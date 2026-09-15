@@ -29,10 +29,7 @@ export async function readActivatedSiteRelease(options: DeliveryReaderOptions): 
 
 export interface ActivatedSiteAssetData { bytes: Uint8Array; mimeType: AssetType; identity: SiteProjectActiveSelection }
 export async function readActivatedSiteAssets(pathname: string, options: DeliveryReaderOptions): Promise<ActivatedSiteAssetData | null> {
-  const store = createLocalSiteProjectStore(options);
-  try { await lstat(store.root); }
-  catch (cause) { if ((cause as NodeJS.ErrnoException).code === "ENOENT") return null; throw cause; }
-  const result = await store.readActiveAsset(pathname);
+  const result = await createLocalSiteProjectStore(options).readActiveAsset(pathname);
   if (result.status === "unavailable") throw new Error(`Activated Assets is unavailable: ${result.message}`);
   if (result.status === "not-found") return null;
   const { toolchain, ...value } = result.value;

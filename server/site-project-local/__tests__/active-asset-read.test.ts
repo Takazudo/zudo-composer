@@ -1,8 +1,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
-import { fixture, review, call, PNG, toolchain } from "./release-fixture";
+import { fixture, review, call, catalog, PNG, toolchain } from "./release-fixture";
+import { createSiteProjectApiService } from "../../../src/site-project/api/service";
 import { createLocalSiteProjectStore } from "../store";
 import { readActivatedSiteAssets } from "../dev-reader";
 import type { CompletedRelease, SiteProjectActiveSelection } from "../../../src/site-project/api/types";
@@ -24,11 +25,40 @@ describe("lock-free activated Assets reads", () => {
     const lock = join(testRoot, ".transaction-lock"), owner = JSON.stringify({ pid: process.pid, nonce: "a".repeat(24) });
     await mkdir(lock); await writeFile(join(lock, "owner.json"), owner);
     const reader = createLocalSiteProjectStore({ testRoot, lockTimeoutMs: 15 });
+    const locked = vi.spyOn(reader as unknown as { lock: () => Promise<unknown> }, "lock");
     const results = await Promise.all(Array.from({ length: 24 }, () => reader.readActiveAsset(pin.url)));
     for (const result of results) expect(result).toMatchObject({ status: "ok", value: { bytes: PNG, mimeType: "image/png", identity: completed.identity } });
     await expect(Promise.all(Array.from({ length: 8 }, () => readActivatedSiteAssets(pin.url, { testRoot, lockTimeoutMs: 15, toolchain })))).resolves.toHaveLength(8);
+    expect(locked).not.toHaveBeenCalled();
     expect(await reader.list()).toMatchObject({ status: "unavailable", message: expect.stringContaining("Release writer lock unavailable") });
     expect(await readFile(join(lock, "owner.json"), "utf8")).toBe(owner);
+  });
+  it("falls back to the locked read when the lock-free resolution keeps failing", async () => {
+    const { testRoot, completed, pin } = await releasedAsset();
+    const reader = createLocalSiteProjectStore({ testRoot });
+    const internals = reader as unknown as { lock: () => Promise<unknown>; verifyLayout: () => Promise<void> };
+    const locked = vi.spyOn(internals, "lock"), verifyLayout = internals.verifyLayout.bind(reader);
+    let failures = 3; vi.spyOn(internals, "verifyLayout").mockImplementation(async () => { if (failures-- > 0) throw new Error("writer temporary state"); return verifyLayout(); });
+    expect(await reader.readActiveAsset(pin.url)).toMatchObject({ status: "ok", value: { bytes: PNG, identity: completed.identity } });
+    expect(locked).toHaveBeenCalledTimes(1);
+    expect(await reader.readActiveAsset(`/uploaded-assets/sha256-${"f".repeat(64)}.png`)).toEqual({ status: "not-found" });
+    expect(locked).toHaveBeenCalledTimes(1);
+  });
+  it("serves pinned Assets while an apply is paused mid-write and after it commits", async () => {
+    const context = await releasedAsset();
+    let release!: () => void, paused!: () => void;
+    const gate = new Promise<void>((done) => { release = done; }), reached = new Promise<void>((done) => { paused = done; });
+    let points = 0;
+    const gated = createLocalSiteProjectStore({ testRoot: context.testRoot, componentPack: catalog.pack, async fault(point) { if (point === "after-close" && ++points === 2) { paused(); await gate; } } });
+    const service = createSiteProjectApiService({ ...context.dependencies, projectStore: gated, buildStore: gated });
+    const plan = await review(context.service, { ...project(), name: "Changed" }, { expectedRevision: context.completed.identity.revision, expectedActive: context.completed.identity });
+    const applying = call(service, "apply", { plan });
+    await reached;
+    const reader = createLocalSiteProjectStore({ testRoot: context.testRoot });
+    const during = await Promise.all(Array.from({ length: 12 }, () => reader.readActiveAsset(context.pin.url)));
+    const settling = Array.from({ length: 12 }, () => reader.readActiveAsset(context.pin.url));
+    release(); await applying;
+    for (const result of [...during, ...await Promise.all(settling)]) expect(result).toMatchObject({ status: "ok", value: { bytes: PNG, identity: context.completed.identity } });
   });
   it("keeps the delivery seam's toolchain and missing-root checks", async () => {
     const { testRoot, parent, pin } = await releasedAsset();
