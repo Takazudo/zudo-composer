@@ -33,7 +33,7 @@ export const categoryTileComponent = defineComponent<CategoryTileProps>()(Catego
   fields: [
     { kind: "text", prop: "label", label: "Label" },
     { kind: "text", prop: "href", label: "URL" },
-    { kind: "text", prop: "src", label: "Image URL" },
+    { kind: "text", prop: "src", label: "Image" },
     { kind: "text", prop: "alt", label: "Image alt" },
     { kind: "text", prop: "caption", label: "Caption" },
   ],
