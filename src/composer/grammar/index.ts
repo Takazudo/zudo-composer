@@ -37,7 +37,7 @@ export interface GrammarRegion {
 export interface GrammarTemplate {
   id: string;
   name: string;
-  /** `null` when the outlet's target slot declares no `accepts` — any component is allowed. */
+  /** `null` when the outlet's target slot declares no `accepts` and no cardinality/min/max bound — any component, any count. */
   region: GrammarRegion | null;
   open: boolean;
 }
