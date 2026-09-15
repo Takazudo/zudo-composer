@@ -71,6 +71,9 @@ function createHostFixture(parent) {
     cpSync(join(root, "fixtures/host", file), join(hostRoot, file));
   }
   cpSync(join(root, "packages/demo-sample/site-project.json"), join(hostRoot, "site-project.json"));
+  // The host's own Assets store, so `seed` resolves the sample's pinned
+  // managed URLs against real committed bytes instead of an empty store.
+  cpSync(join(root, "packages/demo-sample/cms/assets"), join(hostRoot, "cms/assets"), { recursive: true });
   // The manifest is generated rather than copied, because a release attests how
   // its pack was installed and therefore reads the pack's dependency spec out of
   // the HOST manifest. The spec is taken from this package's own manifest so the
