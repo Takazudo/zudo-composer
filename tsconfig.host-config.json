@@ -22,6 +22,7 @@
     "fixtures/host/zudo-composer.config.ts",
     "fixtures/themeset-host/zudo-composer.config.ts",
     "fixtures/self-host/zudo-composer.config.ts",
+    "fixtures/self-host-root/zudo-composer.config.ts",
     "packages/demo-webshop/zudo-composer.config.ts",
     "packages/demo-landing/zudo-composer.config.ts",
     "packages/demo-blog/zudo-composer.config.ts"

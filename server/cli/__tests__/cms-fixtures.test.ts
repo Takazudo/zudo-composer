@@ -120,6 +120,11 @@ async function hostRepository() {
   await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "fixture-host/pack" });\n');
   await mkdir(join(host, "components"));
   await writeFile(join(host, "components/pack.ts"), 'import { defineComponentPack } from "@zudo-composer/component-contract";\nexport const componentPack = defineComponentPack({ packId: "empty-host", packVersion: "1.0.0", components: [] });\n');
+  // A host-self pack's release identity is its resolved source graph, and the
+  // host's configured `styles` entry (default "styles/base.css") is always
+  // one of its roots — even with an empty component pack.
+  await mkdir(join(host, "styles"));
+  await writeFile(join(host, "styles/base.css"), "");
   const source = 'import { defineSite } from "zudo-composer/authoring";\nimport { componentPack } from "fixture-host/pack";\nconst site = defineSite({ id: "fixture-site", name: "Original site", componentPack });\nconst home = site.page({ name: "Home", root: [] });\nsite.sitemap({ name: "Routes", root: { title: "Home", page: home } });\nexport default site;\n';
   await writeFile(join(host, "site-project.ts"), source);
   await git(root, "init", "-q");
