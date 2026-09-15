@@ -12,6 +12,7 @@ import mappingDomainProvider from './plugins/mapping-domain-provider.mjs';
 import sitemapperDomainProvider from './plugins/sitemapper-domain-provider.mjs';
 import workspaceDomainProvider, { resolveWorkspaceRegistryRoot } from './plugins/workspace-domain-provider.mjs';
 import componentPackPlugin from './plugins/component-pack-plugin.mjs';
+import { devPrebundleIncludes } from './plugins/dev-prebundle.mjs';
 import hostStylesPlugin from './plugins/host-styles-plugin.mjs';
 import { APP_ROOT, readRootEnvironment, resolveAppWarmupFiles, resolveFsAllow, resolvePublicDir, resolveSiteProjectLocalRoot, resolveWatchIgnored } from './plugins/roots.mjs';
 import { CONFIG_FILE_NAME, composer } from './server/config/index.ts';
@@ -64,7 +65,19 @@ export default defineConfig({
   // imports while scanning the package, whereas the asset pipeline handles
   // them on demand. The pack's name is derived, never spelled out — that is
   // what makes the themeset swap one config edit.
-  optimizeDeps: { exclude: [componentPack.identity.packageName, '@takazudo/zfb-md-wasm'] },
+  // `include` pre-bundles at startup what the scanner otherwise only finds at
+  // runtime -- @preact/preset-vite's dev-only injections, compiled JSX's
+  // preact/jsx-runtime, and the excluded pack's own runtime dependencies (the
+  // pack is linked workspace source, not scanned node_modules) -- so a cold
+  // dev server doesn't pay for a "new dependencies found" reload (#703).
+  optimizeDeps: {
+    exclude: [componentPack.identity.packageName, '@takazudo/zfb-md-wasm'],
+    include: devPrebundleIncludes({
+      workspaceRoot: composerConfig.workspaceRoot,
+      pack: composerConfig.settings.pack,
+      exclude: ['@takazudo/zfb-md-wasm'],
+    }),
+  },
   // `componentPackPlugin` declares an fs-allow entry for the pack, and any
   // declared entry replaces Vite's root-derived default. Naming both roots here
   // is what keeps this repo's own sources readable while the pack stays so.

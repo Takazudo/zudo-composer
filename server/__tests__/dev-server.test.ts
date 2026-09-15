@@ -12,6 +12,7 @@ import { build } from "vite";
 import { APP_ROOT, resolvePublicDir } from "../../plugins/roots.mjs";
 import { APP_ENTRY_MODULE } from "../../plugins/composer-app-html.mjs";
 import { OPTIMIZE_DEPS_EXCLUDE, loadHostConfig, resolveComposerDevConfig } from "../dev-server.mjs";
+import { devPrebundleIncludes } from "../../plugins/dev-prebundle.mjs";
 import { resolveImageEditorAliases } from "../../plugins/image-editor-aliases.mjs";
 import { resolveFsAllow } from "../../plugins/roots.mjs";
 import { resolveComponentPack } from "../../plugins/component-pack.mjs";
@@ -140,6 +141,11 @@ describe("resolveComposerDevConfig", () => {
     const pack = resolveComponentPack(FIXTURE_HOST, "@zudo-composer/ui/composer-pack");
     expect(inlineConfig.optimizeDeps?.exclude).toEqual([pack.packageName, ...OPTIMIZE_DEPS_EXCLUDE]);
     expect(inlineConfig.optimizeDeps?.entries).toEqual([resolve(APP_ROOT, APP_ENTRY_MODULE)]);
+    // Pre-bundled at startup so the pack's own runtime deps and preact's
+    // dev-only injections don't trigger a runtime re-optimization (#703).
+    expect(inlineConfig.optimizeDeps?.include).toEqual(
+      devPrebundleIncludes({ workspaceRoot: FIXTURE_HOST, pack: "@zudo-composer/ui/composer-pack", exclude: OPTIMIZE_DEPS_EXCLUDE }),
+    );
     // The pack's own directory is allowed too: it is outside the host root.
     expect(inlineConfig.server?.fs?.allow).toEqual([...resolveFsAllow(FIXTURE_HOST), pack.packageRoot]);
     expect(inlineConfig.resolve?.alias).toEqual(resolveImageEditorAliases());
