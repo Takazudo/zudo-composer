@@ -20,12 +20,13 @@ All five persist to the host's own project files — the four JSON domains plus
 assets, under paths the host's `zudo-composer.config.ts` controls (see
 [Settings and host directory layout](#settings-and-host-directory-layout)
 below). The tool does not depend on zudo-doc, a zfb
-application runtime/configuration, or a styleguide registry. `zudo-sg` has a
-narrower permanent role in this repository: its installed `@zudo-sg/ui`
-package is this repo's own dogfood component pack, supplying typed component
-sidecars, the runtime component pack, and canonical Composer CSS. That
-provider transitively owns the focused `@takazudo/zfb-md-wasm` renderer used
-by `ProseMd`; this is not a zfb application dependency. A host is free to
+application runtime/configuration, or a styleguide registry. This repository
+also owns `packages/ui` (`@zudo-composer/ui`), its own dogfood component pack,
+supplying typed component sidecars, the runtime component pack, and canonical
+Composer CSS. That pack depends on the focused `@takazudo/zfb-md-wasm`
+renderer used by `ProseMd`; this is not a zfb application dependency, and the
+tool itself never depends on it. The tool never bundles the pack and never
+falls back to it: there is no dual provider and no fallback registry. A host is free to
 install a different themeset instead — see
 [Component packs and themesets](#component-packs-and-themesets).
 
@@ -112,8 +113,9 @@ needed, click a demo thumbnail to inspect it, then click **Preview**.
 ## Demo host projects
 
 `packages/demo-sample`, `packages/demo-webshop`, `packages/demo-landing` and
-`packages/demo-blog` are four complete host projects. Studio installs the pinned
-provider; the other three own their component packs and Tailwind themes. They
+`packages/demo-blog` are four complete host projects. Studio uses the
+repository-owned `@zudo-composer/ui` pack; the other three own their component
+packs and Tailwind themes. They
 are kept as workspace members so the tool is exercised the way a real host
 exercises it. Each host runs the installed `zudo-composer` commands directly.
 Full authoring and gate-wiring details are in
@@ -151,12 +153,15 @@ contract, which the package declares as a **peer dependency** so the host's own
 ```sh
 pnpm add -D \
   "zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<commit>" \
-  "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0"
+  "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0" \
+  "@zudo-composer/ui@git+https://github.com/Takazudo/zudo-composer.git#847b582c911a3c2e5461ed89caf2b78a874331d7"
 ```
 
 Replace `<commit>` with a full 40-character tool commit. This consumer install
-reference is separate from the permanent provider and contract identities;
-abbreviated hashes remain forbidden in handoff documentation.
+reference is separate from the permanent contract and UI-pack identities;
+abbreviated hashes remain forbidden in handoff documentation. The
+`@zudo-composer/ui` line is needed only by a host that uses the owned pack; a
+host-self or third-party themeset omits it.
 
 The host also declares the package its `pack` comes from. A pack is resolved
 from the HOST root, and a release attests the dependency spec the host used, so
@@ -170,7 +175,7 @@ bin. `pack` is the only setting without a default:
 import { defineComposerConfig } from "zudo-composer/config";
 
 export default defineComposerConfig({
-  pack: "@zudo-sg/ui/composer-pack",
+  pack: "@zudo-composer/ui/composer-pack",
 });
 ```
 
@@ -355,9 +360,9 @@ toolchain reads to compute release identity; those sources are named one file at
 a time in `files`, because the nested `package.json` under `packages/` stops the
 root allowlist's exclusions from applying to that subtree.
 
-With pnpm 11.5.2, the host must explicitly accept the tool's Git-hosted
-`@zudo-sg/ui` dependency, which is pinned to a full commit SHA. pnpm blocks
-transitive Git sources by default and this version has no per-package exception.
+With pnpm 11.5.2, a host installing these Git-hosted packages must explicitly
+accept Git sources, pinned to full commit SHAs. pnpm blocks transitive Git
+sources by default and this version has no per-package exception.
 Use the following in the **host project's** `pnpm-workspace.yaml`; do not change
 global pnpm settings. `blockExoticSubdeps: false` permits transitive Git sources
 for this host, so review other dependencies before adopting it. Build permission
@@ -404,19 +409,20 @@ its original project with no host images; its five optional repository Assets
 seed images are checked centrally alongside the 8 MiB combined source-image
 budget. Adding another host automatically includes its imagery in that budget.
 
-The provider boundary is split in two. `provider:boundary` checks the manifest
-spec, the lockfile resolution and the parity between the installed pack's
+The provider boundary is split in two. `provider:boundary` checks the
+`workspace:*` spec, the lockfile link and the parity between the installed pack's
 generated component list and its sidecars — none of which needs a build, so it
 runs on a bare checkout. `dist:boundary` checks what `vite build` emitted and
 requires `pnpm build` first.
 
-CI additionally verifies the component-contract handoff and runs the browser
-lanes:
+CI additionally verifies the component-contract and UI-pack handoffs and runs
+the browser lanes:
 
 ```sh
 corepack pnpm contract:conformance
 corepack pnpm contract:negative-scan
 corepack pnpm contract:external-install -- --exact
+corepack pnpm ui:external-install -- --exact
 corepack pnpm test:browser:host
 corepack pnpm test:browser:dev
 corepack pnpm demo:build-sites
@@ -482,39 +488,44 @@ filename: `*.coarse.pw.ts` runs only on a 390x844 touch project, and
 on a fine pointer, so a coarse spec that reaches the desktop project passes
 while proving nothing — the suffix is part of the proof, not a label.
 
-## Immutable UI-provider handoff
+## Owned UI-pack handoff
 
-The current UI provider identity has four distinct version/provenance domains:
+This repository owns its component set in `packages/ui`. External hosts install
+it through a package-only commit recorded by [`ui-handoff.json`](./ui-handoff.json):
 
-| Domain | Current value |
+| Item | Value |
 |---|---|
-| Provider Git spec | `git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf` |
-| Provider commit / root tree | `6b0826cdaa14d9888e58c795ee015f70e2c5cbdf` / `1c3cbfd3a25d1425f447cdadd5ba538916394309` |
-| Installed package metadata | `@zudo-sg/ui@0.1.0` |
-| Component-pack protocol identity | `@zudo-sg/ui@1.0.0` |
+| Package | `@zudo-composer/ui` |
+| Source path | `packages/ui` |
+| Branch | `package/ui-v1` |
+| Package commit | `847b582c911a3c2e5461ed89caf2b78a874331d7` |
+| Exact external Git spec | `git+https://github.com/Takazudo/zudo-composer.git#847b582c911a3c2e5461ed89caf2b78a874331d7` |
+| Package metadata | `@zudo-composer/ui@0.1.0` |
+| Component-pack protocol identity | `@zudo-composer/ui@1.0.0` |
 
 The package version and pack protocol version are intentionally different.
-Neither is a substitute for the immutable Git commit/tree.
+Neither is a substitute for the immutable package commit. Inside this
+repository the pack is a `workspace:*` development dependency, never a runtime
+or peer dependency of the tool, and the tool archive never contains it.
 
-To update the provider:
+To update the pack:
 
-1. Obtain the permanent package-only zudo-sg commit and independently verify
-   its root tree and advertised 12-component pack.
-2. Set `dependencies["@zudo-sg/ui"]` to the exact full Git SHA. Never use a
-   branch name, moving tag, sibling checkout, `workspace:`, `file:`, `link:`,
-   `path:`, copied provider source, or a pnpm Git subdirectory selector.
-3. Regenerate `pnpm-lock.yaml`, then prove a clean
-   `corepack pnpm install --frozen-lockfile` resolves the same codeload SHA.
-4. Run `corepack pnpm check`, all three contract commands above, and
-   `corepack pnpm test:browser:host`. The provider and dist boundaries must
-   still prove the exact 12 IDs/runtime exports, canonical CSS, and one focused
-   WASM/glue.
-
-Do not copy provider components into this repository or add a fallback registry.
+1. Change `packages/ui` and regenerate its pack with `corepack pnpm ui:pack`.
+2. Cut a package-only commit whose tree equals `HEAD:packages/ui`, parented on
+   the previous package commit so `package/ui-v1` fast-forwards, push that ref,
+   and record the full SHA in `ui-handoff.json`, this README and `CLAUDE.md`.
+   Never publish it through a branch name, moving tag, sibling checkout,
+   `workspace:`, `file:`, `link:`, `path:`, copied source, or a pnpm Git
+   subdirectory selector.
+3. Prove a clean `corepack pnpm install --frozen-lockfile`, then
+   `corepack pnpm ui:external-install -- --exact`.
+4. Run `corepack pnpm check` and `corepack pnpm test:browser:host`. The
+   provider and dist boundaries must still prove the exact 12 IDs/runtime
+   exports, canonical CSS, and one focused WASM/glue.
 
 ## Component-contract handoff
 
-The component contract is a separate handoff from the UI provider. This
+The component contract is a separate handoff from the UI pack. This
 repository owns its source at `packages/component-contract`; external package
 consumers use the package-only commit recorded by
 [`contract-handoff.json`](./contract-handoff.json):
@@ -527,7 +538,7 @@ consumers use the package-only commit recorded by
 The monorepo itself intentionally resolves this contract with `workspace:*`, as
 a dev dependency; the published manifest declares it as a peer dependency so a
 host installs exactly one instance. Neither relationship may be confused with,
-or used in place of, the immutable external UI-provider Git dependency.
+or used in place of, the immutable external UI-pack Git spec.
 
 ## Scoped hosted demo exception
 
@@ -599,9 +610,12 @@ resources, domains, credentials, user files, or other infrastructure.
 The initial implementation was ported with provenance from
 `Takazudo/zudo-sg@f1206f3b82bdbfff791dcaf5d9918c2afdda0ae2`, without grafting
 history or inheriting any zudo-sg infrastructure identity. That frozen source
-reference is provenance only; zudo-sg no longer owns these applications.
+reference is provenance only; zudo-sg no longer owns these applications. The
+UI component set in `packages/ui` was likewise ported from the zudo-sg package
+commit `6b0826cdaa14d9888e58c795ee015f70e2c5cbdf`, and zudo-sg no longer owns
+it either.
 
 After the Phase 3 root reaches `main`, the integration owner records one
 canonical evidence block on both Phase 3 and Phase 4 epics: root PR URL; full
-permanent `main` SHA; provider Git spec/SHA/tree and all version domains; and
+permanent `main` SHA; UI-pack and contract Git specs/SHAs and all version domains; and
 green root-PR and post-merge CI URLs.

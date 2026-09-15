@@ -65,9 +65,9 @@ function createHostFixture(parent) {
     "cms/compositions", "cms/content", "cms/mappings", "cms/sitemaps", "cms/assets"]) {
     mkdirSync(join(hostRoot, directory), { recursive: true });
   }
-  const packScope = UI_PACK.packageName.split("/")[0];
+  mkdirSync(join(hostRoot, "node_modules", UI_PACK.packageName, ".."), { recursive: true });
   symlinkSync(root, join(hostRoot, "node_modules/zudo-composer"), "dir");
-  symlinkSync(join(root, "node_modules", packScope), join(hostRoot, "node_modules", packScope), "dir");
+  symlinkSync(join(root, "node_modules", UI_PACK.packageName), join(hostRoot, "node_modules", UI_PACK.packageName), "dir");
   symlinkSync(join(root, "node_modules/preact"), join(hostRoot, "node_modules/preact"), "dir");
   for (const file of ["zudo-composer.config.ts", "styles/base.css"]) {
     cpSync(join(root, "fixtures/host", file), join(hostRoot, file));

@@ -168,7 +168,7 @@ assert.ok(/--sg-header-h:\s*var\(\s*--zc-topbar-h\s*\)/.test(combinedCss), "edit
 // shared `cms-` controls.)
 // `min-w-48` cannot hold this role: it generates no CSS at all under this
 // project's Tailwind theme, so the emission half could never pass. `min-h-0`
-// is verified local-only — no file under node_modules/@zudo-sg/ui/src uses it,
+// is verified local-only — no file under node_modules/@zudo-composer/ui/src uses it,
 // unlike flex-1 / w-full / min-w-0, whose emission would prove nothing about
 // whether local source is scanned.
 assert.ok(readFileSync(join(root, "src/features/composer/library/new-composition-dialog.tsx"), "utf8").includes("min-h-0"), "local Tailwind source proof drifted");

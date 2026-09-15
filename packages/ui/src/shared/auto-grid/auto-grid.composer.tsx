@@ -12,7 +12,7 @@ export const autoGridComposer = defineComponent<AutoGridProps>()(AutoGrid, {
   id: "ui.auto-grid",
   schemaVersion: 1,
   ...autoGridDisplay,
-  source: { module: "@zudo-sg/ui", exportKind: "named", exportName: "AutoGrid" },
+  source: { module: "@zudo-composer/ui", exportKind: "named", exportName: "AutoGrid" },
   defaults: { min: "15rem", fill: false, gap: "md" },
   fields: [
     {

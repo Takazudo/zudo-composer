@@ -12,7 +12,7 @@ export const splitLayoutComposer = defineComponent<SplitLayoutProps>()(SplitLayo
   id: "ui.split-layout",
   schemaVersion: 1,
   ...splitLayoutDisplay,
-  source: { module: "@zudo-sg/ui", exportKind: "named", exportName: "SplitLayout" },
+  source: { module: "@zudo-composer/ui", exportKind: "named", exportName: "SplitLayout" },
   defaults: { ratio: "50/50", gap: "md" },
   fields: [
     {

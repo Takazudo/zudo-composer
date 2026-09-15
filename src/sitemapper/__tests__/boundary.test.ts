@@ -24,7 +24,7 @@ describe("standalone Sitemapper boundary", () => {
       const source = boundarySource(raw, { fileName: file });
       const code = boundarySource(raw, { fileName: file, strings: false });
       const name = relative(repositoryRoot, file);
-      if (/@\/|@takazudo\/zudo-doc|\bzfb\b|@zudo-sg\/ui|styleguide/i.test(source)) {
+      if (/@\/|@takazudo\/zudo-doc|\bzfb\b|@zudo-composer\/ui|styleguide/i.test(source)) {
         violations.push(`${name}: forbidden host dependency`);
       }
       if (/\b(?:legacy|migrat(?:e|ion)|compatibility|alias|adapter|SITEMAP_SCHEMA_V0|ready-with-recovery)\b/i.test(code)) {

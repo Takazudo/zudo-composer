@@ -1,7 +1,7 @@
 /*
- * @zudo-sg/ui — grouped three-tier color system (light + dark)
+ * @zudo-composer/ui — grouped three-tier color system (light + dark)
  *
- * This is the COLOR contract the @zudo-sg/ui components depend on. Components
+ * This is the COLOR contract the @zudo-composer/ui components depend on. Components
  * reference these semantic Tailwind color utilities only (bg-surface, text-fg,
  * bg-accent, border-border, text-rail-fg, …) — never raw oklch literals, never
  * numeric Tailwind shades (`bg-gray-500` is a build error under the tight-token
@@ -23,7 +23,7 @@
  *
  * The Tier-1 palette is inlined at the TOP of this file (a plain :root block)
  * rather than a sibling file: the single-consumer contract requires every
- * consumer to do exactly one `@import "@zudo-sg/ui/styles/colors.css"`, and the
+ * consumer to do exactly one `@import "@zudo-composer/ui/styles/colors.css"`, and the
  * consumer Tailwind/Lightning pipeline inlines that import's CONTENTS but leaves
  * a nested relative `@import "./palette.css"` as a literal the browser then
  * ignores — dropping the palette entirely. Inlining keeps both tiers in the one

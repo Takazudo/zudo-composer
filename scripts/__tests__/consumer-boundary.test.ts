@@ -180,13 +180,13 @@ describe('consumer boundary protocols and commands', () => {
   });
 
   it('requires the actual first-party package identity and never accepts the provider as a workspace', () => {
-    const host = fixture({ dependencies: { '@zudo-composer/component-contract': 'workspace:*', '@zudo-sg/ui': 'workspace:*' } });
+    const host = fixture({ dependencies: { '@zudo-composer/component-contract': 'workspace:*', '@example/ui': 'workspace:*' } });
     host.write('package.json', '{"name":"zudo-composer"}', host.root);
     expect(host.scan()).toHaveLength(2);
     host.write('packages/component-contract/package.json', '{"name":"wrong-package"}', host.root);
     expect(host.scan()).toHaveLength(2);
     host.write('packages/component-contract/package.json', '{"name":"@zudo-composer/component-contract"}', host.root);
-    expect(host.scan()).toEqual([expect.objectContaining({ detail: 'dependencies.@zudo-sg/ui: workspace:*' })]);
+    expect(host.scan()).toEqual([expect.objectContaining({ detail: 'dependencies.@example/ui: workspace:*' })]);
     host.write('package.json', '{"name":"consumer"}', host.root);
     expect(host.scan()).toHaveLength(2);
   });

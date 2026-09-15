@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { h, type ComponentType, type VNode } from "preact";
 import { render as renderToString } from "preact-render-to-string";
-import { componentPack } from "@zudo-sg/ui/composer-pack";
+import { componentPack } from "@zudo-composer/ui/composer-pack";
 import { beforeAll, describe, expect, it } from "vitest";
 import { canonicalStringifyJson, validateSiteProject } from "zudo-composer/authoring";
 import { compileStaticSite, type StaticSiteCompilation } from "zudo-composer/site-build";
@@ -16,7 +16,7 @@ const projectPath = resolve(packageRoot, "site-project.json");
 // SHA-256 of the committed Sample Studio fixture. This exact-byte assertion
 // keeps the host self-contained, without a second JSON input or a dependency
 // on the tool repository's test files.
-const projectDigest = "263f682f0e9fe8d2c1b7ae8690550979bff7d874da042efae2c6082f61c7cf32";
+const projectDigest = "81442f21be3213cdfcd794aa7684c61481cc9c561906495d15624f07b13a5861";
 const headings: Record<string, string> = {
   "/": "Clear ideas, carefully shaped",
   "/about": "A studio built around useful clarity",
@@ -62,8 +62,8 @@ describe("Sample Studio host", () => {
     if (!validation.ok) return;
     expect(canonicalStringifyJson(validation.project as never)).toBe(bytes.toString("utf8"));
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(projectDigest);
-    expect(config.pack).toBe("@zudo-sg/ui/composer-pack");
-    expect(compiled.project.componentPack).toEqual({ contractVersion: 2, packId: "@zudo-sg/ui", packVersion: "1.0.0" });
+    expect(config.pack).toBe("@zudo-composer/ui/composer-pack");
+    expect(compiled.project.componentPack).toEqual({ contractVersion: 2, packId: "@zudo-composer/ui", packVersion: "1.0.0" });
     expect(compiled.project.id).toBe("sample-studio-site");
     expect(compiled.project.name).toBe("Sample Studio");
   });

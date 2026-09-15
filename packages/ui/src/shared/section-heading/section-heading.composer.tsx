@@ -15,7 +15,7 @@ export const sectionHeadingComposer = defineComponent<SectionHeadingComposerProp
   id: "ui.section-heading",
   schemaVersion: 1,
   ...sectionHeadingDisplay,
-  source: { module: "@zudo-sg/ui", exportKind: "named", exportName: "SectionHeading" },
+  source: { module: "@zudo-composer/ui", exportKind: "named", exportName: "SectionHeading" },
   defaults: {
     eyebrow: "About",
     heading: "Our approach",

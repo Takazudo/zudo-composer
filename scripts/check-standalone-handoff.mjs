@@ -16,15 +16,26 @@ const readme = read("README.md");
 const guidance = read("CLAUDE.md");
 const packageJson = readJson("package.json");
 const contractHandoff = readJson("contract-handoff.json");
+const uiHandoff = readJson("ui-handoff.json");
 const appTokens = read("src/styles/app-tokens.css");
 
-const providerSha = UI_PACK.provenanceCommit;
-const providerTree = UI_PACK.provenanceTree;
-const providerSpec = UI_PACK.dependencySpec;
+const uiSpec = `git+https://github.com/Takazudo/zudo-composer.git#${UI_PACK.packageCommit}`;
+assert.equal(UI_PACK.rootGitSpec, uiSpec);
 const contractSpec = `git+https://github.com/Takazudo/zudo-composer.git#${CONTRACT_PACKAGE_COMMIT}`;
 
 assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/assets"]);
-assert.equal(packageJson.devDependencies[UI_PACK.packageName], providerSpec);
+// The owned pack is a workspace development dependency only: the tool never
+// ships it, and an external host installs it through `ui-handoff.json`.
+assert.equal(packageJson.devDependencies[UI_PACK.packageName], "workspace:*");
+assert.equal(packageJson.dependencies[UI_PACK.packageName], undefined);
+assert.equal(packageJson.peerDependencies[UI_PACK.packageName], undefined);
+assert.deepEqual(uiHandoff, {
+  packageName: UI_PACK.packageName,
+  sourcePath: UI_PACK.sourcePath,
+  packageBranch: "package/ui-v1",
+  packageCommit: UI_PACK.packageCommit,
+  rootGitSpec: uiSpec,
+});
 // The contract is a peer of the published package and a workspace dev
 // dependency of this repository. Both halves are load-bearing: the peer keeps a
 // host on one contract instance, the dev spec keeps `workspace:*` out of what
@@ -71,9 +82,13 @@ for (const [name, document] of [["README.md", readme], ["CLAUDE.md", guidance]])
     `${UI_PACK.packageName}@${UI_PACK.installedVersion}`,
     `${UI_PACK.packageName}@${UI_PACK.packVersion}`,
     "@zudo-composer/component-contract@1.0.0",
-    providerSha,
-    providerTree,
-    providerSpec,
+    UI_PACK.provenanceCommit,
+    UI_PACK.packageCommit,
+    uiSpec,
+    CONTRACT_PACKAGE_COMMIT,
+    contractSpec,
+    "package/ui-v1",
+    "ui-handoff.json",
     "no users",
     "persisted production data",
     "migrations",
@@ -128,8 +143,9 @@ for (const document of [readme, guidance]) {
   assert.match(document, /styleguide registry/i);
   assert.match(document, /focused[\s\S]{0,80}@takazudo\/zfb-md-wasm/i);
   assert.match(document, /component-contract handoff[\s\S]{0,500}(?:separate|distinct)/i);
-  assert.match(document, /UI-provider|UI provider|provider updates?/i);
-  assert.match(document, /(?:never|do not)[\s\S]{0,120}cop(?:y|ied)[\s\S]{0,80}provider|copied provider source/i);
+  // Ownership framing since #701: the component set lives in this repository.
+  assert.match(document, /owns?[\s\S]{0,120}`packages\/ui`|`packages\/ui`[\s\S]{0,120}owne?d?/i);
+  assert.match(document, /(?:never|do not)[\s\S]{0,160}(?:second|fallback|alternate) (?:provider|registry)|no (?:dual provider|fallback registry)/i);
 }
 
 /** @param {string} directory @returns {string[]} */
@@ -221,8 +237,11 @@ for (const path of [
 
 assert.doesNotMatch(read("src/components/icons/index.ts"), /Composer\/styleguide/i, "icon ownership must remain standalone Composer/Sitemapper app chrome");
 
-for (const forbidden of ["workspace:", "file:", "link:", "path:", "packages/ui", "../zudo-sg"]) {
-  assert.ok(!packageJson.devDependencies[UI_PACK.packageName].includes(forbidden), `provider spec uses forbidden resolution: ${forbidden}`);
+for (const forbidden of ["workspace:", "file:", "link:", "path:", "&path:", "packages/ui"]) {
+  assert.ok(!uiHandoff.rootGitSpec.includes(forbidden), `ui handoff spec uses forbidden resolution: ${forbidden}`);
+}
+for (const [name, document] of [["README.md", readme], ["CLAUDE.md", guidance]]) {
+  assert.doesNotMatch(document, /@zudo-sg\/ui@|github\.com\/Takazudo\/zudo-sg\.git#/, `${name} must not publish the retired zudo-sg provider pin`);
 }
 
-console.log("Standalone handoff boundary passed: tool/host ownership framing, the bin/config/dataDir host contract, routes, provider/contract identities, and clean-break policy are locked.");
+console.log("Standalone handoff boundary passed: tool/host ownership framing, the bin/config/dataDir host contract, routes, owned UI pack/contract handoff identities, and clean-break policy are locked.");

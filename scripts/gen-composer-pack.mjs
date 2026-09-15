@@ -87,7 +87,7 @@ function render(entries) {
   lines.push(
     "",
     "export const componentPack = defineComponentPack({",
-    '  packId: "@zudo-sg/ui",',
+    '  packId: "@zudo-composer/ui",',
     '  packVersion: "1.0.0",',
     "  components: [",
     ...entries.map((entry) => `    ${entry.importName},`),

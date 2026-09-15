@@ -1,7 +1,7 @@
 # Sample Studio
 
 Sample Studio is a complete host project for `zudo-composer`. It uses the
-installed `@zudo-sg/ui/composer-pack` themeset and its canonical stylesheet.
+repository-owned `@zudo-composer/ui/composer-pack` themeset and its canonical stylesheet.
 The compositions, two content models, four entries, two mappings and five
 authored sitemap rows live in `site-project.ts`; longer copy lives in `content/`.
 

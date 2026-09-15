@@ -22,7 +22,7 @@ async function fixture() {
   temporary.push(host);
   const metadata = JSON.parse(await readFile(join(root, "packages/demo-sample/package.json"), "utf8"));
   await writeFile(join(host, "package.json"), JSON.stringify({ ...metadata, name: "route-proof" }));
-  await writeFile(join(host, "zudo-composer.config.ts"), 'export default { pack: "@zudo-sg/ui/composer-pack" };');
+  await writeFile(join(host, "zudo-composer.config.ts"), 'export default { pack: "@zudo-composer/ui/composer-pack" };');
   const project = JSON.parse(await readFile(join(root, "packages/demo-sample/site-project.json"), "utf8")) as SiteProject;
   const source = () => writeFile(join(host, "site-project.json"), JSON.stringify(project));
   await source();

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ProseMd } from "@zudo-sg/ui";
+import { ProseMd } from "@zudo-composer/ui";
 
 type MarkdownRenderResult = {
   html: string | null;
@@ -8,7 +8,7 @@ type MarkdownRenderResult = {
 };
 
 const { renderMarkdownMock } = vi.hoisted(() => ({ renderMarkdownMock: vi.fn() }));
-vi.mock("@zudo-sg/ui/src/content/prose-md/markdown-runtime", () => ({ renderMarkdown: renderMarkdownMock }));
+vi.mock("@zudo-composer/ui/src/content/prose-md/markdown-runtime", () => ({ renderMarkdown: renderMarkdownMock }));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

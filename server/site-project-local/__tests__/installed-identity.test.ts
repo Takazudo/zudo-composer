@@ -125,7 +125,7 @@ describe("published contract attestation", () => {
 });
 
 describe("pack source graph attestation", () => {
-  const manifest = { name: "host", description: "Host site", type: "module", exports: { "./components/*": { import: "./src/components/*.tsx", default: "./src/components/*.js" } }, dependencies: { react: "^19.0.0" }, peerDependencies: { "@zudo-sg/ui": "*" } };
+  const manifest = { name: "host", description: "Host site", type: "module", exports: { "./components/*": { import: "./src/components/*.tsx", default: "./src/components/*.js" } }, dependencies: { react: "^19.0.0" }, peerDependencies: { "@zudo-composer/ui": "*" } };
   async function host() {
     const { parent } = await fixture();
     const root = join(parent, "host");

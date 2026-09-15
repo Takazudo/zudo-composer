@@ -1,6 +1,6 @@
 import { h } from "preact";
 import { render, waitFor } from "@testing-library/preact";
-import { ProseMd } from "@zudo-sg/ui";
+import { ProseMd } from "@zudo-composer/ui";
 import { describe, expect, it } from "vitest";
 
 describe("Markdown preview sanitizer integration", () => {

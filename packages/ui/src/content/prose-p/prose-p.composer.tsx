@@ -17,7 +17,7 @@ export const prosePComposer = defineComponent<ProsePComposerProps>()(ProseP, {
   id: "ui.prose-p",
   schemaVersion: 1,
   ...prosePDisplay,
-  source: { module: "@zudo-sg/ui", exportKind: "named", exportName: "ProseP" },
+  source: { module: "@zudo-composer/ui", exportKind: "named", exportName: "ProseP" },
   defaults: { children: "Body copy." },
   fields: [
     {

@@ -1,5 +1,5 @@
 /*
- * @zudo-sg/ui — shared design tokens
+ * @zudo-composer/ui — shared design tokens
  *
  * Single source of truth for the tight-token @theme system.
  * Consumed by the styleguide host (root), packages/ui, and apps/demo.
@@ -25,7 +25,7 @@
  *   - Colors: the shared semantic set lives in ./colors.css; the root host
  *     RE-ASSERTS the overlapping names to its --zd-* palette (zudo-doc
  *     injection) so doc-chrome is unchanged. Each consumer imports colors.css.
- *   - Z-index: the `--z-index-ui-*` set below is the shared @zudo-sg/ui scale;
+ *   - Z-index: the `--z-index-ui-*` set below is the shared @zudo-composer/ui scale;
  *     the root host and apps/demo ALSO keep their own context-specific scales
  *     (the `ui-` prefix keeps all three collision-free).
  *
@@ -188,7 +188,7 @@
   --default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* ========================================
-   * Z-index — semantic single-namespace scale for @zudo-sg/ui components.
+   * Z-index — semantic single-namespace scale for @zudo-composer/ui components.
    *
    * Names describe ROLES, not magnitudes (zudo-css-wisdom z-index-strategy).
    * The `ui-` prefix is deliberate: it keeps this scale collision-free with

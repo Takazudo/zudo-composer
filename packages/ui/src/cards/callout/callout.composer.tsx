@@ -11,7 +11,7 @@ export const calloutComposer = defineComponent<CalloutProps>()(Callout, {
   id: "ui.callout",
   schemaVersion: 1,
   ...calloutDisplay,
-  source: { module: "@zudo-sg/ui", exportKind: "named", exportName: "Callout" },
+  source: { module: "@zudo-composer/ui", exportKind: "named", exportName: "Callout" },
   defaults: { tone: "note", title: "Note" },
   fields: [
     { prop: "tone", label: "Tone", schema: { type: "string", enum: ["note", "muted"] }, editor: { kind: "select" } },

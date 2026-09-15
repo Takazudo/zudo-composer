@@ -6,7 +6,7 @@ import { basename, delimiter, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  FIRST_PARTY, PACKED_NPMRC, assertConfinedWrites, assertExternalWorkspace, assertInstalledHost,
+  FIRST_PARTY, MANDATORY_FIRST_PARTY, PACKED_NPMRC, assertConfinedWrites, assertExternalWorkspace, assertInstalledHost,
   configurePackedHost, copyPackedHost, discoverPackedHosts, isolatedEnvironment,
   packedHostManifest, packedHostMatrix, packPackage, pnpm, repositoryRoots, run, selectPackedHosts,
   startHostServer, tree,
@@ -38,7 +38,8 @@ const declared = () => ({
   scripts: { test: "vitest run", seed: "zudo-composer seed" },
   devDependencies: { "zudo-composer": "workspace:*", "@zudo-composer/component-contract": "workspace:*", preact: "^10.29.8" },
 });
-const archiveSpecs = { "zudo-composer": "file:/tmp/tool.tgz", "@zudo-composer/component-contract": "file:/tmp/contract.tgz" };
+const archiveSpecs = { "zudo-composer": "file:/tmp/tool.tgz", "@zudo-composer/component-contract": "file:/tmp/contract.tgz", "@zudo-composer/ui": "file:/tmp/ui.tgz" };
+const { "@zudo-composer/ui": uiArchive, ...mandatoryArchives } = archiveSpecs;
 
 it("preserves a location-dependent CI package-manager launcher without exposing its dependency bin", async () => {
   const root = await temporary();
@@ -84,18 +85,21 @@ describe("packed host discovery and manifest isolation", () => {
     for (const host of packedHostMatrix(root).host) expect(() => selectPackedHosts(["--host", host], discoverPackedHosts(root))).not.toThrow();
   });
 
-  it("rewrites and overrides exactly the two first-party packages, preserving the host", () => {
+  it("rewrites the declared first-party packages, overrides all three and preserves the host", () => {
     const original = declared();
     const result = packedHostManifest(original, archiveSpecs, packageManager);
-    expect(result.devDependencies).toEqual({ ...original.devDependencies, ...archiveSpecs });
+    expect(result.devDependencies).toEqual({ ...original.devDependencies, ...mandatoryArchives });
+    expect(result.devDependencies).not.toHaveProperty("@zudo-composer/ui");
     expect(result.pnpm).toEqual({ overrides: archiveSpecs });
     expect(result.packageManager).toBe(packageManager);
     expect(result).toMatchObject({ exports: original.exports, scripts: original.scripts });
     expect(original.devDependencies["zudo-composer"]).toBe("workspace:*");
     const installedHost = { name: "generated-host", dependencies: { "zudo-composer": "0.0.0", "@zudo-composer/component-contract": "^1.0.0" } };
-    expect(packedHostManifest(installedHost, archiveSpecs, packageManager).dependencies).toEqual(archiveSpecs);
+    expect(packedHostManifest(installedHost, archiveSpecs, packageManager).dependencies).toEqual(mandatoryArchives);
     const peers = { name: "peer-host", peerDependencies: { ...installedHost.dependencies }, optionalDependencies: { ...installedHost.dependencies } };
-    expect(packedHostManifest(peers, archiveSpecs, packageManager)).toMatchObject({ peerDependencies: archiveSpecs, optionalDependencies: archiveSpecs });
+    expect(packedHostManifest(peers, archiveSpecs, packageManager)).toMatchObject({ peerDependencies: mandatoryArchives, optionalDependencies: mandatoryArchives });
+    const packHost = { ...original, devDependencies: { ...original.devDependencies, "@zudo-composer/ui": "workspace:*" } };
+    expect(packedHostManifest(packHost, archiveSpecs, packageManager).devDependencies).toMatchObject({ "@zudo-composer/ui": uiArchive });
   });
 
   it.each(["workspace:^", "workspace:../tool", "file:../tool", "link:../tool", "path:../tool"])("rejects the broader first-party protocol %s", (specifier) => {
@@ -107,7 +111,7 @@ describe("packed host discovery and manifest isolation", () => {
   it("rejects undeclared peers, arbitrary workspaces, unknown overrides and relative tarballs", () => {
     expect(() => packedHostManifest({ name: "missing", dependencies: { "zudo-composer": "workspace:*" } }, archiveSpecs, packageManager)).toThrow("must declare @zudo-composer/component-contract");
     expect(() => packedHostManifest({ ...declared(), dependencies: { unknown: "workspace:*" } }, archiveSpecs, packageManager)).toThrow("unsupported consumer dependency");
-    expect(() => packedHostManifest({ ...declared(), dependencies: { "@zudo-sg/ui": "file:/copied-provider" } }, archiveSpecs, packageManager)).toThrow("unsupported consumer dependency");
+    expect(() => packedHostManifest({ ...declared(), dependencies: { "@example/ui": "file:/copied-provider" } }, archiveSpecs, packageManager)).toThrow("unsupported consumer dependency");
     expect(() => packedHostManifest({ ...declared(), pnpm: { overrides: { unknown: "file:../root" } } }, archiveSpecs, packageManager)).toThrow("pnpm settings");
     expect(() => packedHostManifest(declared(), { ...archiveSpecs, "zudo-composer": "file:tool.tgz" }, packageManager)).toThrow("Missing absolute packed tarball");
   });
@@ -277,7 +281,7 @@ describe("real bounded package/install and negative mechanics", () => {
     await run(pnpm, ["install", "--offline", "--no-frozen-lockfile"], host, { env });
     await run(pnpm, ["install", "--offline", "--frozen-lockfile"], host, { env });
     const installed = await assertInstalledHost(host, env, [repositoryRoot]);
-    expect(Object.keys(installed)).toEqual(FIRST_PARTY);
+    expect(Object.keys(installed)).toEqual(MANDATORY_FIRST_PARTY);
     expect(installed["zudo-composer"]).toMatch(/\/server\/dev-server[.]mjs$/u);
     expect(installed["@zudo-composer/component-contract"]).toMatch(/\/dist\/index[.]js$/u);
     // pnpm 11 verifies dependencies before exec/run; the rewritten manifest and

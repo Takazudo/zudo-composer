@@ -31,7 +31,7 @@ const TONE_TITLE_CLASS: Record<CalloutTone, string> = {
 /**
  * Call-out box for surfacing a note or aside in the flow of body copy.
  * `tone="note"` is accent-tinted with an accent rule; `tone="muted"` is a
- * neutral surface-tinted variant. This is a `@zudo-sg/ui` building block,
+ * neutral surface-tinted variant. This is a `@zudo-composer/ui` building block,
  * separate from the doc host's own built-in `<Note>`/admonition directives.
  */
 export function Callout({ tone = "note", title, class: cls, children }: CalloutProps) {

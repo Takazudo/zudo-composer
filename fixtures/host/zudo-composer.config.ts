@@ -6,5 +6,5 @@
 import { defineComposerConfig } from "zudo-composer/config";
 
 export default defineComposerConfig({
-  pack: "@zudo-sg/ui/composer-pack",
+  pack: "@zudo-composer/ui/composer-pack",
 });

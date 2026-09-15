@@ -12,7 +12,7 @@ export const cardComposer = defineComponent<CardProps>()(Card, {
   id: "ui.card",
   schemaVersion: 1,
   ...cardDisplay,
-  source: { module: "@zudo-sg/ui", exportKind: "named", exportName: "Card" },
+  source: { module: "@zudo-composer/ui", exportKind: "named", exportName: "Card" },
   defaults: { title: "Card heading", variant: "default", padding: "md" },
   fields: [
     { prop: "title", label: "Title", schema: { type: "string" }, editor: { kind: "text" } },

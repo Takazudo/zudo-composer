@@ -47,7 +47,7 @@ describe("gen-composer-pack", () => {
     expect(run().status).toBe(0);
     const output = readFileSync(join(sandbox, "packages/ui/src/composer-pack.ts"), "utf8");
     expect(output.indexOf("aComposer as aDeepA")).toBeLessThan(output.indexOf("zComposer as zZ"));
-    expect(output).toContain('packId: "@zudo-sg/ui"');
+    expect(output).toContain('packId: "@zudo-composer/ui"');
     expect(output).toContain('packVersion: "1.0.0"');
   });
 

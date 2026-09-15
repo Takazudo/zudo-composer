@@ -17,7 +17,7 @@ export const heroComposer = defineComponent<HeroComposerProps>()(Hero, {
   id: "ui.hero",
   schemaVersion: 1,
   ...heroDisplay,
-  source: { module: "@zudo-sg/ui", exportKind: "named", exportName: "Hero" },
+  source: { module: "@zudo-composer/ui", exportKind: "named", exportName: "Hero" },
   defaults: {
     eyebrow: "Welcome",
     heading: "Build things that last",

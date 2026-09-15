@@ -7,21 +7,21 @@
  * `.zd-content`'s flow-space stylesheet is shipped by @takazudo/zudo-doc and
  * absent on the /composer routes. So this file ports the same Tailwind
  * utility VALUES those components use, as plain descendant selectors scoped
- * off `.zc-prose-md`, bound to @zudo-sg/ui's Tier-2 semantic tokens only
+ * off `.zc-prose-md`, bound to @zudo-composer/ui's Tier-2 semantic tokens only
  * (never the Tier-1 `--palette-*` values, never Tailwind `dark:` — this
  * project themes via `data-theme` + `light-dark()`, baked into the tokens
  * themselves).
  *
  * `hi-*` fence token colors are owned by the public provider stylesheet,
- * `@zudo-sg/ui/styles/composer.css`.
+ * `@zudo-composer/ui/styles/composer.css`.
  * This file only lays out the `pre`/`code` box (padding, radius,
  * overflow-x, background), mirroring `.zd-content`'s own code-block rules
- * (@takazudo/zudo-doc/content.css) but bound to @zudo-sg/ui's own portable
+ * (@takazudo/zudo-doc/content.css) but bound to @zudo-composer/ui's own portable
  * `--color-surface-2` rather than the root-only `--color-code-bg` — this
- * component ships from @zudo-sg/ui and must render correctly in any consumer,
+ * component ships from @zudo-composer/ui and must render correctly in any consumer,
  * not just this repo's root app.
  *
- * External consumers import the canonical `@zudo-sg/ui/styles/composer.css`
+ * External consumers import the canonical `@zudo-composer/ui/styles/composer.css`
  * entrypoint, which supplies tokens, highlighting, and this component CSS.
  */
 

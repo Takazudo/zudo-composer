@@ -129,8 +129,9 @@ assert(
   rootPackageJson.peerDependencies?.['@zudo-composer/component-contract'] === '^1.0.0',
   'the contract must be a 1.x peer, supplied by the host from the exact handoff or a packed artifact',
 );
-assert(rootPackageJson.dependencies?.[UI_PACK.packageName] === undefined, 'the demo provider must not be a runtime dependency');
-assert(rootPackageJson.devDependencies?.[UI_PACK.packageName] !== undefined, 'the demo provider must remain a development dependency');
+assert(rootPackageJson.dependencies?.[UI_PACK.packageName] === undefined, 'the owned UI pack must not be a runtime dependency');
+assert(rootPackageJson.peerDependencies?.[UI_PACK.packageName] === undefined, 'the owned UI pack must not be a peer dependency');
+assert(rootPackageJson.devDependencies?.[UI_PACK.packageName] === UI_PACK.workspaceSpec, 'the owned UI pack must remain a workspace:* development dependency');
 
 // Dev-only for this repository, runtime-required for a host: the installed
 // launcher imports all four.
@@ -178,6 +179,7 @@ for (const target of [...exportTargets, rootPackageJson.bin['zudo-composer']]) {
 for (const required of [
   'index.html',
   'contract-handoff.json',
+  'ui-handoff.json',
   'src/main.tsx',
   'src/App.tsx',
   'server/cli/run.mjs',
@@ -230,6 +232,7 @@ for (const required of [
 
 for (const packed of rootPackedPaths) {
   assert(!packed.startsWith('packages/component-contract/'), `packed tool must use its contract peer: ${packed}`);
+  assert(!packed.startsWith(`${UI_PACK.sourcePath}/`), `packed tool must not bundle the UI pack: ${packed}`);
   assert(!/(?:^|\/)__tests__\//u.test(packed), `packed archive exposes a test directory: ${packed}`);
   assert(!/(?:^|\/)type-tests\//u.test(packed), `packed archive exposes type tests: ${packed}`);
   assert(!/(?:^|\/)test-support\//u.test(packed), `packed archive exposes test support: ${packed}`);

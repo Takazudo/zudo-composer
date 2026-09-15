@@ -44,7 +44,6 @@ import {
 import { MISSING_RUNTIME, packMissingRuntime, plantHoistedDependency } from "./packed-host-negatives.mjs";
 import { createPackedGeneratedHost, snapshotPackedFiles } from "./packed-generated-host.mjs";
 import { checkNoDeploy } from "./check-no-deploy.mjs";
-import { UI_PACK } from "./ui-pack-identity.mjs";
 
 /** @typedef {import("@playwright/test").Page} Page */
 /** @typedef {import("./packed-host-helpers.mjs").HostManifest} HostManifest */
@@ -350,20 +349,18 @@ async function proveDiskHost(sourceHost, workspace, tarballs, toolPackage, negat
     step(`${name}: copying the complete host tree outside the repository`);
     await copyPackedHost(sourceHost, hostRoot);
     const manifest = await configurePackedHost(hostRoot, tarballs, toolPackage.packageManager);
-    for (const section of [manifest.dependencies, manifest.devDependencies, manifest.peerDependencies, manifest.optionalDependencies]) {
-      if (section?.[UI_PACK.packageName]) assert.equal(section[UI_PACK.packageName], toolPackage.devDependencies[UI_PACK.packageName], "The provider must retain its exact Git pin");
-    }
+    const declared = FIRST_PARTY.filter((name) => [manifest.dependencies, manifest.devDependencies, manifest.peerDependencies, manifest.optionalDependencies].some((section) => section?.[name]));
     if (negative === "hoisted-dependency") {
       planted = await plantHoistedDependency({ root, sourceHost, hostRoot, env: environment });
       step(`${name}: source-host control resolved root-hoisted ${planted.name}; only the copied config now imports it undeclared`);
     }
 
-    step(`${name}: installing the tool and contract tarballs with exact overrides`);
+    step(`${name}: installing the ${declared.join(", ")} tarballs with exact overrides`);
     await run(pnpm, ["install", "--no-frozen-lockfile"], hostRoot);
     await run(pnpm, ["install", "--frozen-lockfile"], hostRoot);
     const installed = await assertInstalledHost(hostRoot, environment, roots);
-    step(`${name}: package resolution is confined to ${hostRoot}/node_modules (${FIRST_PARTY.length} packed packages)`);
-    assert.equal(Object.keys(installed).length, FIRST_PARTY.length);
+    step(`${name}: package resolution is confined to ${hostRoot}/node_modules (${declared.length} packed packages)`);
+    assert.deepEqual(Object.keys(installed), declared);
     const installedTree = await tree(hostRoot);
     const readyCms = generated ? await snapshotPackedFiles(join(hostRoot, "cms")) : undefined;
 
@@ -407,10 +404,10 @@ checkNoDeploy({ root });
 const workspace = await createPackedWorkspace(roots);
 try {
   step(`external workspace: ${workspace}`);
-  step(`packing the actual tool and contract for ${selection.hosts.length} disk host(s)${selection.fixture ? " and the synthesized fixture" : ""}`);
+  step(`packing the actual tool, contract and UI pack for ${selection.hosts.length} disk host(s)${selection.fixture ? " and the synthesized fixture" : ""}`);
   /** @type {Tarballs} */
   const tarballs = {};
-  for (const [name, directory] of [["zudo-composer", root], ["@zudo-composer/component-contract", join(root, "packages/component-contract")]]) {
+  for (const [name, directory] of [["zudo-composer", root], ["@zudo-composer/component-contract", join(root, "packages/component-contract")], ["@zudo-composer/ui", join(root, "packages/ui")]]) {
     tarballs[name] = await packPackage(directory, join(workspace, "tarballs"));
   }
   if (selection.negative === "missing-runtime") {
