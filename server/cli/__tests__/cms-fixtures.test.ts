@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, utimes, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -106,7 +107,7 @@ async function git(root: string, ...args: string[]) {
   return run("git", ["-C", root, ...args], { encoding: "utf8" });
 }
 
-async function hostRepository() {
+async function hostRepository(options: { contractRoot?: string } = {}) {
   const root = await temporary(), hostName = "packages/demo-sample", host = join(root, hostName);
   await mkdir(host, { recursive: true });
   await mkdir(join(root, "scripts"));
@@ -114,7 +115,7 @@ async function hostRepository() {
   await writeFile(join(root, ".gitignore"), "node_modules/\nignored.txt\n");
   await mkdir(join(host, "node_modules/@zudo-composer"), { recursive: true });
   await symlink(APP_ROOT, join(host, "node_modules/zudo-composer"), "dir");
-  await symlink(join(APP_ROOT, "node_modules/@zudo-composer/component-contract"), join(host, "node_modules/@zudo-composer/component-contract"), "dir");
+  await symlink(options.contractRoot ?? join(APP_ROOT, "node_modules/@zudo-composer/component-contract"), join(host, "node_modules/@zudo-composer/component-contract"), "dir");
   await symlink(join(APP_ROOT, "node_modules/preact"), join(host, "node_modules/preact"), "dir");
   await writeFile(join(host, "package.json"), json({ name: "fixture-host", type: "module", exports: { "./pack": "./components/pack.ts" }, devDependencies: { "zudo-composer": "0.0.0", "@zudo-composer/component-contract": "1.0.0", preact: "^10.29.8" } }));
   await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "fixture-host/pack" });\n');
@@ -231,4 +232,59 @@ describe("installed fixture regeneration", () => {
     }
     await expect(lstat(join(current.host, "cms"))).rejects.toMatchObject({ code: "ENOENT" });
   });
+});
+
+/**
+ * An isolated copy of the real, checked-out `@zudo-composer/component-contract`:
+ * its own `src`, `tsconfig.json` and a real `dist` built by a real `tsc -b`
+ * run against that copy. Only `node_modules/typescript` is shared (a symlink
+ * to the real installed package) so the copy's own `tsc -b` invocation writes
+ * its build-info cache inside the copy, never into the real package's
+ * `node_modules` or `dist` — nothing here can leak into the checked-out repo.
+ */
+async function freshContractCopy(): Promise<string> {
+  const root = await temporary();
+  const source = join(APP_ROOT, "node_modules/@zudo-composer/component-contract");
+  for (const name of ["package.json", "tsconfig.json", "src"]) await cp(join(source, name), join(root, name), { recursive: true });
+  const typescriptManifestPath = createRequire(join(source, "package.json")).resolve("typescript/package.json");
+  const typescriptManifest = JSON.parse(await readFile(typescriptManifestPath, "utf8")) as { bin: Record<string, string> };
+  await mkdir(join(root, "node_modules"));
+  await symlink(dirname(typescriptManifestPath), join(root, "node_modules/typescript"), "dir");
+  await run(process.execPath, [join(dirname(typescriptManifestPath), typescriptManifest.bin.tsc!), "-b"], { cwd: root });
+  return root;
+}
+
+describe("component-contract dist freshness", () => {
+  it("blames a stale local component-contract build instead of the committed hosts, for both check and regenerate", async () => {
+    const contractRoot = await freshContractCopy();
+    const current = await hostRepository({ contractRoot });
+    await runInstalledComposer(current.host, ["generate"]);
+    await runInstalledComposer(current.host, ["seed", "--ready-workspace"]);
+    await current.invoke();
+    await current.commit();
+    const metadata = JSON.parse(await readFile(join(current.root, OWNERSHIP_FILE), "utf8"));
+    const managed = [...metadata.hosts[current.hostName], "site-project.json"];
+    const before = await inventory(current.host, managed);
+    // Simulate a checkout that pulled a contract source change without
+    // rerunning the package's `prepare` (`tsc -b`): the source gets a fresh
+    // mtime, the previously built `dist` does not.
+    const future = new Date(Date.now() + 5 * 60_000);
+    await utimes(join(contractRoot, "src/index.ts"), future, future);
+    await expect(current.invoke(true)).rejects.toThrow(/local component-contract build is stale/);
+    await expect(current.invoke()).rejects.toThrow(/local component-contract build is stale/);
+    expect(await inventory(current.host, managed)).toEqual(before);
+  }, 120_000);
+
+  it("passes a fresh local component-contract build through unchanged", async () => {
+    const contractRoot = await freshContractCopy();
+    const current = await hostRepository({ contractRoot });
+    await runInstalledComposer(current.host, ["generate"]);
+    await runInstalledComposer(current.host, ["seed", "--ready-workspace"]);
+    const distNames = (await readdir(join(contractRoot, "dist"))).sort();
+    const before = await Promise.all(distNames.map(async (name) => (await lstat(join(contractRoot, "dist", name))).mtimeMs));
+    await current.invoke();
+    await current.invoke(true);
+    expect((await readdir(join(contractRoot, "dist"))).sort()).toEqual(distNames);
+    expect(await Promise.all(distNames.map(async (name) => (await lstat(join(contractRoot, "dist", name))).mtimeMs))).toEqual(before);
+  }, 120_000);
 });
