@@ -26,7 +26,7 @@ ordinary root `dev` script starts Vite on its default development port,
 ## The repository is a host
 
 The repository root is its own dogfood host. [`zudo-composer.config.ts`](https://github.com/Takazudo/zudo-composer/blob/main/zudo-composer.config.ts)
-selects `@zudo-sg/ui/composer-pack`, while `styles/base.css` is the host-owned
+selects `@zudo-composer/ui/composer-pack`, while `styles/base.css` is the host-owned
 stylesheet entry that imports the provider CSS. The same host-rooted resolution
 is exercised by `pnpm dev`, `pnpm build`, and the artifact gates; there is no
 second private application configuration to keep in sync.

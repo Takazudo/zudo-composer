@@ -20,6 +20,7 @@ const uiHandoff = readJson("ui-handoff.json");
 const appTokens = read("src/styles/app-tokens.css");
 
 const uiSpec = `git+https://github.com/Takazudo/zudo-composer.git#${UI_PACK.packageCommit}`;
+assert.equal(UI_PACK.rootGitSpec, uiSpec);
 const contractSpec = `git+https://github.com/Takazudo/zudo-composer.git#${CONTRACT_PACKAGE_COMMIT}`;
 
 assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/assets"]);

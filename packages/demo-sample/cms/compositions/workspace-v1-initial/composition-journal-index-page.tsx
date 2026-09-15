@@ -1,6 +1,6 @@
 import LinkedTemplate from "./composition-site-frame";
 
-import { AutoGrid, Callout, Card, CtaButton, ProseP, SectionHeading } from "@zudo-sg/ui";
+import { AutoGrid, Callout, Card, CtaButton, ProseP, SectionHeading } from "@zudo-composer/ui";
 
 function LocalCompositionContent() {
   return (

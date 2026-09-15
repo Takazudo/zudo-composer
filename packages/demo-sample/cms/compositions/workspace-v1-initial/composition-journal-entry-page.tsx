@@ -1,6 +1,6 @@
 import LinkedTemplate from "./composition-site-frame";
 
-import { Callout, CtaButton, ProseMd, ProseP, SectionHeading } from "@zudo-sg/ui";
+import { Callout, CtaButton, ProseMd, ProseP, SectionHeading } from "@zudo-composer/ui";
 
 function LocalCompositionContent() {
   return (

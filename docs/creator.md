@@ -62,10 +62,11 @@ without modifying or rebuilding the committed initial CMS.
 
 Preact is a direct peer-satisfying dependency, and the tool deduplicates it.
 Tailwind remains tool-supplied: the host owns only its CSS entry and `@source`.
-The starter uses its own pack; adding `@zudo-sg/ui` still requires the exact
-provider Git pin documented in `CLAUDE.md`. The generated package-manager files
-retain `blockExoticSubdeps: false` while that provider uses Git. They do not
-introduce a provider version or weaken the provider identity checks.
+The starter uses its own pack; adding `@zudo-composer/ui` requires the exact
+`ui-handoff.json` Git spec documented in `CLAUDE.md`. The generated
+package-manager files retain `blockExoticSubdeps: false` for Git-hosted
+first-party packages. They do not introduce a pack version or weaken the
+package identity checks.
 
 ## Preview before publication
 

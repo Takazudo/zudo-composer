@@ -38,8 +38,8 @@ describe("owned UI pack dependency", () => {
       packageName: UI_PACK.packageName,
       sourcePath: UI_PACK.sourcePath,
       packageBranch: "package/ui-v1",
-      packageCommit: expect.stringMatching(/^[0-9a-f]{40}$/),
-      rootGitSpec: `git+https://github.com/Takazudo/zudo-composer.git#${handoff.packageCommit}`,
+      packageCommit: UI_PACK.packageCommit,
+      rootGitSpec: UI_PACK.rootGitSpec,
     });
     expect(handoff.rootGitSpec).not.toMatch(/&path:|(?:^|:)(?:workspace|file|link|path):/);
   });

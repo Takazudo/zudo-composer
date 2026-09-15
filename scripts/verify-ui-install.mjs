@@ -188,12 +188,15 @@ async function listFiles(directory, prefix = '') {
 async function assertInstalledPackage(directory) {
   const probe = [
     "import { createRequire } from 'node:module';",
-    "import { readFileSync, realpathSync } from 'node:fs';",
-    "import { dirname, join } from 'node:path';",
+    "import { existsSync, readFileSync, realpathSync } from 'node:fs';",
+    "import { join } from 'node:path';",
     `const root = realpathSync(join(process.cwd(), 'node_modules', ${JSON.stringify(packageName)}));`,
     "const packageRequire = createRequire(join(root, 'package.json'));",
     "const consumerRequire = createRequire(join(process.cwd(), 'package.json'));",
-    "const wasm = JSON.parse(readFileSync(join(dirname(packageRequire.resolve('@takazudo/zfb-md-wasm/package.json')), 'package.json'), 'utf8'));",
+    // The markdown runtime does not export ./package.json, so find its manifest along the pack's own resolution paths.
+    "const wasmManifest = packageRequire.resolve.paths('@takazudo/zfb-md-wasm').map((path) => join(path, '@takazudo/zfb-md-wasm/package.json')).find((path) => existsSync(path));",
+    "if (!wasmManifest) throw new Error('@takazudo/zfb-md-wasm is not resolvable from the installed pack');",
+    "const wasm = JSON.parse(readFileSync(wasmManifest, 'utf8'));",
     "consumerRequire.resolve('dompurify', { paths: [root] });",
     "console.log(JSON.stringify({ root, wasm: wasm.version }));",
   ].join('\n');

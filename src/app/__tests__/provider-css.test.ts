@@ -33,7 +33,7 @@ describe("host and tool CSS ownership", () => {
     // The repo root is a host too: `pnpm dev` and the artifact gates resolve
     // their pack and styles through the root config exactly as an install does.
     const hostStyles = readFileSync(resolve("styles/base.css"), "utf8");
-    expect(hostStyles.match(/@zudo-sg\/ui\/styles\/composer\.css/g)).toHaveLength(1);
+    expect(hostStyles.match(/@zudo-composer\/ui\/styles\/composer\.css/g)).toHaveLength(1);
     const config = readFileSync(resolve("zudo-composer.config.ts"), "utf8");
     expect(config).toContain('pack: "@zudo-composer/ui/composer-pack"');
     expect(config).toContain('styles: "styles/base.css"');

@@ -16,7 +16,7 @@ const projectPath = resolve(packageRoot, "site-project.json");
 // SHA-256 of the committed Sample Studio fixture. This exact-byte assertion
 // keeps the host self-contained, without a second JSON input or a dependency
 // on the tool repository's test files.
-const projectDigest = "263f682f0e9fe8d2c1b7ae8690550979bff7d874da042efae2c6082f61c7cf32";
+const projectDigest = "81442f21be3213cdfcd794aa7684c61481cc9c561906495d15624f07b13a5861";
 const headings: Record<string, string> = {
   "/": "Clear ideas, carefully shaped",
   "/about": "A studio built around useful clarity",

@@ -1,4 +1,4 @@
-import { Container, Stack } from "@zudo-sg/ui";
+import { Container, Stack } from "@zudo-composer/ui";
 
 export type CompositionOutlets = {
   "main-content"?: import("preact").ComponentChildren;

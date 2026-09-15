@@ -143,37 +143,37 @@ Changing a themeset therefore means changing the configured pack and the
 host's CSS import/source declarations, with no provider-specific edit to
 Composer. See [Installing into a Host](../setup/installing-into-a-host.mdx).
 
-## The installed provider proof
+## The owned pack proof
 
-`@zudo-sg/ui` is this repository's ordinary dogfood pack. It owns its component
-sidecars, runtime pack, and canonical component CSS. The tool does not copy its
-components or consume its styleguide application. Its focused
+`@zudo-composer/ui` in `packages/ui` is this repository's ordinary dogfood pack.
+It owns its component sidecars, runtime pack, and canonical component CSS. The
+tool never bundles it or falls back to it. The pack's focused
 `@takazudo/zfb-md-wasm` dependency supports `ProseMd` rendering.
 
 The provider proof has several distinct parts:
 
 - `src/features/composer/__tests__/active-pack.test.ts` checks the advertised
   twelve-component pack and its schema identities.
-- `scripts/check-provider-boundary.mjs` checks the exact installed provider
-  dependency, lockfile, and sidecar/runtime-list correspondence.
+- `scripts/check-provider-boundary.mjs` checks the `workspace:*` pack
+  dependency, its lockfile link, and sidecar/runtime-list correspondence.
 - `src/app/__tests__/provider-render.test.tsx` exercises real component
   rendering, named slots, and ProseMd WASM output; `provider-css.test.ts`
   checks stylesheet ownership and integration.
 - `scripts/check-dist-artifact.mjs` checks emitted resources, including exactly
   one focused render WASM file and its glue.
 
-The provider's package metadata version, its pack protocol identity, and the
+The pack's package metadata version, its pack protocol identity, and the
 contract package version are separate values:
 
 | Identity | Current handoff |
 | --- | --- |
-| Installed provider package | `@zudo-sg/ui@0.1.0` |
-| Component-pack identity | `@zudo-sg/ui@1.0.0` |
+| Pack package | `@zudo-composer/ui@0.1.0` |
+| Component-pack identity | `@zudo-composer/ui@1.0.0` |
 | Contract API/package | `@zudo-composer/component-contract@1.0.0` |
 
 [file: contract-handoff.json](https://github.com/Takazudo/zudo-composer/blob/main/contract-handoff.json)
-records the contract's external package commit and root Git spec; it is not
-the UI-provider pin. This monorepo uses `workspace:*` for its own contract
-source. The provider remains an exact external Git dependency. See
+records the contract's external package commit and root Git spec, and
+[file: ui-handoff.json](https://github.com/Takazudo/zudo-composer/blob/main/ui-handoff.json)
+records the pack's. This monorepo uses `workspace:*` for both. See
 [Provider and Contract Handoffs](../development/provider-and-contract-handoffs.mdx)
 for update procedures.

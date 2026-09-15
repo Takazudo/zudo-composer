@@ -6,7 +6,7 @@ import { basename, delimiter, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  FIRST_PARTY, PACKED_NPMRC, assertConfinedWrites, assertExternalWorkspace, assertInstalledHost,
+  FIRST_PARTY, MANDATORY_FIRST_PARTY, PACKED_NPMRC, assertConfinedWrites, assertExternalWorkspace, assertInstalledHost,
   configurePackedHost, copyPackedHost, discoverPackedHosts, isolatedEnvironment,
   packedHostManifest, packedHostMatrix, packPackage, pnpm, repositoryRoots, run, selectPackedHosts,
   startHostServer, tree,
@@ -281,7 +281,7 @@ describe("real bounded package/install and negative mechanics", () => {
     await run(pnpm, ["install", "--offline", "--no-frozen-lockfile"], host, { env });
     await run(pnpm, ["install", "--offline", "--frozen-lockfile"], host, { env });
     const installed = await assertInstalledHost(host, env, [repositoryRoot]);
-    expect(Object.keys(installed)).toEqual(FIRST_PARTY);
+    expect(Object.keys(installed)).toEqual(MANDATORY_FIRST_PARTY);
     expect(installed["zudo-composer"]).toMatch(/\/server\/dev-server[.]mjs$/u);
     expect(installed["@zudo-composer/component-contract"]).toMatch(/\/dist\/index[.]js$/u);
     // pnpm 11 verifies dependencies before exec/run; the rewritten manifest and

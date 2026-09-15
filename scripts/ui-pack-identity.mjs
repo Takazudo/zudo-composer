@@ -9,11 +9,9 @@
 // Imported by scripts, unit tests and tests/browser only — never by shipped
 // code, since `scripts/` is excluded from the published tarball.
 
-import { readFileSync } from "node:fs";
-
-/** @type {{packageName: string, sourcePath: string, packageBranch: string, packageCommit: string, rootGitSpec: string}} */
-const handoff = JSON.parse(readFileSync(new URL("../ui-handoff.json", import.meta.url), "utf8"));
-
+// The package-only handoff commit on `package/ui-v1`. `ui-handoff.json` records
+// the same value for external hosts; `handoff:boundary` asserts they agree.
+const packageCommit = "847b582c911a3c2e5461ed89caf2b78a874331d7";
 // The zudo-sg package commit the twelve components were ported from.
 const provenanceCommit = "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf";
 const appProvenanceCommit = "f1206f3b82bdbfff791dcaf5d9918c2afdda0ae2";
@@ -25,9 +23,9 @@ export const UI_PACK = Object.freeze({
   packageName,
   sourcePath: "packages/ui",
   workspaceSpec: "workspace:*",
-  packageBranch: handoff.packageBranch,
-  packageCommit: handoff.packageCommit,
-  rootGitSpec: handoff.rootGitSpec,
+  packageBranch: "package/ui-v1",
+  packageCommit,
+  rootGitSpec: `git+https://github.com/Takazudo/zudo-composer.git#${packageCommit}`,
   installedVersion: "0.1.0",
   packId: packageName,
   packVersion: "1.0.0",
@@ -42,5 +40,5 @@ export const PERMANENT_HANDOFF_HASHES = Object.freeze([
   appProvenanceCommit,
   provenanceCommit,
   contractPackageCommit,
-  handoff.packageCommit,
+  packageCommit,
 ]);
