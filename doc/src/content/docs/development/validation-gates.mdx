@@ -25,27 +25,30 @@ by weakening an earlier boundary.
 | 10 | `handoff:boundary` | Verifies the tool bin/config/data contract, provider and contract identities, route surface, clean-break policy, and absence of copied or stale provenance. | A permanent handoff hash/spec/version, host-facing filename, route, or current-only rule no longer matches the documented contract. |
 | 11 | `styles:class-names` | Checks that browser specs name live classes and that source does not write numeric Tailwind spacing utilities the theme cannot generate. | A selector is stale, or a spacing utility silently emits no CSS. |
 | 12 | `provider:boundary` | Compares the exact provider Git spec and lockfile codeload resolution with installed metadata, generated pack entries, sidecars, public source modules, and unique component IDs. | The provider is not the pinned full SHA, local/sibling resolution appears, or pack/sidecar order or identity differs. |
-| 13 | `test` | Runs the repository's Vitest suites, including package, domain, and script regressions. | Any test fails or exits unsuccessfully. |
-| 14 | `build` | Runs the TypeScript build and the ordinary Vite production build. | Compilation, bundling, or asset generation fails. |
-| 15 | `dist:boundary` | Inspects `dist/` after `build`: root-relative assets, one preview/app entry, focused WASM/glue, canonical CSS, local/provider Tailwind proof, and no server/file-provider leakage. | Build output is absent, has a forbidden marker, emits an extra or missing runtime asset, or violates the CSS/asset boundary. |
-| 16 | `doc:check` | Runs the zudo-doc content and TypeScript checks for the documentation workspace. | MDX/frontmatter/content validation or documentation TypeScript checks fail. |
-| 17 | `doc:build-site` | Builds the static documentation site, writes `doc-site-manifest.json`, and verifies every emitted file, route, MIME identity, tool identity, and optional source SHA in `doc/dist`. | The docs build, manifest route derivation, artifact inventory/checksum, supported extension, or trusted source identity fails. |
-| 18 | `smoke:host-install` | Packs the tool and contract, installs them in isolated disposable hosts, runs installed dev/generate/seed/build/test/browser proofs, and checks data ownership and release portability. It owns port 4175 and needs network access and Playwright Chromium. | A packed archive, frozen install, host command, generated output, artifact, browser proof, or cleanup/confinement assertion fails. |
+| 13 | `ui:pack-check` | Regenerates `packages/ui/src/composer-pack.ts` from the package's `.composer.tsx` sidecars and checks the committed file matches byte for byte. | The generated pack module is stale or a sidecar was added/removed without regenerating it. |
+| 14 | `test` | Runs the repository's Vitest suites, including package, domain, and script regressions. | Any test fails or exits unsuccessfully. |
+| 15 | `build` | Runs the TypeScript build and the ordinary Vite production build. | Compilation, bundling, or asset generation fails. |
+| 16 | `dist:boundary` | Inspects `dist/` after `build`: root-relative assets, one preview/app entry, focused WASM/glue, canonical CSS, local/provider Tailwind proof, and no server/file-provider leakage. | Build output is absent, has a forbidden marker, emits an extra or missing runtime asset, or violates the CSS/asset boundary. |
+| 17 | `doc:check` | Runs the zudo-doc content and TypeScript checks for the documentation workspace. | MDX/frontmatter/content validation or documentation TypeScript checks fail. |
+| 18 | `doc:build-site` | Builds the static documentation site, writes `doc-site-manifest.json`, and verifies every emitted file, route, MIME identity, tool identity, and optional source SHA in `doc/dist`. | The docs build, manifest route derivation, artifact inventory/checksum, supported extension, or trusted source identity fails. |
+| 19 | `smoke:host-install` | Packs the tool, contract and UI pack, installs the declared archives in isolated disposable hosts, runs installed dev/generate/seed/build/test/browser proofs, and checks data ownership and release portability. It owns port 4175 and needs network access and Playwright Chromium. | A packed archive, frozen install, host command, generated output, artifact, browser proof, or cleanup/confinement assertion fails. |
 
 `consumer:boundary` invokes `creator:check` itself; `creator:check` is listed
 separately here because it is also the focused command for a generated host.
 Likewise, `typecheck:public` is the public-surface part of `typecheck`, not an
 extra aggregate step.
 
-## Contract and packed-host gates
+## Package-handoff and packed-host gates
 
-The contract handoff has three commands in addition to the aggregate chain:
+The two package-only handoffs have four commands in addition to the aggregate
+chain:
 
 | Command | What it guards | Failure means |
 | --- | --- | --- |
 | `contract:conformance` | The `@zudo-composer/component-contract` package version, exports, built declarations/runtime, pack contents, and consumer-facing boundary. | A package manifest/export/build/pack invariant or published-file allowlist is wrong. |
 | `contract:negative-scan` | The generic contract package's independence from `workspace:`, `file:`, `link:`, sibling paths, root-workspace preparation, and application dependencies. | A contract source or handoff document introduces a forbidden protocol, preparation command, or application coupling. |
 | `contract:external-install -- --exact` | The exact package-only Git handoff: advertised branch and package tree, full commit SHA in the lockfile, frozen install, and imports of the package and `./fixtures`. | The handoff branch is unavailable/stale, the tree differs, a path/protocol appears in the external install, or the installed contract cannot load. `--exact` makes an unavailable public branch an error rather than using the local fallback proof. |
+| `ui:external-install -- --exact` | The exact package-only Git handoff for `@zudo-composer/ui`: advertised branch and package tree, full commit SHA in the lockfile, frozen install, installed file list and `package.json` bytes matching `packages/ui`, `@takazudo/zfb-md-wasm` resolving at `2.10.1`, and the pack declaring its twelve sidecars. | The handoff branch is unavailable/stale, the tree differs, a path/protocol appears in the external install, a file/manifest mismatch is found, or a dependency/sidecar check fails. `--exact` makes an unavailable public branch an error rather than using the local fallback proof. |
 
 `corepack pnpm packed-host:matrix` runs `scripts/packed-host-matrix.mjs` and
 prints the disk-discovered host matrix (or writes it to `GITHUB_OUTPUT` with

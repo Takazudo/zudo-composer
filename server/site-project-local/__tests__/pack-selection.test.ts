@@ -1,6 +1,6 @@
 // Server-side validation and release identity both follow the CONFIGURED pack.
 //
-// The themeset fixture shares no component id with `@zudo-sg/ui`, which is what
+// The themeset fixture shares no component id with `@zudo-composer/ui`, which is what
 // makes the first assertion a real proof rather than a tautology: a project
 // authored against one pack cannot pass a server validating against the other.
 

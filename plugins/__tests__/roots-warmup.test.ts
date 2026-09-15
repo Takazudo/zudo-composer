@@ -1,4 +1,4 @@
-import { statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { APP_ENTRY, APP_ROOT, resolveAppWarmupFiles } from "../roots.mjs";
@@ -16,7 +16,14 @@ describe("resolveAppWarmupFiles()", () => {
     expect(relativePaths.some((file) => file.split("/").includes("__tests__"))).toBe(false);
     expect(relativePaths.some((file) => file.split("/").includes("test-support"))).toBe(false);
 
-    for (const excludedTree of ["src/hosted-demo", "server/site-build/client"]) {
+    expect(relativePaths.some((file) => /\.(?:test|spec)\.[^/]+$/.test(file))).toBe(false);
+
+    // A test library in the warmup graph is found only after Vite's entry scan,
+    // which re-runs the optimizer and full-reloads open pages (#703).
+    const testImport = /from\s+["'](?:vitest|@vitest\/[^"']+|@testing-library\/[^"']+)["']/;
+    expect(files.filter((file) => testImport.test(readFileSync(file, "utf8"))).map((file) => relative(APP_ROOT, file))).toEqual([]);
+
+    for (const excludedTree of ["src/test", "src/hosted-demo", "server/site-build/client"]) {
       expect(relativePaths.some((file) => file === excludedTree || file.startsWith(`${excludedTree}/`))).toBe(false);
     }
   });

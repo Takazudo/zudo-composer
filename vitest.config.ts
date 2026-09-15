@@ -59,7 +59,7 @@ export default defineConfig({
           // blow past 20s while passing in isolation. Same reason the server project raises
           // its own timeout; the cost here is real I/O, not a hung promise.
           testTimeout: 60_000,
-          exclude: [...configDefaults.exclude, '**/worktrees/**', 'templates/**', 'server/**', 'packages/image-editor/src/__tests__/**/*.test.ts', 'packages/demo-*/**'],
+          exclude: [...configDefaults.exclude, '**/worktrees/**', 'templates/**', 'server/**', 'packages/image-editor/src/__tests__/**/*.test.ts', 'packages/demo-*/**', 'packages/ui/**'],
         },
       },
       {
@@ -74,6 +74,19 @@ export default defineConfig({
           include: ['packages/demo-*/**/*.test.?(c|m)[jt]s?(x)'],
           environment: 'node',
           testTimeout: 60_000,
+          exclude: [...configDefaults.exclude, '**/worktrees/**'],
+        },
+      },
+      {
+        // packages/ui is a standalone handoff package (#686 C0): its own
+        // colocated tests, no `src/test` setup and none of the app project's
+        // `virtual:*` aliases, which a pack must never depend on.
+        oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } },
+        test: {
+          name: 'ui',
+          include: ['packages/ui/src/**/*.test.{ts,tsx}'],
+          environment: 'jsdom',
+          setupFiles: ['./packages/ui/src/test/setup.ts'],
           exclude: [...configDefaults.exclude, '**/worktrees/**'],
         },
       },

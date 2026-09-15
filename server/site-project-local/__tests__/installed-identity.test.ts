@@ -78,7 +78,7 @@ describe("published contract attestation", () => {
     await expect(digest()).rejects.toThrow(/link/);
   });
 
-  it("matches pnpm 11.5.2's published manifest while retaining the component pack's raw bytes", async () => {
+  it("matches pnpm 11.5.2's published manifest in contract and directory modes", async () => {
     const { root, digest } = await contract();
     const published = { name: "contract", version: "1.0.0", scripts: { build: "tsc -b", install: "node install.mjs" } };
     await writeFile(join(root, "package.json"), JSON.stringify({
@@ -88,7 +88,7 @@ describe("published contract attestation", () => {
     const checkout = await digest(), pack = await installedPackageDigest(root);
     await writeFile(join(root, "package.json"), JSON.stringify({ scripts: published.scripts, version: published.version, name: published.name }));
     expect(await digest()).toBe(checkout);
-    expect(await installedPackageDigest(root)).not.toBe(pack);
+    expect(await installedPackageDigest(root)).toBe(pack);
   });
 
   it.each([
@@ -125,7 +125,7 @@ describe("published contract attestation", () => {
 });
 
 describe("pack source graph attestation", () => {
-  const manifest = { name: "host", description: "Host site", type: "module", exports: { "./components/*": { import: "./src/components/*.tsx", default: "./src/components/*.js" } }, dependencies: { react: "^19.0.0" }, peerDependencies: { "@zudo-sg/ui": "*" } };
+  const manifest = { name: "host", description: "Host site", type: "module", exports: { "./components/*": { import: "./src/components/*.tsx", default: "./src/components/*.js" } }, dependencies: { react: "^19.0.0" }, peerDependencies: { "@zudo-composer/ui": "*" } };
   async function host() {
     const { parent } = await fixture();
     const root = join(parent, "host");

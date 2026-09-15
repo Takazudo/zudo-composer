@@ -1,0 +1,8 @@
+@import "tailwindcss/preflight";
+@import "tailwindcss/utilities";
+@import "./tokens.css";
+@import "./colors.css";
+@import "./syntax-highlight.css";
+@import "../src/content/prose-md/prose-md.css";
+
+@source "../src";

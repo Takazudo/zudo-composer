@@ -53,7 +53,7 @@ to the starter's records:
 | --- | --- |
 | Ready runtime | Owned pack/styles/config; canonical Compositions, Content, Mapping and Sitemapper records; current pointers and completed workspace registry; Assets catalog/version and public image bytes |
 | Authoring, regeneration and build | `site-project.ts`, canonical `site-project.json`, image manifest and source PNG |
-| Tests, types, docs and hygiene | Own Preact/Vitest tests, TypeScript and Vitest configs, README, scratch-only `.gitignore`, `.npmrc` and `pnpm-workspace.yaml` |
+| Tests, types, docs and hygiene | Own Preact/Vitest tests, TypeScript and Vitest configs, README, scratch-only `.gitignore` and `pnpm-workspace.yaml` |
 
 A normal published creation also retains the registry lockfile. Installs, build
 artifacts, release activation state and test output are on-demand scratch state.
@@ -62,10 +62,9 @@ without modifying or rebuilding the committed initial CMS.
 
 Preact is a direct peer-satisfying dependency, and the tool deduplicates it.
 Tailwind remains tool-supplied: the host owns only its CSS entry and `@source`.
-The starter uses its own pack; adding `@zudo-sg/ui` still requires the exact
-provider Git pin documented in `CLAUDE.md`. The generated package-manager files
-retain `blockExoticSubdeps: false` while that provider uses Git. They do not
-introduce a provider version or weaken the provider identity checks.
+The starter uses its own pack; adding `@zudo-composer/ui` requires the exact
+`ui-handoff.json` Git spec documented in `CLAUDE.md`. Adopting it does not
+introduce a pack version or weaken the package identity checks.
 
 ## Preview before publication
 

@@ -21,6 +21,7 @@ import workspaceDomainProvider, { resolveWorkspaceRegistryRoot } from "../plugin
 import { siteProjectSourcePlugin } from "../plugins/site-project-source-plugin.mjs";
 import composerAppHtmlPlugin, { APP_ENTRY_MODULE } from "../plugins/composer-app-html.mjs";
 import componentPackPlugin from "../plugins/component-pack-plugin.mjs";
+import { devPrebundleIncludes } from "../plugins/dev-prebundle.mjs";
 import hostStylesPlugin from "../plugins/host-styles-plugin.mjs";
 import { APP_ROOT, resolveAppWarmupFiles, resolveFsAllow, resolvePublicDir, resolveSiteProjectLocalRoot, resolveWatchIgnored, resolveWorkspaceRoot } from "../plugins/roots.mjs";
 import { createModuleEvaluator } from "./module-evaluator.mjs";
@@ -72,6 +73,12 @@ export async function resolveComposerDevConfig(options = {}) {
         // scanner at the package's entry so the first request does not stall
         // on a full-reload discovery round.
         entries: [resolve(APP_ROOT, APP_ENTRY_MODULE)],
+        // Pre-bundles at startup what the scanner would otherwise only find at
+        // runtime and reload for: @preact/preset-vite's dev-only injections,
+        // compiled JSX's preact/jsx-runtime, and the excluded pack's own
+        // runtime dependencies, since the pack is excluded from scanning above
+        // (#703 — every real `zudo-composer dev` boots through this config).
+        include: devPrebundleIncludes({ workspaceRoot, pack: settings.pack, exclude: OPTIMIZE_DEPS_EXCLUDE }),
       },
       resolve: resolveComposerModules(),
       server: {

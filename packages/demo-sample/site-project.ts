@@ -3,7 +3,7 @@
 // Run `pnpm generate` after editing; the JSON and ready CMS are generated.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { componentPack } from "@zudo-sg/ui/composer-pack";
+import { componentPack } from "@zudo-composer/ui/composer-pack";
 import { assetAuthoringUrl, defineSite, node } from "zudo-composer/authoring";
 import type { RouteInput } from "zudo-composer/site-project";
 

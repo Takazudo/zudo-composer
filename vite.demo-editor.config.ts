@@ -6,6 +6,7 @@ import preact from "@preact/preset-vite";
 import tailwindPlugin from "./plugins/tailwind-plugin.mjs";
 import componentPackPlugin from "./plugins/component-pack-plugin.mjs";
 import { loadComponentPack } from "./plugins/component-pack.mjs";
+import { devPrebundleIncludes } from "./plugins/dev-prebundle.mjs";
 import hostStylesPlugin from "./plugins/host-styles-plugin.mjs";
 import { APP_HTML_PATH, rewriteAppEntry } from "./plugins/composer-app-html.mjs";
 import { APP_ROOT, resolveFsAllow, resolveWorkspaceRoot } from "./plugins/roots.mjs";
@@ -81,7 +82,13 @@ export async function resolveDemoEditorConfig(hostDir: string): Promise<InlineCo
     base: "/",
     publicDir: false,
     resolve: resolveComposerModules(),
-    optimizeDeps: { exclude: [componentPack.identity.packageName, "@takazudo/zfb-md-wasm"], entries: [resolve(APP_ROOT, DEMO_EDITOR_ENTRY)] },
+    // Pre-bundles at startup what the scanner would otherwise only find at
+    // runtime, forcing a reload — see vite.config.ts for the full rationale.
+    optimizeDeps: {
+      exclude: [componentPack.identity.packageName, "@takazudo/zfb-md-wasm"],
+      include: devPrebundleIncludes({ workspaceRoot: hostRoot, pack: settings.pack, exclude: ["@takazudo/zfb-md-wasm"] }),
+      entries: [resolve(APP_ROOT, DEMO_EDITOR_ENTRY)],
+    },
     server: { fs: { allow: [...resolveFsAllow(hostRoot), componentPack.identity.packageRoot] } },
     build: { outDir, emptyOutDir: true, rollupOptions: { input: APP_HTML_PATH } },
     plugins: [demo, componentPack, hostStylesPlugin({ stylesPath: paths.styles, styles: settings.styles, configPath }), tailwindPlugin(), preact()],

@@ -35,7 +35,6 @@
   ],
   "tests_types_docs_hygiene": [
     ".gitignore",
-    ".npmrc",
     "README.md",
     "pnpm-workspace.yaml",
     "tests/starter.spec.tsx",

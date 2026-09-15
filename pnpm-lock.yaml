@@ -1,7 +1,7 @@
 lockfileVersion: '9.0'
 
 settings:
-  autoInstallPeers: true
+  autoInstallPeers: false
   excludeLinksFromLockfile: false
 
 importers:
@@ -69,9 +69,9 @@ importers:
       '@zudo-composer/image-editor':
         specifier: workspace:*
         version: link:packages/image-editor
-      '@zudo-sg/ui':
-        specifier: git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf
-        version: https://codeload.github.com/Takazudo/zudo-sg/tar.gz/6b0826cdaa14d9888e58c795ee015f70e2c5cbdf(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)
+      '@zudo-composer/ui':
+        specifier: workspace:*
+        version: link:packages/ui
       eslint:
         specifier: ^10.9.1
         version: 10.9.1(jiti@2.7.0)
@@ -157,9 +157,9 @@ importers:
       '@zudo-composer/component-contract':
         specifier: workspace:*
         version: link:../../packages/component-contract
-      '@zudo-sg/ui':
-        specifier: git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf
-        version: https://codeload.github.com/Takazudo/zudo-sg/tar.gz/6b0826cdaa14d9888e58c795ee015f70e2c5cbdf(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)
+      '@zudo-composer/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       preact:
         specifier: ^10.29.8
         version: 10.29.8(preact-render-to-string@6.7.0)
@@ -253,9 +253,9 @@ importers:
       '@zudo-composer/component-contract':
         specifier: workspace:*
         version: link:../component-contract
-      '@zudo-sg/ui':
-        specifier: git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf
-        version: https://codeload.github.com/Takazudo/zudo-sg/tar.gz/6b0826cdaa14d9888e58c795ee015f70e2c5cbdf(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)
+      '@zudo-composer/ui':
+        specifier: workspace:*
+        version: link:../ui
       preact:
         specifier: ^10.29.8
         version: 10.29.8(preact-render-to-string@6.7.0)
@@ -306,6 +306,15 @@ importers:
         version: 10.29.8(preact-render-to-string@6.7.0)
 
   packages/image-editor: {}
+
+  packages/ui:
+    dependencies:
+      '@takazudo/zfb-md-wasm':
+        specifier: 2.10.1
+        version: 2.10.1
+      dompurify:
+        specifier: ^3.4.11
+        version: 3.4.14
 
 packages:
 
@@ -1915,14 +1924,6 @@ packages:
 
   '@vitest/utils@4.1.11':
     resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
-
-  '@zudo-sg/ui@https://codeload.github.com/Takazudo/zudo-sg/tar.gz/6b0826cdaa14d9888e58c795ee015f70e2c5cbdf':
-    resolution: {gitHosted: true, integrity: sha512-FXSyaSwawqbq+GFB5RB8KxkmHBvuDdLpdbwzMFyeR7x6i2AUGjrBzdwji8ZakCHnhOlqDI8+LMBu+wvnk5cC2g==, tarball: https://codeload.github.com/Takazudo/zudo-sg/tar.gz/6b0826cdaa14d9888e58c795ee015f70e2c5cbdf}
-    version: 0.1.0
-    peerDependencies:
-      '@zudo-composer/component-contract': ^1.0.0
-      preact: ^10.29.1
-      tailwindcss: ^4.0.0
 
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
@@ -4833,16 +4834,6 @@ snapshots:
       '@vitest/pretty-format': 4.1.11
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
-
-  '@zudo-sg/ui@https://codeload.github.com/Takazudo/zudo-sg/tar.gz/6b0826cdaa14d9888e58c795ee015f70e2c5cbdf(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)':
-    dependencies:
-      '@takazudo/zfb-md-wasm': 2.10.1
-      '@zudo-composer/component-contract': link:packages/component-contract
-      dompurify: 3.4.14
-      preact: 10.29.8(preact-render-to-string@6.7.0)
-      tailwindcss: 4.3.3
-    transitivePeerDependencies:
-      - supports-color
 
   acorn-jsx@5.3.2(acorn@8.18.0):
     dependencies:

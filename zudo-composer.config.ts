@@ -12,6 +12,6 @@
 import { defineComposerConfig } from "./server/config/define.mjs";
 
 export default defineComposerConfig({
-  pack: "@zudo-sg/ui/composer-pack",
+  pack: "@zudo-composer/ui/composer-pack",
   styles: "styles/base.css",
 });

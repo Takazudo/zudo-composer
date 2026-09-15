@@ -43,9 +43,11 @@ jobs:
       - run: pnpm contract:conformance
       - run: pnpm contract:negative-scan
       - run: pnpm contract:external-install
+      - run: pnpm ui:external-install
       - run: pnpm handoff:boundary
       - run: pnpm styles:class-names
       - run: pnpm provider:boundary
+      - run: pnpm ui:pack-check
       - run: pnpm test
       - run: pnpm build
       - run: pnpm dist:boundary
