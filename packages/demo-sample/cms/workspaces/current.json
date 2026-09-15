@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "generation": 3,
-  "mutationToken": "ff7ce2ee737d8f06cfa634309d51b2ff3a0f614d889f0c4a8368a8191d24c7b2",
+  "mutationToken": "cc7c44ac169e892481b151911c2e85b1799b4ee21121ccb136ffccc5eec133ea",
   "entries": [
     {
       "id": "initial",
-      "digest": "284812ed227409f0375e9f1760be9a2661f6f2c53cfecf8f7a7b6b2d6da3a7f5"
+      "digest": "4b226627276dbe7abcea5ee135f0d49855b3d560019b4dd1ab25fd4c1b0b114b"
     },
     {
       "id": "meta",
