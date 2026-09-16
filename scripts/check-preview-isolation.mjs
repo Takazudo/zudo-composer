@@ -198,14 +198,8 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
       }
     }
     assert.ok(existsSync(target.graphPath), `${target.graphPath} was not produced by building ${target.label}.`);
-    const graph = readEntryGraph(target.graphPath);
-    entryCount += Object.keys(graph.entries).length;
-    offenders.push(...evaluateEntryGraph({
-      graphLabel: target.label,
-      graph,
-      readCss: (cssFileName) => readFileSync(join(target.outDir, cssFileName), "utf8"),
-      sentinelClass,
-    }));
+    entryCount += Object.keys(readEntryGraph(target.graphPath).entries).length;
+    offenders.push(...checkEntryGraphFile({ graphLabel: target.label, graphPath: target.graphPath, outDir: target.outDir, sentinelClass }));
   }
 
   assert.deepEqual(offenders, [], `Preview isolation gate failed:\n  ${offenders.join("\n  ")}`);
