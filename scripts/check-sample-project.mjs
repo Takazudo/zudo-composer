@@ -62,6 +62,7 @@ const NON_COMPILING_CONSUMERS = [
   "src/app/__tests__/workspace-state.test.ts",
   "src/app/workspace-filesystem/__tests__/capture.test.ts",
   "src/app/workspace-filesystem/__tests__/registry.test.ts",
+  "src/hosted-demo/__tests__/bootstrap.test.ts",
   "src/hosted-demo/__tests__/runtime.test.ts",
   "src/test/site-project-source.ts",
 ];
