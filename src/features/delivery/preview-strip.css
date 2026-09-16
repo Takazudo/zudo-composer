@@ -1,0 +1,74 @@
+/* Tool chrome shown inside a preview document. The host site's stylesheet and
+   the component pack are untrusted here and declare the same token names the
+   editor does, so the strip lives in a shadow root that resets every inherited
+   property and reads only its own `--zc-strip-*` tokens. */
+:host {
+  all: initial;
+  display: block;
+  color-scheme: light dark;
+
+  --zc-strip-bg: light-dark(#f2f2f4, #1b1b1e);
+  --zc-strip-fg: light-dark(#18181b, #ededf0);
+  --zc-strip-muted: light-dark(#52525b, #a1a1aa);
+  --zc-strip-border: light-dark(#d3d3d8, #3e3e45);
+  --zc-strip-field-bg: light-dark(#ffffff, #26262a);
+  --zc-strip-focus: light-dark(#1d4ed8, #82abff);
+  --zc-strip-font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.zc-preview-strip__inner {
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem .75rem;
+  padding: .5rem .75rem;
+  border-block-end: 1px solid var(--zc-strip-border);
+  background: var(--zc-strip-bg);
+  color: var(--zc-strip-fg);
+  font: 400 .8125rem / 1.4 var(--zc-strip-font);
+}
+
+.zc-preview-strip__label {
+  padding: .125rem .5rem;
+  border: 1px solid var(--zc-strip-border);
+  border-radius: .25rem;
+  color: var(--zc-strip-fg);
+  font-weight: 600;
+}
+
+.zc-preview-strip__picker {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  color: var(--zc-strip-muted);
+}
+
+.zc-preview-strip__select {
+  box-sizing: border-box;
+  max-inline-size: 18rem;
+  margin: 0;
+  padding: .25rem .5rem;
+  border: 1px solid var(--zc-strip-border);
+  border-radius: .25rem;
+  color: var(--zc-strip-fg);
+  background: var(--zc-strip-field-bg);
+  font: inherit;
+  appearance: auto;
+}
+
+.zc-preview-strip__notice {
+  flex: 1 1 16rem;
+  margin: 0;
+  color: var(--zc-strip-muted);
+}
+
+.zc-preview-strip__notice strong {
+  color: var(--zc-strip-fg);
+  font-weight: 600;
+}
+
+.zc-preview-strip__select:focus-visible {
+  outline: 2px solid var(--zc-strip-focus);
+  outline-offset: 2px;
+}

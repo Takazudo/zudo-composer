@@ -60,9 +60,9 @@ async function waitForAuthoringRoute(page: Page, title: string): Promise<void> {
   await expect(page.locator("h1").first()).toHaveText(title);
 }
 
-async function waitForDeliveryRoute(page: Page, projectName: string): Promise<void> {
+async function waitForDeliveryRoute(page: Page): Promise<void> {
   await expect(page.locator("main#main-content")).toBeVisible();
-  await expect(page.getByText(projectName, { exact: true }).first()).toBeVisible();
+  await expect(page.locator(".zc-preview-strip")).toBeAttached();
 }
 
 async function navigateToReview(page: Page): Promise<void> {
@@ -74,6 +74,12 @@ async function navigateToReview(page: Page): Promise<void> {
 
 function expectDemoNotice(page: Page): Promise<void> {
   return expect(page.getByText("Public demo of zudo-composer", { exact: true }).first()).toBeVisible();
+}
+
+// On a delivery route the notice moved into the strip's shadow root, which
+// Playwright's CSS engine pierces but its text selectors reach just the same.
+function expectDeliveryDemoNotice(page: Page): Promise<void> {
+  return expect(page.locator(".zc-preview-strip").getByText("Public demo of zudo-composer", { exact: true })).toBeVisible();
 }
 
 function watchLocalEndpointRequests(page: Page): string[] {
@@ -159,11 +165,11 @@ test.describe(`demo editor: ${context.name}`, () => {
     }
     for (const path of ["/site", "/website-preview"]) {
       await page.goto(path, { waitUntil: "domcontentloaded" });
-      await waitForDeliveryRoute(page, context.project.name);
-      await expectDemoNotice(page);
+      await waitForDeliveryRoute(page);
+      await expectDeliveryDemoNotice(page);
       await page.reload({ waitUntil: "domcontentloaded" });
-      await waitForDeliveryRoute(page, context.project.name);
-      await expectDemoNotice(page);
+      await waitForDeliveryRoute(page);
+      await expectDeliveryDemoNotice(page);
     }
     expect(localEndpointRequests, localEndpointRequests.join("\n")).toEqual([]);
     expect(failures, failures.join("\n")).toEqual([]);

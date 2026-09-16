@@ -5,7 +5,7 @@ import { activeComponentProvider } from "../../../src/features/composer/active-p
 import { SiteDelivery } from "../../../src/features/delivery/site-delivery";
 import type { DeliverySourceContract } from "../../../src/features/delivery/source";
 import "virtual:zudo-composer-host-styles";
-import "./styles.css";
+import "../../../src/features/delivery/visitor.css";
 
 const root = document.querySelector("#app");
 if (!root) throw new Error("Missing #app mount point");

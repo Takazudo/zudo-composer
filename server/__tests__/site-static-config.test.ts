@@ -104,7 +104,7 @@ describe("static site Vite config", () => {
           load(id) {
             if (normalizePath(id) === normalizePath(resolve(APP_ROOT, SITE_BUILD_ENTRY))) return `
               import "virtual:zudo-composer-host-styles";
-              import "./styles.css";
+              import "../../../src/features/delivery/visitor.css";
               document.getElementById("app").textContent = "Package visitor";
             `;
           },
