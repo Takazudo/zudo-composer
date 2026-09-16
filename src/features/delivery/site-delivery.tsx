@@ -160,9 +160,9 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
     setState({ status: "loading" });
     void retryDeliverySnapshot(source).then((next) => { if (request.current === current) setState(next); });
   };
+  const label = source.kind === "activated" ? "Activated local release — not deployed" : "Live working preview — not activated";
   // A site delivered at its own origin root is the published document itself,
   // so only the tool's own base paths carry the strip.
-  const label = source.kind === "activated" ? "Activated local release — not deployed" : "Live working preview — not activated";
   const withPreviewStrip = (content: JSX.Element, routes?: readonly SiteCompiledRoute[]): JSX.Element => basePath === "/" ? content : <>
     <PreviewStrip label={label} basePath={basePath} pathname={pathname} hostedDemo={hostedDemo} routes={routes} />
     {content}

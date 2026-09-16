@@ -11,6 +11,7 @@ import { SiteDelivery, loadWorkingPreviewSnapshot } from "../site-delivery";
 import { compileSiteProject } from "../../../site-project/compiler";
 import type { ActivatedDeliveryArtifact, ActivatedDeliverySource, DeliverySourceContract } from "../source";
 import { validateActivatedDeliveryArtifact } from "../source";
+import { toDeliveryHref } from "../routing";
 import { providerFixture, PNG } from "../../assets/__tests__/versioned-fixture";
 
 afterEach(cleanup);
@@ -156,7 +157,7 @@ describe("SiteDelivery", () => {
     expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).toBeNull();
     expect(container.querySelector(".site-delivery__header, .site-delivery__footer")).toBeNull();
     const picker = stripPicker()!;
-    expect([...picker.options].map(({ value }) => value)).toEqual(artifact.build.routes.map(({ pathname }) => pathname === "/" ? "/site" : `/site${pathname}`));
+    expect([...picker.options].map(({ value }) => value)).toEqual(artifact.build.routes.map(({ pathname }) => toDeliveryHref(pathname, "/site")));
     expect([...picker.options].map(({ text }) => text)).toEqual(artifact.build.routes.map(({ displayTitle }) => displayTitle));
     expect(picker).toHaveValue("/site/journal/start-with-the-question");
     await waitFor(() => expect(document.title).toBe("Start with the question — Sample Studio"));
