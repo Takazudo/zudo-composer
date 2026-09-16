@@ -8,6 +8,7 @@ import componentPackPlugin from "./plugins/component-pack-plugin.mjs";
 import { loadComponentPack } from "./plugins/component-pack.mjs";
 import { devPrebundleIncludes } from "./plugins/dev-prebundle.mjs";
 import hostStylesPlugin from "./plugins/host-styles-plugin.mjs";
+import entryGraphPlugin, { COMPOSER_PREVIEW_ENTRY_MODULE, SITE_PREVIEW_ENTRY_MODULE } from "./plugins/entry-graph-plugin.mjs";
 import { APP_HTML_PATH, rewriteAppEntry } from "./plugins/composer-app-html.mjs";
 import { APP_ROOT, resolveFsAllow, resolveWorkspaceRoot } from "./plugins/roots.mjs";
 import { resolveComposerModules } from "./plugins/module-resolution.mjs";
@@ -91,7 +92,16 @@ export async function resolveDemoEditorConfig(hostDir: string): Promise<InlineCo
     },
     server: { fs: { allow: [...resolveFsAllow(hostRoot), componentPack.identity.packageRoot] } },
     build: { outDir, emptyOutDir: true, rollupOptions: { input: APP_HTML_PATH } },
-    plugins: [demo, componentPack, hostStylesPlugin({ stylesPath: paths.styles, styles: settings.styles, configPath }), tailwindPlugin(), preact()],
+    plugins: [
+      demo,
+      componentPack,
+      hostStylesPlugin({ stylesPath: paths.styles, styles: settings.styles, configPath }),
+      tailwindPlugin(),
+      preact(),
+      // See vite.config.ts: the same isolation-gate record, built from this
+      // host's own component pack and stylesheet.
+      entryGraphPlugin({ startModules: [COMPOSER_PREVIEW_ENTRY_MODULE, SITE_PREVIEW_ENTRY_MODULE] }),
+    ],
   };
 }
 

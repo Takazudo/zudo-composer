@@ -11,6 +11,7 @@ import { createModuleEvaluator } from "../../server/module-evaluator.mjs";
 import { APP_ROOT } from "../../plugins/roots.mjs";
 import { assertDemoEditorRoutes } from "../routes.mjs";
 import { boundarySource } from "../boundary-source.mjs";
+import { ENTRY_GRAPH_FILE_NAME } from "../../plugins/entry-graph-plugin.mjs";
 
 export const DEMO_EDITOR_MANIFEST = "demo-editor-manifest.json";
 export const DEMO_EDITOR_SEED = "demo-editor-seed.json";
@@ -135,6 +136,10 @@ export function sha256(bytes) {
 export function expectedMime(path) {
   if (path === HOSTED_DEMO_HEADERS) return "text/plain";
   if (path === DEMO_EDITOR_SEED) return "application/json";
+  // `plugins/entry-graph-plugin.mjs` records package-relative module ids and
+  // emitted CSS file names only, no filesystem paths — the same build-metadata
+  // shape `DEMO_EDITOR_MANIFEST` already carries, so it is served the same way.
+  if (path === ENTRY_GRAPH_FILE_NAME) return "application/json";
   if (path.startsWith("uploaded-assets/")) {
     const mime = ASSET_CHECKSUM_URL_PATTERN.test(`/${path}`) ? assetMimeTypeForExtension(path.slice(path.lastIndexOf(".") + 1)) : undefined;
     assert.ok(mime, `No hosted demo asset MIME contract for ${path}`);

@@ -46,6 +46,7 @@ jobs:
       - run: pnpm ui:external-install
       - run: pnpm handoff:boundary
       - run: pnpm styles:class-names
+      - run: pnpm styles:isolation
       - run: pnpm provider:boundary
       - run: pnpm ui:pack-check
       - run: pnpm test
