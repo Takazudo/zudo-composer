@@ -98,8 +98,11 @@ for (const forbidden of [
   assert.ok(!jsText.includes(forbidden), `client artifact leaked file-provider server capability: ${forbidden}`);
 }
 
+// Two entries carry this name: the Composer canvas preview and the delivery
+// visitor document. Both are preview documents, so the marker scan below walks
+// every one of their graphs rather than picking a single chunk.
 const previewJs = jsFiles.filter((path) => basename(path).startsWith("preview-entry-"));
-assert.equal(previewJs.length, 1, "exactly one preview entry chunk must be emitted");
+assert.ok(previewJs.length > 0, "at least one preview entry chunk must be emitted");
 /** @type {Set<string>} */
 const previewGraph = new Set();
 /** @param {string} path @returns {void} */
@@ -112,7 +115,7 @@ function collectJsGraph(path) {
     if (jsFiles.includes(dependency)) collectJsGraph(dependency);
   }
 }
-collectJsGraph(previewJs[0]);
+for (const entry of previewJs) collectJsGraph(entry);
 const previewText = [...previewGraph].map((path) => readFileSync(path, "utf8")).join("\n");
 // Each marker is a string the HOST renders and the preview graph must not.
 // A marker whose host string is deleted stops proving anything, so repoint it
