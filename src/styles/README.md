@@ -11,6 +11,17 @@ Feature route entries import the content, assets, mapping, and sitemapper sheets
 the sitemapper sheet is a barrel for its canvas, inspector, shell, and token
 leaves. Preview CSS is imported by the preview entry and stays in the iframe.
 
+`features/composer/preview/preview.css` owns its tokens outright and never
+imports the chrome sheet. The preview document loads only the host's styles
+entry plus that sheet, so the components in the canvas render with the
+themeset's own palette; `app-tokens.css` redeclares the same `--color-*` names
+the pack declares and would repaint them in the editor palette. The canvas
+chrome around them therefore reads a scoped `--zc-preview-*` set declared on
+`html[data-composer-preview-doc]`, with the dark rungs on that selector plus
+`[data-theme="dark"]`. Its values are copied from `app-tokens.css`, so the
+chrome is unchanged; never point one of them at a pack token, since a themeset
+is interchangeable and untrusted by design.
+
 App chrome classes use a `cms-` or `sg-` prefix; the public delivery surface uses
 `site-delivery`. `src/base.css` has `@source "./"`, so Tailwind scans the whole
 source tree; prefixes keep authored names identifiable and avoid collisions with

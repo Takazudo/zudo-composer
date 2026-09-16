@@ -25,8 +25,21 @@ describe("host and tool CSS ownership", () => {
     const main = readFileSync(resolve("src/main.tsx"), "utf8");
     expect(main.indexOf('import("virtual:zudo-composer-host-styles")')).toBeGreaterThan(-1);
     expect(main.indexOf('import("virtual:zudo-composer-host-styles")')).toBeLessThan(main.indexOf('import("./style.css")'));
+    // The preview document is a canvas for the PACK, so it takes the host sheet
+    // and nothing of the editor's: `app-tokens.css` redeclares the same
+    // `--color-*` names the pack declares, and would repaint the components in
+    // the editor palette. `preview.css` owns its own `--zc-preview-*` chrome
+    // tokens instead (#717).
     const preview = readFileSync(resolve("src/features/composer/preview/preview-entry.ts"), "utf8");
-    expect(preview.indexOf('import "virtual:zudo-composer-host-styles";')).toBeLessThan(preview.indexOf('import "../../../base.css";'));
+    expect(preview.indexOf('import "virtual:zudo-composer-host-styles";')).toBeGreaterThan(-1);
+    expect(preview.indexOf('import "virtual:zudo-composer-host-styles";')).toBeLessThan(preview.indexOf('import "./preview.css";'));
+    for (const editorSheet of ["base.css", "style.css", "app-tokens.css"]) {
+      expect(preview).not.toContain(editorSheet);
+    }
+    const previewCss = readFileSync(resolve("src/features/composer/preview/preview.css"), "utf8");
+    expect(previewCss).not.toMatch(/var\(--(?:color|text|spacing|z-index|sg-)/);
+    expect(previewCss).toMatch(/^html\[data-composer-preview-doc\] \{$/m);
+    expect(previewCss).toMatch(/^html\[data-composer-preview-doc\]\[data-theme="dark"\] \{$/m);
   });
 
   it("makes the dogfood host the sole importer of its pack's CSS", () => {
