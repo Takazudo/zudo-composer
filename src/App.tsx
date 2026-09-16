@@ -19,7 +19,6 @@ import { SitemapperRouteContent } from "./features/sitemapper";
 import { ReleaseRoute, createReleaseController, createReleaseTransport } from "./features/release";
 import { createApplicationOperationGate } from "./app/operation-gate";
 import { HostedDemoNotice } from "./features/delivery/hosted-demo-notice";
-import { isSitePath, isWorkingPreviewPath } from "./features/delivery/routing";
 import { bootstrapTheme, createThemeController, type ThemeController } from "./theme/theme";
 
 function NotFound() { return <main class="route-placeholder"><h1>Not found</h1><p>This standalone route does not exist.</p><a href="/">Return home</a></main>; }
@@ -164,7 +163,10 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
       const anchor = event.target.closest("a[href]") as HTMLAnchorElement | null;
       if (!anchor || anchor.target || anchor.hasAttribute("download") || anchor.getAttribute("aria-disabled") === "true") return;
       const url = new URL(anchor.href);
-      if (url.origin !== window.location.origin || (!["/", "/content", "/composer", "/mapping", "/sitemapper", "/assets", "/review"].includes(url.pathname) && !(hostedDemo && (isSitePath(url.pathname) || isWorkingPreviewPath(url.pathname))))) return;
+      // Only authoring routes. `/site*` and `/website-preview*` are separate
+      // visitor documents now, so taking one over here could only push it into a
+      // shell that no longer renders it.
+      if (url.origin !== window.location.origin || !["/", "/content", "/composer", "/mapping", "/sitemapper", "/assets", "/review"].includes(url.pathname)) return;
       event.preventDefault(); void navigate(url.href);
     };
     window.addEventListener("popstate", pop, true);

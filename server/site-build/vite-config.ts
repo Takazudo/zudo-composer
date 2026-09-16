@@ -75,8 +75,15 @@ export async function resolveStaticSiteConfig(options: Pick<BuildSiteOptions, "w
       tailwindPlugin(),
       preact(),
       // See vite.config.ts: the same isolation-gate record, for the published
-      // static visitor entry this host's build ships.
-      entryGraphPlugin({ startModules: [STATIC_SITE_ENTRY_MODULE] }),
+      // static visitor entry this host's build ships. Opt-in, because this
+      // config is part of the packed tool and runs inside consuming hosts: the
+      // graph lists the tool's internal module ids, and `dist-site` is served
+      // publicly, so emitting it unconditionally would publish tool internals
+      // from every host's own website. Only this repository's own builds, which
+      // the isolation gate reads, set the variable.
+      ...(process.env.ZUDO_COMPOSER_ENTRY_GRAPH === "1"
+        ? [entryGraphPlugin({ startModules: [STATIC_SITE_ENTRY_MODULE] })]
+        : []),
     ],
   };
 }

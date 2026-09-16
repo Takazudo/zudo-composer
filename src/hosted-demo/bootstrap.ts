@@ -47,12 +47,17 @@ const DEMO_ERROR_ID = "hosted-demo-error";
  * preview pop-up is raised by a capturing document listener, which has no
  * workspace state to set. Reuses the shell's notice styling so it reads as
  * part of the chrome; passing `null` clears it.
+ *
+ * It is a body-level sibling of the shell, and `.app-shell` is `100dvh`, so it
+ * is pinned over the chrome rather than left below the fold where nobody
+ * reading the blocked-pop-up message would ever see it.
  */
 function reportDemoError(message: string | null): void {
   const existing = document.getElementById(DEMO_ERROR_ID);
   if (!message) { existing?.remove(); return; }
   const node = existing ?? document.createElement("p");
   node.id = DEMO_ERROR_ID; node.className = "cms-shell-notice"; node.setAttribute("role", "alert");
+  node.style.cssText = "position:fixed;z-index:9999;inset-block-start:0;inset-inline:0;margin:0;border-block-end:1px solid currentColor;text-align:center";
   node.textContent = message;
   if (!node.isConnected) document.body.append(node);
 }
