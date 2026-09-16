@@ -10,7 +10,7 @@ import type { SitemapDocument } from "../../sitemapper/model/types";
 import { normalizeDeliveryLink, normalizeDeliveryLinks, type DeliveryBasePath } from "./routing";
 import { DeliveryRuntime, type DeliveryComponentError } from "./runtime";
 import { matchDeliveryRoute } from "./routing";
-import { validateActivatedDeliveryArtifact, type DeliverySourceContract } from "./source";
+import { deliveryBasePath, validateActivatedDeliveryArtifact, type DeliverySourceContract } from "./source";
 import { PreviewStrip } from "./preview-strip";
 
 type DeliveryState =
@@ -126,7 +126,7 @@ function DeliveryChrome({ route, pack, report, focus, onFocused, basePath }: { r
   </div>;
 }
 
-export function SiteDelivery({ source, pathname = window.location.pathname, hostedDemo = false, onComponentError = (detail) => console.error("Delivery component failed", detail) }: { source: DeliverySourceContract; pathname?: string; hostedDemo?: boolean; onComponentError?: (detail: DeliveryComponentError) => void }): JSX.Element {
+export function SiteDelivery({ source, pathname = window.location.pathname, hostedDemo = false, onReady, onComponentError = (detail) => console.error("Delivery component failed", detail) }: { source: DeliverySourceContract; pathname?: string; hostedDemo?: boolean; onReady?: (build: SiteBuildPlan) => void; onComponentError?: (detail: DeliveryComponentError) => void }): JSX.Element {
   const [state, setState] = useState<DeliveryState>({ status: "loading" });
   const request = useRef(0);
   const focusAfterRetry = useRef(false);
@@ -136,7 +136,11 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
     return () => { request.current += 1; };
   }, [source]);
   useEffect(() => source.kind === "activated" && source.subscribe ? source.subscribe(() => { const current = ++request.current; setState({ status: "loading" }); void loadDeliverySnapshot(source).then((next) => { if (request.current === current) setState(next); }); }) : undefined, [source]);
-  const basePath: DeliveryBasePath = source.kind === "activated" ? "/site" : source.kind === "static" ? "/" : source.basePath ?? "/website-preview";
+  // The entry that owns this document installs its navigation from the routes
+  // a ready build carries, so it learns them from the one snapshot load here
+  // rather than compiling the working draft a second time.
+  useEffect(() => { if (state.status === "ready") onReady?.(state.build); }, [state, onReady]);
+  const basePath: DeliveryBasePath = deliveryBasePath(source);
   const route = state.status === "ready" ? matchDeliveryRoute(state.build.routes, pathname, basePath) : undefined;
   const routeTitle = route?.displayTitle;
   const pageTitle = state.status === "ready"

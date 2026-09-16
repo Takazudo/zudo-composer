@@ -46,6 +46,25 @@ const SHELL_MODULES = [
   "/src/components/outline-tree",
 ] as const;
 
+/**
+ * The editor chrome's own height token. A document that never loaded the
+ * editor's sheet resolves it to the empty string, which is how a preview
+ * proves it is not inheriting the chrome's cascade.
+ */
+function editorTopbarToken(page: Page): Promise<string> {
+  return page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--zc-topbar-h").trim());
+}
+
+/** Every stylesheet the document actually has, named by source path in the dev lane. */
+function readStyleSheets(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    [...document.styleSheets].map((sheet) => {
+      const owner = sheet.ownerNode as Element | null;
+      return sheet.href ?? owner?.getAttribute("data-vite-dev-id") ?? owner?.getAttribute("href") ?? "";
+    }),
+  );
+}
+
 /** The persisted half of the editor's geometry, plus what it actually painted. */
 async function readRailGeometry(page: Page) {
   return page.evaluate(() => {
@@ -141,21 +160,53 @@ test("the isolated preview document loads no shell stylesheet and no shell modul
 
   await page.goto("/composer/preview");
   await expect(page.locator("html")).toHaveAttribute("data-composer-preview-doc", "");
+  // `base.css` is gone from this graph (#717), so the editor's own chrome
+  // tokens must not resolve here either.
+  expect(await editorTopbarToken(page)).toBe("");
   await expect(page.getByRole("navigation", { name: "Main navigation" })).toHaveCount(0);
   // A direct refresh takes the same branch, so the graph is proven twice.
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-composer-preview-doc", "");
 
-  const sheets = await page.evaluate(() =>
-    [...document.styleSheets].map((sheet) => {
-      const owner = sheet.ownerNode as Element | null;
-      return sheet.href ?? owner?.getAttribute("data-vite-dev-id") ?? owner?.getAttribute("href") ?? "";
-    }),
-  );
+  const sheets = await readStyleSheets(page);
 
   // The preview styles itself, so "no shell stylesheet" cannot pass by the
   // document having no stylesheets at all.
   expect(sheets.some((href) => href.includes("/preview.css"))).toBe(true);
+  for (const shellModule of SHELL_MODULES) {
+    expect(sheets.filter((href) => href.includes(shellModule)), `${shellModule} stylesheet`).toEqual([]);
+    expect(requested.filter((url) => url.includes(shellModule)), `${shellModule} module`).toEqual([]);
+  }
+
+  expect(failures).toEqual([]);
+});
+
+test("every delivery path is its own visitor document, on a direct load and on a reload", async ({ page }) => {
+  const failures = watchRuntimeFailures(page);
+  const requested: string[] = [];
+  page.on("request", (request) => requested.push(request.url()));
+
+  // `/site` has no activated release on this lane, so it can only prove the
+  // document; `/website-preview` also proves the page whenever the lane's
+  // workspace compiles a route.
+  for (const path of ["/website-preview", "/website-preview/about", "/site"]) {
+    for (const load of ["direct", "reload"] as const) {
+      if (load === "direct") await page.goto(path); else await page.reload();
+      await expect(page.locator("html")).toHaveAttribute("data-site-preview-doc", "");
+      await expect(page.locator(".zc-preview-strip")).toHaveCount(1);
+      await expect(page.getByRole("navigation", { name: "Main navigation" })).toHaveCount(0);
+      expect(await editorTopbarToken(page), `${path} (${load})`).toBe("");
+      await expect(page.locator("main#main-content, main[data-site-delivery-state]").first()).toBeVisible();
+      // The picker exists only once a build is ready, and a ready build must
+      // render the site's own page rather than a tool state screen.
+      if (await page.locator(".zc-preview-strip__select").count()) await expect(page.locator("main#main-content")).toBeVisible();
+    }
+  }
+
+  const sheets = await readStyleSheets(page);
+  // The visitor sheet is loaded, so "no shell stylesheet" cannot pass by the
+  // document having no stylesheets at all.
+  expect(sheets.some((href) => href.includes("/visitor.css"))).toBe(true);
   for (const shellModule of SHELL_MODULES) {
     expect(sheets.filter((href) => href.includes(shellModule)), `${shellModule} stylesheet`).toEqual([]);
     expect(requested.filter((url) => url.includes(shellModule)), `${shellModule} module`).toEqual([]);

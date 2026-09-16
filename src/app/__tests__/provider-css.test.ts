@@ -42,6 +42,29 @@ describe("host and tool CSS ownership", () => {
     expect(previewCss).toMatch(/^html\[data-composer-preview-doc\]\[data-theme="dark"\] \{$/m);
   });
 
+  it("keeps the editor's sheets out of every visitor document", () => {
+    // `/site*` and `/website-preview*` are their own documents (#721): the
+    // host's stylesheet plus the tool's visitor sheet, exactly what the static
+    // build ships, so a preview cannot drift from the published site.
+    const editorSheets = ["base.css", "style.css", "app-tokens.css", "shell.css"];
+    for (const entry of ["src/features/delivery/preview-entry.ts", "server/site-build/client/main.tsx"]) {
+      const source = readFileSync(resolve(entry), "utf8");
+      const hostStyles = source.indexOf('import "virtual:zudo-composer-host-styles";');
+      expect(hostStyles).toBeGreaterThan(-1);
+      expect(hostStyles).toBeLessThan(source.indexOf("visitor.css"));
+      for (const editorSheet of editorSheets) expect(source).not.toContain(editorSheet);
+    }
+    const visitorCss = readFileSync(resolve("src/features/delivery/visitor.css"), "utf8");
+    expect(visitorCss).not.toMatch(/var\(--(?:color|text|spacing|z-index|sg-)/);
+
+    // The shell entry decides the document before it imports any sheet, so the
+    // visitor branch never reaches the editor's chrome or its theme bootstrap.
+    const main = readFileSync(resolve("src/main.tsx"), "utf8");
+    const visitorBranch = main.slice(main.indexOf("if (isSitePath(pathname)"), main.indexOf("const initialTheme"));
+    expect(visitorBranch).toContain('import("./features/delivery/preview-entry")');
+    for (const editorSheet of [...editorSheets, "bootstrapTheme"]) expect(visitorBranch).not.toContain(editorSheet);
+  });
+
   it("makes the dogfood host the sole importer of its pack's CSS", () => {
     // The repo root is a host too: `pnpm dev` and the artifact gates resolve
     // their pack and styles through the root config exactly as an install does.

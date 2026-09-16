@@ -56,8 +56,8 @@ describe("rail navigation model", () => {
   });
 
   it("never resolves a delivery path to the Site entry", () => {
-    // `App` returns SiteDelivery before the Shell mounts, so `/site*` can never
-    // be the current route of a rendered rail.
+    // Every delivery path is its own visitor document, so `/site*` can never be
+    // the current route of a rendered rail.
     expect(currentRailItem("/site")).toBeNull();
     expect(currentRailItem("/site/about")).toBeNull();
   });
@@ -152,12 +152,22 @@ describe("Rail", () => {
     expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
   });
 
-  it("names the Site entry as a link out of the CMS and never marks it current", () => {
-    renderRail({ path: "/" });
+  it("opens the Site entry in its own tab and never marks it current", () => {
+    const onNavigate = vi.fn();
+    renderRail({ path: "/", onNavigate });
     const site = screen.getByRole("link", { name: "Website preview — choose preview source" });
     expect(site).toHaveAttribute("href", "/website-preview");
+    expect(site).toHaveAttribute("target", "_blank");
+    expect(site).toHaveAttribute("rel", "noopener");
     expect(site).not.toHaveAttribute("aria-current");
     expect(currentRailItem("/website-preview")?.id).toBe("site");
+
+    // The visitor document is a separate entry graph, so the click is the
+    // browser's to handle and must not become an in-shell navigation.
+    fireEvent.click(site);
+    expect(onNavigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("link", { name: "Compositions" }));
+    expect(onNavigate).toHaveBeenCalledWith("/composer");
   });
 
   it("renders a count only where the summary supplied one", () => {

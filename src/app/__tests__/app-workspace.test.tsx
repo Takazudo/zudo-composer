@@ -33,7 +33,6 @@ vi.mock("../../features/assets", async () => {
   };
 });
 vi.mock("../../features/sitemapper", () => ({ SitemapperRouteContent: () => <h1>Sitemap editor</h1> }));
-vi.mock("../../features/delivery/site-delivery", () => ({ SiteDelivery: () => <h1>Visitor website</h1> }));
 function workspace(id = "one") {
   return {
     componentProvider: activeComponentProvider,

@@ -30,12 +30,12 @@ export interface RailItem {
   readonly href: string;
   readonly icon: IconComponent;
   /**
-   * A destination rendered outside the CMS chrome. `App` returns SiteDelivery
-   * before the Shell mounts on `/site*`, so this entry can never be the current
-   * route: it is a plain full-page link out of the application, marked with an
-   * external glyph and never given `aria-current`.
+   * A destination rendered outside the CMS chrome, marked with an external
+   * glyph and never given `aria-current`.
    */
   readonly external?: true;
+  /** Opens its own document in a new tab; the rail leaves the click to the browser. */
+  readonly newTab?: true;
   /** Accessible name; required for `external`, where "Site" alone is ambiguous. */
   readonly accessibleName?: string;
 }
@@ -73,6 +73,7 @@ export const RAIL_GROUPS: readonly RailGroup[] = [
         label: "Website preview",
         href: "/website-preview",
         icon: PageIcon,
+        newTab: true,
         accessibleName: "Website preview — choose preview source",
       },
     ],
@@ -164,7 +165,7 @@ export function Rail({ path, collapsed, onToggleCollapsed, counts = {}, models =
   const [rename, setRename] = useState<NavigationPin | null>(null);
   const [label, setLabel] = useState("");
   const navigate = (event: JSX.TargetedMouseEvent<HTMLAnchorElement>, href: string) => {
-    if (!onNavigate || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    if (!onNavigate || event.currentTarget.target || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     event.preventDefault(); onNavigate(href);
   };
   const addPin = (pin: NavigationPin) => {
@@ -198,6 +199,8 @@ export function Rail({ path, collapsed, onToggleCollapsed, counts = {}, models =
                       class="cms-rail__item"
                       href={item.href}
                       onClick={(event) => navigate(event, item.href)}
+                      target={item.newTab ? "_blank" : undefined}
+                      rel={item.newTab ? "noopener" : undefined}
                       data-route={item.id}
                       aria-current={current?.id === item.id ? "page" : undefined}
                       aria-label={item.accessibleName ?? item.label}

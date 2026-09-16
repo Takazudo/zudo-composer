@@ -25,8 +25,14 @@ it("renders real static inspection and explanatory disabled release actions", as
   await vi.waitFor(() => expect(screen.getByRole("button", { name: "Export working JSON" })).toBeEnabled());
   expect(screen.getByRole("button", { name: "Run release checks" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Activate locally" })).toBeDisabled();
-  expect(screen.getByRole("link", { name: "Live working preview" })).toHaveAttribute("href", "/website-preview");
-  expect(screen.getByRole("link", { name: "Activated local website (not deployed)" })).toHaveAttribute("href", "/site");
+  // Both destinations are visitor documents on their own entry graph, so they
+  // open in a new tab rather than inside the editor document.
+  for (const [name, href] of [["Live working preview", "/website-preview"], ["Activated local website (not deployed)", "/site"]] as const) {
+    const link = screen.getByRole("link", { name });
+    expect(link).toHaveAttribute("href", href);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener");
+  }
   expect(request).not.toHaveBeenCalled(); controller.dispose();
 });
 
