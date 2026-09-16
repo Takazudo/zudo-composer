@@ -46,7 +46,6 @@ jobs:
       - run: pnpm ui:external-install
       - run: pnpm handoff:boundary
       - run: pnpm styles:class-names
-      - run: pnpm styles:isolation
       - run: pnpm provider:boundary
       - run: pnpm ui:pack-check
       - run: pnpm test
@@ -60,6 +59,10 @@ jobs:
       # The site-project and demo browser lanes verify artifacts prepared here
       # and never rebuild them.
       - run: pnpm demo:build-sites
+      # Runs after the builds it inspects: the gate builds only what is missing,
+      # so an earlier slot both rebuilds artifacts CI makes anyway and can read a
+      # stale entry-graph.json from a previous build of the source.
+      - run: pnpm styles:isolation
       - run: pnpm test:browser:site-project
       - run: pnpm test:browser:demos
       # A browser failure that only happens on a runner is undiagnosable from the log
