@@ -18,8 +18,6 @@ import { AssetFieldPicker, AssetRouteContent, createAssetContentServices, versio
 import { SitemapperRouteContent } from "./features/sitemapper";
 import { ReleaseRoute, createReleaseController, createReleaseTransport } from "./features/release";
 import { createApplicationOperationGate } from "./app/operation-gate";
-import { SiteDelivery } from "./features/delivery/site-delivery";
-import { activatedDeliverySource } from "./features/delivery/activated-source";
 import { HostedDemoNotice } from "./features/delivery/hosted-demo-notice";
 import { isSitePath, isWorkingPreviewPath } from "./features/delivery/routing";
 import { bootstrapTheme, createThemeController, type ThemeController } from "./theme/theme";
@@ -52,8 +50,6 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
 
   const [providers, setProviders] = useState(() => integration ?? createProductionProviderIntegration());
   useEffect(() => { onIntegration?.(providers); }, [providers, onIntegration]);
-  const activatedSource = useMemo(() => activatedDeliverySource(providers.componentProvider), [providers.componentProvider]);
-  const workingPreviewSource = useMemo(() => ({ kind: "working-preview" as const, providers }), [providers]);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search + window.location.hash);
   const [routeEpoch, setRouteEpoch] = useState(0);
   const locationRef = useRef(location);
@@ -86,7 +82,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
       if (url.origin !== window.location.origin) throw new Error("This is not a workspace destination.");
       await flush();
       if (ticket !== navigationTicket.current) return false;
-      if ((!hostedDemo && (isSitePath(url.pathname) || isWorkingPreviewPath(url.pathname))) || url.pathname === "/composer/preview") { window.location.assign(url.href); return true; }
+      if (url.pathname === "/composer/preview") { window.location.assign(url.href); return true; }
       const next = url.pathname + url.search + url.hash;
       if (next !== locationRef.current) setRouteEpoch((value) => value + 1);
       if (replace || next !== locationRef.current) {
@@ -164,12 +160,11 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
       locationRef.current = next; setLocation(next);
     };
     const click = (event: MouseEvent) => {
-      if (!hostedDemo && (isSitePath(new URL(locationRef.current, window.location.origin).pathname) || isWorkingPreviewPath(new URL(locationRef.current, window.location.origin).pathname))) return;
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !(event.target instanceof Element)) return;
       const anchor = event.target.closest("a[href]") as HTMLAnchorElement | null;
       if (!anchor || anchor.target || anchor.hasAttribute("download") || anchor.getAttribute("aria-disabled") === "true") return;
       const url = new URL(anchor.href);
-      if (url.origin !== window.location.origin || (!["/", "/content", "/composer", "/mapping", "/sitemapper", "/assets", "/review", "/website-preview", "/site"].includes(url.pathname) && !(hostedDemo && (isSitePath(url.pathname) || isWorkingPreviewPath(url.pathname))))) return;
+      if (url.origin !== window.location.origin || (!["/", "/content", "/composer", "/mapping", "/sitemapper", "/assets", "/review"].includes(url.pathname) && !(hostedDemo && (isSitePath(url.pathname) || isWorkingPreviewPath(url.pathname))))) return;
       event.preventDefault(); void navigate(url.href);
     };
     window.addEventListener("popstate", pop, true);
@@ -214,8 +209,6 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
   useEffect(() => () => workspaceSummary.dispose?.(), [workspaceSummary]);
   const path = new URL(location, window.location.origin).pathname;
   useEffect(() => { if (path === "/sitemapper") void providers.compositionCatalog.listCompositions().catch(() => undefined); }, [path, providers]);
-  if (isSitePath(path)) return <SiteDelivery source={hostedDemo ? { ...workingPreviewSource, basePath: "/site" } : activatedSource} pathname={path} hostedDemo={hostedDemo} />;
-  if (isWorkingPreviewPath(path)) return <SiteDelivery source={workingPreviewSource} pathname={path} hostedDemo={hostedDemo} />;
   let content: ComponentChildren;
   const intent = parseIntent(location);
   const target = intent.status === "matched" ? intent.intent : null;

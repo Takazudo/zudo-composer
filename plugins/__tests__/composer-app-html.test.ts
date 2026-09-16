@@ -55,6 +55,21 @@ describe("the shell middleware", () => {
     expect(response.body).toContain("<!--transformed-->");
   });
 
+  it("serves the shell for a nested visitor path, so a direct load and a reload both reach the preview entry", async () => {
+    // `/website-preview/about` and `/site/about` are documents of their own
+    // (#721); without the shell a deep link or a reload would 404 before the
+    // entry could mount.
+    for (const url of ["/website-preview", "/website-preview/about", "/site/about"]) {
+      const { handler, server } = middlewareOf(composerAppHtmlPlugin());
+      const response = fakeResponse();
+      await handler({ method: "GET", url, originalUrl: url, headers: { accept: "text/html,*/*" } }, response, () => {
+        throw new Error("must not fall through");
+      });
+      expect(response.statusCode).toBe(200);
+      expect(server.transformIndexHtml).toHaveBeenCalledWith(url, expect.stringContaining("/@fs"), url);
+    }
+  });
+
   it("passes non-html and non-GET requests through, so asset and endpoint routes keep precedence", async () => {
     const { handler } = middlewareOf(composerAppHtmlPlugin());
     for (const req of [

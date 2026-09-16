@@ -37,7 +37,7 @@ export function ReleaseRoute({ controller, href, hostedDemo = false }: { hostedD
         <div><dt>Activated local build:</dt><dd><Identity value={state.active?.buildId ?? "None inspected"} /></dd></div>
         <div><dt>Exact staged build:</dt><dd><Identity value={state.staged?.buildId ?? "None"} /></dd></div>
       </dl>
-      <nav class="cms-release__links" aria-label="Release destinations"><a href="/website-preview">Live working preview</a><a href="/site">{hostedDemo ? "Demo website preview" : "Activated local website (not deployed)"}</a></nav>
+      <nav class="cms-release__links" aria-label="Release destinations"><a href="/website-preview" target="_blank" rel="noopener">Live working preview</a><a href="/site" target="_blank" rel="noopener">{hostedDemo ? "Demo website preview" : "Activated local website (not deployed)"}</a></nav>
       <div class="cms-release__tools">
       <Button disabled={blocked} onClick={() => void controller.inspect()}>Inspect current state</Button>
       <Button disabled={!state.working || blocked} onClick={exportWorking}>Export working JSON</Button>
