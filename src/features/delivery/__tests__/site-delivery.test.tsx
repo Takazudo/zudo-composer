@@ -58,6 +58,9 @@ let artifact: ActivatedDeliveryArtifact;
 beforeAll(async () => { artifact = await activatedArtifact(); });
 const ready = (): ActivatedDeliverySource => ({ status: "ready", artifact });
 const activated = (value: ActivatedDeliverySource = ready()): DeliverySourceContract => ({ kind: "activated", componentProvider: activeComponentProvider, read: () => value });
+/** The strip is isolated in a shadow root, so Testing Library queries cannot reach it. */
+const strip = (): ShadowRoot => document.querySelector(".zc-preview-strip")!.shadowRoot!;
+const stripPicker = (): HTMLSelectElement | null => strip().querySelector<HTMLSelectElement>("select");
 
 describe("SiteDelivery", () => {
   it("compiles the fixture into one self-contained artifact with all seven deterministic visitor routes", () => {
@@ -115,46 +118,73 @@ describe("SiteDelivery", () => {
     render(<SiteDelivery source={activated()} pathname={pathname} />);
     expect(screen.getByRole("heading", { name: "Loading site" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
-    expect(screen.getByText("Activated local release — not deployed")).toBeInTheDocument();
+    expect(strip().textContent).toContain("Activated local release — not deployed");
+    expect(stripPicker()).toHaveValue(pathname);
   });
 
-  it("shows the hosted demo notice on /site", async () => {
+  it("carries the hosted demo notice inside the strip on /site", async () => {
     render(<SiteDelivery source={activated()} pathname="/site" hostedDemo />);
     await screen.findByRole("heading", { name: "Clear ideas, carefully shaped" });
-    expect(screen.getByText("Public demo of zudo-composer")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/nothing is published/i);
+    expect(strip().textContent).toContain("Public demo of zudo-composer");
+    expect(strip().textContent).toMatch(/nothing is published/i);
   });
 
-  it("shows the hosted demo notice separately on /website-preview", async () => {
+  it("carries the hosted demo notice inside the strip on /website-preview", async () => {
     render(<SiteDelivery source={working(await workingIntegration())} pathname="/website-preview/about" hostedDemo />);
     await screen.findByRole("heading", { name: "A studio built around useful clarity" });
-    expect(screen.getByText("Public demo of zudo-composer")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/real authoring runs locally with pnpm dev/i);
+    expect(strip().textContent).toContain("Public demo of zudo-composer");
+    expect(strip().textContent).toMatch(/real authoring runs locally with pnpm dev/i);
   });
 
-  it("does not show the hosted demo notice when hosted mode is false", async () => {
+  it("omits the hosted demo notice from the strip when hosted mode is false", async () => {
     render(<SiteDelivery source={activated()} pathname="/site" />);
     await screen.findByRole("heading", { name: "Clear ideas, carefully shaped" });
-    expect(screen.queryByText("Public demo of zudo-composer")).not.toBeInTheDocument();
+    expect(strip().textContent).not.toContain("Public demo of zudo-composer");
     cleanup();
     render(<SiteDelivery source={working(await workingIntegration())} pathname="/website-preview/about" />);
     await screen.findByRole("heading", { name: "A studio built around useful clarity" });
-    expect(screen.queryByText("Public demo of zudo-composer")).not.toBeInTheDocument();
+    expect(strip().textContent).toContain("Live working preview — not activated");
+    expect(strip().textContent).not.toContain("Public demo of zudo-composer");
   });
 
-  it("renders Sitemap navigation, collection breadcrumbs, footer, and not-found", async () => {
-    render(<SiteDelivery source={activated()} pathname="/site/journal/start-with-the-question" />);
+  it("renders the root visitor shape with a strip route picker and no tool navigation", async () => {
+    const { container } = render(<SiteDelivery source={activated()} pathname="/site/journal/start-with-the-question" />);
     await screen.findByRole("heading", { name: "Start with the question" });
-    expect(screen.getByRole("navigation", { name: "Primary navigation" }).querySelectorAll("a")).toHaveLength(4);
-    expect(screen.getByRole("navigation", { name: "Primary navigation" }).querySelector('[aria-current="page"]')).toBeNull();
-    expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toHaveTextContent("HomeJournalStart with the question");
-    expect(screen.getByRole("navigation", { name: "Footer navigation" })).toBeInTheDocument();
+    expect(container.querySelector("main.site-root__main#main-content")).not.toBeNull();
     expect(screen.getByRole("link", { name: "Skip to main content" })).toHaveAttribute("href", "#main-content");
+    expect(screen.queryByRole("navigation", { name: "Primary navigation" })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).toBeNull();
+    expect(container.querySelector(".site-delivery__header, .site-delivery__footer")).toBeNull();
+    const picker = stripPicker()!;
+    expect([...picker.options].map(({ value }) => value)).toEqual(artifact.build.routes.map(({ pathname }) => pathname === "/" ? "/site" : `/site${pathname}`));
+    expect([...picker.options].map(({ text }) => text)).toEqual(artifact.build.routes.map(({ displayTitle }) => displayTitle));
+    expect(picker).toHaveValue("/site/journal/start-with-the-question");
     await waitFor(() => expect(document.title).toBe("Start with the question — Sample Studio"));
     cleanup(); render(<SiteDelivery source={activated()} pathname="/site/missing" />);
     expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Return to site home" })).toHaveAttribute("href", "/site");
+    expect(strip().textContent).toContain("Activated local release — not deployed");
+    expect(stripPicker()).toBeNull();
     await waitFor(() => expect(document.title).toBe("Page not found — Sample Studio"));
+  });
+
+  it("keeps the strip in every non-ready state and the route picker only in ready", async () => {
+    render(<SiteDelivery source={activated()} pathname="/site" />);
+    expect(screen.getByRole("heading", { name: "Loading site" })).toBeInTheDocument();
+    expect(strip().textContent).toContain("Activated local release — not deployed");
+    expect(stripPicker()).toBeNull();
+    await screen.findByRole("heading", { name: "Clear ideas, carefully shaped" });
+    expect(stripPicker()).not.toBeNull();
+    for (const [source, heading] of [
+      [activated({ status: "error", message: "offline" }), "Site unavailable"],
+      [activated({ status: "ready", artifact: (() => { const invalid = structuredClone(artifact); invalid.project.componentPack.packVersion = "wrong"; return invalid; })() }), "Site data blocked"],
+      [activated({ status: "ready", artifact: (() => { const blocked = structuredClone(artifact); blocked.build.projectId = "wrong"; return blocked; })() }), "Site build blocked"],
+    ] as const) {
+      cleanup(); render(<SiteDelivery source={source} pathname="/site" />);
+      expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
+      expect(strip().textContent).toContain("Activated local release — not deployed");
+      expect(stripPicker()).toBeNull();
+    }
   });
 
   it("links every generated journal entry from the journal index", async () => {
@@ -216,7 +246,7 @@ describe("SiteDelivery", () => {
     await providers.initialization.initialize();
     render(<SiteDelivery source={working(providers)} pathname="/website-preview/about" />);
     expect(await screen.findByRole("heading", { name: "A studio built around useful clarity" })).toBeInTheDocument();
-    expect(screen.getByText("Live working preview — not activated")).toBeInTheDocument();
+    expect(strip().textContent).toContain("Live working preview — not activated");
     const loaded = await providers.contentProvider.store.getEntry("about-entry");
     if (loaded.status !== "loaded") throw new Error("seed entry unavailable");
     await providers.contentProvider.store.putEntry({ ...loaded.record, updatedAt: "2026-08-31T01:00:00.000Z", values: { ...loaded.record.values, "about-heading-field": "Persisted delivery heading" } });

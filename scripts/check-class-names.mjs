@@ -55,7 +55,6 @@ function code(line) {
 
 const styleSheets = [
   ...find("src", "-name", "*.css"),
-  ...find("server/site-build/client", "-name", "*.css"),
   ...find(`node_modules/${UI_PACK.packageName}/styles`, "-name", "*.css"),
 ];
 const scriptFiles = ["src", "server/site-build/client"].flatMap((directory) => find(directory, "-type", "f", "(", "-name", "*.ts", "-o", "-name", "*.tsx", ")"));
@@ -99,6 +98,26 @@ for (const path of sourceFiles) {
 // is otherwise indistinguishable from a name the Content route retired.
 for (const match of read("node_modules/@codemirror/view/dist/index.js").matchAll(/\bcm-[a-zA-Z0-9-]+/g)) {
   known.add(match[0]);
+}
+
+/* --------------------------------------------------------------------------
+ * The preview strip renders into a shadow root
+ * -------------------------------------------------------------------------- */
+
+// Its sheet reaches nothing but that shadow tree, so a class the strip writes
+// and its sheet never declares fails silently in exactly the way rule 1 exists
+// to catch — and rule 1 only reads specs.
+const stripStyleNames = new Set(
+  [...read("src/features/delivery/preview-strip.css").matchAll(/\.(zc-preview-strip[\w-]*)/g)].map((match) => match[1]),
+);
+assert(stripStyleNames.has("zc-preview-strip__inner"), "preview-strip.css no longer declares the strip's own inner class");
+assert(known.has("zc-preview-strip"), "no source file writes the strip's shadow host class");
+for (const match of read("src/features/delivery/preview-strip.tsx").matchAll(/["'`](zc-preview-strip[\w-]*)["'`]/g)) {
+  const name = match[1];
+  assert(
+    name === "zc-preview-strip" || stripStyleNames.has(name),
+    `preview-strip.tsx writes .${name}, which preview-strip.css does not declare`,
+  );
 }
 
 /** True when `name` is a live class, or the leading segments of one. */

@@ -4,7 +4,6 @@ import { activeComponentProvider } from "../../composer/active-pack";
 import { loadSampleSiteProjectWithAssetLock } from "../../../test/sample-asset-lock";
 import { compileSiteProject, type SiteBuildPlan } from "../../../site-project/compiler";
 import type { SiteProject } from "../../../site-project/model";
-import { breadcrumbs, footerNavigation, primaryNavigation } from "../chrome";
 import { deliveryRoutePathname, matchDeliveryRoute, normalizeDeliveryLinks, safeDeliveryHref, toDeliveryHref } from "../routing";
 import { SiteDelivery } from "../site-delivery";
 import type { DeliverySourceContract } from "../source";
@@ -20,7 +19,6 @@ beforeAll(async () => {
   build = compilation.build;
 });
 const staticSource = (value: SiteProject = project): DeliverySourceContract => ({ kind: "static", componentProvider: activeComponentProvider, project: value, build });
-const sitemap = () => project.providers.sitemaps[0]!.records.find(({ id }) => id === project.activeSitemap.recordId)!.document;
 
 describe("delivery routing at basePath /", () => {
   it("leaves compiler paths as final hrefs and keeps uploaded assets canonical", () => {
@@ -45,18 +43,6 @@ describe("delivery routing at basePath /", () => {
     expect(matchDeliveryRoute(build.routes, "/site/journal", "/")).toBeUndefined();
     expect(matchDeliveryRoute(build.routes, "/missing", "/")).toBeUndefined();
   });
-
-  it("resolves navigation and breadcrumbs against / with active state from the pathname", () => {
-    const entry = build.routes.find(({ pathname }) => pathname === "/journal/start-with-the-question")!;
-    const primary = primaryNavigation(sitemap(), build.routes, entry.sitemapNode.id, entry.pathname, "/");
-    expect(primary.map(({ href }) => href)).toEqual(["/", "/about", "/services", "/journal"]);
-    expect(primary.filter(({ active }) => active).map(({ href }) => href)).toEqual(["/", "/journal"]);
-    expect(primary.some(({ current }) => current)).toBe(false);
-    const journal = build.routes.find(({ pathname }) => pathname === "/journal")!;
-    expect(primaryNavigation(sitemap(), build.routes, journal.sitemapNode.id, "/journal", "/").find(({ current }) => current)?.href).toBe("/journal");
-    expect(footerNavigation(sitemap(), build.routes, entry.sitemapNode.id, entry.pathname, "/").every(({ href, external }) => external || !href.startsWith("/site"))).toBe(true);
-    expect(breadcrumbs(sitemap(), build.routes, entry.sitemapNode.id, entry.pathname, "/").map(({ href }) => href)).toEqual(["/", "/journal", "/journal/start-with-the-question"]);
-  });
 });
 
 describe("SiteDelivery from a static source at /", () => {
@@ -69,7 +55,9 @@ describe("SiteDelivery from a static source at /", () => {
     expect(screen.queryByRole("navigation", { name: "Primary navigation" })).toBeNull();
     expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).toBeNull();
     expect(screen.queryByRole("navigation", { name: "Footer navigation" })).toBeNull();
-    expect(container.querySelector("header.site-delivery__header, footer.site-delivery__footer")).toBeNull();
+    expect(container.querySelector(".site-root > .site-root__skip")).toBe(screen.getByRole("link", { name: "Skip to main content" }));
+    expect(container.querySelector("main.site-root__main#main-content")).not.toBeNull();
+    expect(container.querySelector(".zc-preview-strip")).toBeNull();
     expect(screen.queryByText(/not deployed|not activated/)).toBeNull();
     await waitFor(() => expect(document.title).toBe("Start with the question — Sample Studio"));
   });
