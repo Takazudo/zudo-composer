@@ -141,7 +141,9 @@ export function persistRailState(state: RailState, storage: Storage | null = def
 /** The rail item a pathname is currently inside, or `null` for an unknown route. */
 export function currentRailItem(path: string): RailItem | null {
   const normalized = path === "" ? "/" : path;
-  return RAIL_ITEMS.find((item) => !item.external && item.href === normalized.split("?")[0]) ?? null;
+  // A destination that opens in its own tab is never the authoring document's
+  // own route, so it can never be the current item.
+  return RAIL_ITEMS.find((item) => !item.external && !item.newTab && item.href === normalized.split("?")[0]) ?? null;
 }
 
 export interface RailProps {

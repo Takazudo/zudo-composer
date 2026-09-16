@@ -160,7 +160,7 @@ describe("Rail", () => {
     expect(site).toHaveAttribute("target", "_blank");
     expect(site).toHaveAttribute("rel", "noopener");
     expect(site).not.toHaveAttribute("aria-current");
-    expect(currentRailItem("/website-preview")?.id).toBe("site");
+    expect(currentRailItem("/website-preview")).toBeNull();
 
     // The visitor document is a separate entry graph, so the click is the
     // browser's to handle and must not become an in-shell navigation.
