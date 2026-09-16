@@ -21,6 +21,7 @@
     "scripts/check-class-names.mjs",
     "scripts/check-contract-boundary.mjs",
     "scripts/check-dist-artifact.mjs",
+    "scripts/check-preview-isolation.mjs",
     "scripts/check-headless-boundary.mjs",
     "scripts/check-package-conformance.mjs",
     "scripts/check-provider-boundary.mjs",

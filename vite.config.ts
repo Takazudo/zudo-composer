@@ -14,6 +14,7 @@ import workspaceDomainProvider, { resolveWorkspaceRegistryRoot } from './plugins
 import componentPackPlugin from './plugins/component-pack-plugin.mjs';
 import { devPrebundleIncludes } from './plugins/dev-prebundle.mjs';
 import hostStylesPlugin from './plugins/host-styles-plugin.mjs';
+import entryGraphPlugin, { COMPOSER_PREVIEW_ENTRY_MODULE, SITE_PREVIEW_ENTRY_MODULE } from './plugins/entry-graph-plugin.mjs';
 import { APP_ROOT, readRootEnvironment, resolveAppWarmupFiles, resolveFsAllow, resolvePublicDir, resolveSiteProjectLocalRoot, resolveWatchIgnored } from './plugins/roots.mjs';
 import { CONFIG_FILE_NAME, composer } from './server/config/index.ts';
 import hostConfig from './zudo-composer.config.ts';
@@ -128,5 +129,9 @@ export default defineConfig({
     }),
     tailwindPlugin(),
     preact(),
+    // Records what the composer canvas preview and the site-preview document
+    // each reach, so `pnpm styles:isolation` can prove editor CSS never lands
+    // in either — see #724.
+    entryGraphPlugin({ startModules: [COMPOSER_PREVIEW_ENTRY_MODULE, SITE_PREVIEW_ENTRY_MODULE] }),
   ],
 });

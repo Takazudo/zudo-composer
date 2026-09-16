@@ -1,7 +1,7 @@
 import { render, type JSX } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import type { SiteCompiledRoute } from "../../site-project/compiler";
-import { HOSTED_DEMO_NOTICE_COPY, HOSTED_DEMO_NOTICE_TITLE } from "./hosted-demo-notice";
+import { HOSTED_DEMO_NOTICE_COPY, HOSTED_DEMO_NOTICE_TITLE } from "./hosted-demo-notice-copy";
 import { toDeliveryHref, type DeliveryBasePath } from "./routing";
 import stripStyles from "./preview-strip.css?inline";
 

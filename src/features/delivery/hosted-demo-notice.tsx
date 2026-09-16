@@ -1,5 +1,6 @@
 import type { JSX } from "preact";
 import { Banner } from "../../components/ui";
+import { HOSTED_DEMO_NOTICE_COPY, HOSTED_DEMO_NOTICE_TITLE } from "./hosted-demo-notice-copy";
 
 export interface HostedDemoNoticeProps {
   /** Keep the project-export reminder on authoring routes only. */
@@ -7,12 +8,7 @@ export interface HostedDemoNoticeProps {
   class?: string;
 }
 
-/**
- * One source for the hosted-demo wording. The authoring banner and the
- * isolated preview strip both read it, so the two cannot drift apart.
- */
-export const HOSTED_DEMO_NOTICE_TITLE = "Public demo of zudo-composer";
-export const HOSTED_DEMO_NOTICE_COPY = "Edits and uploads stay in this browser tab and reset on reload. Nothing is published. Real authoring runs locally with pnpm dev.";
+export { HOSTED_DEMO_NOTICE_COPY, HOSTED_DEMO_NOTICE_TITLE };
 
 /**
  * Shared copy for the hosted demo. The notice is intentionally not dismissible:
