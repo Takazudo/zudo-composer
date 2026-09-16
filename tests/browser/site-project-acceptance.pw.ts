@@ -187,7 +187,10 @@ test("dev virtual source contains the CLI-activated project", async ({ page }) =
   const failures = watchRuntimeFailures(page);
   const virtualResponses: Response[] = [];
   page.on("response", (response) => {
-    if (response.url().includes("virtual:site-project-source") || response.url().includes("__x00__virtual")) virtualResponses.push(response);
+    // Match the bare module name, not `virtual:…`: Vite serves a virtual id as
+    // `/@id/__x00__virtual:<name>` and may percent-encode the colon, and `/site`
+    // is now its own visitor document that also pulls `virtual:zudo-composer-pack`.
+    if (response.url().includes("site-project-source")) virtualResponses.push(response);
   });
   await page.goto("/site");
   await expect(page.locator("main#main-content")).toBeVisible();

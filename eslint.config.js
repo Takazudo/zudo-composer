@@ -56,6 +56,7 @@ export default tseslint.config(
       'src/hosted-demo/main.tsx',
       'src/features/composer/active-pack.ts',
       'src/features/composer/preview/preview-entry.ts',
+      'src/features/delivery/preview-entry.ts',
     ],
     rules: {
       '@typescript-eslint/triple-slash-reference': 'off',
