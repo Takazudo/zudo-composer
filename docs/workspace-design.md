@@ -373,6 +373,10 @@ for repair. A model/entry/view intent must finish successfully before selection
 updates rewrite the address bar.
 
 Review & release explicitly reports its unavailable release services until the
-release integration lands. Website preview labels the current visitor route as
-live draft input and does not claim approval or activated immutable delivery.
+release integration lands. Website preview and `/site` open a separate visitor
+document in a new tab, fed by the working draft or the activated release; the
+tool draws only a preview strip in a Shadow DOM (source label, route picker) —
+the site's own global-template chrome, rendered with the host's own tokens, is
+what the visitor sees. The strip labels the current visitor route as live
+draft input and does not claim approval or activated immutable delivery.
 Notifications continue to disclose disabled, unconnected delivery capabilities.

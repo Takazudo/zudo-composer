@@ -423,7 +423,9 @@ delivery resolves `/site` only from the currently activated, completed local
 release. It verifies the active project/revision/build triple and serves only that
 build's copied checksum-addressed Assets bytes; missing or corrupt release state is
 unavailable and never falls back to a working draft. In contrast,
-`/website-preview` flushes and compiles the current live authoring snapshot. A release
+`/website-preview` flushes and compiles the current live authoring snapshot,
+delivered as a visitor document outside the authoring shell — the same visitor
+client the static build ships, opened in a new tab. A release
 is stamped with the toolchain that built it, so after a component-pack swap an already
 activated release no longer matches the installed runtime and becomes unavailable
 rather than being served against different components. Local activation is not deployment.

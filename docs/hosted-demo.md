@@ -50,11 +50,14 @@ immutable uploads fail closed; the four immutable bundled assets remain public.
 The isolated Composer iframe forwards asset requests only to its matching host.
 Setup waits at most ten seconds for control and reports initialization failures.
 
-Same-tab working preview and `/site` keep the current integration. Ctrl/Command-click,
-Shift-click or a link targeting a new window opens a one-use, random-token handoff;
-the opener validates both origin and window identity, flushes sessions and captures
-a coherent current project plus all asset bytes. Other tabs cannot request it.
-The bootstrap also exposes `mountPreviewFrame(frame, url)` for the same scoped handoff into an attached working-preview iframe. The preview receives a snapshot, and reloading it resets to the public sample.
+Same-tab working preview is gone: `/website-preview` and `/site` always open in
+their own new tab as a separate visitor document, and the one-use, random-token
+handoff is the only path that feeds it. The opener validates both origin and
+window identity, flushes sessions and captures a coherent current project plus
+all asset bytes; other tabs cannot request it. Reloading that tab without a
+token falls back to the public bundled sample. The bootstrap also exposes
+`mountPreviewFrame(frame, url)` for the same scoped handoff into an attached
+working-preview iframe.
 
 Build output includes `demo-editor-manifest.json` with the full **40-character
 Git sourceRevision**, the separate **64-character projectSourceRevision**, and

@@ -40,8 +40,12 @@ interchangeable with it.
 
 The tool's authoring routes are `/`, `/composer`, same-origin
 `/composer/preview`, `/content`, `/mapping`, `/sitemapper`, and `/assets`.
-An activated host site is delivered under `/site`; each static site's own routes
-come from its verified `dist-site/site-manifest.json`. The SiteProject acceptance
+`/site` and `/website-preview` are visitor documents outside the authoring
+shell: they open in their own tab, delivered by the same visitor client as the
+static build, loading only the host's styles entry and a small tool-owned
+visitor sheet. An activated host site is delivered under `/site`; each static
+site's own routes come from its verified `dist-site/site-manifest.json`. The
+SiteProject acceptance
 lane derives Sample Studio's route data from `scripts/host-site-routes.mjs`'s
 `readVerifiedHostManifest`, which verifies it against that artifact.
 Emitted files live under `/assets/`, and committed images and PDFs from the
