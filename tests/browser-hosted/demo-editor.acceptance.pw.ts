@@ -223,6 +223,8 @@ test.describe(`demo editor: ${context.name}`, () => {
 
   test("reports a blocked preview pop-up in the authoring document", async ({ page }) => {
     const failures = watchRuntimeFailures(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await waitForAuthoringRoute(page, "Dashboard");
     await navigateToReview(page);
     await page.evaluate(() => { window.open = () => null; });
     await page.getByRole("link", { name: "Live working preview", exact: true }).click();
@@ -232,6 +234,8 @@ test.describe(`demo editor: ${context.name}`, () => {
 
   test("falls back to the bundled sample when the preview reloads without its token", async ({ page }) => {
     const failures = watchRuntimeFailures(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await waitForAuthoringRoute(page, "Dashboard");
     await navigateToReview(page);
     const popup = await openWorkingPreview(page);
     await waitForDeliveryRoute(popup);
