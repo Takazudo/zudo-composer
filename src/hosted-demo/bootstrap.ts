@@ -20,18 +20,29 @@ async function incomingHandoff(): Promise<Handoff | null> {
     source.postMessage({ type: "hosted-demo-preview-request", token }, location.origin);
   });
 }
-export async function bootstrapHostedDemo() {
+/**
+ * The `#demoPreview` token handoff, asset seeding and service-worker
+ * registration a non-App visitor document also needs. Authoring-only
+ * listeners (ticket handling, frame relays, click capture) stay in
+ * `bootstrapHostedDemo`.
+ */
+export async function createHostedDemoIntegration() {
   const handoff = await incomingHandoff();
   const validated = validateSiteProject(handoff?.project ?? project, activeSiteProjectValidationContext);
   if (!validated.ok) throw new Error("Bundled demo project is incompatible with the configured component pack.");
   const assetSeed: DemoAssetSeed = handoff?.assets ?? { snapshot: bundledAsset, bytes: {} };
   if (!handoff) await Promise.all(bundledAsset.records.flatMap((r) => r.document.versions).map(async (v) => { const response = await fetch(`${v.url}?hosted-demo-seed=1`, { signal: AbortSignal.timeout(15000) }); if (!response.ok) throw new Error(`Demo assets could not load: ${v.url}`); assetSeed.bytes[v.checksum] = new Uint8Array(await response.arrayBuffer()); }));
   const assets = await createDemoAsset(assetSeed);
-  let integration = createProductionProviderIntegration({ project: validated.project, sourceRevision: await computeSiteProjectRevision(validated.project), createProviders: createDemoWorkspaceProviders(), assetProvider: assets.provider });
+  const integration = createProductionProviderIntegration({ project: validated.project, sourceRevision: await computeSiteProjectRevision(validated.project), createProviders: createDemoWorkspaceProviders(), assetProvider: assets.provider });
   if (!("serviceWorker" in navigator)) throw new Error("The hosted demo requires service-worker support for tab-isolated assets.");
   navigator.serviceWorker.addEventListener("message", (event) => { if (event.data?.type === "hosted-demo-assets" && event.ports[0]) event.ports[0].postMessage(assets.readUrl(event.data.pathname)); });
   await Promise.race([navigator.serviceWorker.register("/hosted-demo-assets-worker.js", { scope: "/", updateViaCache: "none" }), new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error("Demo assets registration timed out. Reload to retry.")), 10000))]);
   await Promise.race([new Promise<void>((resolve) => { if (navigator.serviceWorker.controller) resolve(); else navigator.serviceWorker.addEventListener("controllerchange", () => resolve(), { once: true }); }), new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error("Demo assets setup timed out. Reload to retry.")), 10000))]);
+  return { integration, assets };
+}
+export async function bootstrapHostedDemo() {
+  const { integration: initialIntegration, assets } = await createHostedDemoIntegration();
+  let integration = initialIntegration;
   window.addEventListener("message", (event) => {
     if (event.origin !== location.origin || event.data?.type !== "hosted-demo-frame-assets" || !event.ports[0]) return;
     const frame = [...document.querySelectorAll("iframe")].find((frame) => frame.contentWindow === event.source && new URL(frame.src, location.href).pathname === "/composer/preview");
