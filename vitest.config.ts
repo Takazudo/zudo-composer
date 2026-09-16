@@ -47,6 +47,12 @@ export default defineConfig({
             'virtual:site-project-source': fileURLToPath(
               new URL('./src/test/site-project-source.ts', import.meta.url),
             ),
+            'virtual:hosted-demo-seed': fileURLToPath(
+              new URL('./src/test/hosted-demo-seed.ts', import.meta.url),
+            ),
+            'virtual:demo-editor-project': fileURLToPath(
+              new URL('./src/test/demo-editor-project.ts', import.meta.url),
+            ),
           },
         },
         test: {

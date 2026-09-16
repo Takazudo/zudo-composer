@@ -11,6 +11,7 @@ import { createModuleEvaluator } from "../../server/module-evaluator.mjs";
 import { APP_ROOT } from "../../plugins/roots.mjs";
 import { assertDemoEditorRoutes } from "../routes.mjs";
 import { boundarySource } from "../boundary-source.mjs";
+import { ENTRY_GRAPH_FILE_NAME } from "../../plugins/entry-graph-plugin.mjs";
 
 export const DEMO_EDITOR_MANIFEST = "demo-editor-manifest.json";
 export const DEMO_EDITOR_SEED = "demo-editor-seed.json";
@@ -135,6 +136,10 @@ export function sha256(bytes) {
 export function expectedMime(path) {
   if (path === HOSTED_DEMO_HEADERS) return "text/plain";
   if (path === DEMO_EDITOR_SEED) return "application/json";
+  // `plugins/entry-graph-plugin.mjs` records package-relative module ids and
+  // emitted CSS file names only, no filesystem paths — the same build-metadata
+  // shape `DEMO_EDITOR_MANIFEST` already carries, so it is served the same way.
+  if (path === ENTRY_GRAPH_FILE_NAME) return "application/json";
   if (path.startsWith("uploaded-assets/")) {
     const mime = ASSET_CHECKSUM_URL_PATTERN.test(`/${path}`) ? assetMimeTypeForExtension(path.slice(path.lastIndexOf(".") + 1)) : undefined;
     assert.ok(mime, `No hosted demo asset MIME contract for ${path}`);
@@ -284,11 +289,14 @@ export async function verifyDemoEditorArtifact({ directory, expectedSourceRevisi
   assert.equal(contents.get(HOSTED_DEMO_HEADERS)?.toString("utf8"), hostedAssetHeaders(assets.map((path) => ({ path, byteLength: manifest.assets[path].byteLength }))), "Hosted asset header rules must match the bundled asset contract");
 
   // Preserve the ordinary dist check's preview boundary. The full application
-  // bundle may contain host-only labels, so inspect only the preview entry's
+  // bundle may contain host-only labels, so inspect only each preview entry's
   // static graph for those markers.
   const javascript = found.filter((path) => path.startsWith("assets/") && [".js", ".mjs"].includes(extname(path)));
+  // Two entries carry this name: the Composer canvas preview and the delivery
+  // visitor document. Both are preview documents, so every one of their graphs
+  // is walked rather than picking a single chunk.
   const previewEntries = javascript.filter((path) => basename(path).startsWith("preview-entry-"));
-  assert.equal(previewEntries.length, 1, "Hosted artifact must include exactly one preview entry chunk");
+  assert.ok(previewEntries.length > 0, "Hosted artifact must include a preview entry chunk");
   const previewGraph = new Set();
   /** @param {string} path */
   function collectPreviewGraph(path) {
@@ -300,7 +308,7 @@ export async function verifyDemoEditorArtifact({ directory, expectedSourceRevisi
       if (javascript.includes(dependency)) collectPreviewGraph(dependency);
     }
   }
-  collectPreviewGraph(previewEntries[0]);
+  for (const entry of previewEntries) collectPreviewGraph(entry);
   const previewText = [...previewGraph].map((path) => contents.get(path)?.toString("utf8")).join("\n");
   for (const forbidden of [
     "How the pieces connect",

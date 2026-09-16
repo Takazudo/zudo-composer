@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isSafeRecordId } from "../../../shared";
 import { compileSiteProject } from "../../index";
-import { breadcrumbs } from "../../../features/delivery/chrome";
 import {
   componentCatalog,
   composition,
@@ -18,14 +17,14 @@ import {
 const compile = (value = project()) => compileSiteProject(value, { componentCatalog });
 
 describe("SiteProject compiler", () => {
-  it("compiles nested Cartesian contexts and breadcrumbs without selecting the first repeated ancestor", async () => {
+  it("compiles nested Cartesian contexts and ancestor chains without selecting the first repeated ancestor", async () => {
     const value = project({ root: page("parent", "parent", mappingSource("entry-field", "title"), [page("child", "child", mappingSource("entry-field", "title"), [page("details", "details", { kind: "composition", ref: { providerId: "files", recordId: "landing" } })])]), entries: [entry("a", "Alpha"), entry("b", "Beta")] });
     const result = await compile(value); expect(result.status).toBe("ready"); if (result.status !== "ready") return;
     expect(result.build.routes).toHaveLength(10);
     expect(new Set(result.build.routes.map((route) => route.composition.routeRecordId)).size).toBe(10);
     const route = result.build.routes.find(({ pathname }) => pathname === "/parent/b/child/a/details")!;
     expect(route.ancestors[0]).toMatchObject({ pathname: "/parent/b", selectedEntry: { providerId: "content-filesystem", modelId: "articles", recordId: "b" } });
-    expect(breadcrumbs(value.providers.sitemaps[0]!.records[0]!.document, result.build.routes, "details", route.pathname).map(({ title, href }) => [title, href])).toEqual([["Beta", "/site/parent/b"], ["Alpha", "/site/parent/b/child/a"], ["details", "/site/parent/b/child/a/details"]]);
+    expect([...route.ancestors, route].map(({ displayTitle, pathname }) => [displayTitle, pathname])).toEqual([["Beta", "/parent/b"], ["Alpha", "/parent/b/child/a"], ["details", "/parent/b/child/a/details"]]);
     expect(result.build.activeSitemap).toEqual(value.activeSitemap);
   });
   it("compiles a selected collection entry and uses explicit preview/release draft policy", async () => {

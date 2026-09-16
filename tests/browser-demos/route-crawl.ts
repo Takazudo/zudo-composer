@@ -13,12 +13,25 @@ export async function crawlDemoRoutes(page: Page, routes: readonly string[]): Pr
     const path = toSiteHref(route);
     const response = await page.goto(path, { waitUntil: "domcontentloaded" });
     expect(response?.status(), `${path} should respond 200`).toBe(200);
-    await expect(page.locator("h1").first()).toBeVisible();
+    await expectRenderedPage(page, path);
     const reloaded = await page.reload({ waitUntil: "domcontentloaded" });
     expect(reloaded?.status(), `${path} should respond 200 after reload`).toBe(200);
-    await expect(page.locator("h1").first()).toBeVisible();
+    await expectRenderedPage(page, path);
   }
   expect(failures, failures.join("\n")).toEqual([]);
+}
+
+/**
+ * The site's own page, not a delivery state screen. Every non-ready state —
+ * loading, provider error, "Page not found" — renders its own `h1` inside
+ * `main[data-site-delivery-state]`, so waiting for `main#main-content` first is
+ * what makes the heading assertion mean anything. It also absorbs the wait
+ * while this document's entry loads and the activated release is read, which a
+ * bare `h1` assertion raced against on the larger hosts.
+ */
+async function expectRenderedPage(page: Page, path: string): Promise<void> {
+  await expect(page.locator("main#main-content"), `${path} should render the site page`).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("h1").first()).toBeVisible();
 }
 
 /** No horizontal scroll at the narrowest phone size the chrome supports. */

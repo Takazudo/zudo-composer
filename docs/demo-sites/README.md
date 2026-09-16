@@ -353,8 +353,9 @@ blocked, not found, with a link to `/`). Header, navigation, breadcrumbs and foo
 global-template nodes. Nav links are static props or `route-link` projections;
 the components compute active state from `location.pathname`. Href prefixing is
 a no-op at `/`, and `/uploaded-assets/` stays canonical. `/site` and
-`/website-preview` keep the full tool chrome unchanged. The page's only tool CSS
-is `server/site-build/client/styles.css`, which uses no authoring-app tokens.
+`/website-preview` render the same shape, plus one tool-owned preview strip
+isolated in a shadow root. The page's only tool CSS is
+`src/features/delivery/visitor.css`, which uses no authoring-app tokens.
 
 `--print-routes` requires an existing `<host>/dist-site` artifact. It verifies
 that artifact and prints only its manifest's route list as JSON, without

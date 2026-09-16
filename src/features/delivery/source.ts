@@ -5,6 +5,7 @@ import type { ReleaseToolchain } from "../../site-project/api";
 import { validateReleaseToolchain } from "../../site-project/api/validation";
 import type { SiteBuildPlan } from "../../site-project/compiler";
 import type { SiteProject } from "../../site-project/model";
+import type { DeliveryBasePath } from "./routing";
 
 export interface ActivatedDeliveryArtifact {
   kind: "activated-local";
@@ -27,6 +28,11 @@ export type DeliverySourceContract =
   | { kind: "working-preview"; basePath?: "/site" | "/website-preview"; providers: import("../../app/provider-integration").ProductionProviderIntegration }
   /** A project compiled at build time and delivered at its own origin root (`vite.site-static.config.ts`). */
   | { kind: "static"; componentProvider: typeof import("../composer/active-pack").activeComponentProvider; project: SiteProject; build: SiteBuildPlan };
+
+/** Where a source is delivered: its own origin root for a static build, the tool's own base path otherwise. */
+export function deliveryBasePath(source: DeliverySourceContract): DeliveryBasePath {
+  return source.kind === "activated" ? "/site" : source.kind === "static" ? "/" : source.basePath ?? "/website-preview";
+}
 
 export function parseActivatedDeliverySource(value: unknown): ActivatedDeliverySource | undefined {
   if (!value || typeof value !== "object" || !("status" in value)) return undefined;

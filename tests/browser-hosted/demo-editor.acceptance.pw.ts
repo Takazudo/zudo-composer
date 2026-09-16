@@ -60,9 +60,9 @@ async function waitForAuthoringRoute(page: Page, title: string): Promise<void> {
   await expect(page.locator("h1").first()).toHaveText(title);
 }
 
-async function waitForDeliveryRoute(page: Page, projectName: string): Promise<void> {
+async function waitForDeliveryRoute(page: Page): Promise<void> {
   await expect(page.locator("main#main-content")).toBeVisible();
-  await expect(page.getByText(projectName, { exact: true }).first()).toBeVisible();
+  await expect(page.locator(".zc-preview-strip")).toBeAttached();
 }
 
 async function navigateToReview(page: Page): Promise<void> {
@@ -74,6 +74,12 @@ async function navigateToReview(page: Page): Promise<void> {
 
 function expectDemoNotice(page: Page): Promise<void> {
   return expect(page.getByText("Public demo of zudo-composer", { exact: true }).first()).toBeVisible();
+}
+
+// On a delivery route the notice moved into the strip's shadow root, which
+// Playwright's CSS engine pierces but its text selectors reach just the same.
+function expectDeliveryDemoNotice(page: Page): Promise<void> {
+  return expect(page.locator(".zc-preview-strip").getByText("Public demo of zudo-composer", { exact: true })).toBeVisible();
 }
 
 function watchLocalEndpointRequests(page: Page): string[] {
@@ -127,11 +133,24 @@ async function selectEditableTextField(page: Page): Promise<Locator> {
   throw new Error(`Could not select ${context.editableText.componentTitle}.${context.editableText.fieldProp} in the Composer inspector.`);
 }
 
-async function openWorkingPreview(page: Page): Promise<import("@playwright/test").Page> {
+/**
+ * A plain click is the real path now that the delivery links carry
+ * `target="_blank"`: the hosted demo's capturing handler prevents the default
+ * and re-opens the URL itself so the preview keeps a `window.opener` to read
+ * its one-use snapshot from.
+ */
+async function openDeliveryPopup(page: Page, name: string): Promise<Page> {
   const popupPromise = page.waitForEvent("popup");
-  await page.getByRole("link", { name: "Live working preview", exact: true }).click({ modifiers: ["Control"] });
+  await page.getByRole("link", { name, exact: true }).click();
   return popupPromise;
 }
+
+async function openWorkingPreview(page: Page): Promise<Page> {
+  return openDeliveryPopup(page, "Live working preview");
+}
+
+/** A compiled site route below the root, used for the nested-reload checks. */
+const nestedRoute = context.manifest.routes.find((route) => route.startsWith("/site/"))?.slice("/site".length);
 
 /**
  * A Structure tree row action lives in `.cms-tree-acts`, which is
@@ -159,14 +178,98 @@ test.describe(`demo editor: ${context.name}`, () => {
     }
     for (const path of ["/site", "/website-preview"]) {
       await page.goto(path, { waitUntil: "domcontentloaded" });
-      await waitForDeliveryRoute(page, context.project.name);
-      await expectDemoNotice(page);
+      await waitForDeliveryRoute(page);
+      await expectDeliveryDemoNotice(page);
       await page.reload({ waitUntil: "domcontentloaded" });
-      await waitForDeliveryRoute(page, context.project.name);
-      await expectDemoNotice(page);
+      await waitForDeliveryRoute(page);
+      await expectDeliveryDemoNotice(page);
     }
     expect(localEndpointRequests, localEndpointRequests.join("\n")).toEqual([]);
     expect(failures, failures.join("\n")).toEqual([]);
+  });
+
+  test("opens the working preview in a new tab from the rail and from Review & release", async ({ page }) => {
+    const failures = watchRuntimeFailures(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await waitForAuthoringRoute(page, "Dashboard");
+    const railPopup = await openDeliveryPopup(page, "Website preview — choose preview source");
+    await waitForDeliveryRoute(railPopup);
+    await expectDeliveryDemoNotice(railPopup);
+    await railPopup.close();
+
+    await navigateToReview(page);
+    for (const link of ["Live working preview", "Demo website preview"]) {
+      const popup = await openDeliveryPopup(page, link);
+      await waitForDeliveryRoute(popup);
+      await expectDeliveryDemoNotice(popup);
+      await popup.close();
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+
+  test("serves a nested delivery route on direct load and on reload", async ({ page }) => {
+    test.skip(nestedRoute === undefined, "This host compiles only the site root.");
+    const failures = watchRuntimeFailures(page);
+    for (const basePath of ["/site", "/website-preview"]) {
+      await page.goto(`${basePath}${nestedRoute}`, { waitUntil: "domcontentloaded" });
+      await waitForDeliveryRoute(page);
+      await expectDeliveryDemoNotice(page);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await waitForDeliveryRoute(page);
+      await expectDeliveryDemoNotice(page);
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+
+  test("reports a blocked preview pop-up in the authoring document", async ({ page }) => {
+    const failures = watchRuntimeFailures(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await waitForAuthoringRoute(page, "Dashboard");
+    await navigateToReview(page);
+    await page.evaluate(() => { window.open = () => null; });
+    await page.getByRole("link", { name: "Live working preview", exact: true }).click();
+    await expect(page.locator('#hosted-demo-error[role="alert"]')).toContainText("blocked");
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+
+  test("falls back to the bundled sample when the preview reloads without its token", async ({ page }) => {
+    const failures = watchRuntimeFailures(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await waitForAuthoringRoute(page, "Dashboard");
+    await navigateToReview(page);
+    const popup = await openWorkingPreview(page);
+    await waitForDeliveryRoute(popup);
+    // The preview strips `#demoPreview` before the exchange, so the reload
+    // carries no token and must land on the bundled public sample.
+    expect(new URL(popup.url()).hash).toBe("");
+    await popup.reload({ waitUntil: "domcontentloaded" });
+    await waitForDeliveryRoute(popup);
+    await expectDeliveryDemoNotice(popup);
+    await popup.close();
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+
+  test("reports a handoff that never answers and survives a preview closed mid-handoff", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await waitForAuthoringRoute(page, "Dashboard");
+    // An unknown token is never in the owner's ticket map, so no response ever
+    // comes and the preview document reports the 10s handoff timeout.
+    const orphanPromise = page.waitForEvent("popup");
+    await page.evaluate(() => { window.open("/website-preview#demoPreview=never-issued", "_blank"); });
+    const orphan = await orphanPromise;
+    await expect(orphan.getByText("Demo preview handoff timed out. Open it again from the owning tab.", { exact: true })).toBeVisible({ timeout: 20_000 });
+    await orphan.close();
+
+    await navigateToReview(page);
+    const closedEarly = await openWorkingPreview(page);
+    await closedEarly.close();
+
+    // The dropped ticket must not poison the owner: a later preview still
+    // receives its snapshot.
+    const reopened = await openWorkingPreview(page);
+    await waitForDeliveryRoute(reopened);
+    await expectDeliveryDemoNotice(reopened);
+    await reopened.close();
   });
 
   test("seeds exactly the editor manifest assets", async ({ page }) => {

@@ -34,7 +34,8 @@ the canvas action, and root/non-root toolbar targets.
 | States | Empty/no-match, loading, error, unavailable and stale-target messages are not editable success | `workspace-states.pw.ts`, responsive source: refused workspace provider, delayed/rejected Assets, recovery, no-match, unavailable provider URL; existing unit suites cover blank schemas and incomplete reference diagnostics |
 
 Every module remains navigable: Overview, Content, Assets, Compositions,
-Mappings, Sitemaps, Review & release, and the separate Website preview chooser.
+Mappings, Sitemaps, Review & release, and the separate Website preview
+chooser, which opens the visitor document in a new tab.
 
 ## Viewport and interaction matrix
 

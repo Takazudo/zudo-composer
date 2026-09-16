@@ -7,12 +7,11 @@ import { validateAssetSnapshot } from "../../assets/model";
 import type { WorkspaceCapture } from "../../app/workspace-snapshot";
 import { validateSiteProject, type SiteProject } from "../../site-project";
 import type { SitemapDocument } from "../../sitemapper/model/types";
-import { breadcrumbs, footerNavigation, primaryNavigation } from "./chrome";
 import { normalizeDeliveryLink, normalizeDeliveryLinks, type DeliveryBasePath } from "./routing";
 import { DeliveryRuntime, type DeliveryComponentError } from "./runtime";
 import { matchDeliveryRoute } from "./routing";
-import { validateActivatedDeliveryArtifact, type DeliverySourceContract } from "./source";
-import { HostedDemoNotice } from "./hosted-demo-notice";
+import { deliveryBasePath, validateActivatedDeliveryArtifact, type DeliverySourceContract } from "./source";
+import { PreviewStrip } from "./preview-strip";
 
 type DeliveryState =
   | { status: "loading" }
@@ -100,7 +99,7 @@ function StateMessage({ heading, message, children, busy, focus, onFocused }: { 
   </main>;
 }
 
-function DeliveryChrome({ project, build, sitemap, route, pack, report, focus, onFocused, basePath, label }: { project: SiteProject; build: SiteBuildPlan; sitemap: SitemapDocument; route: SiteCompiledRoute; pack: ProductionProviderIntegration["componentProvider"]["pack"]; report: (detail: DeliveryComponentError) => void; focus?: boolean; onFocused?: () => void; basePath: DeliveryBasePath; label: string }): JSX.Element {
+function DeliveryChrome({ route, pack, report, focus, onFocused, basePath }: { route: SiteCompiledRoute; pack: ProductionProviderIntegration["componentProvider"]["pack"]; report: (detail: DeliveryComponentError) => void; focus?: boolean; onFocused?: () => void; basePath: DeliveryBasePath }): JSX.Element {
   const content = useRef<HTMLElement>(null);
   useEffect(() => {
     const root = content.current;
@@ -118,26 +117,16 @@ function DeliveryChrome({ project, build, sitemap, route, pack, report, focus, o
     const hadHref = target.hasAttribute("href");
     if (hadHref && normalizeDeliveryLink(target, basePath) === undefined) event.preventDefault();
   };
-  const main = <main ref={content} class={basePath === "/" ? "site-root__main" : "site-delivery__main"} id="main-content" tabIndex={-1} onClickCapture={guardLink}><DeliveryRuntime composition={route.composition} pack={pack} onComponentError={report} basePath={basePath} /></main>;
-  // At the origin root the site owns its header, navigation, breadcrumbs and
-  // footer as global-template nodes; the tool keeps only the skip link and <main>.
-  if (basePath === "/") return <div class="site-root"><a class="site-root__skip" href="#main-content">Skip to main content</a>{main}</div>;
-  const primary = primaryNavigation(sitemap, build.routes, route.sitemapNode.id, route.pathname, basePath);
-  const crumbs = breadcrumbs(sitemap, build.routes, route.sitemapNode.id, route.pathname, basePath);
-  const footer = footerNavigation(sitemap, build.routes, route.sitemapNode.id, route.pathname, basePath);
-  return <div class="site-delivery">
-    <a class="site-delivery__skip" href="#main-content">Skip to main content</a>
-    <header class="site-delivery__header">
-      <a class="site-delivery__brand" href={basePath}>{project.name}</a><span class="site-delivery__source-label">{label}</span>
-      <nav aria-label="Primary navigation"><ul>{primary.map((item) => <li key={item.id}><a href={item.href} data-active={item.active || undefined} aria-current={item.current ? "page" : undefined}>{item.title}</a></li>)}</ul></nav>
-    </header>
-    {crumbs.length > 1 && <nav class="site-delivery__breadcrumbs" aria-label="Breadcrumb"><ol>{crumbs.map((item, index) => <li key={item.id}>{index < crumbs.length - 1 ? <a href={item.href}>{item.title}</a> : <span aria-current="page">{item.title}</span>}</li>)}</ol></nav>}
-    {main}
-    <footer class="site-delivery__footer"><p>{project.name}</p><nav aria-label="Footer navigation"><ul>{footer.map((item) => <li key={item.id}><a href={item.href} aria-current={item.current ? "page" : undefined}>{item.title}</a></li>)}</ul></nav></footer>
+  // Every base path renders the visitor shape: the site owns its header,
+  // navigation, breadcrumbs and footer as global-template nodes, and the tool
+  // keeps only the skip link and <main>.
+  return <div class="site-root">
+    <a class="site-root__skip" href="#main-content">Skip to main content</a>
+    <main ref={content} class="site-root__main" id="main-content" tabIndex={-1} onClickCapture={guardLink}><DeliveryRuntime composition={route.composition} pack={pack} onComponentError={report} basePath={basePath} /></main>
   </div>;
 }
 
-export function SiteDelivery({ source, pathname = window.location.pathname, hostedDemo = false, onComponentError = (detail) => console.error("Delivery component failed", detail) }: { source: DeliverySourceContract; pathname?: string; hostedDemo?: boolean; onComponentError?: (detail: DeliveryComponentError) => void }): JSX.Element {
+export function SiteDelivery({ source, pathname = window.location.pathname, hostedDemo = false, onReady, onComponentError = (detail) => console.error("Delivery component failed", detail) }: { source: DeliverySourceContract; pathname?: string; hostedDemo?: boolean; onReady?: (build: SiteBuildPlan) => void; onComponentError?: (detail: DeliveryComponentError) => void }): JSX.Element {
   const [state, setState] = useState<DeliveryState>({ status: "loading" });
   const request = useRef(0);
   const focusAfterRetry = useRef(false);
@@ -147,7 +136,11 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
     return () => { request.current += 1; };
   }, [source]);
   useEffect(() => source.kind === "activated" && source.subscribe ? source.subscribe(() => { const current = ++request.current; setState({ status: "loading" }); void loadDeliverySnapshot(source).then((next) => { if (request.current === current) setState(next); }); }) : undefined, [source]);
-  const basePath: DeliveryBasePath = source.kind === "activated" ? "/site" : source.kind === "static" ? "/" : source.basePath ?? "/website-preview";
+  // The entry that owns this document installs its navigation from the routes
+  // a ready build carries, so it learns them from the one snapshot load here
+  // rather than compiling the working draft a second time.
+  useEffect(() => { if (state.status === "ready") onReady?.(state.build); }, [state, onReady]);
+  const basePath: DeliveryBasePath = deliveryBasePath(source);
   const route = state.status === "ready" ? matchDeliveryRoute(state.build.routes, pathname, basePath) : undefined;
   const routeTitle = route?.displayTitle;
   const pageTitle = state.status === "ready"
@@ -171,18 +164,18 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
     setState({ status: "loading" });
     void retryDeliverySnapshot(source).then((next) => { if (request.current === current) setState(next); });
   };
-  const withHostedDemoNotice = (content: JSX.Element): JSX.Element => hostedDemo ? (
-    <div class="site-delivery-hosted-demo">
-      <HostedDemoNotice class="site-delivery-hosted-demo__notice" />
-      <div class="site-delivery-hosted-demo__content">{content}</div>
-    </div>
-  ) : content;
-  if (state.status === "loading") return withHostedDemoNotice(<StateMessage heading="Loading site" message={source.kind === "activated" ? "Reading the completed activated local release…" : source.kind === "static" ? "Reading the published site…" : "Flushing and compiling the live working draft…"} busy />);
-  if (state.status === "provider-error") return withHostedDemoNotice(<StateMessage heading="Site unavailable" message={<>{source.kind === "activated" ? "The activated local release could not be loaded. " : "The live working draft could not be loaded. "}{state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus}>{state.retryable && <button type="button" onClick={retry}>Retry loading site</button>}</StateMessage>);
-  if (state.status === "validation-error") return withHostedDemoNotice(<StateMessage heading="Site data blocked" message={<>The latest site data did not pass validation. {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />);
-  if (state.status === "compiler-error") return withHostedDemoNotice(<StateMessage heading="Site build blocked" message={<>This site cannot be published until its configuration is fixed. {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />);
-  if (!route) return withHostedDemoNotice(<StateMessage heading="Page not found" message={source.kind === "static" ? "There is no page at this address." : "This page is not present in the selected delivery snapshot."} focus={focusAfterRetry.current} onFocused={completeRetryFocus}><a href={basePath}>Return to site home</a></StateMessage>);
+  const label = source.kind === "activated" ? "Activated local release — not deployed" : "Live working preview — not activated";
+  // A site delivered at its own origin root is the published document itself,
+  // so only the tool's own base paths carry the strip.
+  const withPreviewStrip = (content: JSX.Element, routes?: readonly SiteCompiledRoute[]): JSX.Element => basePath === "/" ? content : <>
+    <PreviewStrip label={label} basePath={basePath} pathname={pathname} hostedDemo={hostedDemo} routes={routes} />
+    {content}
+  </>;
+  if (state.status === "loading") return withPreviewStrip(<StateMessage heading="Loading site" message={source.kind === "activated" ? "Reading the completed activated local release…" : source.kind === "static" ? "Reading the published site…" : "Flushing and compiling the live working draft…"} busy />);
+  if (state.status === "provider-error") return withPreviewStrip(<StateMessage heading="Site unavailable" message={<>{source.kind === "activated" ? "The activated local release could not be loaded. " : "The live working draft could not be loaded. "}{state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus}>{state.retryable && <button type="button" onClick={retry}>Retry loading site</button>}</StateMessage>);
+  if (state.status === "validation-error") return withPreviewStrip(<StateMessage heading="Site data blocked" message={<>The latest site data did not pass validation. {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />);
+  if (state.status === "compiler-error") return withPreviewStrip(<StateMessage heading="Site build blocked" message={<>This site cannot be published until its configuration is fixed. {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />);
+  if (!route) return withPreviewStrip(<StateMessage heading="Page not found" message={source.kind === "static" ? "There is no page at this address." : "This page is not present in the selected delivery snapshot."} focus={focusAfterRetry.current} onFocused={completeRetryFocus}><a href={basePath}>Return to site home</a></StateMessage>);
   const componentProvider = source.kind === "working-preview" ? source.providers.componentProvider : source.componentProvider;
-  const label = state.sourceKind === "working-preview" ? "Live working preview — not activated" : "Activated local release — not deployed";
-  return withHostedDemoNotice(<DeliveryGuard><DeliveryChrome project={state.project} build={state.build} sitemap={state.sitemap} route={route} pack={componentProvider.pack} report={onComponentError} focus={focusAfterRetry.current} onFocused={completeRetryFocus} basePath={basePath} label={label} /></DeliveryGuard>);
+  return withPreviewStrip(<DeliveryGuard><DeliveryChrome route={route} pack={componentProvider.pack} report={onComponentError} focus={focusAfterRetry.current} onFocused={completeRetryFocus} basePath={basePath} /></DeliveryGuard>, state.build.routes);
 }

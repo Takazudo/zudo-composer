@@ -227,14 +227,21 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Notifications' })).not.toBeInTheDocument();
   });
 
-  it('keeps the same-origin preview on its isolated entry graph', () => {
+  it('keeps every preview document on its own isolated entry graph', () => {
     const main = readFileSync(resolve('src/main.tsx'), 'utf8');
-    const previewBranch = main.indexOf('window.location.pathname === "/composer/preview"');
+    const visitorBranch = main.indexOf('isSitePath(pathname) || isWorkingPreviewPath(pathname)');
+    const visitorImport = main.indexOf('import("./features/delivery/preview-entry")');
     const bootstrap = main.indexOf('bootstrapTheme()');
+    const previewBranch = main.indexOf('pathname === "/composer/preview"');
     const previewImport = main.indexOf('import("./features/composer/preview/preview-entry")');
     const hostStyle = main.indexOf('import("./style.css")');
     const hostApp = main.indexOf('import("./App")');
-    expect(bootstrap).toBeGreaterThan(-1);
+    expect(visitorBranch).toBeGreaterThan(-1);
+    // The visitor document is decided before the theme is bootstrapped: it
+    // follows the OS like the published site and never applies the editor's
+    // stored preference.
+    expect(visitorBranch).toBeLessThan(visitorImport);
+    expect(visitorImport).toBeLessThan(bootstrap);
     expect(bootstrap).toBeLessThan(previewBranch);
     expect(previewBranch).toBeLessThan(previewImport);
     expect(previewImport).toBeLessThan(hostStyle);
@@ -258,14 +265,14 @@ describe('App', () => {
     expect(screen.queryByText(/being connected/i)).not.toBeInTheDocument();
   });
 
-  it('dispatches Site outside the authoring Shell and never falls back to a draft without an active release', async () => {
-    window.history.replaceState(null, '', '/site');
-    const { container } = await renderApp();
-    expect(await screen.findByRole('heading', { name: 'Site unavailable' })).toBeInTheDocument();
-    expect(screen.getByText(/No activated local release/)).toBeInTheDocument();
-    expect(container.querySelector('.app-shell')).not.toBeInTheDocument();
-    expect(container.querySelector('.cms-rail')).not.toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Primary navigation' })).not.toBeInTheDocument();
+  it('leaves every delivery path to the visitor entry instead of rendering it', async () => {
+    // `src/main.tsx` mounts `/site*` and `/website-preview*` as their own
+    // document, so the authoring App knows neither route any more.
+    for (const path of ['/site', '/site/about', '/website-preview']) {
+      window.history.replaceState(null, '', path);
+      await renderApp();
+      expect(await screen.findByRole('heading', { name: 'Not found' })).toBeInTheDocument();
+      cleanup();
+    }
   });
 });

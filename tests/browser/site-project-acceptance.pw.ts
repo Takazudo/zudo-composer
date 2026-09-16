@@ -21,17 +21,21 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 }
 
+// The tool draws no navigation at /site any more: the site's own global
+// template owns its chrome, and the only tool UI is the strip, whose contents
+// live in an open shadow root that Playwright's CSS engine pierces.
+const stripSelect = (page: Page) => page.locator(".zc-preview-strip select");
+
 async function expectSiteChrome(page: Page, route: string) {
-  const primary = page.getByRole("navigation", { name: "Primary navigation" });
-  await expect(primary.getByRole("link")).toHaveText(["Home", "About", "Services", "Journal"]);
-  const breadcrumbs = page.getByRole("navigation", { name: "Breadcrumb" });
-  if (route === "/site") {
-    await expect(breadcrumbs).toHaveCount(0);
-  } else {
-    await expect(breadcrumbs).toBeVisible();
-    await expect(breadcrumbs.getByRole("link").first()).toHaveText("Home");
-    if (route.startsWith("/site/journal/")) await expect(breadcrumbs.getByRole("link").nth(1)).toHaveText("Journal");
-  }
+  await expect(page.locator("main#main-content")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Primary navigation" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveCount(0);
+  const picker = stripSelect(page);
+  await expect(picker).toBeVisible();
+  await expect
+    .poll(async () => (await picker.locator("option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value))).slice().sort())
+    .toEqual([...SITE_ROUTES].sort());
+  await expect(picker).toHaveValue(route);
 }
 
 async function expectRouteContent(page: Page, route: string) {
@@ -167,19 +171,15 @@ test("SiteDelivery remains usable at desktop and mobile widths in both themes", 
   await page.goto("/site/journal/map-the-moving-parts");
   for (const theme of ["light", "dark"] as const) {
     await useTheme(page, theme);
-    await expect(page.locator(".site-delivery__main")).toBeVisible();
+    await expect(page.locator("main#main-content")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   }
   await page.setViewportSize({ width: 375, height: 812 });
   await expectNoHorizontalOverflow(page);
-  const primary = page.getByRole("navigation", { name: "Primary navigation" });
-  for (const link of await primary.getByRole("link").all()) {
-    expect((await link.boundingBox())?.height).toBeGreaterThanOrEqual(44);
-  }
-  const brand = page.getByRole("link", { name: "Sample Studio", exact: true });
-  await brand.focus();
-  await expect(brand).toBeFocused();
-  await expect(brand).toHaveCSS("outline-width", "2px");
+  const picker = stripSelect(page);
+  await picker.focus();
+  await expect(picker).toBeFocused();
+  await expect(picker).toHaveCSS("outline-width", "2px");
   expect(failures).toEqual([]);
 });
 
@@ -187,10 +187,13 @@ test("dev virtual source contains the CLI-activated project", async ({ page }) =
   const failures = watchRuntimeFailures(page);
   const virtualResponses: Response[] = [];
   page.on("response", (response) => {
-    if (response.url().includes("virtual:site-project-source") || response.url().includes("__x00__virtual")) virtualResponses.push(response);
+    // Match the bare module name, not `virtual:…`: Vite serves a virtual id as
+    // `/@id/__x00__virtual:<name>` and may percent-encode the colon, and `/site`
+    // is now its own visitor document that also pulls `virtual:zudo-composer-pack`.
+    if (response.url().includes("site-project-source")) virtualResponses.push(response);
   });
   await page.goto("/site");
-  await expect(page.getByRole("link", { name: "Sample Studio", exact: true })).toBeVisible();
+  await expect(page.locator("main#main-content")).toBeVisible();
   await expect.poll(() => virtualResponses.length).toBeGreaterThan(0);
   const source = await virtualResponses[0]!.text();
   expect(source).toContain('"sample-studio-site"');

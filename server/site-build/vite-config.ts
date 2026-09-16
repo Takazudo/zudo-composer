@@ -5,6 +5,7 @@ import preact from "@preact/preset-vite";
 import tailwindPlugin from "../../plugins/tailwind-plugin.mjs";
 import componentPackPlugin from "../../plugins/component-pack-plugin.mjs";
 import hostStylesPlugin from "../../plugins/host-styles-plugin.mjs";
+import entryGraphPlugin, { STATIC_SITE_ENTRY_MODULE } from "../../plugins/entry-graph-plugin.mjs";
 import { APP_HTML_PATH, rewriteAppEntry } from "../../plugins/composer-app-html.mjs";
 import { SITE_BUILD_ENTRY, resolveWorkspaceRoot } from "../../plugins/roots.mjs";
 import { resolveComposerModules } from "../../plugins/module-resolution.mjs";
@@ -73,6 +74,16 @@ export async function resolveStaticSiteConfig(options: Pick<BuildSiteOptions, "w
       hostStylesPlugin({ stylesPath: paths.styles, styles: settings.styles, configPath }),
       tailwindPlugin(),
       preact(),
+      // See vite.config.ts: the same isolation-gate record, for the published
+      // static visitor entry this host's build ships. Opt-in, because this
+      // config is part of the packed tool and runs inside consuming hosts: the
+      // graph lists the tool's internal module ids, and `dist-site` is served
+      // publicly, so emitting it unconditionally would publish tool internals
+      // from every host's own website. Only this repository's own builds, which
+      // the isolation gate reads, set the variable.
+      ...(process.env.ZUDO_COMPOSER_ENTRY_GRAPH === "1"
+        ? [entryGraphPlugin({ startModules: [STATIC_SITE_ENTRY_MODULE] })]
+        : []),
     ],
   };
 }

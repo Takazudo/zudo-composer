@@ -211,7 +211,7 @@ for (const required of [
   'server/site-build/source-revision.d.mts',
   'server/site-build/print-routes.ts',
   'server/site-build/client/main.tsx',
-  'server/site-build/client/styles.css',
+  'src/features/delivery/visitor.css',
   'server/site-build/client/site-static-project.d.ts',
   'plugins/component-pack.mjs',
   'plugins/component-pack-plugin.mjs',

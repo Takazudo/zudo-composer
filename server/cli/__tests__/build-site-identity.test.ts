@@ -42,7 +42,7 @@ describe("installed static build identity", () => {
     // behind the actual bin, with a tiny visitor in this disposable tool copy.
     await writeFile(join(toolRoot, SITE_BUILD_ENTRY), `
       import "virtual:zudo-composer-host-styles";
-      import "./styles.css";
+      import "../../../src/features/delivery/visitor.css";
       document.getElementById("app").textContent = "Installed package visitor";
     `);
     const metadataPath = join(toolRoot, "package.json");

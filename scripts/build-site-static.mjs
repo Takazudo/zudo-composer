@@ -21,4 +21,8 @@ if (!existsSync(join(hostRoot, "site-project.json"))) {
   process.exit(1);
 }
 
+// This repository's own hosts are the ones `pnpm styles:isolation` reads, so
+// they record the entry graph; a consuming host's build leaves it out.
+process.env.ZUDO_COMPOSER_ENTRY_GRAPH = "1";
+
 await runComposerCli(["build-site", "--root", hostRoot, ...arguments_.slice(1)]);
