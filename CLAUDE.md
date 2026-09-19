@@ -38,6 +38,9 @@ dual provider and no fallback registry. `@zudo-composer/ui` is otherwise an
 ordinary component pack — any themeset that satisfies the same contract is
 interchangeable with it.
 
+The standalone `styleguide/sample/` host is outside this tool; it catalogs the
+tool's pack without making the styleguide engine part of the tool.
+
 The tool's authoring routes are `/`, `/composer`, same-origin
 `/composer/preview`, `/content`, `/mapping`, `/sitemapper`, and `/assets`.
 `/site` and `/website-preview` are visitor documents outside the authoring
@@ -125,7 +128,39 @@ A byte change under `packages/ui` needs a new package commit, parented on the
 previous one so `package/ui-v1` fast-forwards, recorded in `ui-handoff.json`,
 README and here. Then run a clean frozen install and the full
 unit/artifact/browser gates, which still prove the 12-component
-runtime/CSS/WASM set.
+runtime/CSS/WASM set. A byte change under `packages/ui` also requires bumping
+the styleguide pin in `styleguide/sample/package.json`; `corepack pnpm sg:pins`
+enforces that it matches the handoff.
+
+## Sample styleguide
+
+`styleguide/sample/` is a catalog of the 12 `@zudo-composer/ui` components used
+by the Sample host, built with the `zudo-sg` engine. It is a standalone project
+with its own lockfile and is not a workspace member. The root lockfile must
+never contain `@takazudo/zudo-sg`; `provider:boundary` enforces that
+separation. Stories belong to this host and never live under `packages/ui`.
+
+The host installs the UI pack and component contract by their exact root Git
+specs, so its dependencies show the pinned package commits recorded by the
+handoff files:
+
+- `@zudo-composer/ui`: `git+https://github.com/Takazudo/zudo-composer.git#847b582c911a3c2e5461ed89caf2b78a874331d7`
+- `@zudo-composer/component-contract`: `git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0`
+
+This is the proven Git-spec state from the scaffold; it does not fall back to
+a `link:` spec. A handoff bump must update
+`styleguide/sample/package.json`, and `corepack pnpm sg:pins` enforces both
+pins against `ui-handoff.json` and `contract-handoff.json`.
+
+From the repository root, use:
+
+```sh
+corepack pnpm -C styleguide/sample install --frozen-lockfile
+corepack pnpm -C styleguide/sample dev
+corepack pnpm -C styleguide/sample build
+corepack pnpm -C styleguide/sample check
+corepack pnpm sg:build-site
+```
 
 ## Commands and completion gates
 
@@ -160,15 +195,17 @@ handoffs, or the 12-component runtime/CSS/WASM proof to make a gate pass.
 ## Scoped hosted demo exception
 
 The installed tool and ordinary local workflow remain local-first. The scoped
-exception publishes the documentation site, four static demo websites and
-four disposable per-host editors. None adds hosted persistence, a hosted API,
+exception publishes the documentation site, the standalone sample styleguide,
+four static demo websites and four disposable per-host editors. None adds
+hosted persistence, a hosted API,
 authentication, arbitrary host project access or deployment support for
 installed applications. `scripts/hosted-demo/targets.mjs` is the source of
-truth for this nine-target registry:
+truth for this ten-target registry:
 
 | Target key | Kind | Worker | Wrangler config | Domain |
 | --- | --- | --- | --- | --- |
 | `doc` | `doc-site` | `zudo-composer` | `wrangler.doc.jsonc` | `zudo-composer.zudolab.dev` |
+| `sample-sg` | `doc-site` | `zc-sg-sample` | `wrangler.sample-sg.jsonc` | `zc-sg-sample.zudolab.dev` |
 | `sample` | `site-static` | `zc-demo-sample` | `wrangler.demo-sample.jsonc` | `zc-demo-sample.zudolab.dev` |
 | `shop` | `site-static` | `zc-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` |
 | `landing` | `site-static` | `zc-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` |
@@ -200,6 +237,11 @@ and the current `main` head. It captures the active single-version
 deployment, performs a Wrangler dry run, uploads the verified directory with
 Wrangler 4.130.0, and activates only the version returned by that upload.
 Pull-request validation has no Cloudflare secrets.
+
+The `sample-sg` target runs `pnpm sg:build-site`, verifies the standalone
+`styleguide/sample/dist` artifact with the same `doc-site-manifest.json`
+contract, and publishes the `zudo-sg` catalog as a new Worker. Its first
+rollout therefore takes the missing-Worker path.
 
 Missing credentials, stale `main`, missing rollback state, split traffic or an
 artifact/source mismatch fail before mutation. A target whose Worker does not

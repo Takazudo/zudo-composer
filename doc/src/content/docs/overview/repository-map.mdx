@@ -41,6 +41,7 @@ Each workspace package has a separate boundary or demonstrates one:
 | `scripts/` | Repository checks, generators, boundary scans, asset helpers, static-build helpers, and CI support. `scripts/hosted-demo/` contains the hosted-demo target definitions, artifact preparation, deployment guard, deployment commands, and bounded live checks. |
 | `docs/` | Operator-reference documentation for creator bootstrap, demo sites, SiteProject release/build behavior, packed installs, hosted demos, and workspace acceptance. |
 | `doc/` | This zudo-doc developer documentation site: its content, config, route seams, and static-site checks. |
+| `styleguide/sample/` (`sample-sg`) | Standalone zudo-sg catalog for the 12 `@zudo-composer/ui` components used by the Sample host. It owns its own lockfile and is not a root workspace member; its host build and stories stay outside the tool. |
 | `cms/` | The repository's own dogfood host data. The tracked root currently retains the demo Assets catalog; other runtime CMS trees are host or generated state. |
 | `templates/host/` | The canonical host starter copied by `zudo-composer init`; it contains host-owned components, styles, authored SiteProject source, an image manifest/source asset, and starter tests. |
 | `tests/` | Browser acceptance, document-readiness, isolated-host, and runtime-failure test support. |
@@ -54,7 +55,7 @@ Each workspace package has a separate boundary or demonstrates one:
 | --- | --- |
 | `tsconfig.*.json` | TypeScript project configurations for the app, Node/CLI code, plugins, public entries, scripts, SiteProject local code, and type tests. |
 | `playwright.*.config.ts` | Browser-lane configurations for development, host, hosted-demo, demo, and SiteProject acceptance surfaces. |
-| `wrangler*.jsonc` | Cloudflare Worker configurations for the nine hosted targets: the root-domain documentation site, four static demo sites, and four per-host editors. |
+| `wrangler*.jsonc` | Cloudflare Worker configurations for the ten hosted targets: the root-domain documentation site, the standalone sample styleguide, four static demo sites, and four per-host editors. |
 | `zudo-composer.config.ts` | The repository root's host configuration: this repository is its own dogfood host and selects `@zudo-composer/ui/composer-pack`. |
 | `vite*.config.ts`, `vitest.config.ts`, `eslint.config.js` | Root Vite build variants, Vitest setup, and ESLint configuration used by repository checks. |
 | `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml` | Workspace scripts, package membership and package-manager policy, and the frozen dependency graph. |
