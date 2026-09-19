@@ -54,13 +54,14 @@ Because `base` is `/`, emitted links and asset URLs are root-relative. Build
 output and zfb working directories are ignored; a build must not leave
 untracked `doc/dist/`, `doc/.zfb/`, or `doc/.zfb-build/` files.
 
-The documentation site is the `doc` target in the nine-target trusted-run
+The documentation site is the `doc` target in the ten-target trusted-run
 pipeline, served at [zudo-composer.zudolab.dev](https://zudo-composer.zudolab.dev/).
 The target registry and Wrangler contracts are:
 
 | Target key | Kind | Worker | Wrangler config | Domain | Artifact directory | Manifest | CI artifact |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `doc` | `doc-site` | `zudo-composer` | `wrangler.doc.jsonc` | `zudo-composer.zudolab.dev` | `doc/dist` | `doc-site-manifest.json` | `doc-site-<sha>` |
+| `sample-sg` | `doc-site` | `zc-sg-sample` | `wrangler.sample-sg.jsonc` | `zc-sg-sample.zudolab.dev` | `styleguide/sample/dist` | `doc-site-manifest.json` | `sample-sg-site-<sha>` |
 | `sample` | `site-static` | `zc-demo-sample` | `wrangler.demo-sample.jsonc` | `zc-demo-sample.zudolab.dev` | `packages/demo-sample/dist-site` | `site-manifest.json` | `demo-site-sample-<sha>` |
 | `shop` | `site-static` | `zc-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` | `packages/demo-webshop/dist-site` | `site-manifest.json` | `demo-site-shop-<sha>` |
 | `landing` | `site-static` | `zc-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` | `packages/demo-landing/dist-site` | `site-manifest.json` | `demo-site-landing-<sha>` |
@@ -70,10 +71,12 @@ The target registry and Wrangler contracts are:
 | `landing-editor` | `demo-editor` | `zc-demo-landing-editor` | `wrangler.demo-landing-editor.jsonc` | `zc-demo-landing-editor.zudolab.dev` | `packages/demo-landing/dist-editor` | `demo-editor-manifest.json` | `demo-editor-landing-<sha>` |
 | `blog-editor` | `demo-editor` | `zc-demo-blog-editor` | `wrangler.demo-blog-editor.jsonc` | `zc-demo-blog-editor.zudolab.dev` | `packages/demo-blog/dist-editor` | `demo-editor-manifest.json` | `demo-editor-blog-<sha>` |
 
-The `doc-site-build` job uploads `doc-site-<sha>` from `doc/dist`; static
-targets use `site-manifest.json` and editor targets use
+The `doc-site-build` job uploads `doc-site-<sha>` from `doc/dist`; the
+`sample-sg-site-build` job uploads `sample-sg-site-<sha>` from
+`styleguide/sample/dist`. Both doc-site targets use `doc-site-manifest.json`;
+static targets use `site-manifest.json` and editor targets use
 `demo-editor-manifest.json`. Keep this table aligned with
-`scripts/hosted-demo/targets.mjs` and the nine checked-in Wrangler files.
+`scripts/hosted-demo/targets.mjs` and the ten checked-in Wrangler files.
 
 Before the first rollout, an owner must delete the retired Workers
 `zudo-composer`, `zudo-composer-doc`, `zudo-composer-demo-shop`,
@@ -85,6 +88,10 @@ as a partial first deploy: delete that target's Worker, confirm both listings
 report it missing, and rerun the same target. Never bootstrap a partial state
 with a plain deploy.
 
+The standalone `styleguide/sample/` host is outside the tool. Its `sample-sg`
+target is a new Worker built by `pnpm sg:build-site`, so its first rollout also
+uses the missing-Worker path.
+
 The deployment token needs Account › Workers Scripts › Edit and Account ›
 Account Settings › Read, plus Zone › Workers Routes › Edit, Zone › DNS › Edit
 and Zone › Zone › Read for `zudolab.dev`. For a manual rollback, use the
@@ -93,6 +100,7 @@ version from a list:
 
 ```sh
 corepack pnpm exec wrangler rollback <version-id> --name zudo-composer --config wrangler.doc.jsonc --yes
+corepack pnpm exec wrangler rollback <version-id> --name zc-sg-sample --config wrangler.sample-sg.jsonc --yes
 corepack pnpm exec wrangler rollback <version-id> --name zc-demo-sample --config wrangler.demo-sample.jsonc --yes
 corepack pnpm exec wrangler rollback <version-id> --name zc-demo-sample-editor --config wrangler.demo-sample-editor.jsonc --yes
 corepack pnpm exec wrangler rollback <version-id> --name zc-demo-shop --config wrangler.demo-shop.jsonc --yes

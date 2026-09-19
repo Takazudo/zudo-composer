@@ -30,18 +30,22 @@ falls back to it: there is no dual provider and no fallback registry. A host is 
 install a different themeset instead — see
 [Component packs and themesets](#component-packs-and-themesets).
 
+The standalone `styleguide/sample/` host is outside this tool; it catalogs the
+owned pack with the `zudo-sg` engine.
+
 Create a populated standalone host with `zudo-composer init <new-directory>`.
 The [creator guide](./docs/creator.md) covers the installed command, the
 unpublished-package preview, and which generated files to commit.
 
 ## Deployed sites
 
-Nine hosted targets are deployed from `main` (each is its own Worker; see
+Ten hosted targets are deployed from `main` (each is its own Worker; see
 `scripts/hosted-demo/targets.mjs`):
 
 | Site | URL | Worker config |
 | --- | --- | --- |
 | Developer documentation (`doc`) | <https://zudo-composer.zudolab.dev> | [`wrangler.doc.jsonc`](./wrangler.doc.jsonc) |
+| Sample styleguide (`sample-sg`) | <https://zc-sg-sample.zudolab.dev> | [`wrangler.sample-sg.jsonc`](./wrangler.sample-sg.jsonc) |
 | Sample Studio site (`sample`) | <https://zc-demo-sample.zudolab.dev> | [`wrangler.demo-sample.jsonc`](./wrangler.demo-sample.jsonc) |
 | Nightjar Supply site (`shop`) | <https://zc-demo-shop.zudolab.dev> | [`wrangler.demo-shop.jsonc`](./wrangler.demo-shop.jsonc) |
 | Orrery site (`landing`) | <https://zc-demo-landing.zudolab.dev> | [`wrangler.demo-landing.jsonc`](./wrangler.demo-landing.jsonc) |
@@ -50,6 +54,36 @@ Nine hosted targets are deployed from `main` (each is its own Worker; see
 | Nightjar Supply editor (`shop-editor`) | <https://zc-demo-shop-editor.zudolab.dev> | [`wrangler.demo-shop-editor.jsonc`](./wrangler.demo-shop-editor.jsonc) |
 | Orrery editor (`landing-editor`) | <https://zc-demo-landing-editor.zudolab.dev> | [`wrangler.demo-landing-editor.jsonc`](./wrangler.demo-landing-editor.jsonc) |
 | Margin Notes editor (`blog-editor`) | <https://zc-demo-blog-editor.zudolab.dev> | [`wrangler.demo-blog-editor.jsonc`](./wrangler.demo-blog-editor.jsonc) |
+
+## Sample styleguide
+
+`styleguide/sample/` is a catalog of the 12 `@zudo-composer/ui` components used
+by the Sample host, built with the `zudo-sg` engine. It is a standalone project
+with its own lockfile and is not a workspace member. The root lockfile must
+never contain `@takazudo/zudo-sg`; `provider:boundary` enforces that
+separation. Stories belong to this host and never live under `packages/ui`.
+
+The host installs the UI pack and component contract by their exact root Git
+specs, so its dependencies show the pinned package commits recorded by the
+handoff files:
+
+- `@zudo-composer/ui`: `git+https://github.com/Takazudo/zudo-composer.git#847b582c911a3c2e5461ed89caf2b78a874331d7`
+- `@zudo-composer/component-contract`: `git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0`
+
+This is the proven Git-spec state from the scaffold; it does not fall back to
+a `link:` spec. A handoff bump must update
+`styleguide/sample/package.json`, and `corepack pnpm sg:pins` enforces both
+pins against `ui-handoff.json` and `contract-handoff.json`.
+
+From the repository root, use:
+
+```sh
+corepack pnpm -C styleguide/sample install --frozen-lockfile
+corepack pnpm -C styleguide/sample dev
+corepack pnpm -C styleguide/sample build
+corepack pnpm -C styleguide/sample check
+corepack pnpm sg:build-site
+```
 
 ## Documentation site
 
@@ -541,13 +575,15 @@ or used in place of, the immutable external UI-pack Git spec.
 
 The installed tool and ordinary local workflow remain local-first. The scoped
 exception publishes four static demo sites, four disposable per-host editors,
-and the developer documentation site; none adds hosted persistence, an API,
+the developer documentation site, and the standalone sample styleguide; none
+adds hosted persistence, an API,
 authentication, arbitrary host-project access or a deployment target for
 installed applications. The registry and Wrangler contracts are:
 
 | Target key | Kind | Worker | Wrangler config | Domain |
 | --- | --- | --- | --- | --- |
 | `doc` | `doc-site` | `zudo-composer` | `wrangler.doc.jsonc` | `zudo-composer.zudolab.dev` |
+| `sample-sg` | `doc-site` | `zc-sg-sample` | `wrangler.sample-sg.jsonc` | `zc-sg-sample.zudolab.dev` |
 | `sample` | `site-static` | `zc-demo-sample` | `wrangler.demo-sample.jsonc` | `zc-demo-sample.zudolab.dev` |
 | `shop` | `site-static` | `zc-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` |
 | `landing` | `site-static` | `zc-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` |
@@ -580,6 +616,10 @@ bind its custom domain and has no rollback target. The owner runbook covers
 the pre-rollout cleanup of retired Workers, partial-first-deploy recovery,
 targeted `workflow_dispatch` runs, token scopes and captured-version rollback:
 [`docs/hosted-demo.md`](./docs/hosted-demo.md).
+
+The `sample-sg` target runs `pnpm sg:build-site`, verifies
+`styleguide/sample/dist` with the `doc-site-manifest.json` contract, and takes
+the missing-Worker path on its first rollout.
 
 Prove the exact local artifact with:
 
