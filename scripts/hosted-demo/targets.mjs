@@ -1,7 +1,8 @@
 // @ts-check
 // The trusted-run deploy pipeline (deploy.mjs, live-check.mjs,
-// check-hosted-demo.mjs) is shared by nine Cloudflare Workers: four static demo
-// websites, four per-host editors and the documentation site.
+// check-hosted-demo.mjs) is shared by ten Cloudflare Workers: four static demo
+// websites, four per-host editors, the documentation site and the sample
+// styleguide site.
 // This module is the single place that names each target's Worker, config file,
 // host/artifact directories, domain and artifact-verification shape so those
 // scripts stay generic. workflow-guard.mjs needs none of this: its trusted-run
@@ -110,17 +111,17 @@ function createStaticTarget(key, hostDirectory, workerName, configPath, domain) 
   };
 }
 
-/** @type {Record<string, DeployTarget>} */
-export const TARGETS = {
-  doc: {
-    key: "doc",
+/** @param {string} key @param {string} workerName @param {string} configPath @param {string} domain @param {string} artifactDirectory @param {string} artifactPrefix @returns {DeployTarget} */
+function createDocSiteTarget(key, workerName, configPath, domain, artifactDirectory, artifactPrefix) {
+  return {
+    key,
     kind: "doc-site",
-    workerName: "zudo-composer",
-    configPath: "wrangler.doc.jsonc",
-    domain: "zudo-composer.zudolab.dev",
-    artifactDirectory: resolve(root, "doc/dist"),
+    workerName,
+    configPath,
+    domain,
+    artifactDirectory: resolve(root, artifactDirectory),
     manifestFileName: DOC_SITE_MANIFEST,
-    ciArtifactName: (sha) => `doc-site-${sha}`,
+    ciArtifactName: (sha) => `${artifactPrefix}-${sha}`,
     // The doc verifier keeps local builds usable without Git metadata. The
     // production preflight requires an expected full SHA before any mutation.
     verifyArtifact: verifyDocSiteArtifact,
@@ -133,7 +134,12 @@ export const TARGETS = {
     // auto-trailing-slash redirects /x.html to /x. Fetch the canonical URL
     // without navigation headers to verify its untransformed asset bytes.
     assetUrl: (path) => path === "index.html" || path.endsWith("/index.html") ? null : path.endsWith(".html") ? `/${path.slice(0, -".html".length)}` : `/${path}`,
-  },
+  };
+}
+
+/** @type {Record<string, DeployTarget>} */
+export const TARGETS = {
+  doc: createDocSiteTarget("doc", "zudo-composer", "wrangler.doc.jsonc", "zudo-composer.zudolab.dev", "doc/dist", "doc-site"),
   sample: createStaticTarget("sample", "packages/demo-sample", "zc-demo-sample", "wrangler.demo-sample.jsonc", "zc-demo-sample.zudolab.dev"),
   shop: createStaticTarget("shop", "packages/demo-webshop", "zc-demo-shop", "wrangler.demo-shop.jsonc", "zc-demo-shop.zudolab.dev"),
   landing: createStaticTarget("landing", "packages/demo-landing", "zc-demo-landing", "wrangler.demo-landing.jsonc", "zc-demo-landing.zudolab.dev"),
@@ -142,9 +148,10 @@ export const TARGETS = {
   "shop-editor": createDemoEditorTarget("shop-editor", "packages/demo-webshop"),
   "landing-editor": createDemoEditorTarget("landing-editor", "packages/demo-landing"),
   "blog-editor": createDemoEditorTarget("blog-editor", "packages/demo-blog"),
+  "sample-sg": createDocSiteTarget("sample-sg", "zc-sg-sample", "wrangler.sample-sg.jsonc", "zc-sg-sample.zudolab.dev", "styleguide/sample/dist", "sample-sg-site"),
 };
 
-export const TARGET_KEYS = /** @type {const} */ (["doc", "sample", "shop", "landing", "blog", "sample-editor", "shop-editor", "landing-editor", "blog-editor"]);
+export const TARGET_KEYS = /** @type {const} */ (["doc", "sample", "shop", "landing", "blog", "sample-editor", "shop-editor", "landing-editor", "blog-editor", "sample-sg"]);
 
 /** @param {string | undefined} key @returns {DeployTarget} */
 export function resolveTarget(key) {

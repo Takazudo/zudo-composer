@@ -15,9 +15,10 @@ const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))); });
 
 describe("hosted-demo deploy targets", () => {
-  it("names all nine Workers, configs, domains, host directories and artifact directories", () => {
-    expect(TARGET_KEYS).toEqual(["doc", "sample", "shop", "landing", "blog", "sample-editor", "shop-editor", "landing-editor", "blog-editor"]);
+  it("names all ten Workers, configs, domains, host directories and artifact directories", () => {
+    expect(TARGET_KEYS).toEqual(["doc", "sample", "shop", "landing", "blog", "sample-editor", "shop-editor", "landing-editor", "blog-editor", "sample-sg"]);
     expect(TARGETS.doc).toMatchObject({ workerName: "zudo-composer", configPath: "wrangler.doc.jsonc", domain: "zudo-composer.zudolab.dev", kind: "doc-site" });
+    expect(TARGETS["sample-sg"]).toMatchObject({ workerName: "zc-sg-sample", configPath: "wrangler.sample-sg.jsonc", domain: "zc-sg-sample.zudolab.dev", kind: "doc-site", artifactDirectory: resolve(import.meta.dirname, "../..", "styleguide/sample/dist"), manifestFileName: DOC_SITE_MANIFEST, ciArtifactName: expect.any(Function) });
     expect(TARGETS.sample).toMatchObject({ workerName: "zc-demo-sample", configPath: "wrangler.demo-sample.jsonc", domain: "zc-demo-sample.zudolab.dev", kind: "site-static" });
     expect(TARGETS.shop).toMatchObject({ workerName: "zc-demo-shop", configPath: "wrangler.demo-shop.jsonc", domain: "zc-demo-shop.zudolab.dev", kind: "site-static" });
     expect(TARGETS.landing).toMatchObject({ workerName: "zc-demo-landing", configPath: "wrangler.demo-landing.jsonc", domain: "zc-demo-landing.zudolab.dev", kind: "site-static" });
@@ -49,6 +50,7 @@ describe("hosted-demo deploy targets", () => {
       expect(TARGETS[`${name}-editor`].ciArtifactName("a".repeat(40))).toBe(`demo-editor-${name}-${"a".repeat(40)}`);
     }
     expect(TARGETS.doc.ciArtifactName("a".repeat(40))).toBe(`doc-site-${"a".repeat(40)}`);
+    expect(TARGETS["sample-sg"].ciArtifactName("a".repeat(40))).toBe(`sample-sg-site-${"a".repeat(40)}`);
     for (const name of ["sample", "shop", "landing", "blog"]) expect(TARGETS[name].ciArtifactName("a".repeat(40))).toBe(`demo-site-${name}-${"a".repeat(40)}`);
   });
 
@@ -69,6 +71,17 @@ describe("hosted-demo deploy targets", () => {
 
   it("reads a static demo site's live routes from its own manifest", () => {
     expect(TARGETS.shop.liveRoutes({ routes: ["/", "/about"] })).toEqual(["/", "/about"]);
+  });
+
+  it("maps sample styleguide routes and assets through the doc-site target", () => {
+    const target = TARGETS["sample-sg"];
+    expect(target.routeFile?.("/", {})).toBe("index.html");
+    expect(target.routeFile?.("/components/", {})).toBe("components/index.html");
+    expect(target.routeFile?.("/components/cta-button/", {})).toBe("components/cta-button/index.html");
+    expect(target.assetUrl?.("assets/styles-abc.css")).toBe("/assets/styles-abc.css");
+    expect(target.assetUrl?.("theme-packs/default/meta.json")).toBe("/theme-packs/default/meta.json");
+    expect(target.assetUrl?.("components/index.html")).toBeNull();
+    expect(target.verifyArtifact).toBe(verifyDocSiteArtifact);
   });
 
   it("keeps every Wrangler config in parity with exactly one registered target", async () => {

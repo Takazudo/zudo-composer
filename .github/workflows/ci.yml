@@ -264,3 +264,33 @@ jobs:
           path: doc/dist
           if-no-files-found: error
           retention-days: 7
+
+  sample-sg-site-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            styleguide/sample/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: corepack pnpm sg:pins
+      - run: corepack pnpm sg:build-site
+      - run: pnpm -C styleguide/sample check
+      - run: pnpm hosted-demo:verify styleguide/sample/dist "${{ github.sha }}"
+        env:
+          HOSTED_DEMO_TARGET: sample-sg
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sample-sg-site-${{ github.sha }}
+          path: styleguide/sample/dist
+          if-no-files-found: error
+          retention-days: 7
