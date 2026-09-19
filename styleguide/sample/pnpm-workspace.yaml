@@ -1,0 +1,15 @@
+packages: []
+allowBuilds:
+  esbuild: true
+  "@zudo-composer/component-contract": true
+minimumReleaseAgeExclude:
+  - '@takazudo/zfb-darwin-arm64@2.19.0'
+  - '@takazudo/zfb-darwin-x64@2.19.0'
+  - '@takazudo/zfb-linux-arm64-gnu@2.19.0'
+  - '@takazudo/zfb-linux-x64-gnu@2.19.0'
+  - '@takazudo/zfb-md-wasm@2.19.0'
+  - '@takazudo/zfb-runtime@2.19.0'
+  - '@takazudo/zfb-win32-x64-msvc@2.19.0'
+  - '@takazudo/zfb@2.19.0'
+  - '@takazudo/zudo-doc@5.26.0'
+  - '@takazudo/zudo-sg@0.2.0'
