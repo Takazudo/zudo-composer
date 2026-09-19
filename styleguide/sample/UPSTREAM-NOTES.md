@@ -138,6 +138,19 @@ cache has the same initializer ignore gap, so the host also ignores `.zfb/`.
   output ignored. The host README documents its actual inputs and commands.
   No generated comments or installed package files are patched.
 
+## 10. The initializer omits the catalog's global stylesheet
+
+- Status: **filed** — [zudo-sg #753](https://github.com/Takazudo/zudo-sg/issues/753).
+- Observed: the initialized host typechecks and builds without a consumer
+  global stylesheet, but its catalog shell lacks the zudo-doc and zudo-sg
+  package CSS and generated utility safelists. Responsive classes such as
+  `lg:hidden` are absent, leaving the mobile navigation unusable.
+- Expected: the initializer scaffolds and wires the required public stylesheet
+  imports, or explicitly requires the consumer to provide them.
+- Workaround: `src/styles/global.css` assembles the public Composer, zudo-doc,
+  zudo-sg, and zdtp styles in cascade order. Production and dev browser checks
+  now pass at 1280px and 390px, including mobile drawer interaction.
+
 Duplicate searches covered all zudo-sg issues using the relevant config,
 registry, initializer, lockfile, release-age, dev-output, and token-manifest
 terms. The original CLI/template implementation issues (#655 and #736) do not cover
