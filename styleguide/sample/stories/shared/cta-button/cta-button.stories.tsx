@@ -7,6 +7,7 @@ import {
 
 const meta: StoryMeta = {
   ...ctaButtonDisplay,
+  category: "Shared",
   usage: `import { CtaButton } from "@zudo-composer/ui";
 
 <CtaButton href="/products">Browse products</CtaButton>`,
@@ -26,4 +27,9 @@ export const Primary: Story = {
 export const Secondary: Story = {
   name: "Secondary",
   render: () => <CtaButton {...ctaButtonComposer.defaults} variant="secondary" />,
+};
+
+export const NoArrow: Story = {
+  name: "No arrow",
+  render: () => <CtaButton {...ctaButtonComposer.defaults} arrow={false} />,
 };
