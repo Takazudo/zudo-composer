@@ -133,6 +133,12 @@ describe("reachable validation commands cannot deploy", () => {
     expect(() => audit(root)).not.toThrow();
   });
 
+  it("audits the standalone sample styleguide manifest and rejects deploy scripts", async () => {
+    const root = await fixture("echo verified");
+    await put(root, "styleguide/sample/package.json", JSON.stringify({ scripts: { build: "wrangler deploy" } }));
+    expect(() => audit(root)).toThrow(/Wrangler deploy --dry-run/u);
+  });
+
   it("audits lifecycle hooks for every pnpm workspace member", async () => {
     const root = await fixture("pnpm install");
     await put(root, "pnpm-workspace.yaml", "packages:\n  - doc\n");
@@ -216,7 +222,7 @@ describe("reachable validation commands cannot deploy", () => {
 });
 
 describe("CI and aggregate packed-host coverage", () => {
-  it("builds and verifies the exact doc artifact before the nine-target deployment handoff", async () => {
+  it("builds and verifies the exact doc and sample styleguide artifacts before the ten-target deployment handoff", async () => {
     const workflow = parse(await readFile(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8"));
     const job = workflow.jobs["doc-site-build"];
     const checkout = job.steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/checkout@"));
@@ -229,6 +235,17 @@ describe("CI and aggregate packed-host coverage", () => {
     const upload = job.steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/upload-artifact@"));
     expect(upload.uses).toBe(workflow.jobs["demo-sites-build"].steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/upload-artifact@")).uses);
     expect(upload.with).toEqual({ name: "doc-site-${{ github.sha }}", path: "doc/dist", "if-no-files-found": "error", "retention-days": 7 });
+    const sampleStyleguide = workflow.jobs["sample-sg-site-build"];
+    expect(sampleStyleguide.steps.some((step: { run?: string }) => step.run === "corepack pnpm sg:pins")).toBe(true);
+    expect(sampleStyleguide.steps.some((step: { run?: string }) => step.run === "corepack pnpm sg:build-site")).toBe(true);
+    expect(sampleStyleguide.steps.some((step: { run?: string }) => step.run === "pnpm -C styleguide/sample check")).toBe(true);
+    const sampleCache = sampleStyleguide.steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/setup-node@"));
+    expect(sampleCache.with["cache-dependency-path"]).toContain("styleguide/sample/pnpm-lock.yaml");
+    const sampleVerify = sampleStyleguide.steps.find((step: { run?: string }) => step.run?.includes("styleguide/sample/dist"));
+    expect(sampleVerify.run).toBe('pnpm hosted-demo:verify styleguide/sample/dist "${{ github.sha }}"');
+    expect(sampleVerify.env.HOSTED_DEMO_TARGET).toBe("sample-sg");
+    const sampleUpload = sampleStyleguide.steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/upload-artifact@"));
+    expect(sampleUpload.with).toEqual({ name: "sample-sg-site-${{ github.sha }}", path: "styleguide/sample/dist", "if-no-files-found": "error", "retention-days": 7 });
     const production = parse(await readFile(join(repositoryRoot, ".github/workflows/hosted-demo-deploy.yml"), "utf8"));
     const sourceRevision = "a".repeat(40);
     const artifactPrefix = (key: string) => TARGETS[key].ciArtifactName(sourceRevision).slice(0, -sourceRevision.length - 1);
@@ -242,8 +259,22 @@ describe("CI and aggregate packed-host coverage", () => {
     expect(targetFilter).toContain("inputs.target");
     expect(targetFilter).toContain("inputs.target == '' && '[]'");
     for (const key of TARGET_KEYS) expect(targetFilter).toContain(`inputs.target == '${key}'`);
+    expect(production.on.workflow_dispatch.inputs.target.type).toBe("choice");
+    expect(production.on.workflow_dispatch.inputs.target.options).toEqual(TARGET_KEYS);
+    const branches = new Map<string, string[]>();
+    let defaultExcluded: string[] | undefined;
+    for (const match of targetFilter.matchAll(/(?:inputs\.target == '([^']*)' && )?'(\[[^\n]*\])'/gu)) {
+      const excluded = JSON.parse(match[2]) as Array<{ target: string }>;
+      if (match[1] === undefined) defaultExcluded = excluded.map(({ target }) => target);
+      else branches.set(match[1], excluded.map(({ target }) => target));
+    }
+    const selected = (target: string) => TARGET_KEYS.filter((key) => !(branches.get(target) ?? defaultExcluded ?? []).includes(key));
+    expect(selected("")).toEqual(TARGET_KEYS);
+    expect(selected("sample-sg")).toEqual(["sample-sg"]);
+    expect(selected("not-a-target")).toEqual([]);
     const manifest = JSON.parse(await readFile(join(repositoryRoot, "package.json"), "utf8"));
-    expect(shellCommands(manifest.scripts.check).slice(-3)).toEqual([["pnpm", "doc:check"], ["pnpm", "doc:build-site"], ["pnpm", "smoke:host-install"]]);
+    expect(shellCommands(manifest.scripts.check).slice(-4)).toEqual([["pnpm", "doc:check"], ["pnpm", "doc:build-site"], ["pnpm", "sg:build-site"], ["pnpm", "smoke:host-install"]]);
+    expect(shellCommands(manifest.scripts.check)).toContainEqual(["pnpm", "sg:pins"]);
   });
 
   it("covers every static-site and editor target in the CI build matrices", async () => {

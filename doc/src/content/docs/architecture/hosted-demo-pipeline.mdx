@@ -7,14 +7,16 @@ description: The trusted-run pipeline that builds and deploys the repository's h
 ## Repository-owned static targets
 
 The hosted pipeline publishes the repository's four static sample websites,
-four disposable per-host editors, and this developer documentation site. Each
-target has its own Worker, custom domain, artifact contract, and deployment
-concurrency group. This exception does not add deployment or hosted persistence
-to an installed host's ordinary authoring workflow.
+four disposable per-host editors, this developer documentation site, and the
+standalone sample styleguide. Each target has its own Worker, custom domain,
+artifact contract, and deployment concurrency group. This exception does not
+add deployment or hosted persistence to an installed host's ordinary authoring
+workflow.
 
 | Target | Worker | Wrangler config | Domain | Artifact directory | Manifest | CI artifact |
 | --- | --- | --- | --- | --- | --- | --- |
 | `doc` | `zudo-composer` | `wrangler.doc.jsonc` | `zudo-composer.zudolab.dev` | `doc/dist` | `doc-site-manifest.json` | `doc-site-<sha>` |
+| `sample-sg` | `zc-sg-sample` | `wrangler.sample-sg.jsonc` | `zc-sg-sample.zudolab.dev` | `styleguide/sample/dist` | `doc-site-manifest.json` | `sample-sg-site-<sha>` |
 | `sample` | `zc-demo-sample` | `wrangler.demo-sample.jsonc` | `zc-demo-sample.zudolab.dev` | `packages/demo-sample/dist-site` | `site-manifest.json` | `demo-site-sample-<sha>` |
 | `shop` | `zc-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` | `packages/demo-webshop/dist-site` | `site-manifest.json` | `demo-site-shop-<sha>` |
 | `landing` | `zc-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` | `packages/demo-landing/dist-site` | `site-manifest.json` | `demo-site-landing-<sha>` |
@@ -27,7 +29,8 @@ to an installed host's ordinary authoring workflow.
 [file: scripts/hosted-demo/targets.mjs](https://github.com/Takazudo/zudo-composer/blob/main/scripts/hosted-demo/targets.mjs)
 is the target registry consumed by deployment and verification. The four
 visitor sites use `site-manifest.json`; the four editors use
-`demo-editor-manifest.json`; documentation uses `doc-site-manifest.json`.
+`demo-editor-manifest.json`; documentation and the sample styleguide use
+`doc-site-manifest.json`.
 The documentation artifact has a separate HTML file per route, so its route
 verification must select that route's emitted HTML rather than a shared SPA
 entry. Its `verifyArtifact` hook directly uses `verifyDocSiteArtifact`, and
@@ -35,8 +38,10 @@ entry. Its `verifyArtifact` hook directly uses `verifyDocSiteArtifact`, and
 
 The `doc-site-build` CI job runs `pnpm doc:build-site`, verifies the `doc`
 target's artifact contract, and uploads `doc-site-<sha>` from `doc/dist`. The
-production matrix downloads that exact artifact name before the target-specific
-Wrangler preflight.
+`sample-sg-site-build` job runs `pnpm sg:build-site`, verifies the `sample-sg`
+target's artifact contract, and uploads `sample-sg-site-<sha>` from
+`styleguide/sample/dist`. The production matrix downloads the matching exact
+artifact name before the target-specific Wrangler preflight.
 
 ## Build and deployment are separate workflows
 
@@ -121,7 +126,8 @@ Later runs use the ordinary versioned rollout path.
 `verifyLiveDeployment` compares the remote manifest with the verified local
 artifact, fetches emitted files, and checks every target route. Static sites and
 the four editors derive their route sets from their verified manifests;
-documentation derives routes from its own multi-page manifest. Route/file
+documentation and the sample styleguide derive routes from their own
+multi-page manifests. Route/file
 mappings support both shared SPA entries, the editor authoring/site handoff,
 and a documentation route's own HTML file.
 
@@ -142,7 +148,8 @@ and incorrect immutable asset headers fail verification.
 
 Each `demo-editor` adapter starts from its matching host's committed project and
 keeps edits/uploads in the current tab; reload resets them. The four static
-site targets publish visitor artifacts, while `doc` publishes the multi-page
-documentation artifact. Operator details, deployment evidence, and recovery
+site targets publish visitor artifacts, while `doc` and `sample-sg` publish
+multi-page documentation artifacts. Operator details, deployment evidence, and
+recovery
 commands belong in the
 [hosted demo guide](https://github.com/Takazudo/zudo-composer/blob/main/docs/hosted-demo.md).
