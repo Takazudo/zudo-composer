@@ -3,7 +3,7 @@ export default {
   componentsRoots: [{ dir: "stories", importBase: "../../stories" }],
   registryOut: "./src/styleguide/sg-registry.ts",
   categoryOrder: ["Shared", "Cards", "Content", "Media"],
-  // The generator imports StoryModule from here; the component pack does not export it.
+  // StoryModule/component import conflation: https://github.com/Takazudo/zudo-sg/issues/747.
   uiPackageName: "@takazudo/zudo-sg/stories",
   barrelIndex: null,
   previewStyles: "./src/styles/preview-entry.css",

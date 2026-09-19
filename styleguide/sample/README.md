@@ -20,9 +20,10 @@ the home page, 404 page, `/components`, component detail and preview pages,
 `/tokens`, and the overview document. Serve `dist/` with a static HTTP server to
 inspect the production build.
 
-On a cold dev start, wait for `/assets/islands.js` to return 200 before checking
-interactive previews. zfb can announce readiness before that bundle is ready;
-reload a page opened during that interval (see the upstream notes).
+On a cold dev start, wait for `GET /__zfb/ready` to report `ready: true` before
+checking interactive previews, and confirm `X-Zfb-Dev-Ready: true` on the
+document response. The CLI's listening message and an available island bundle
+can both precede a ready document generation (see the upstream notes).
 
 `check`, `build`, and `dev` each run `gen` first. Generation bootstraps the empty
 registry seed if needed, discovers the stories, and reads design tokens from
@@ -32,9 +33,9 @@ only `src/styleguide/sg-registry.seed.ts` is committed.
 Stories live under `stories/<group>/<component>/`. Import components from
 `@zudo-composer/ui` and the sidecar's display metadata and defaults through its
 `@zudo-composer/ui/src/*` export. Export `Defaults` first, then one named story
-for every enum value in the sidecar fields. Categories come from the sidecar,
-so they need not match folder names; categories absent from `categoryOrder`
-are appended by the engine. Previews compile the installed Composer CSS and
+for every enum value in the sidecar fields. Titles and descriptions come from
+the sidecar; categories use the capitalised pack folder: `Shared`, `Cards`,
+`Content`, or `Media`. Previews compile the installed Composer CSS and
 scan both the stories and the installed pack's source for Tailwind classes.
 
 ## Updating the component pack
