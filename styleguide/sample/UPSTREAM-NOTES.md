@@ -1,7 +1,7 @@
 # Upstream integration notes
 
-This host was rechecked on 2026-09-20 with `@takazudo/zudo-sg@0.2.1`,
-`create-zudo-sg@0.1.1`, `@takazudo/zfb@2.20.0`,
+This host was rechecked on 2026-09-20 with `@takazudo/zudo-sg@0.2.2`,
+`create-zudo-sg@0.1.2`, `@takazudo/zfb@2.20.0`,
 `@takazudo/zudo-doc@5.26.2`, Node `24.13.1`, and pnpm `11.5.2`.
 The installed UI pack still keeps its separate `@takazudo/zfb-md-wasm`
 dependency at `2.10.1`; the standalone host uses the 2.20.0 markdown WASM.
@@ -55,9 +55,9 @@ token manifest remain ignored build outputs.
 ## 5. Fresh engine releases need exact release-age exceptions
 
 - Status: **resolved-upstream** — [zudo-sg #750](https://github.com/Takazudo/zudo-sg/issues/750).
-- The 0.1.1 starter now emits exact release-age exemptions for zdtp, zfb and
+- The 0.1.2 starter emits exact release-age exemptions for zdtp, zfb and
   its platform packages, zudo-doc, and zudo-sg. The host's
-  `pnpm-workspace.yaml` retains the same exact 2.20.0 / 5.26.2 / 0.2.1
+  `pnpm-workspace.yaml` retains the same exact 2.20.0 / 5.26.2 / 0.2.2
   entries as an explicit consumer policy; no bare package names are used.
 - Verification: the unpacked template and the host workspace policy match,
   and the frozen install succeeds under pnpm 11.5.2.
@@ -139,6 +139,18 @@ token manifest remain ignored build outputs.
 - Verification: a fresh browser context loads the built catalog with all four
   requests returning 200 and no console errors.
 
+## 13. Minimal hosts omit engine-owned header navigation
+
+- Status: **resolved-upstream** — [zudo-sg #791](https://github.com/Takazudo/zudo-sg/pull/791).
+- The 0.2.2 `withZudoSg` composition fills zudo-doc's otherwise empty minimal
+  header with Components and Design Tokens links plus Search. A host with
+  configured navigation remains authoritative, and `chromeDefaults: false`
+  preserves an intentionally empty header.
+- Verification: the built catalog exposes both engine-owned links and the
+  working Search control at desktop width; its mobile drawer opens and closes,
+  and all template routes load without console or network errors.
+
 The three `local-misuse` entries remain as host operating guidance. The seven
-original upstream defects are resolved in the published releases; the two
-confirmation findings above remain tracked with local workarounds.
+original upstream defects and the minimal-header defect are resolved in the
+published releases; the two confirmation findings above remain tracked with
+local workarounds.
