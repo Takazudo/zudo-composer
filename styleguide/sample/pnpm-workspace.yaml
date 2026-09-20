@@ -3,6 +3,7 @@ allowBuilds:
   esbuild: true
   "@zudo-composer/component-contract": true
 minimumReleaseAgeExclude:
+  - '@takazudo/zdtp@0.8.0'
   - '@takazudo/zfb-darwin-arm64@2.20.0'
   - '@takazudo/zfb-darwin-x64@2.20.0'
   - '@takazudo/zfb-linux-arm64-gnu@2.20.0'

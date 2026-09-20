@@ -3,8 +3,7 @@ export default {
   componentsRoots: [{ dir: "stories", importBase: "../../stories" }],
   registryOut: "./src/styleguide/sg-registry.ts",
   categoryOrder: ["Shared", "Cards", "Content", "Media"],
-  // StoryModule/component import conflation: https://github.com/Takazudo/zudo-sg/issues/747.
-  uiPackageName: "@takazudo/zudo-sg/stories",
+  uiPackageName: "@zudo-composer/ui",
   barrelIndex: null,
   previewStyles: "./src/styles/preview-entry.css",
   tokens: {

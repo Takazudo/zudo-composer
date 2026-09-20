@@ -17,4 +17,5 @@
 
 @source "../../pages/**/*.{tsx,ts,jsx,js}";
 @source "../../stories/**/*.{tsx,ts,jsx,js,mdx,md}";
+@source "../../src/content/**/*.{mdx,md}";
 @source "../../node_modules/@zudo-composer/ui/src/**/*.{tsx,ts,jsx,js}";
