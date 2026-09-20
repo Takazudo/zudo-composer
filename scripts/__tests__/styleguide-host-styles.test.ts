@@ -7,6 +7,18 @@ import { describe, expect, it } from "vitest";
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
 describe("sample styleguide host styles", () => {
+  it("gives the host-owned homepage an explicit styled shell", () => {
+    const page = readFileSync(
+      resolve(repositoryRoot, "styleguide/sample/pages/index.tsx"),
+      "utf8",
+    );
+
+    expect(page).toContain('<body class="sg-home">');
+    expect(page).toContain('class="sg-home__title"');
+    expect(page).toContain('class="sg-home__links"');
+    expect(page).toContain('class="sg-home__link"');
+  });
+
   it("loads the public component, docs, and catalog stylesheets", () => {
     const css = readFileSync(
       resolve(repositoryRoot, "styleguide/sample/src/styles/global.css"),
@@ -17,6 +29,8 @@ describe("sample styleguide host styles", () => {
     expect(css).toContain('@import "@takazudo/zudo-doc/safelist.css"');
     expect(css).toContain('@import "@takazudo/zudo-sg/styles.css"');
     expect(css).toContain('@import "@takazudo/zudo-sg/safelist.css"');
+    expect(css).toContain(".sg-home__main");
+    expect(css).toContain(".sg-home__link:focus-visible");
     expect(css).toContain(
       '[data-zfb-island="SidebarToggle"] > button > .hidden',
     );
