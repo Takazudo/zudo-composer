@@ -17,4 +17,11 @@
 
 @source "../../pages/**/*.{tsx,ts,jsx,js}";
 @source "../../stories/**/*.{tsx,ts,jsx,js,mdx,md}";
+@source "../../src/content/**/*.{mdx,md}";
 @source "../../node_modules/@zudo-composer/ui/src/**/*.{tsx,ts,jsx,js}";
+
+/* Work around https://github.com/zudolab/zudo-doc/issues/4355 until its
+ * sidebar icon state survives unlayered consumer SVG resets. */
+[data-zfb-island="SidebarToggle"] > button > .hidden {
+  display: none;
+}

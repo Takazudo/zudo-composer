@@ -17,6 +17,24 @@ describe("sample styleguide host styles", () => {
     expect(css).toContain('@import "@takazudo/zudo-doc/safelist.css"');
     expect(css).toContain('@import "@takazudo/zudo-sg/styles.css"');
     expect(css).toContain('@import "@takazudo/zudo-sg/safelist.css"');
+    expect(css).toContain(
+      '[data-zfb-island="SidebarToggle"] > button > .hidden',
+    );
     expect(css).not.toContain('@import "@zudo-composer/ui/src/');
+  });
+
+  it("ships the favicon assets advertised by the catalog head", () => {
+    for (const fileName of [
+      "favicon-16x16.png",
+      "favicon-32x32.png",
+      "favicon.ico",
+      "favicon.svg",
+    ]) {
+      expect(
+        readFileSync(
+          resolve(repositoryRoot, "styleguide/sample/public", fileName),
+        ),
+      ).toEqual(readFileSync(resolve(repositoryRoot, "doc/public", fileName)));
+    }
   });
 });
