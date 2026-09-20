@@ -25,10 +25,11 @@ checking interactive previews, and confirm `X-Zfb-Dev-Ready: true` on the
 document response. The CLI's listening message and an available island bundle
 can both precede a ready document generation (see the upstream notes).
 
-`check`, `build`, and `dev` each run `gen` first. Generation bootstraps the empty
-registry seed if needed, discovers the stories, and reads design tokens from
-the installed pack. The generated registry and token manifest are ignored;
-only `src/styleguide/sg-registry.seed.ts` is committed.
+`check`, `build`, and `dev` each run `gen` first. Generation creates the ignored
+registry output when it is missing, discovers the stories, and reads design
+tokens from the installed pack. The generated registry and token manifest are
+ignored and recreated by the installed engine from the stories and configured
+CSS inputs.
 
 Stories live under `stories/<group>/<component>/`. Import components from
 `@zudo-composer/ui` and the sidecar's display metadata and defaults through its
@@ -39,7 +40,9 @@ the sidecar; categories use the capitalised pack folder: `Shared`, `Cards`,
 scan both the stories and the installed pack's source for Tailwind classes.
 The catalog document uses `src/styles/global.css` to assemble the public
 Composer, zudo-doc, zudo-sg, and zdtp stylesheets; keep both package safelist
-imports so responsive catalog chrome is present in production builds.
+imports so responsive catalog chrome is present in production builds. The
+stylesheet also scans the host's documentation content and installed component
+pack, matching the initializer's global-entry contract.
 
 ## Updating the component pack
 

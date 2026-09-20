@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@11.5.2",
   "scripts": {
-    "gen": "node scripts/bootstrap-registry.mjs && zudo-sg gen-registry && zudo-sg gen-token-manifest",
+    "gen": "zudo-sg gen-registry && zudo-sg gen-token-manifest",
     "dev": "pnpm gen && zfb dev",
     "build": "pnpm gen && zfb build",
     "check": "pnpm gen && tsc --noEmit"
