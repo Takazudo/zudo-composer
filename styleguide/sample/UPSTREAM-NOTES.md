@@ -1,7 +1,7 @@
 # Upstream integration notes
 
 This host was rechecked on 2026-09-20 with `@takazudo/zudo-sg@0.2.2`,
-`create-zudo-sg@0.1.1`, `@takazudo/zfb@2.20.0`,
+`create-zudo-sg@0.1.2`, `@takazudo/zfb@2.20.0`,
 `@takazudo/zudo-doc@5.26.2`, Node `24.13.1`, and pnpm `11.5.2`.
 The installed UI pack still keeps its separate `@takazudo/zfb-md-wasm`
 dependency at `2.10.1`; the standalone host uses the 2.20.0 markdown WASM.
@@ -55,7 +55,7 @@ token manifest remain ignored build outputs.
 ## 5. Fresh engine releases need exact release-age exceptions
 
 - Status: **resolved-upstream** — [zudo-sg #750](https://github.com/Takazudo/zudo-sg/issues/750).
-- The 0.1.1 starter now emits exact release-age exemptions for zdtp, zfb and
+- The 0.1.2 starter emits exact release-age exemptions for zdtp, zfb and
   its platform packages, zudo-doc, and zudo-sg. The host's
   `pnpm-workspace.yaml` retains the same exact 2.20.0 / 5.26.2 / 0.2.2
   entries as an explicit consumer policy; no bare package names are used.
