@@ -15,6 +15,12 @@
 @import "@takazudo/zudo-sg/styles.css";
 @import "@takazudo/zudo-sg/safelist.css";
 
+/* zudo-doc's package route bundle contributes its own later preflight. Emit
+ * the shared utility inventory after that reset so layout utilities from both
+ * the documentation chrome and the installed component pack keep their
+ * margin and padding declarations. */
+@import "tailwindcss/utilities";
+
 @source "../../pages/**/*.{tsx,ts,jsx,js}";
 @source "../../stories/**/*.{tsx,ts,jsx,js,mdx,md}";
 @source "../../src/content/**/*.{mdx,md}";

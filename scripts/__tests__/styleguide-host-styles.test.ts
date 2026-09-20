@@ -29,6 +29,9 @@ describe("sample styleguide host styles", () => {
     expect(css).toContain('@import "@takazudo/zudo-doc/safelist.css"');
     expect(css).toContain('@import "@takazudo/zudo-sg/styles.css"');
     expect(css).toContain('@import "@takazudo/zudo-sg/safelist.css"');
+    expect(css.lastIndexOf('@import "tailwindcss/utilities"')).toBeGreaterThan(
+      css.indexOf('@import "@takazudo/zudo-sg/safelist.css"'),
+    );
     expect(css).toContain(".sg-home__main");
     expect(css).toContain(".sg-home__link:focus-visible");
     expect(css).toContain(
