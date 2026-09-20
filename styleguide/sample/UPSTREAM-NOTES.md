@@ -112,5 +112,33 @@ token manifest remain ignored build outputs.
   The Composer import is intentionally not replaced by the starter's local
   token file because this host consumes the Git-installed UI pack.
 
-The three `local-misuse` entries are retained as host operating guidance; the
-seven filed upstream defects are resolved in the published releases.
+## 11. Layered `hidden` loses to an unlayered consumer SVG reset
+
+- Status: **filed; local workaround retained** —
+  [zudo-doc #4355](https://github.com/zudolab/zudo-doc/issues/4355).
+- The package-owned mobile sidebar toggle uses the layered Tailwind `hidden`
+  utility for its inactive SVG, while the installed UI pack's unlayered media
+  reset sets SVGs to `display: block`. The reset wins by cascade-layer order,
+  so both icons rendered and stacked at mobile widths.
+- Workaround: the host global stylesheet carries one unlayered selector scoped
+  to the zudo-doc `SidebarToggle` island. It restores `display: none` only for
+  the inactive package-owned icon and links the upstream report.
+- Verification: at 390px exactly one icon renders, the toggle is 24px tall,
+  and the drawer opens and closes without console errors.
+
+## 12. The initializer omits favicons requested by the catalog head
+
+- Status: **filed; local workaround retained** —
+  [zudo-sg #789](https://github.com/Takazudo/zudo-sg/issues/789).
+- The 0.1.1 template has no favicon assets, but the zudo-doc-backed head
+  requests `favicon.ico`, `favicon.svg`, `favicon-32x32.png`, and
+  `favicon-16x16.png`. A clean built host therefore logged four 404 errors.
+- Workaround: this host reuses the repository's canonical documentation-site
+  favicon assets under `styleguide/sample/public/`; the root regression test
+  requires all four files to remain byte-identical.
+- Verification: a fresh browser context loads the built catalog with all four
+  requests returning 200 and no console errors.
+
+The three `local-misuse` entries remain as host operating guidance. The seven
+original upstream defects are resolved in the published releases; the two
+confirmation findings above remain tracked with local workarounds.
