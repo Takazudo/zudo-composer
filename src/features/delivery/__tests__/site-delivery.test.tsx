@@ -70,7 +70,8 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   const promise = new Promise<void>((settle) => { resolve = settle; });
   return { promise, resolve };
 }
-const idle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, RECAPTURE_DEBOUNCE_MS + 500));
+/** Long enough that any trailing re-capture the component scheduled has started. */
+const pastDebounce = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, RECAPTURE_DEBOUNCE_MS + 500));
 const SLOW = { timeout: 30_000 };
 
 /**
@@ -319,7 +320,7 @@ describe("SiteDelivery", () => {
     gate.release();
     expect(await screen.findByRole("heading", { name: "A studio built around useful clarity" }, SLOW)).toBeInTheDocument();
     await waitFor(() => expect(fx.captures()).toBe(2), SLOW);
-    await idle();
+    await pastDebounce();
     expect(fx.captures()).toBe(2);
   });
 
@@ -330,7 +331,7 @@ describe("SiteDelivery", () => {
     await waitFor(() => expect(fx.captures()).toBe(1));
     fx.emitChange(); fx.emitChange(); fx.emitChange();
     await waitFor(() => expect(fx.captures()).toBe(2), SLOW);
-    await idle();
+    await pastDebounce();
     expect(fx.captures()).toBe(2);
   });
 
@@ -386,7 +387,7 @@ describe("SiteDelivery", () => {
     cleanup();
     gate.release();
     fx.emitChange(); fx.emitChange();
-    await idle();
+    await pastDebounce();
     expect(fx.captures()).toBe(1);
     expect(fx.subscribers()).toBe(0);
     expect(container).toBeEmptyDOMElement();

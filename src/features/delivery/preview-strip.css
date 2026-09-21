@@ -57,9 +57,11 @@
   appearance: auto;
 }
 
-/* The freshness region stays mounted through every message, including none at
-   all, so it claims no width of its own when the preview is up to date. */
+/* The freshness region stays mounted even with nothing to say, so it takes no
+   width of its own; `min-inline-size` lets a long failure message wrap inside
+   the row instead of overflowing it. */
 .zc-preview-strip__status {
+  min-inline-size: 0;
   margin: 0;
   color: var(--zc-strip-muted);
 }
