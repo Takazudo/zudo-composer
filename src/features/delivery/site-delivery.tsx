@@ -190,13 +190,20 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
     const settle = (next: DeliveryState, snapshot: WorkspaceCapture | undefined, current: number): void => {
       running = false;
       if (disposed) return;
-      if (request.current !== current) { setRefreshing(false); return; }
+      // `again` is the only record of a write that committed inside this
+      // capture's own window, so it is consumed here even when a newer
+      // request — a Retry — has already superseded this run. Dropping it
+      // there would leave the preview serving a draft it was told is stale
+      // until something unrelated changed again.
+      const queued = again;
+      again = false;
+      if (request.current !== current) { setRefreshing(false); if (queued) schedule(); return; }
       if (next.status === "ready") { rendered.current = true; setRecaptureError(undefined); setState(next); }
       // A re-capture that fails keeps the last good render on screen and
       // reports why through the strip; only a first load has nothing to keep.
       else if (rendered.current) setRecaptureError(recaptureFailure(next));
       else setState(next);
-      if (again) { again = false; schedule(); return; }
+      if (queued) { schedule(); return; }
       if (!snapshot) { setRefreshing(false); return; }
       // Change notifications are a hint, so this render is only declared
       // current once the captured tokens themselves still agree.
