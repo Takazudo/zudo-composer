@@ -8,6 +8,7 @@ import { WorkspaceContext } from "./app/workspace-context";
 import { parseIntent, formatIntent } from "./app/route-intents";
 import { Button } from "./components/ui";
 import { PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "./app/persistence-channels";
+import { publishPendingState } from "./shared/pending-broadcast";
 import { createProjectAssetUsageInspection } from "./site-project/assets/usage";
 import { Shell } from "./app/shell";
 import { createWorkspaceSummary } from "./app/workspace-summary";
@@ -71,6 +72,27 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     const outcome = await providers.sessions.flush();
     if (outcome.status === "failed") throw new Error(outcome.failures.map((failure) => `${failure.feature} (${failure.providerId}${failure.recordId ? ` / ${failure.recordId}` : ""}): ${failure.error.message}`).join("; "));
     if (outcome.status === "changed") throw new Error("Edits changed while saving. Finish the edit and try navigation again.");
+  };
+  // A best-effort head start for the working-preview tab's own session flush
+  // (issue #795): fired on pointerdown/Enter of the anchor, before the browser
+  // opens it. Fire-and-forget only — a synchronous flush is impossible, and
+  // awaiting it before `window.open` loses the user gesture and gets
+  // pop-up-blocked (ruled out in #731). The registry keeps its own failure
+  // state, so a rejection here has nothing useful to do but stop.
+  //
+  // Deliberately NOT gated on `sessions.hasPending`, though #795 specified that
+  // guard. `hasPending` only turns true once an editor has accepted a draft
+  // (`registered.changed()` fires on a `draftRevision` change), while a value
+  // still being typed lives in the detail session's *pending props*, which
+  // `WorkspaceSaveHandle.flush` pushes via `flushPendingProps` before draining
+  // the queue. So the guard read false in exactly the case this feature exists
+  // for — edit a field, click "Website preview" without blurring first — and
+  // skipped the flush that would have committed the edit. Confirmed on the dev
+  // browser lane (#798): the preview sat on the pending indicator indefinitely.
+  // An unguarded flush with nothing outstanding just settles every session once
+  // and returns, so the guard bought nothing.
+  const flushOnPreviewActivation = () => {
+    void providers.sessions.flush().catch(() => undefined);
   };
   const navigate = async (href: string, replace = false): Promise<boolean> => {
     if (replacing.current || traversal.current) return false;
@@ -186,6 +208,13 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [providers, release]);
+  // Hint other tabs (the working preview) whether this editor has unflushed
+  // writes. Editor documents only — the visitor documents mounted by
+  // src/main.tsx never publish.
+  useEffect(() => publishPendingState({
+    getPending: () => providers.sessions.hasPending,
+    subscribe: (listener) => providers.sessions.subscribe(listener),
+  }), [providers]);
   const assetContentServices = useMemo(() => createAssetContentServices(
     providers.contentProviders,
     () => providers.sessions.flush(),
@@ -234,7 +263,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
   else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
   else if (path === "/assets") content = <AssetRouteContent provider={providers.assetProvider} contentServices={assetContentServices} usageHref={({ valuePath, ...location }) => formatIntent({ route: "content", ...location, ...(valuePath.length ? { valuePath } : {}) })} />;
   else if (path === "/") content = <Dashboard summary={workspaceSummary} hostedDemo={hostedDemo} />;
-  else if (path === "/review") content = <ReleaseRoute hostedDemo={hostedDemo} controller={release} href={(item) => {
+  else if (path === "/review") content = <ReleaseRoute hostedDemo={hostedDemo} controller={release} onBeforeNewTab={flushOnPreviewActivation} href={(item) => {
     if (!("domain" in item)) return item.path.includes("assets") ? "/assets" : item.path.includes("sitemap") ? "/sitemapper" : item.path.includes("mapping") ? "/mapping" : item.path.includes("content") ? "/content" : null;
     if (item.domain === "content-entry") { const entry = release.getSnapshot().working?.providers.content.find(({ id }) => id === item.providerId)?.entries.find(({ id }) => id === item.recordId); return entry ? formatIntent({ route: "content", providerId: item.providerId, modelId: entry.modelId, entryId: entry.id }) : "/content"; }
     if (item.domain === "content-model") return formatIntent({ route: "content", providerId: item.providerId, modelId: item.recordId });
@@ -242,5 +271,5 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     return item.domain === "assets" ? "/assets" : item.domain === "mappings" ? "/mapping" : item.domain === "sitemaps" ? "/sitemapper" : null;
   }} />;
   else content = <NotFound />;
-  return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell hostedDemo={hostedDemo} path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary}>{hostedDemo && <HostedDemoNotice includeExport />}<div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;
+  return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell hostedDemo={hostedDemo} path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary} onBeforeNewTab={flushOnPreviewActivation}>{hostedDemo && <HostedDemoNotice includeExport />}<div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;
 }

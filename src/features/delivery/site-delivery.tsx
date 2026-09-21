@@ -12,6 +12,7 @@ import { DeliveryRuntime, type DeliveryComponentError } from "./runtime";
 import { matchDeliveryRoute } from "./routing";
 import { deliveryBasePath, validateActivatedDeliveryArtifact, type DeliverySourceContract } from "./source";
 import { PreviewStrip } from "./preview-strip";
+import { subscribePendingState } from "../../shared/pending-broadcast";
 
 type DeliveryState =
   | { status: "loading" }
@@ -20,20 +21,46 @@ type DeliveryState =
   | { status: "compiler-error"; message: string }
   | { status: "ready"; sourceKind: "activated-local" | "working-preview" | "static"; project: SiteProject; build: SiteBuildPlan; sitemap: SitemapDocument };
 
+/**
+ * Trailing-edge window for a working-preview re-capture. One editor save lands
+ * as a burst of committed writes — one notification per provider channel — and
+ * this coalesces them; the in-flight guard, not this delay, is what keeps
+ * captures from stacking up while one is still compiling.
+ */
+export const RECAPTURE_DEBOUNCE_MS = 300;
+
+const UNAVAILABLE_ACTIVATED = "The activated local release could not be loaded.";
+const UNAVAILABLE_WORKING = "The live working draft could not be loaded.";
+const DATA_BLOCKED = "The latest site data did not pass validation.";
+const BUILD_BLOCKED = "This site cannot be published until its configuration is fixed.";
+
+/** Why a working-preview re-capture failed, in the copy its own state branch uses. */
+function recaptureFailure(state: DeliveryState): string | undefined {
+  if (state.status === "provider-error") return `${UNAVAILABLE_WORKING} ${state.message}`;
+  if (state.status === "validation-error") return `${DATA_BLOCKED} ${state.message}`;
+  if (state.status === "compiler-error") return `${BUILD_BLOCKED} ${state.message}`;
+  return undefined;
+}
+
 function activeSitemap(project: SiteProject): SitemapDocument | undefined {
   return project.providers.sitemaps
     .find(({ id }) => id === project.activeSitemap.providerId)?.records
     .find(({ id }) => id === project.activeSitemap.recordId)?.document;
 }
 
-export async function loadWorkingPreviewSnapshot(providers: ProductionProviderIntegration): Promise<DeliveryState> {
+export async function loadWorkingPreviewSnapshot(
+  providers: ProductionProviderIntegration,
+  /** Receives the aggregate capture this snapshot was compiled from, so a re-capturing
+   *  caller can re-check its freshness once compilation has ended. */
+  onCapture?: (capture: WorkspaceCapture) => void,
+): Promise<DeliveryState> {
   try {
     let project: SiteProject;
     let capture: WorkspaceCapture | undefined;
     if (providers.assetProvider) {
       const snapshot = await providers.captureWorkspace();
       if (snapshot.status !== "ready") return { status: "provider-error", message: snapshot.status === "unavailable" ? snapshot.error.message : `Workspace capture ${snapshot.status}; retry after completing pending edits.`, retryable: true };
-      project = snapshot.project; capture = snapshot.capture;
+      project = snapshot.project; capture = snapshot.capture; onCapture?.(capture);
     } else {
       // Static/committed assets need no authoring provider. This is explicitly
       // detached output, not proof of cross-domain release currentness.
@@ -128,12 +155,80 @@ function DeliveryChrome({ route, pack, report, focus, onFocused, basePath }: { r
 
 export function SiteDelivery({ source, pathname = window.location.pathname, hostedDemo = false, onReady, onComponentError = (detail) => console.error("Delivery component failed", detail) }: { source: DeliverySourceContract; pathname?: string; hostedDemo?: boolean; onReady?: (build: SiteBuildPlan) => void; onComponentError?: (detail: DeliveryComponentError) => void }): JSX.Element {
   const [state, setState] = useState<DeliveryState>({ status: "loading" });
+  // The broadcast only reports transitions, so `false` is the starting truth
+  // rather than something this tab waits to be told.
+  const [pending, setPending] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [recaptureError, setRecaptureError] = useState<string | undefined>(undefined);
   const request = useRef(0);
   const focusAfterRetry = useRef(false);
+  // Whether a working page has ever reached the screen, which decides whether
+  // a later failure replaces it or is reported beside it. A retry renders one
+  // too, so this cannot live in the re-capture effect's own closure.
+  const rendered = useRef(false);
+  useEffect(() => source.kind === "working-preview" ? subscribePendingState(setPending) : undefined, [source]);
   useEffect(() => {
-    const current = ++request.current;
-    void loadDeliverySnapshot(source).then((next) => { if (request.current === current) setState(next); });
-    return () => { request.current += 1; };
+    if (source.kind !== "working-preview") {
+      const current = ++request.current;
+      void loadDeliverySnapshot(source).then((next) => { if (request.current === current) setState(next); });
+      return () => { request.current += 1; };
+    }
+    const { providers } = source;
+    let disposed = false;
+    let running = false;
+    let again = false;
+    let initial = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = (): void => {
+      if (disposed) return;
+      // A capture in flight already has a re-run waiting on it, so a change
+      // arriving now can only ever queue that one trailing run.
+      if (running) { again = true; return; }
+      if (timer !== undefined) clearTimeout(timer);
+      timer = setTimeout(() => { timer = undefined; run(); }, RECAPTURE_DEBOUNCE_MS);
+    };
+    const settle = (next: DeliveryState, snapshot: WorkspaceCapture | undefined, current: number): void => {
+      running = false;
+      if (disposed) return;
+      // `again` is the only record of a write that committed inside this
+      // capture's own window, so it is consumed here even when a newer
+      // request — a Retry — has already superseded this run. Dropping it
+      // there would leave the preview serving a draft it was told is stale
+      // until something unrelated changed again.
+      const queued = again;
+      again = false;
+      if (request.current !== current) { setRefreshing(false); if (queued) schedule(); return; }
+      if (next.status === "ready") { rendered.current = true; setRecaptureError(undefined); setState(next); }
+      // A re-capture that fails keeps the last good render on screen and
+      // reports why through the strip; only a first load has nothing to keep.
+      else if (rendered.current) setRecaptureError(recaptureFailure(next));
+      else setState(next);
+      if (queued) { schedule(); return; }
+      if (!snapshot) { setRefreshing(false); return; }
+      // Change notifications are a hint, so this render is only declared
+      // current once the captured tokens themselves still agree.
+      void providers.isCaptureCurrent(snapshot).then(
+        (fresh) => { if (disposed || request.current !== current) return; if (fresh) setRefreshing(false); else schedule(); },
+        () => { if (!disposed && request.current === current) setRefreshing(false); },
+      );
+    };
+    const run = (): void => {
+      if (disposed) return;
+      running = true;
+      again = false;
+      setRefreshing(!initial);
+      initial = false;
+      const current = ++request.current;
+      let snapshot: WorkspaceCapture | undefined;
+      void loadWorkingPreviewSnapshot(providers, (value) => { snapshot = value; }).then((next) => settle(next, snapshot, current));
+    };
+    // Installed before the first capture starts, in this same synchronous
+    // block: a write committing between capture start and capture end would
+    // otherwise never be heard, and the preview would keep serving a draft it
+    // already knows is stale.
+    const stop = providers.subscribeChanges(schedule);
+    run();
+    return () => { disposed = true; stop(); if (timer !== undefined) clearTimeout(timer); request.current += 1; };
   }, [source]);
   useEffect(() => source.kind === "activated" && source.subscribe ? source.subscribe(() => { const current = ++request.current; setState({ status: "loading" }); void loadDeliverySnapshot(source).then((next) => { if (request.current === current) setState(next); }); }) : undefined, [source]);
   // The entry that owns this document installs its navigation from the routes
@@ -161,20 +256,24 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
   const retry = (): void => {
     const current = ++request.current;
     focusAfterRetry.current = true;
+    setRecaptureError(undefined);
     setState({ status: "loading" });
-    void retryDeliverySnapshot(source).then((next) => { if (request.current === current) setState(next); });
+    void retryDeliverySnapshot(source).then((next) => { if (request.current !== current) return; if (next.status === "ready") rendered.current = true; setState(next); });
   };
   const label = source.kind === "activated" ? "Activated local release — not deployed" : "Live working preview — not activated";
+  // Freshness is a working-preview concern only; an activated release is a
+  // finished artifact and passes none of these.
+  const freshness = source.kind === "working-preview" ? { pending, refreshing, error: recaptureError } : {};
   // A site delivered at its own origin root is the published document itself,
   // so only the tool's own base paths carry the strip.
   const withPreviewStrip = (content: JSX.Element, routes?: readonly SiteCompiledRoute[]): JSX.Element => basePath === "/" ? content : <>
-    <PreviewStrip label={label} basePath={basePath} pathname={pathname} hostedDemo={hostedDemo} routes={routes} />
+    <PreviewStrip label={label} basePath={basePath} pathname={pathname} hostedDemo={hostedDemo} routes={routes} {...freshness} />
     {content}
   </>;
   if (state.status === "loading") return withPreviewStrip(<StateMessage heading="Loading site" message={source.kind === "activated" ? "Reading the completed activated local release…" : source.kind === "static" ? "Reading the published site…" : "Flushing and compiling the live working draft…"} busy />);
-  if (state.status === "provider-error") return withPreviewStrip(<StateMessage heading="Site unavailable" message={<>{source.kind === "activated" ? "The activated local release could not be loaded. " : "The live working draft could not be loaded. "}{state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus}>{state.retryable && <button type="button" onClick={retry}>Retry loading site</button>}</StateMessage>);
-  if (state.status === "validation-error") return withPreviewStrip(<StateMessage heading="Site data blocked" message={<>The latest site data did not pass validation. {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />);
-  if (state.status === "compiler-error") return withPreviewStrip(<StateMessage heading="Site build blocked" message={<>This site cannot be published until its configuration is fixed. {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />);
+  if (state.status === "provider-error") return withPreviewStrip(<StateMessage heading="Site unavailable" message={<>{source.kind === "activated" ? UNAVAILABLE_ACTIVATED : UNAVAILABLE_WORKING} {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus}>{state.retryable && <button type="button" onClick={retry}>Retry loading site</button>}</StateMessage>);
+  if (state.status === "validation-error") return withPreviewStrip(<StateMessage heading="Site data blocked" message={<>{DATA_BLOCKED} {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />);
+  if (state.status === "compiler-error") return withPreviewStrip(<StateMessage heading="Site build blocked" message={<>{BUILD_BLOCKED} {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />);
   if (!route) return withPreviewStrip(<StateMessage heading="Page not found" message={source.kind === "static" ? "There is no page at this address." : "This page is not present in the selected delivery snapshot."} focus={focusAfterRetry.current} onFocused={completeRetryFocus}><a href={basePath}>Return to site home</a></StateMessage>);
   const componentProvider = source.kind === "working-preview" ? source.providers.componentProvider : source.componentProvider;
   return withPreviewStrip(<DeliveryGuard><DeliveryChrome route={route} pack={componentProvider.pack} report={onComponentError} focus={focusAfterRetry.current} onFocused={completeRetryFocus} basePath={basePath} /></DeliveryGuard>, state.build.routes);

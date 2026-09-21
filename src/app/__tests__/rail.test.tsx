@@ -170,6 +170,25 @@ describe("Rail", () => {
     expect(onNavigate).toHaveBeenCalledWith("/composer");
   });
 
+  it("gives the working-preview flush a head start on pointerdown and Enter, and never on other items", () => {
+    const onBeforeNewTab = vi.fn();
+    renderRail({ onBeforeNewTab });
+    const site = screen.getByRole("link", { name: "Website preview — choose preview source" });
+    fireEvent.pointerDown(site);
+    expect(onBeforeNewTab).toHaveBeenCalledTimes(1);
+    expect(onBeforeNewTab).toHaveBeenCalledWith(expect.objectContaining({ id: "site", href: "/website-preview" }));
+    fireEvent.keyDown(site, { key: "Enter" });
+    expect(onBeforeNewTab).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(site, { key: " " });
+    expect(onBeforeNewTab).toHaveBeenCalledTimes(2);
+
+    onBeforeNewTab.mockClear();
+    const composer = screen.getByRole("link", { name: "Compositions" });
+    fireEvent.pointerDown(composer);
+    fireEvent.keyDown(composer, { key: "Enter" });
+    expect(onBeforeNewTab).not.toHaveBeenCalled();
+  });
+
   it("renders a count only where the summary supplied one", () => {
     renderRail({ counts: { content: 2, composer: 6 } });
     const content = screen.getByRole("link", { name: "Content" });

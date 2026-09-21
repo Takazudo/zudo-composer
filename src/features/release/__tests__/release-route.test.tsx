@@ -36,6 +36,25 @@ it("renders real static inspection and explanatory disabled release actions", as
   expect(request).not.toHaveBeenCalled(); controller.dispose();
 });
 
+it("gives the working-preview flush a head start on pointerdown and Enter, but never on the activated site link", () => {
+  const onBeforeNewTab = vi.fn();
+  render(<ReleaseRoute controller={stubController()} href={() => null} onBeforeNewTab={onBeforeNewTab} />);
+  const preview = screen.getByRole("link", { name: "Live working preview" });
+  const site = screen.getByRole("link", { name: "Activated local website (not deployed)" });
+
+  fireEvent.pointerDown(preview);
+  expect(onBeforeNewTab).toHaveBeenCalledTimes(1);
+  fireEvent.keyDown(preview, { key: "Enter" });
+  expect(onBeforeNewTab).toHaveBeenCalledTimes(2);
+  fireEvent.keyDown(preview, { key: " " });
+  expect(onBeforeNewTab).toHaveBeenCalledTimes(2);
+
+  onBeforeNewTab.mockClear();
+  fireEvent.pointerDown(site);
+  fireEvent.keyDown(site, { key: "Enter" });
+  expect(onBeforeNewTab).not.toHaveBeenCalled();
+});
+
 function stubController(overrides: Partial<ReleaseState> = {}): ReleaseController {
   const state: ReleaseState = {
     busy: false, phase: "inspect", message: "Inspect the working workspace before review.",
