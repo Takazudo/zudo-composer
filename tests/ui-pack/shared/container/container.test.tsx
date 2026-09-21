@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
-import { Container } from "../container";
+import { Container } from "../../../../packages/ui/src/shared/container/container";
 
 describe("Container", () => {
   it("renders a <div> with its children by default", () => {

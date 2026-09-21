@@ -14,8 +14,8 @@
  */
 import { render, screen, waitFor } from "@testing-library/preact";
 import { beforeAll, describe, expect, it } from "vitest";
-import { ProseMd } from "../prose-md";
-import { renderMarkdown } from "../markdown-runtime";
+import { ProseMd } from "../../../../packages/ui/src/content/prose-md/prose-md";
+import { renderMarkdown } from "../../../../packages/ui/src/content/prose-md/markdown-runtime";
 
 // First call pays the one-time wasm instantiation cost (~3MB artifact).
 const WASM_WARMUP_TIMEOUT_MS = 60_000;

@@ -19,5 +19,5 @@
     "jsxImportSource": "preact",
     "types": ["node"]
   },
-  "include": ["packages/ui/src"]
+  "include": ["packages/ui/src", "tests/ui-pack"]
 }

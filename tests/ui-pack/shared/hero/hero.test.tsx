@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
-import { Hero } from "../hero";
+import { Hero } from "../../../../packages/ui/src/shared/hero/hero";
 
 describe("Hero", () => {
   it("renders the heading as an <h1>", () => {

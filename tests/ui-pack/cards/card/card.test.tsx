@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
-import { Card } from "../card";
+import { Card } from "../../../../packages/ui/src/cards/card/card";
 
 describe("Card", () => {
   it("renders its children", () => {
