@@ -544,8 +544,10 @@ To update the pack:
 1. Change `packages/ui` and regenerate its pack with `corepack pnpm ui:pack`.
 2. Cut a package-only commit whose tree equals `HEAD:packages/ui`, parented on
    the previous package commit so `package/ui-v1` fast-forwards, push that ref,
-   and record the full SHA in `ui-handoff.json`, this README and `CLAUDE.md`.
-   Never publish it through a branch name, moving tag, sibling checkout,
+   and record the full SHA in `scripts/ui-pack-identity.mjs` — the source of
+   truth `handoff:boundary` asserts this README and `CLAUDE.md` against — plus
+   every other place `git grep <previous SHA>` finds it, which must then return
+   nothing. Never publish it through a branch name, moving tag, sibling checkout,
    `workspace:`, `file:`, `link:`, `path:`, copied source, or a pnpm Git
    subdirectory selector.
 3. Prove a clean `corepack pnpm install --frozen-lockfile`, then

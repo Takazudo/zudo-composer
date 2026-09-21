@@ -39,7 +39,8 @@ An update is a new package-only commit:
 1. Change `packages/ui` and regenerate the pack with `corepack pnpm ui:pack`.
 2. Create a commit whose tree equals `HEAD:packages/ui`, parented on the
    previous package commit so `package/ui-v1` fast-forwards, and push that ref.
-3. Record the full SHA in `ui-handoff.json`, `README.md` and `CLAUDE.md`, then
+3. Record the full SHA in `scripts/ui-pack-identity.mjs` and everywhere else
+   `git grep <previous SHA>` finds it, so that grep then returns nothing, and
    run `corepack pnpm ui:external-install -- --exact`.
 4. Run the full unit, artifact, and browser gates, including the 12-component
    runtime/CSS/focused-WASM proof.
