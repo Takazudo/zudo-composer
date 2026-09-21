@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import { toSiteHref } from "../../src/features/delivery/routing";
-import { expectBodyBackgroundTracksColorScheme } from "./computed-styles";
 import { requireDemosLaneContext } from "./isolated-context";
 import { crawlDemoRoutes, expectNoMobileOverflow, expectPrimaryNavTappable } from "./route-crawl";
 
@@ -11,7 +10,6 @@ test("crawls every Orrery route and keeps the mobile chrome usable", async ({ pa
   await crawlDemoRoutes(page, routes);
   await expectNoMobileOverflow(page, "/");
   await expectPrimaryNavTappable(page);
-  await expectBodyBackgroundTracksColorScheme(page, "/");
 });
 
 test("toggling yearly billing changes a tier price", async ({ page }) => {

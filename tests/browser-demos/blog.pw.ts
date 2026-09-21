@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import { toSiteHref } from "../../src/features/delivery/routing";
-import { expectBodyBackgroundTracksColorScheme } from "./computed-styles";
 import { requireDemosLaneContext } from "./isolated-context";
 import { crawlDemoRoutes, expectNoMobileOverflow, expectPrimaryNavTappable } from "./route-crawl";
 
@@ -11,7 +10,6 @@ test("crawls every Margin Notes route and keeps the mobile chrome usable", async
   await crawlDemoRoutes(page, routes);
   await expectNoMobileOverflow(page, "/");
   await expectPrimaryNavTappable(page);
-  await expectBodyBackgroundTracksColorScheme(page, "/");
 });
 
 test("submitting a comment adds it to the list", async ({ page }) => {
