@@ -33,10 +33,10 @@ CSS inputs.
 
 Stories live under `stories/<group>/<component>/`. Import components from
 `@zudo-composer/ui` and the sidecar's display metadata and defaults through its
-`@zudo-composer/ui/src/*` export. Export `Defaults` first, then one named story
-for every enum value in the sidecar fields. Titles and descriptions come from
-the sidecar; categories use the capitalised pack folder: `Shared`, `Cards`,
-`Content`, or `Media`. Previews compile the installed Composer CSS and
+`@zudo-composer/ui/src/*.composer.tsx` export. Export `Defaults` first, then one
+named story for every enum value in the sidecar fields. Titles and descriptions
+come from the sidecar; categories use the capitalised pack folder: `Shared`,
+`Cards`, `Content`, or `Media`. Previews compile the installed Composer CSS and
 scan both the stories and the installed pack's source for Tailwind classes.
 The catalog document uses `src/styles/global.css` to assemble the public
 Composer, zudo-doc, zudo-sg, and zdtp stylesheets; keep both package safelist

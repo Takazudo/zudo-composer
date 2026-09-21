@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
-import { SectionHeading } from "../section-heading";
+import { SectionHeading } from "../../../../packages/ui/src/shared/section-heading/section-heading";
 
 describe("SectionHeading", () => {
   it("renders the heading as an <h2> by default", () => {

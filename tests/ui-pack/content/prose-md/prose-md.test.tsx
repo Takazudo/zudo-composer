@@ -8,11 +8,11 @@
  */
 import { render, screen, waitFor } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ProseMd } from "../prose-md";
-import { renderMarkdown } from "../markdown-runtime";
-import type { MarkdownRenderResult } from "../markdown-runtime";
+import { ProseMd } from "../../../../packages/ui/src/content/prose-md/prose-md";
+import { renderMarkdown } from "../../../../packages/ui/src/content/prose-md/markdown-runtime";
+import type { MarkdownRenderResult } from "../../../../packages/ui/src/content/prose-md/markdown-runtime";
 
-vi.mock("../markdown-runtime", () => ({
+vi.mock("../../../../packages/ui/src/content/prose-md/markdown-runtime", () => ({
   renderMarkdown: vi.fn(),
 }));
 

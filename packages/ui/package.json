@@ -14,7 +14,8 @@
     "./styles/composer.css": "./styles/composer.css",
     "./styles/tokens.css": "./styles/tokens.css",
     "./styles/colors.css": "./styles/colors.css",
-    "./src/*": "./src/*"
+    "./src/*.composer.tsx": "./src/*.composer.tsx",
+    "./src/content/prose-md/markdown-runtime": "./src/content/prose-md/markdown-runtime.ts"
   },
   "dependencies": {
     "@takazudo/zfb-md-wasm": "2.10.1",

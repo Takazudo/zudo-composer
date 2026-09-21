@@ -44,7 +44,7 @@ Each workspace package has a separate boundary or demonstrates one:
 | `styleguide/sample/` (`sample-sg`) | Standalone zudo-sg catalog for the 12 `@zudo-composer/ui` components used by the Sample host. It owns its own lockfile and is not a root workspace member; its host build and stories stay outside the tool. |
 | `cms/` | The repository's own dogfood host data. The tracked root currently retains the demo Assets catalog; other runtime CMS trees are host or generated state. |
 | `templates/host/` | The canonical host starter copied by `zudo-composer init`; it contains host-owned components, styles, authored SiteProject source, an image manifest/source asset, and starter tests. |
-| `tests/` | Browser acceptance, document-readiness, isolated-host, and runtime-failure test support. |
+| `tests/` | Browser acceptance, document-readiness, isolated-host, and runtime-failure test support, plus `tests/ui-pack/`: the `@zudo-composer/ui` unit tests, which live here rather than inside the package so the package directory equals what it publishes. |
 | `styles/` | The root dogfood host's `base.css`, which imports provider CSS and declares the host stylesheet entry. |
 | `bin/` | The published `zudo-composer` executable entry point. |
 | `type-tests/` | Compile-time fixtures for the public SiteProject exports. |

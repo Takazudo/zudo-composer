@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
-import { Stack } from "../stack";
+import { Stack } from "../../../../packages/ui/src/shared/stack/stack";
 
 describe("Stack", () => {
   it("renders a <div> with its children, stacked vertically by default", () => {

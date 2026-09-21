@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
-import { Callout, Note } from "../callout";
+import { Callout, Note } from "../../../../packages/ui/src/cards/callout/callout";
 
 describe("Callout", () => {
   it("renders its children with role=note", () => {

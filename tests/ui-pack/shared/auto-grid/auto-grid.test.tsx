@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
-import { AutoGrid } from "../auto-grid";
+import { AutoGrid } from "../../../../packages/ui/src/shared/auto-grid/auto-grid";
 
 describe("AutoGrid", () => {
   it("renders a <div> with its children by default", () => {

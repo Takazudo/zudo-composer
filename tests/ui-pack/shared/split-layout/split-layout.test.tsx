@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
-import { SplitLayout } from "../split-layout";
+import { SplitLayout } from "../../../../packages/ui/src/shared/split-layout/split-layout";
 
 describe("SplitLayout", () => {
   it("renders left and right content", () => {

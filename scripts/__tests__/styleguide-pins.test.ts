@@ -25,7 +25,7 @@ describe("sample styleguide dependency pins", () => {
   it("matches both standalone dependencies to the root handoff specs", () => {
     expect(checkStyleguidePins({ root: repositoryRoot })).toEqual({
       pins: [
-        "@zudo-composer/ui=git+https://github.com/Takazudo/zudo-composer.git#2ea02290e5a09e4995a1c1c3f5f1f08a59a94b7d",
+        "@zudo-composer/ui=git+https://github.com/Takazudo/zudo-composer.git#e33643e672554a321f34aed6f035a42ce90f5354",
         "@zudo-composer/component-contract=git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
       ],
       fallbacks: [],

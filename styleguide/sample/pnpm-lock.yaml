@@ -30,8 +30,8 @@ importers:
         specifier: git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0
         version: https://codeload.github.com/Takazudo/zudo-composer/tar.gz/c0b452da075b66757c60bd0d721a47062d4354d0
       '@zudo-composer/ui':
-        specifier: git+https://github.com/Takazudo/zudo-composer.git#2ea02290e5a09e4995a1c1c3f5f1f08a59a94b7d
-        version: https://codeload.github.com/Takazudo/zudo-composer/tar.gz/2ea02290e5a09e4995a1c1c3f5f1f08a59a94b7d(@zudo-composer/component-contract@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/c0b452da075b66757c60bd0d721a47062d4354d0)(preact@10.29.8)(tailwindcss@4.3.3)
+        specifier: git+https://github.com/Takazudo/zudo-composer.git#e33643e672554a321f34aed6f035a42ce90f5354
+        version: https://codeload.github.com/Takazudo/zudo-composer/tar.gz/e33643e672554a321f34aed6f035a42ce90f5354(@zudo-composer/component-contract@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/c0b452da075b66757c60bd0d721a47062d4354d0)(preact@10.29.8)(tailwindcss@4.3.3)
       diff:
         specifier: ^8.0.4
         version: 8.0.4
@@ -632,8 +632,8 @@ packages:
     version: 1.0.0
     engines: {node: ^22.13.0 || >=24.0.0}
 
-  '@zudo-composer/ui@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/2ea02290e5a09e4995a1c1c3f5f1f08a59a94b7d':
-    resolution: {gitHosted: true, integrity: sha512-MYxm0tGPxeT8V7LgKXCTZlrwHxI1SUYy7mKA52uUBAxntusljkbL587vrtpbM6e1hZSsS1oBbafyBoFfuP34lA==, tarball: https://codeload.github.com/Takazudo/zudo-composer/tar.gz/2ea02290e5a09e4995a1c1c3f5f1f08a59a94b7d}
+  '@zudo-composer/ui@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/e33643e672554a321f34aed6f035a42ce90f5354':
+    resolution: {gitHosted: true, integrity: sha512-uWCflA2knCgtjzkUtRzSgsvl3G69Yv7U4NCgnUHUOSCO32epandWGJXIZJkgazUUbhFjPkvtmZrrmxdy6H/+Wg==, tarball: https://codeload.github.com/Takazudo/zudo-composer/tar.gz/e33643e672554a321f34aed6f035a42ce90f5354}
     version: 0.1.0
     peerDependencies:
       '@zudo-composer/component-contract': ^1.0.0
@@ -1555,7 +1555,7 @@ snapshots:
 
   '@zudo-composer/component-contract@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/c0b452da075b66757c60bd0d721a47062d4354d0': {}
 
-  '@zudo-composer/ui@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/2ea02290e5a09e4995a1c1c3f5f1f08a59a94b7d(@zudo-composer/component-contract@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/c0b452da075b66757c60bd0d721a47062d4354d0)(preact@10.29.8)(tailwindcss@4.3.3)':
+  '@zudo-composer/ui@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/e33643e672554a321f34aed6f035a42ce90f5354(@zudo-composer/component-contract@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/c0b452da075b66757c60bd0d721a47062d4354d0)(preact@10.29.8)(tailwindcss@4.3.3)':
     dependencies:
       '@takazudo/zfb-md-wasm': 2.10.1
       '@zudo-composer/component-contract': https://codeload.github.com/Takazudo/zudo-composer/tar.gz/c0b452da075b66757c60bd0d721a47062d4354d0
