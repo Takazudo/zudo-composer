@@ -65,7 +65,7 @@ export default defineConfig({
           // blow past 20s while passing in isolation. Same reason the server project raises
           // its own timeout; the cost here is real I/O, not a hung promise.
           testTimeout: 60_000,
-          exclude: [...configDefaults.exclude, '**/worktrees/**', 'templates/**', 'server/**', 'packages/image-editor/src/__tests__/**/*.test.ts', 'packages/demo-*/**', 'packages/ui/**', 'styleguide/**'],
+          exclude: [...configDefaults.exclude, '**/worktrees/**', 'templates/**', 'server/**', 'packages/image-editor/src/__tests__/**/*.test.ts', 'packages/demo-*/**', 'packages/ui/**', 'styleguide/**', 'tests/ui-pack/**'],
         },
       },
       {
@@ -84,15 +84,20 @@ export default defineConfig({
         },
       },
       {
-        // packages/ui is a standalone handoff package (#686 C0): its own
-        // colocated tests, no `src/test` setup and none of the app project's
-        // `virtual:*` aliases, which a pack must never depend on.
+        // packages/ui is a standalone handoff package (#686 C0): the package
+        // directory itself must equal what it publishes, so its tests live
+        // outside it under tests/ui-pack/ (#799) rather than colocated, with
+        // none of the app project's `virtual:*` aliases, which a pack must
+        // never depend on.
         oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } },
         test: {
           name: 'ui',
-          include: ['packages/ui/src/**/*.test.{ts,tsx}'],
+          // Must stay as wide as the app project's `tests/ui-pack/**` exclusion, or a
+          // ui-pack spec in any other supported extension would be claimed by neither
+          // project and silently never run.
+          include: ['tests/ui-pack/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
           environment: 'jsdom',
-          setupFiles: ['./packages/ui/src/test/setup.ts'],
+          setupFiles: ['./tests/ui-pack/setup.ts'],
           exclude: [...configDefaults.exclude, '**/worktrees/**'],
         },
       },

@@ -159,8 +159,14 @@ export interface RailProps {
   onBrowse?: () => void;
   onNavigate?: (href: string) => void;
   hideToggle?: boolean;
+  /**
+   * Called on `pointerdown` and Enter activation of a `newTab` item, before
+   * the browser opens it. A head start for the caller's own async work (a
+   * session flush) — never a gate on the navigation itself.
+   */
+  onBeforeNewTab?: (item: RailItem) => void;
 }
-export function Rail({ path, collapsed, onToggleCollapsed, counts = {}, models = [], modelError, pins = [], onPinsChange, onBrowse, onNavigate, hideToggle, hostedDemo = false }: RailProps): JSX.Element {
+export function Rail({ path, collapsed, onToggleCollapsed, counts = {}, models = [], modelError, pins = [], onPinsChange, onBrowse, onNavigate, hideToggle, hostedDemo = false, onBeforeNewTab }: RailProps): JSX.Element {
   const current = currentRailItem(path);
   const navId = `cms-rail-nav-${useId()}`;
   const [contentOpen, setContentOpen] = useState(true);
@@ -201,6 +207,8 @@ export function Rail({ path, collapsed, onToggleCollapsed, counts = {}, models =
                       class="cms-rail__item"
                       href={item.href}
                       onClick={(event) => navigate(event, item.href)}
+                      onPointerDown={item.newTab ? () => onBeforeNewTab?.(item) : undefined}
+                      onKeyDown={item.newTab ? (event) => { if (event.key === "Enter") onBeforeNewTab?.(item); } : undefined}
                       target={item.newTab ? "_blank" : undefined}
                       rel={item.newTab ? "noopener" : undefined}
                       data-route={item.id}

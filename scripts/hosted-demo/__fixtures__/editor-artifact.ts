@@ -52,6 +52,7 @@ export async function writeEditorArtifact(options: { minimalAssets?: boolean; so
     ["index.html", Buffer.from("<!doctype html><html><body>live</body></html>\n")],
     ["hosted-demo-assets-worker.js", Buffer.from("export default {};\n")],
     ["assets/preview-entry-test.js", Buffer.from("export const preview = true;\n")],
+    ["assets/visitor-entry-test.js", Buffer.from("export const visitor = true;\n")],
     [HOSTED_DEMO_HEADERS, Buffer.from(hostedAssetHeaders(assets.files.map(({ fileName, source }) => ({ path: fileName, byteLength: source.byteLength }))))],
     [DEMO_EDITOR_SEED, Buffer.from(JSON.stringify(seed))],
     ...assets.files.map(({ fileName, source }): [string, Buffer] => [fileName, Buffer.from(source)]),

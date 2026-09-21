@@ -12,7 +12,7 @@ if (isSitePath(pathname) || isWorkingPreviewPath(pathname)) {
   // A visitor document: the host's stylesheet and the visitor sheet only, and
   // no theme bootstrap, so the preview matches what a visitor is served.
   const [{ mountSitePreview }, { activatedDeliverySource }, { activeComponentProvider }, { createProductionProviderIntegration }] = await Promise.all([
-    import("./features/delivery/preview-entry"),
+    import("./features/delivery/visitor-entry"),
     import("./features/delivery/activated-source"),
     import("./features/composer/active-pack"),
     import("./app/provider-integration"),

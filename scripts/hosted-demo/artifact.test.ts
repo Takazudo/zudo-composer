@@ -168,4 +168,12 @@ describe("forbidden-marker regressions", () => {
     await value.saveManifest();
     await expect(verifyDemoEditorArtifact({ directory: value.root })).rejects.toThrow("preview graph leaked host marker");
   });
+
+  it("fails an artifact that only carries the composer preview chunk, not the visitor entry", async () => {
+    const value = await fixture();
+    await rm(join(value.root, "assets/visitor-entry-test.js"));
+    delete value.manifest.files["assets/visitor-entry-test.js"];
+    await value.saveManifest();
+    await expect(verifyDemoEditorArtifact({ directory: value.root })).rejects.toThrow("must include a visitor-entry-* chunk");
+  });
 });

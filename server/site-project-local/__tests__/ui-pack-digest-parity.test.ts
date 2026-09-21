@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,19 @@ async function modes(root: string): Promise<Map<string, number>> {
   const visit = async (path: string): Promise<void> => {
     found.set(relative(root, path) || ".", (await stat(path)).mode & 0o777);
     for (const entry of await readdir(path, { withFileTypes: true })) if (entry.isDirectory()) await visit(join(path, entry.name)); else found.set(relative(root, join(path, entry.name)), (await stat(join(path, entry.name))).mode & 0o777);
+  };
+  await visit(root);
+  return found;
+}
+
+async function files(root: string): Promise<string[]> {
+  const found: string[] = [];
+  const visit = async (path: string): Promise<void> => {
+    for (const entry of await readdir(path, { withFileTypes: true })) {
+      const full = join(path, entry.name);
+      if (entry.isDirectory()) await visit(full);
+      else found.push(relative(root, full));
+    }
   };
   await visit(root);
   return found;
@@ -47,5 +60,26 @@ describe("@zudo-composer/ui digest parity", () => {
     expect(await installedPackageDigest(copy)).toBe(await installedPackageDigest(packed));
     await writeFile(join(copy, "tsconfig.tsbuildinfo"), "{}\n");
     expect(await installedPackageDigest(copy)).not.toBe(await installedPackageDigest(packed));
+  });
+
+  it("publishes no test files or test-tooling imports", async () => {
+    const packedFiles = await files(packed);
+    const testPaths = packedFiles.filter(
+      (path) =>
+        path.split("/").includes("__tests__") ||
+        path.split("/").includes("test") ||
+        /\.test\.tsx?$/.test(path),
+    );
+    expect(testPaths).toEqual([]);
+
+    const textFiles = packedFiles.filter((path) => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(path));
+    const filesImportingTestTooling: string[] = [];
+    for (const path of textFiles) {
+      const content = await readFile(join(packed, path), "utf8");
+      if (/from\s+["']vitest["']|require\(["']vitest["']\)|from\s+["']@testing-library\//.test(content)) {
+        filesImportingTestTooling.push(path);
+      }
+    }
+    expect(filesImportingTestTooling).toEqual([]);
   });
 });

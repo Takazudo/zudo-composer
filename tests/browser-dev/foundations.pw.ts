@@ -28,6 +28,23 @@ import {
   ROUTES,
 } from "./foundations-probe";
 import { watchRuntimeFailures } from "../runtime-failures";
+import { ensureDevWorkspace } from "./workspace-bootstrap";
+
+/**
+ * Mirrors `PREVIEW_PENDING_COPY` in `src/features/delivery/preview-strip.tsx`
+ * as a literal rather than an import: that module pulls in
+ * `preview-strip.css?inline`, which only Vite (not the Playwright test
+ * runner) knows how to resolve.
+ */
+const PREVIEW_STRIP_PENDING_COPY = "The editor has unsaved changes — this preview updates when they are saved.";
+
+/**
+ * Generous enough for a working-preview capture plus the trailing-edge
+ * re-capture debounce (`RECAPTURE_DEBOUNCE_MS`, `site-delivery.tsx`) to
+ * settle. The design (#797) is deliberately eventually consistent, so this
+ * spec polls rather than asserting synchronously.
+ */
+const RECAPTURE_READY_TIMEOUT_MS = 60_000;
 
 const RAIL_FIXTURE = "Foundations rail geometry";
 
@@ -237,4 +254,84 @@ test("the sitemap canvas geometry stays fixed after opening", async ({ page }) =
   await page.waitForTimeout(1200);
   expect(await sample()).toEqual(first);
   expect(failures).toEqual([]);
+});
+
+/**
+ * Confirm sub-issue (epic #794, issue #798): a fresh edit reaches a newly
+ * opened working preview. `/website-preview` has no activated release on this
+ * lane, so it always resolves to the `working-preview` source (#797) this
+ * epic instruments.
+ *
+ * The rail's "Website preview" item is a plain `target="_blank"` anchor
+ * (#795) — nothing here calls `window.open` itself, so a real pop-up-blocked
+ * click would leave this spec with no `page` event at all rather than a
+ * failing assertion. Taking the new tab from the browser context's `page`
+ * event, instead of `window.open`ing it directly, is what proves that.
+ */
+test("a fresh edit in the editor reaches a newly opened working preview", async ({ page, context }) => {
+  test.setTimeout(120_000);
+  const failures = watchRuntimeFailures(page);
+  // This lane's workspace is a freshly created empty directory tree, so the
+  // bootstrapped sample content's asset references resolve to nothing and the
+  // editor logs a 404 per missing upload. Recording the URLs rather than
+  // exempting the console lines blindly keeps the guard tight: the assertion
+  // below fails if a 404 ever comes from anything but a missing upload.
+  const notFound: string[] = [];
+  page.on("response", (response) => { if (response.status() === 404) notFound.push(new URL(response.url()).pathname); });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await ensureDevWorkspace(page);
+  await page.goto("/composer?provider=files&composition=home-page");
+  await expect(page.getByRole("textbox", { name: "Composition name", exact: true })).toHaveValue("Home page");
+  const structure = page.locator(".cms-editor__region--nav");
+  await structure.getByRole("treeitem", { name: /^Hero(?:\s|$)/ }).click();
+  const heading = page.getByRole("textbox", { name: "Heading" });
+  await expect(heading).toHaveValue("Clear ideas, carefully shaped");
+  const edited = `Preview flush check ${Date.now()}`;
+  await heading.fill(edited);
+  await expect(heading).toHaveValue(edited);
+
+  // No wait between the edit and the click: this is the race the epic
+  // closes. A click on the anchor blurs the field (landing its debounced
+  // commit) and fires the anchor's own pointerdown flush before the browser
+  // opens the tab — but the design does not depend on either winning that
+  // race, since the working preview re-captures on the committed write
+  // whenever it lands.
+  const previewLink = page.getByRole("link", { name: "Website preview — choose preview source", exact: true });
+  const newPagePromise = context.waitForEvent("page");
+  await previewLink.click();
+  const preview = await newPagePromise;
+  const previewFailures = watchRuntimeFailures(preview);
+  await preview.waitForLoadState("domcontentloaded");
+
+  await expect(preview.locator("main#main-content, main[data-site-delivery-state]").first()).toBeVisible({ timeout: RECAPTURE_READY_TIMEOUT_MS });
+
+  // Leaving the pending state is the end-to-end proof this lane can give, and
+  // it exercises the whole chain: the anchor's head-start flush commits the
+  // in-field edit, the editor broadcasts the transition (#796), and this
+  // document's reader clears the indicator (#797). Eventually consistent by
+  // design, hence the poll rather than a synchronous read.
+  //
+  // Asserting the edited TEXT is deliberately not done here: `run-dev-browser.mjs`
+  // gives every dev-lane spec a freshly created empty workspace, so
+  // `ZUDO_ASSETS_STORE_ROOT` is an empty directory and the bootstrapped sample
+  // content's asset references cannot resolve — the working preview reports
+  // "Site build blocked: Required Assets asset is missing." and can never
+  // render the composition on this lane, before or after this epic. The
+  // sibling spec above encodes the same limitation by asserting
+  // `main#main-content` only when the strip's source picker exists. Tracked in
+  // the issue linked from #798; proving the rendered text needs a lane whose
+  // workspace can actually build a site.
+  const status = preview.locator(".zc-preview-strip").getByRole("status");
+  await expect(status).not.toHaveText(PREVIEW_STRIP_PENDING_COPY, { timeout: RECAPTURE_READY_TIMEOUT_MS });
+
+  await preview.close();
+
+  // Every 404 must be a missing uploaded asset — the known consequence of this
+  // lane's empty asset store, tracked in the issue linked from #798. Anything
+  // else is a real failure and still fails here.
+  const unexpected = notFound.filter((pathname) => !pathname.startsWith("/uploaded-assets/"));
+  expect(unexpected, `unexpected 404s: ${unexpected.join(", ")}`).toEqual([]);
+  const NOT_FOUND_CONSOLE = "console: Failed to load resource: the server responded with a status of 404 (Not Found)";
+  expect(failures.filter((failure) => failure !== NOT_FOUND_CONSOLE)).toEqual([]);
+  expect(previewFailures.filter((failure) => failure !== NOT_FOUND_CONSOLE)).toEqual([]);
 });

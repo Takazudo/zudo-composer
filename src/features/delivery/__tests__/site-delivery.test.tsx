@@ -7,7 +7,8 @@ import { activeComponentProvider } from "../../composer/active-pack";
 import { loadSampleSiteProject } from "../../../test/site-project-fixture";
 import { captureSampleAssetLock, SAMPLE_ASSETS_STORE_ROOT } from "../../../test/sample-asset-lock";
 import { serializeSiteProject } from "../../../site-project/model/canonical";
-import { SiteDelivery, loadWorkingPreviewSnapshot } from "../site-delivery";
+import { RECAPTURE_DEBOUNCE_MS, SiteDelivery, loadWorkingPreviewSnapshot } from "../site-delivery";
+import { PREVIEW_REFRESHING_COPY } from "../preview-strip";
 import { compileSiteProject } from "../../../site-project/compiler";
 import type { ActivatedDeliveryArtifact, ActivatedDeliverySource, DeliverySourceContract } from "../source";
 import { validateActivatedDeliveryArtifact } from "../source";
@@ -62,6 +63,65 @@ const activated = (value: ActivatedDeliverySource = ready()): DeliverySourceCont
 /** The strip is isolated in a shadow root, so Testing Library queries cannot reach it. */
 const strip = (): ShadowRoot => document.querySelector(".zc-preview-strip")!.shadowRoot!;
 const stripPicker = (): HTMLSelectElement | null => strip().querySelector<HTMLSelectElement>("select");
+
+/** A promise plus the handle that settles it, for holding one capture open mid-flight. */
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((settle) => { resolve = settle; });
+  return { promise, resolve };
+}
+/** Long enough that any trailing re-capture the component scheduled has started. */
+const pastDebounce = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, RECAPTURE_DEBOUNCE_MS + 500));
+const SLOW = { timeout: 30_000 };
+
+/**
+ * A real working-preview integration with its change channel and its capture
+ * under the test's control: `emitChange` stands in for a committed write in
+ * the editor tab, and a held capture reproduces a write landing while one is
+ * still in flight.
+ */
+async function recapturable(project = sample()) {
+  const { provider } = await providerFixture({ seedFrom: SAMPLE_ASSETS_STORE_ROOT });
+  const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), assetProvider: provider, createProviders: (await host()).createProviders });
+  // Seeding writes real files; readiness is a precondition here, not the assertion.
+  await base.initialization.initialize();
+  const listeners = new Set<() => void>();
+  const order: string[] = [];
+  let captures = 0;
+  let held: { entered: ReturnType<typeof deferred>; released: ReturnType<typeof deferred> } | undefined;
+  let failure: string | undefined;
+  const providers = { ...base,
+    subscribeChanges: (listener: () => void) => { order.push("subscribe"); listeners.add(listener); return () => { listeners.delete(listener); }; },
+    captureWorkspace: async () => {
+      captures += 1;
+      order.push("capture");
+      if (failure !== undefined) { const message = failure; failure = undefined; return { status: "unavailable" as const, source: "test", error: new Error(message) }; }
+      // Read the workspace first, then hold: the gate must open a window
+      // *after* the snapshot is taken, which is where a late flush lands.
+      const outcome = await base.captureWorkspace();
+      if (held) { const gate = held; held = undefined; gate.entered.resolve(); await gate.released.promise; }
+      return outcome;
+    },
+  } as unknown as ProductionProviderIntegration;
+  return {
+    providers,
+    emitChange: () => { for (const listener of listeners) listener(); },
+    captures: () => captures,
+    order: () => order,
+    subscribers: () => listeners.size,
+    failNextCapture: (message: string) => { failure = message; },
+    holdNextCapture: () => {
+      const gate = { entered: deferred(), released: deferred() };
+      held = gate;
+      return { entered: gate.entered.promise, release: gate.released.resolve };
+    },
+    async editAboutHeading(heading: string) {
+      const loaded = await base.contentProvider.store.getEntry("about-entry");
+      if (loaded.status !== "loaded") throw new Error("seed entry unavailable");
+      await base.contentProvider.store.putEntry({ ...loaded.record, updatedAt: "2026-08-31T01:00:00.000Z", values: { ...loaded.record.values, "about-heading-field": heading } });
+    },
+  };
+}
 
 describe("SiteDelivery", () => {
   it("compiles the fixture into one self-contained artifact with all seven deterministic visitor routes", () => {
@@ -235,6 +295,104 @@ describe("SiteDelivery", () => {
     expect(await screen.findByText(/still offline/)).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
     await waitFor(() => expect(document.activeElement).toBe(document.querySelector("[data-site-delivery-state]")));
+  });
+
+  it("re-captures a committed write and swaps the new content in without a remount", async () => {
+    const fx = await recapturable();
+    render(<SiteDelivery source={working(fx.providers)} pathname="/website-preview/about" />);
+    expect(await screen.findByRole("heading", { name: "A studio built around useful clarity" }, SLOW)).toBeInTheDocument();
+    await fx.editAboutHeading("Re-captured delivery heading");
+    fx.emitChange();
+    expect(await screen.findByRole("heading", { name: "Re-captured delivery heading" }, SLOW)).toBeInTheDocument();
+  });
+
+  it("does not lose a write that commits between capture start and capture end", async () => {
+    const fx = await recapturable();
+    const gate = fx.holdNextCapture();
+    render(<SiteDelivery source={working(fx.providers)} pathname="/website-preview/about" />);
+    // The subscription is what hears a write landing inside the capture
+    // window, so it has to exist before the capture that opens that window.
+    await waitFor(() => expect(fx.order()).toEqual(["subscribe", "capture"]));
+    // The first capture has read the workspace and has not resolved yet: this
+    // is the window the subscription must already have been listening through.
+    await gate.entered;
+    fx.emitChange();
+    gate.release();
+    expect(await screen.findByRole("heading", { name: "A studio built around useful clarity" }, SLOW)).toBeInTheDocument();
+    await waitFor(() => expect(fx.captures()).toBe(2), SLOW);
+    await pastDebounce();
+    expect(fx.captures()).toBe(2);
+  });
+
+  it("coalesces overlapping changes into exactly one trailing re-capture", async () => {
+    const fx = await recapturable();
+    render(<SiteDelivery source={working(fx.providers)} pathname="/website-preview/about" />);
+    await screen.findByRole("heading", { name: "A studio built around useful clarity" }, SLOW);
+    await waitFor(() => expect(fx.captures()).toBe(1));
+    fx.emitChange(); fx.emitChange(); fx.emitChange();
+    await waitFor(() => expect(fx.captures()).toBe(2), SLOW);
+    await pastDebounce();
+    expect(fx.captures()).toBe(2);
+  });
+
+  it("keeps the rendered page up while re-capturing and reports the update in the strip", async () => {
+    const fx = await recapturable();
+    render(<SiteDelivery source={working(fx.providers)} pathname="/website-preview/about" />);
+    await screen.findByRole("heading", { name: "A studio built around useful clarity" }, SLOW);
+    const gate = fx.holdNextCapture();
+    fx.emitChange();
+    await gate.entered;
+    expect(screen.getByRole("heading", { name: "A studio built around useful clarity" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Loading site" })).toBeNull();
+    await waitFor(() => expect(strip().textContent).toContain(PREVIEW_REFRESHING_COPY));
+    gate.release();
+    await waitFor(() => expect(strip().textContent).not.toContain(PREVIEW_REFRESHING_COPY), SLOW);
+  });
+
+  it("keeps the last good render when a re-capture fails and recovers on the next one", async () => {
+    const fx = await recapturable();
+    render(<SiteDelivery source={working(fx.providers)} pathname="/website-preview/about" />);
+    await screen.findByRole("heading", { name: "A studio built around useful clarity" }, SLOW);
+    fx.failNextCapture("Workspace provider offline");
+    fx.emitChange();
+    await waitFor(() => expect(strip().textContent).toContain("The live working draft could not be loaded. Workspace provider offline"), SLOW);
+    expect(screen.getByRole("heading", { name: "A studio built around useful clarity" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Site unavailable" })).toBeNull();
+    await fx.editAboutHeading("Recovered delivery heading");
+    fx.emitChange();
+    expect(await screen.findByRole("heading", { name: "Recovered delivery heading" }, SLOW)).toBeInTheDocument();
+    expect(strip().textContent).not.toContain("Workspace provider offline");
+  });
+
+  it("keeps a render recovered by Retry when a later re-capture fails", async () => {
+    const fx = await recapturable();
+    fx.failNextCapture("First capture offline");
+    render(<SiteDelivery source={working(fx.providers)} pathname="/website-preview/about" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Retry loading site" }, SLOW));
+    expect(await screen.findByRole("heading", { name: "A studio built around useful clarity" }, SLOW)).toBeInTheDocument();
+    fx.failNextCapture("Second capture offline");
+    fx.emitChange();
+    await waitFor(() => expect(strip().textContent).toContain("Second capture offline"), SLOW);
+    expect(screen.getByRole("heading", { name: "A studio built around useful clarity" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Site unavailable" })).toBeNull();
+  });
+
+  it("cancels a capture in flight on unmount and stops listening for changes", async () => {
+    const fx = await recapturable();
+    const gate = fx.holdNextCapture();
+    const { container } = render(<SiteDelivery source={working(fx.providers)} pathname="/website-preview/about" />);
+    await gate.entered;
+    expect(fx.subscribers()).toBe(1);
+    const reported = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    cleanup();
+    gate.release();
+    fx.emitChange(); fx.emitChange();
+    await pastDebounce();
+    expect(fx.captures()).toBe(1);
+    expect(fx.subscribers()).toBe(0);
+    expect(container).toBeEmptyDOMElement();
+    expect(reported).not.toHaveBeenCalled();
+    reported.mockRestore();
   });
 
   it("reads a new provider snapshot after remount and shows a persisted Content edit", async () => {

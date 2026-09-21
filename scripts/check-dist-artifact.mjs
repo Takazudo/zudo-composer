@@ -98,11 +98,16 @@ for (const forbidden of [
   assert.ok(!jsText.includes(forbidden), `client artifact leaked file-provider server capability: ${forbidden}`);
 }
 
-// Two entries carry this name: the Composer canvas preview and the delivery
-// visitor document. Both are preview documents, so the marker scan below walks
-// every one of their graphs rather than picking a single chunk.
-const previewJs = jsFiles.filter((path) => basename(path).startsWith("preview-entry-"));
-assert.ok(previewJs.length > 0, "at least one preview entry chunk must be emitted");
+// Two entries are preview documents: the Composer canvas preview
+// (`preview-entry-*`) and the delivery visitor document (`visitor-entry-*`).
+// The marker scan below walks every one of both graphs rather than picking a
+// single chunk, so each prefix is required to have matched on its own —
+// otherwise a renamed or dropped entry could silently stop being covered.
+const previewEntryPrefixes = ["preview-entry-", "visitor-entry-"];
+const previewJs = jsFiles.filter((path) => previewEntryPrefixes.some((prefix) => basename(path).startsWith(prefix)));
+for (const prefix of previewEntryPrefixes) {
+  assert.ok(jsFiles.some((path) => basename(path).startsWith(prefix)), `at least one ${prefix}* chunk must be emitted`);
+}
 /** @type {Set<string>} */
 const previewGraph = new Set();
 /** @param {string} path @returns {void} */
@@ -186,7 +191,7 @@ for (const [size, value] of Object.entries({ xs: ".75rem", sm: "1rem", md: "1.25
 // The pack's CSS has exactly ONE importer now — the host's `styles` entry,
 // reached through `virtual:zudo-composer-host-styles` — so it is emitted once
 // and shared by both entries rather than copied into each. Both still receive
-// it — `main.tsx` imports it before `./style.css`, `preview-entry.ts` before its
+// it — `main.tsx` imports it before `./style.css`, `visitor-entry.ts` before its
 // own sheet — and Vite hoists the link for that shared chunk into the entry.
 const canonicalCss = cssFiles.filter((path) => readFileSync(path, "utf8").includes(".hi-kw{"));
 assert.equal(canonicalCss.length, 1, "canonical pack CSS must be emitted exactly once");

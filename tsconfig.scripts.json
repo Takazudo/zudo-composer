@@ -19,6 +19,8 @@
     "scripts/cms-fixture-readers.ts",
     "scripts/boundary-source.mjs",
     "scripts/check-class-names.mjs",
+    "scripts/check-sg-computed-styles.mjs",
+    "scripts/computed-body-background.mjs",
     "scripts/check-contract-boundary.mjs",
     "scripts/check-dist-artifact.mjs",
     "scripts/check-preview-isolation.mjs",

@@ -57,23 +57,10 @@ export default tseslint.config(
       'src/hosted-demo/main.tsx',
       'src/features/composer/active-pack.ts',
       'src/features/composer/preview/preview-entry.ts',
-      'src/features/delivery/preview-entry.ts',
+      'src/features/delivery/visitor-entry.ts',
     ],
     rules: {
       '@typescript-eslint/triple-slash-reference': 'off',
-    },
-  },
-  {
-    // packages/ui is byte-ported from the pinned @zudo-sg/ui tree (#686 C0),
-    // which lints under eslint-plugin-react (not installed here). Its
-    // `prose-md.tsx` carries an `eslint-disable-next-line react/no-danger`
-    // comment; without a rule of that name registered, ESLint errors on the
-    // directive itself ("Definition for rule ... was not found") rather than
-    // just leaving it unused. This no-op stand-in lets the byte-identical
-    // file lint clean without editing its content.
-    files: ['packages/ui/src/**/*.tsx'],
-    plugins: {
-      react: { rules: { 'no-danger': { create: () => ({}) } } },
     },
   },
 );
