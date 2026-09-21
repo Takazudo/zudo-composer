@@ -53,7 +53,7 @@ function deployment(versionId: string, id: string, createdOn: string) {
   return { id, created_on: createdOn, versions: [{ version_id: versionId, percentage: 100 }] };
 }
 
-function fakeRunner(options: { uploadOutput?: string; failAfterAccept?: boolean } = {}) {
+function fakeRunner(options: { uploadOutput?: string; failAfterAccept?: boolean; failRollback?: boolean } = {}) {
   let activeVersion = OLD_VERSION;
   const calls: string[][] = [];
   const runner = async (_file: string, args: string[]) => {
@@ -76,6 +76,7 @@ function fakeRunner(options: { uploadOutput?: string; failAfterAccept?: boolean 
       return { stdout: "", stderr: "" };
     }
     if (args[0] === "rollback") {
+      if (options.failRollback) throw new Error("rollback rejected by Cloudflare");
       activeVersion = args[1]!;
       return { stdout: "", stderr: "" };
     }
@@ -483,18 +484,40 @@ describe("hosted demo deployment guard", () => {
     expect(fake.calls.some((args) => args[0] === "deploy" && !args.includes("--dry-run"))).toBe(false);
   });
 
-  it("keeps an existing partial Worker on the ordinary path and adds the cleanup runbook to live failures", async () => {
+  // An ordinary rollout proved a prior active deployment in preflight, so it
+  // was never in a partial-first-deploy state. #715's "delete the partial
+  // Worker" next step came from this boilerplate, not from observed evidence.
+  it("omits the partial-Worker runbook when an ordinary rollback succeeds", async () => {
     const fake = fakeRunner();
-    await expect(deployHostedDemo({
+    const failure = await deployHostedDemo({
       target: TARGETS.shop,
       environment: ENVIRONMENT,
       runner: fake.runner,
       artifactVerifier: siteArtifactVerifier,
       liveVerifier: async () => { throw new Error("custom domain is unbound"); },
       retryDelaysMs: [],
-    })).rejects.toThrow(/Runbook: delete the partial Worker, then rerun target shop/);
+    }).catch((error: unknown) => error as Error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toMatch(new RegExp(`custom domain is unbound; automatic rollback to ${OLD_VERSION} completed and was verified$`));
+    expect(failure.message).not.toMatch(/partial Worker/);
     expect(fake.calls.some((args) => args[0] === "versions" && args[1] === "upload")).toBe(true);
     expect(fake.calls.some((args) => args[0] === "deploy" && !args.includes("--dry-run"))).toBe(false);
+  });
+
+  it("names the manual version restore, not Worker deletion, when the rollback itself fails", async () => {
+    const fake = fakeRunner({ failRollback: true });
+    const failure = await deployHostedDemo({
+      target: TARGETS.shop,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      liveVerifier: async () => { throw new Error("live route mismatch"); },
+      retryDelaysMs: [],
+    }).catch((error: unknown) => error as Error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toMatch(/automatic rollback failed or was refused: rollback rejected by Cloudflare/);
+    expect(failure.message).toMatch(new RegExp(`Runbook: check which version zc-demo-shop is serving and restore ${OLD_VERSION} manually before rerunning target shop\\.$`));
+    expect(failure.message).not.toMatch(/partial Worker/);
   });
 
   it("rejects a shop artifact directory that differs from its Wrangler config", async () => {
