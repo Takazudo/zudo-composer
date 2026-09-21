@@ -42,6 +42,10 @@ An update is a new package-only commit:
 3. Record the full SHA in `scripts/ui-pack-identity.mjs` and everywhere else
    `git grep <previous SHA>` finds it, so that grep then returns nothing, and
    run `corepack pnpm ui:external-install -- --exact`.
+   `styleguide/sample/pnpm-lock.yaml` is one of those places and the one that is
+   never hand-edited: its entry carries a tarball `integrity` hash that changes
+   with the SHA, so update `styleguide/sample/package.json` and let
+   `corepack pnpm -C styleguide/sample install` rewrite the lockfile.
 4. Run the full unit, artifact, and browser gates, including the 12-component
    runtime/CSS/focused-WASM proof.
 

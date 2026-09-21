@@ -92,7 +92,10 @@ export default defineConfig({
         oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } },
         test: {
           name: 'ui',
-          include: ['tests/ui-pack/**/*.test.{ts,tsx}'],
+          // Must stay as wide as the app project's `tests/ui-pack/**` exclusion, or a
+          // ui-pack spec in any other supported extension would be claimed by neither
+          // project and silently never run.
+          include: ['tests/ui-pack/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
           environment: 'jsdom',
           setupFiles: ['./tests/ui-pack/setup.ts'],
           exclude: [...configDefaults.exclude, '**/worktrees/**'],

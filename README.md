@@ -547,7 +547,11 @@ To update the pack:
    and record the full SHA in `scripts/ui-pack-identity.mjs` — the source of
    truth `handoff:boundary` asserts this README and `CLAUDE.md` against — plus
    every other place `git grep <previous SHA>` finds it, which must then return
-   nothing. Never publish it through a branch name, moving tag, sibling checkout,
+   nothing. `styleguide/sample/pnpm-lock.yaml` is one of those places and is the
+   one that is never hand-edited: its entry carries a tarball `integrity` hash
+   that changes with the SHA, so update `styleguide/sample/package.json` and let
+   `corepack pnpm -C styleguide/sample install` rewrite the lockfile.
+   Never publish it through a branch name, moving tag, sibling checkout,
    `workspace:`, `file:`, `link:`, `path:`, copied source, or a pnpm Git
    subdirectory selector.
 3. Prove a clean `corepack pnpm install --frozen-lockfile`, then
