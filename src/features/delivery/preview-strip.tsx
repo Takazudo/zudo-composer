@@ -12,7 +12,16 @@ export interface PreviewStripProps {
   hostedDemo: boolean;
   /** Only a ready build has routes to pick from; every other state omits them. */
   routes?: readonly SiteCompiledRoute[];
+  /** Working preview only: an editor tab is holding unsaved writes. */
+  pending?: boolean;
+  /** Working preview only: a re-capture of the working draft is in flight. */
+  refreshing?: boolean;
+  /** Working preview only: why the last re-capture failed, with the previous render still on screen. */
+  error?: string;
 }
+
+export const PREVIEW_PENDING_COPY = "The editor has unsaved changes — this preview updates when they are saved.";
+export const PREVIEW_REFRESHING_COPY = "Updating…";
 
 /**
  * A picked page is an in-place navigation, never a reload: the hosted demo's
@@ -29,11 +38,16 @@ function pickRoute(href: string): void {
   window.scrollTo(0, 0);
 }
 
-function StripContent({ label, basePath, pathname, hostedDemo, routes }: PreviewStripProps): JSX.Element {
+function StripContent({ label, basePath, pathname, hostedDemo, routes, pending, refreshing, error }: PreviewStripProps): JSX.Element {
   // Match through the compiler's own pathname so an equivalent address such as
   // `/site/` still selects the route it resolves to.
   const routePath = deliveryRoutePathname(pathname, basePath);
   const current = routes?.find((route) => route.pathname === routePath);
+  // Only the working preview reports freshness, and its region stays mounted
+  // through every message: a live region added along with its text is not
+  // reliably announced. An activated release passes none of these and gets no
+  // region at all.
+  const reportsFreshness = pending !== undefined || refreshing !== undefined || error !== undefined;
   return <>
     <span class="zc-preview-strip__label">{label}</span>
     {routes && <label class="zc-preview-strip__picker">
@@ -46,6 +60,9 @@ function StripContent({ label, basePath, pathname, hostedDemo, routes }: Preview
         {routes.map((route) => <option key={route.pathname} value={toDeliveryHref(route.pathname, basePath)}>{route.displayTitle}</option>)}
       </select>
     </label>}
+    {reportsFreshness && <p class="zc-preview-strip__status" role="status" aria-live="polite">
+      {error ?? (refreshing ? PREVIEW_REFRESHING_COPY : pending ? PREVIEW_PENDING_COPY : "")}
+    </p>}
     {hostedDemo && <p class="zc-preview-strip__notice"><strong>{HOSTED_DEMO_NOTICE_TITLE}</strong> {HOSTED_DEMO_NOTICE_COPY}</p>}
   </>;
 }

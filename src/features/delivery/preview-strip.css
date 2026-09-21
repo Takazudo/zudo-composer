@@ -57,6 +57,13 @@
   appearance: auto;
 }
 
+/* The freshness region stays mounted through every message, including none at
+   all, so it claims no width of its own when the preview is up to date. */
+.zc-preview-strip__status {
+  margin: 0;
+  color: var(--zc-strip-muted);
+}
+
 .zc-preview-strip__notice {
   flex: 1 1 16rem;
   margin: 0;
