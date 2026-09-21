@@ -9,6 +9,7 @@ export default defineConfig(
     siteUrl: "https://zudo-composer.zudolab.dev",
     base: "/",
     githubUrl: "https://github.com/Takazudo/zudo-composer",
+    home: { wide: true },
     llmsTxt: true,
     sidebarResizer: true,
     sidebarToggle: true,
