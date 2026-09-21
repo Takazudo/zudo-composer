@@ -23,6 +23,7 @@ import {
   railCounts,
   readRailState,
   type RailCounts,
+  type RailItem,
   type RailState,
 } from "./rail";
 import { Topbar } from "./topbar";
@@ -88,6 +89,8 @@ export interface ShellProps {
   themeSnapshot: ThemeSnapshot;
   /** Feeds the rail's count slots. Omitted where no provider graph is mounted. */
   summary?: WorkspaceSummary;
+  /** Forwarded to the rail's `newTab` items; see `Rail`'s prop of the same name. */
+  onBeforeNewTab?: (item: RailItem) => void;
 }
 
 /**
@@ -98,7 +101,7 @@ export interface ShellProps {
  * SiteDelivery before the Shell mounts — which is why the rail's Site entry is
  * an external link that can never be the current route.
  */
-export function Shell({ children, path, themeController, themeSnapshot, summary, hostedDemo = false }: ShellProps): JSX.Element {
+export function Shell({ children, path, themeController, themeSnapshot, summary, hostedDemo = false, onBeforeNewTab }: ShellProps): JSX.Element {
   const workspace = useWorkspace();
   const integration = workspace?.integration;
   const store = useMemo(createChromeStore, []);
@@ -218,6 +221,7 @@ export function Shell({ children, path, themeController, themeSnapshot, summary,
     path, counts: rail, models, modelError, pins,
     onPinsChange: (value: typeof pins) => { setPins(value); writePins(value); },
     onToggleCollapsed: toggleRail,
+    onBeforeNewTab,
     ...(workspace ? { onNavigate: (href: string) => { void workspace.navigate(href).then((ok) => { if (ok) { close(false); requestAnimationFrame(() => document.getElementById("workspace-destination")?.focus()); } }); } } : {}),
   };
   const temporaryRail = <Rail {...railProps} collapsed={false} hideToggle />;

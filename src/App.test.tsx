@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { createProductionProviderIntegration } from './app/provider-integration';
+import type { WorkspaceSaveRegistry } from './app/workspace-sessions';
 
 const hosts: TemporaryWorkspaceProviders[] = [];
 
@@ -130,6 +131,73 @@ describe('App', () => {
     await screen.findByRole('heading', { name: GREETING });
     expect(screen.queryByRole('button', { name: 'Create project' })).not.toBeInTheDocument();
     expect(await integration.getCurrentSiteProject()).toMatchObject({ status: 'ready', project: { name: 'Activated' } });
+  });
+
+  // Issue #795: the rail's "Website preview" link gives the session flush a
+  // best-effort head start on activation, before the browser opens the new
+  // tab. A ready integration with an overridable `sessions` stands in for a
+  // real save registry so `hasPending` and `flush` can be driven directly.
+  async function readyIntegrationWithSessions(hasPending: boolean, flush: WorkspaceSaveRegistry['flush']) {
+    const { host } = await emptyHost();
+    const project = createEmptySiteProject('Preview flush');
+    const base = createProductionProviderIntegration({ project, sourceRevision: await computeSiteProjectRevision(project), createProviders: host.createProviders, assetProvider: null });
+    return { ...base, sessions: { ...base.sessions, hasPending, flush } };
+  }
+
+  it('gives the preview flush a head start on pointerdown and Enter, exactly once per activation, only while sessions are pending', async () => {
+    const flush = vi.fn(async () => ({ status: 'ready', generation: 0 }) as const);
+    const integration = await readyIntegrationWithSessions(true, flush);
+    render(<App integration={integration} />);
+    await screen.findByRole('heading', { name: GREETING });
+    const preview = screen.getByRole('link', { name: 'Website preview — choose preview source' });
+
+    fireEvent.pointerDown(preview);
+    expect(flush).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(preview, { key: 'Enter' });
+    expect(flush).toHaveBeenCalledTimes(2);
+    // A non-Enter key never counts as activation.
+    fireEvent.keyDown(preview, { key: ' ' });
+    expect(flush).toHaveBeenCalledTimes(2);
+
+    flush.mockClear();
+    integration.sessions.hasPending = false;
+    fireEvent.pointerDown(preview);
+    fireEvent.keyDown(preview, { key: 'Enter' });
+    expect(flush).not.toHaveBeenCalled();
+  });
+
+  it('treats a second flush fired while the first is still in flight as harmless', async () => {
+    let resolveFirst!: () => void;
+    let calls = 0;
+    const flush = vi.fn(async () => {
+      calls++;
+      if (calls === 1) await new Promise<void>((resolve) => { resolveFirst = resolve; });
+      return { status: 'ready', generation: 0 } as const;
+    });
+    const integration = await readyIntegrationWithSessions(true, flush);
+    render(<App integration={integration} />);
+    await screen.findByRole('heading', { name: GREETING });
+    const preview = screen.getByRole('link', { name: 'Website preview — choose preview source' });
+
+    fireEvent.pointerDown(preview); // first flush now in flight, unresolved
+    expect(flush).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(preview, { key: 'Enter' }); // overlapping flush while the first is still pending
+    expect(flush).toHaveBeenCalledTimes(2);
+    resolveFirst();
+    // Neither call throws or leaves an unhandled rejection; the test failing
+    // to reach this point (or vitest reporting an unhandled rejection) would
+    // be the harness catching a regression here.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  it('never lets a rejected flush escape as an unhandled rejection', async () => {
+    const flush = vi.fn(async () => { throw new Error('save failed'); });
+    const integration = await readyIntegrationWithSessions(true, flush);
+    render(<App integration={integration} />);
+    await screen.findByRole('heading', { name: GREETING });
+    fireEvent.pointerDown(screen.getByRole('link', { name: 'Website preview — choose preview source' }));
+    expect(flush).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
   // Content is an editor rather than a library page since issue #169, so each
