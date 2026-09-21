@@ -56,6 +56,17 @@ describe("host and tool CSS ownership", () => {
     }
     const visitorCss = readFileSync(resolve("src/features/delivery/visitor.css"), "utf8");
     expect(visitorCss).not.toMatch(/var\(--(?:color|text|spacing|z-index|sg-)/);
+    // The visitor document follows the OS via the host pack's `color-scheme:
+    // light dark` (#790), so every colour literal here must be a light-dark()
+    // pair rather than a fixed hex — `currentColor` and `inherit` stay as-is.
+    const hexOutsideLightDark = visitorCss.replace(/light-dark\([^)]*\)/g, "");
+    expect(hexOutsideLightDark).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    // An element-level `color-scheme` here would override a host's pinned
+    // `data-theme`; the document inherits the pack's declaration instead.
+    expect(visitorCss).not.toContain("color-scheme");
+    // The dark arm above is dead without this declaration in the pack sheet.
+    const packColors = readFileSync(resolve("packages/ui/styles/colors.css"), "utf8");
+    expect(packColors).toContain("color-scheme: light dark;");
 
     // The shell entry decides the document before it imports any sheet, so the
     // visitor branch never reaches the editor's chrome or its theme bootstrap.
