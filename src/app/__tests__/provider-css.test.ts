@@ -47,7 +47,7 @@ describe("host and tool CSS ownership", () => {
     // host's stylesheet plus the tool's visitor sheet, exactly what the static
     // build ships, so a preview cannot drift from the published site.
     const editorSheets = ["base.css", "style.css", "app-tokens.css", "shell.css"];
-    for (const entry of ["src/features/delivery/preview-entry.ts", "server/site-build/client/main.tsx"]) {
+    for (const entry of ["src/features/delivery/visitor-entry.ts", "server/site-build/client/main.tsx"]) {
       const source = readFileSync(resolve(entry), "utf8");
       const hostStyles = source.indexOf('import "virtual:zudo-composer-host-styles";');
       expect(hostStyles).toBeGreaterThan(-1);
@@ -72,7 +72,7 @@ describe("host and tool CSS ownership", () => {
     // visitor branch never reaches the editor's chrome or its theme bootstrap.
     const main = readFileSync(resolve("src/main.tsx"), "utf8");
     const visitorBranch = main.slice(main.indexOf("if (isSitePath(pathname)"), main.indexOf("const initialTheme"));
-    expect(visitorBranch).toContain('import("./features/delivery/preview-entry")');
+    expect(visitorBranch).toContain('import("./features/delivery/visitor-entry")');
     for (const editorSheet of [...editorSheets, "bootstrapTheme"]) expect(visitorBranch).not.toContain(editorSheet);
   });
 

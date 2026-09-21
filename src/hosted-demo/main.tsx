@@ -21,7 +21,7 @@ if (isSitePath(pathname) || isWorkingPreviewPath(pathname)) {
   // preview document strips it before the exchange — falls back to the
   // bundled public sample.
   const [{ mountSitePreview }, { createHostedDemoIntegration }] = await Promise.all([
-    import("../features/delivery/preview-entry"),
+    import("../features/delivery/visitor-entry"),
     import("./bootstrap"),
   ]);
   const { integration } = await createHostedDemoIntegration().catch(failed);
