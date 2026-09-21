@@ -292,11 +292,15 @@ export async function verifyDemoEditorArtifact({ directory, expectedSourceRevisi
   // bundle may contain host-only labels, so inspect only each preview entry's
   // static graph for those markers.
   const javascript = found.filter((path) => path.startsWith("assets/") && [".js", ".mjs"].includes(extname(path)));
-  // Two entries carry this name: the Composer canvas preview and the delivery
-  // visitor document. Both are preview documents, so every one of their graphs
-  // is walked rather than picking a single chunk.
-  const previewEntries = javascript.filter((path) => basename(path).startsWith("preview-entry-"));
-  assert.ok(previewEntries.length > 0, "Hosted artifact must include a preview entry chunk");
+  // Two entries are preview documents: the Composer canvas preview
+  // (`preview-entry-*`) and the delivery visitor document (`visitor-entry-*`).
+  // Every one of both graphs is walked rather than picking a single chunk, so
+  // each prefix is required to have matched on its own.
+  const previewEntryPrefixes = ["preview-entry-", "visitor-entry-"];
+  const previewEntries = javascript.filter((path) => previewEntryPrefixes.some((prefix) => basename(path).startsWith(prefix)));
+  for (const prefix of previewEntryPrefixes) {
+    assert.ok(javascript.some((path) => basename(path).startsWith(prefix)), `Hosted artifact must include a ${prefix}* chunk`);
+  }
   const previewGraph = new Set();
   /** @param {string} path */
   function collectPreviewGraph(path) {

@@ -18,7 +18,7 @@ export const ENTRY_GRAPH_FILE_NAME = "entry-graph.json";
 // this plugin and by `scripts/check-preview-isolation.mjs`, which keys its
 // entry-specific rules off these same strings.
 export const COMPOSER_PREVIEW_ENTRY_MODULE = "src/features/composer/preview/preview-entry.ts";
-export const SITE_PREVIEW_ENTRY_MODULE = "src/features/delivery/preview-entry.ts";
+export const SITE_PREVIEW_ENTRY_MODULE = "src/features/delivery/visitor-entry.ts";
 export const STATIC_SITE_ENTRY_MODULE = "server/site-build/client/main.tsx";
 
 /**
