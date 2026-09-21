@@ -18,6 +18,26 @@ import { readdir } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { chromium } from "@playwright/test";
 import { readBodyBackgroundProbe } from "./computed-body-background.mjs";
+
+/**
+ * The catalog pins its own theme: its inline bootstrap runs `applyTheme`,
+ * which sets `data-theme` AND an inline `style.colorScheme` on `<html>` from
+ * the stored choice (falling back to `prefers-color-scheme` read once, at
+ * load). An inline `color-scheme` beats the media query, so `emulateMedia`
+ * alone cannot switch this document — it reported identical light and dark
+ * backgrounds. Drive the host's own pin instead, exactly as #786 anticipated
+ * for a theme-pinning host.
+ * @param {import("@playwright/test").Page} page
+ * @param {"light" | "dark"} colorScheme
+ */
+async function pinCatalogTheme(page, colorScheme) {
+  /* eslint-disable no-undef -- this callback runs inside the browser via page.evaluate, not in this Node process */
+  await page.evaluate((mode) => {
+    document.documentElement.setAttribute("data-theme", mode);
+    document.documentElement.style.colorScheme = mode;
+  }, colorScheme);
+  /* eslint-enable no-undef */
+}
 import { routesForFiles } from "./hosted-demo/doc-site-artifact.mjs";
 import { startHostedDemoStaticServer } from "./hosted-demo/static-server.mjs";
 
@@ -66,12 +86,13 @@ try {
     /** @type {Record<"light" | "dark", string>} */
     const bodyColors = { light: "", dark: "" };
     for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+      await pinCatalogTheme(page, colorScheme);
       const { body, probe } = await readBodyBackgroundProbe(page, colorScheme);
       assert.equal(body, probe, `${flowRoute}: body background does not equal the --color-bg token in ${colorScheme} (#734).`);
       assert.notEqual(body, TRANSPARENT, `${flowRoute}: body background is transparent in ${colorScheme} (#734).`);
       bodyColors[colorScheme] = body;
     }
-    assert.notEqual(bodyColors.light, bodyColors.dark, `${flowRoute}: light and dark body backgrounds are identical — the dark color scheme never engaged.`);
+    assert.notEqual(bodyColors.light, bodyColors.dark, `${flowRoute}: light and dark body backgrounds are identical — the dark color scheme never engaged despite pinning data-theme.`);
 
     console.log(`Styleguide computed styles verified on ${flowRoute}: "${flowSelector}" margin-top ${marginTop}; body background ${bodyColors.light} light / ${bodyColors.dark} dark.`);
   } finally {
