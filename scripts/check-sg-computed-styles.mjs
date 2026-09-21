@@ -18,6 +18,8 @@ import { readdir } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { chromium } from "@playwright/test";
 import { readBodyBackgroundProbe } from "./computed-body-background.mjs";
+import { routesForFiles } from "./hosted-demo/doc-site-artifact.mjs";
+import { startHostedDemoStaticServer } from "./hosted-demo/static-server.mjs";
 
 /**
  * The catalog pins its own theme: its inline bootstrap runs `applyTheme`,
@@ -38,8 +40,6 @@ async function pinCatalogTheme(page, colorScheme) {
   }, colorScheme);
   /* eslint-enable no-undef */
 }
-import { routesForFiles } from "./hosted-demo/doc-site-artifact.mjs";
-import { startHostedDemoStaticServer } from "./hosted-demo/static-server.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const distDirectory = join(root, "styleguide/sample/dist");

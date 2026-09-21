@@ -15,18 +15,24 @@ const TRANSPARENT = "rgba(0, 0, 0, 0)";
  * message.
  */
 async function expectBodyTracksToken(page: Page, route: string, colorScheme: "light" | "dark"): Promise<string> {
+  // Captured by the passing iteration itself: re-probing after the poll would
+  // return a value nothing checked, from the very settling window the poll
+  // exists to absorb.
+  let settled = "";
   await expect
     .poll(
       async () => {
         const { body, probe } = await readBodyBackgroundProbe(page, colorScheme);
-        if (body === TRANSPARENT) return `body and the --color-bg probe are both transparent (${body})`;
+        if (body === TRANSPARENT && probe === TRANSPARENT) return `body and the --color-bg probe are both transparent (${body})`;
+        if (body === TRANSPARENT) return `body is transparent while the --color-bg probe reads ${probe} — the token is live and body is not using it`;
         if (body !== probe) return `body ${body} does not equal the --color-bg probe ${probe}`;
+        settled = body;
         return "ok";
       },
       { message: `${route} body background should compute from --color-bg in ${colorScheme} (#734)`, timeout: 15_000 },
     )
     .toBe("ok");
-  return (await readBodyBackgroundProbe(page, colorScheme)).body;
+  return settled;
 }
 
 /**
