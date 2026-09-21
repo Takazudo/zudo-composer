@@ -14,7 +14,7 @@ function ReleaseCard({ title, children }: { title: string; children: ComponentCh
   return <section class="cms-release__card"><h2 class="cms-release__card-title">{title}</h2>{children}</section>;
 }
 
-export function ReleaseRoute({ controller, href, hostedDemo = false }: { hostedDemo?: boolean; controller: ReleaseController; href(change: ReleaseChange | ReleaseCheck): string | null }) {
+export function ReleaseRoute({ controller, href, hostedDemo = false, onBeforeNewTab }: { hostedDemo?: boolean; controller: ReleaseController; href(change: ReleaseChange | ReleaseCheck): string | null; /** Called on `pointerdown` and Enter activation of the live working-preview link, before the browser opens it — a head start for a session flush, never a gate. */ onBeforeNewTab?: () => void }) {
   const [state, setState] = useState(controller.getSnapshot);
   useEffect(() => { setState(controller.getSnapshot()); return controller.subscribe(() => setState(controller.getSnapshot())); }, [controller]);
   useEffect(() => { if (!controller.getSnapshot().working) void controller.inspect(); }, [controller]);
@@ -37,7 +37,7 @@ export function ReleaseRoute({ controller, href, hostedDemo = false }: { hostedD
         <div><dt>Activated local build:</dt><dd><Identity value={state.active?.buildId ?? "None inspected"} /></dd></div>
         <div><dt>Exact staged build:</dt><dd><Identity value={state.staged?.buildId ?? "None"} /></dd></div>
       </dl>
-      <nav class="cms-release__links" aria-label="Release destinations"><a href="/website-preview" target="_blank" rel="noopener">Live working preview</a><a href="/site" target="_blank" rel="noopener">{hostedDemo ? "Demo website preview" : "Activated local website (not deployed)"}</a></nav>
+      <nav class="cms-release__links" aria-label="Release destinations"><a href="/website-preview" target="_blank" rel="noopener" onPointerDown={() => onBeforeNewTab?.()} onKeyDown={(event) => { if (event.key === "Enter") onBeforeNewTab?.(); }}>Live working preview</a><a href="/site" target="_blank" rel="noopener">{hostedDemo ? "Demo website preview" : "Activated local website (not deployed)"}</a></nav>
       <div class="cms-release__tools">
       <Button disabled={blocked} onClick={() => void controller.inspect()}>Inspect current state</Button>
       <Button disabled={!state.working || blocked} onClick={exportWorking}>Export working JSON</Button>

@@ -72,6 +72,16 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     if (outcome.status === "failed") throw new Error(outcome.failures.map((failure) => `${failure.feature} (${failure.providerId}${failure.recordId ? ` / ${failure.recordId}` : ""}): ${failure.error.message}`).join("; "));
     if (outcome.status === "changed") throw new Error("Edits changed while saving. Finish the edit and try navigation again.");
   };
+  // A best-effort head start for the working-preview tab's own session flush
+  // (issue #795): fired on pointerdown/Enter of the anchor, before the browser
+  // opens it. Fire-and-forget only — a synchronous flush is impossible, and
+  // awaiting it before `window.open` loses the user gesture and gets
+  // pop-up-blocked (ruled out in #731). The registry keeps its own failure
+  // state, so a rejection here has nothing useful to do but stop.
+  const flushOnPreviewActivation = () => {
+    if (!providers.sessions.hasPending) return;
+    void providers.sessions.flush().catch(() => undefined);
+  };
   const navigate = async (href: string, replace = false): Promise<boolean> => {
     if (replacing.current || traversal.current) return false;
     const ticket = ++navigationTicket.current;
@@ -234,7 +244,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
   else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
   else if (path === "/assets") content = <AssetRouteContent provider={providers.assetProvider} contentServices={assetContentServices} usageHref={({ valuePath, ...location }) => formatIntent({ route: "content", ...location, ...(valuePath.length ? { valuePath } : {}) })} />;
   else if (path === "/") content = <Dashboard summary={workspaceSummary} hostedDemo={hostedDemo} />;
-  else if (path === "/review") content = <ReleaseRoute hostedDemo={hostedDemo} controller={release} href={(item) => {
+  else if (path === "/review") content = <ReleaseRoute hostedDemo={hostedDemo} controller={release} onBeforeNewTab={flushOnPreviewActivation} href={(item) => {
     if (!("domain" in item)) return item.path.includes("assets") ? "/assets" : item.path.includes("sitemap") ? "/sitemapper" : item.path.includes("mapping") ? "/mapping" : item.path.includes("content") ? "/content" : null;
     if (item.domain === "content-entry") { const entry = release.getSnapshot().working?.providers.content.find(({ id }) => id === item.providerId)?.entries.find(({ id }) => id === item.recordId); return entry ? formatIntent({ route: "content", providerId: item.providerId, modelId: entry.modelId, entryId: entry.id }) : "/content"; }
     if (item.domain === "content-model") return formatIntent({ route: "content", providerId: item.providerId, modelId: item.recordId });
@@ -242,5 +252,5 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     return item.domain === "assets" ? "/assets" : item.domain === "mappings" ? "/mapping" : item.domain === "sitemaps" ? "/sitemapper" : null;
   }} />;
   else content = <NotFound />;
-  return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell hostedDemo={hostedDemo} path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary}>{hostedDemo && <HostedDemoNotice includeExport />}<div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;
+  return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell hostedDemo={hostedDemo} path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary} onBeforeNewTab={flushOnPreviewActivation}>{hostedDemo && <HostedDemoNotice includeExport />}<div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;
 }
