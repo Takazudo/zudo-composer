@@ -230,7 +230,7 @@ describe('App', () => {
   it('keeps every preview document on its own isolated entry graph', () => {
     const main = readFileSync(resolve('src/main.tsx'), 'utf8');
     const visitorBranch = main.indexOf('isSitePath(pathname) || isWorkingPreviewPath(pathname)');
-    const visitorImport = main.indexOf('import("./features/delivery/preview-entry")');
+    const visitorImport = main.indexOf('import("./features/delivery/visitor-entry")');
     const bootstrap = main.indexOf('bootstrapTheme()');
     const previewBranch = main.indexOf('pathname === "/composer/preview"');
     const previewImport = main.indexOf('import("./features/composer/preview/preview-entry")');

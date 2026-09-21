@@ -164,7 +164,7 @@ describe("checkEntryGraphFile", () => {
       schemaVersion: 1,
       entries: {
         [SITE_PREVIEW_ENTRY_MODULE]: {
-          moduleIds: ["src/features/delivery/preview-entry.ts", "src/features/delivery/visitor.css"],
+          moduleIds: ["src/features/delivery/visitor-entry.ts", "src/features/delivery/visitor.css"],
           cssFileNames: ["assets/entry.css"],
         },
       },
@@ -184,7 +184,7 @@ describe("checkEntryGraphFile", () => {
       schemaVersion: 1,
       entries: {
         [SITE_PREVIEW_ENTRY_MODULE]: {
-          moduleIds: ["src/features/delivery/preview-entry.ts", "src/base.css"],
+          moduleIds: ["src/features/delivery/visitor-entry.ts", "src/base.css"],
           cssFileNames: ["assets/entry.css"],
         },
       },

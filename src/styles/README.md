@@ -35,7 +35,7 @@ chrome is unchanged; never point one of them at a pack token, since a themeset
 is interchangeable and untrusted by design.
 
 **Visitor documents.** `/site` and `/website-preview` open as their own
-document, mounted by `features/delivery/preview-entry.ts`, which imports the
+document, mounted by `features/delivery/visitor-entry.ts`, which imports the
 host's styles entry plus `features/delivery/visitor.css` — the same shape the
 published static site ships, and none of the editor chrome sheet. The only
 tool-owned UI inside that document is the preview strip
