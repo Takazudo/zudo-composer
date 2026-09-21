@@ -105,7 +105,6 @@ export function ProseMd({ markdown, class: cls }: ProseMdProps) {
         class={cx("zc-prose-md", cls)}
         // `current.html` is sanitized by the markdown runtime (DOMPurify,
         // prose allowlist) as its last step — see markdown-runtime.ts's header.
-        // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{ __html: current.html }}
       />
     );
