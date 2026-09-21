@@ -13,7 +13,7 @@ import {
   createMarkdownRuntime,
   renderMarkdown,
   type MarkdownModule,
-} from "../markdown-runtime";
+} from "../../../../packages/ui/src/content/prose-md/markdown-runtime";
 
 // First call pays the one-time focused render-wasm instantiation cost (~2MB).
 const WASM_WARMUP_TIMEOUT_MS = 60_000;

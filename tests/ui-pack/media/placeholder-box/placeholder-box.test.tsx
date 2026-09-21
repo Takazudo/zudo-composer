@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
-import { PlaceholderBox } from "../placeholder-box";
+import { PlaceholderBox } from "../../../../packages/ui/src/media/placeholder-box/placeholder-box";
 
 describe("PlaceholderBox", () => {
   it("renders the label as its accessible name", () => {

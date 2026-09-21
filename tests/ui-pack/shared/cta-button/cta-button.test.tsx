@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
-import { CtaButton } from "../cta-button";
+import { CtaButton } from "../../../../packages/ui/src/shared/cta-button/cta-button";
 
 describe("CtaButton", () => {
   it("renders an <a> with the given href", () => {
