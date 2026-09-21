@@ -304,6 +304,18 @@ verifies that version is active, and leaves the workflow failed so the incident
 is visible. If production no longer serves the owned version, the workflow
 refuses rollback and fails red for manual intervention.
 
+Activation confirms only Cloudflare's control plane, so a PoP can still answer
+the next request from its cache of the previous build. The live checker
+therefore retries on a bounded budget of about two minutes, and each attempt
+adds its own ordinal to the cache-busting query string so no attempt can be
+served the cached response of an earlier one. The comparison never relaxes: a
+document that never becomes the built artifact fails at the end of the budget.
+
+A rollout that reached the rollback path had a captured active deployment, so
+it was never a partial-first-deploy state and its Worker must not be deleted.
+When the rollback itself fails or is refused, the failure names the captured
+version to restore manually with the commands below.
+
 For manual recovery, inspect the deployment notes and use the captured version
 ID with Wrangler and that target's own Worker name and config file, for
 example:

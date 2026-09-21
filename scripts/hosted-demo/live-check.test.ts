@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { verifyLiveDeployment, verifyLiveWithRetries, verifyNavigationHtml } from "./live-check.mjs";
+import { LIVE_CHECK_TIMEOUT_MS, LIVE_RETRY_DELAYS_MS, verifyLiveDeployment, verifyLiveWithRetries, verifyNavigationHtml } from "./live-check.mjs";
 import { HOSTED_DEMO_HEADERS, expectedMime, sha256, verifyDemoEditorArtifact } from "./artifact.mjs";
 import { TARGET_KEYS, TARGETS } from "./targets.mjs";
 import { createDocSiteManifest, DOC_SITE_MANIFEST } from "./doc-site-artifact.mjs";
@@ -251,6 +251,79 @@ describe("hosted demo live verification", () => {
     });
     expect(proof.routes).toHaveLength(fixture.manifest.routes.length);
     expect(retries).toEqual([{ attempt: 1, delayMs: 25 }]);
+  });
+
+  // #715: the edge answered `cf-cache-status HIT` with an earlier build's
+  // bytes. Retrying the identical URL could only return that same cached
+  // response, so the ordinal has to reach the query string.
+  it("gives every retry a URL no earlier attempt requested", async () => {
+    const fixture = await writeArtifact();
+    fixtures.push(fixture.root);
+    const stale = Buffer.from(fixture.files.get("index.html")!.toString().replace("</body>", "<!--previous build--></body>"));
+    const mock = mockFetch(fixture);
+    const requested: URL[] = [];
+    await verifyLiveWithRetries({
+      target: TARGETS["sample-editor"],
+      baseUrl: "https://demo.example.test",
+      artifactDirectory: fixture.root,
+      expectedSourceRevision: SOURCE_REVISION,
+      fetchImpl: async (input, init) => {
+        const url = new URL(input.toString());
+        requested.push(url);
+        const attempt = Number(url.searchParams.get("hosted-demo-attempt") ?? "1");
+        if (attempt < 3 && fixture.manifest.routes.includes(url.pathname)) return response(stale, "text/html");
+        return mock.fetchImpl(input, init);
+      },
+      retryDelaysMs: [0, 0, 0],
+      delayImpl: async () => {},
+    });
+    // Not "/": that URL is also index.html's asset URL, so one attempt fetches
+    // it twice and the per-attempt count would not read as the retry count.
+    const route = fixture.manifest.routes.find((path: string) => path !== "/")!;
+    const routeUrls = requested.filter((url) => url.pathname === route).map((url) => url.toString());
+    expect(routeUrls).toHaveLength(3);
+    expect(new Set(routeUrls).size).toBe(3);
+    expect(routeUrls.map((url) => new URL(url).searchParams.get("hosted-demo-attempt"))).toEqual([null, "2", "3"]);
+    expect(requested.every((url) => url.searchParams.get("hosted-demo-revision") === SOURCE_REVISION)).toBe(true);
+  });
+
+  // The default policy, not a test-supplied one: the whole point of the fix is
+  // that the shipped budget outlasts the post-activation propagation window.
+  it("absorbs with its default budget a propagation window the former ~7s policy expired on", async () => {
+    expect(LIVE_RETRY_DELAYS_MS.reduce((total, delay) => total + delay, 0)).toBeGreaterThan(60_000);
+    expect(LIVE_CHECK_TIMEOUT_MS).toBeGreaterThan(LIVE_RETRY_DELAYS_MS.reduce((total, delay) => total + delay, 0));
+    const fixture = await writeArtifact();
+    fixtures.push(fixture.root);
+    const stale = Buffer.from(fixture.files.get("index.html")!.toString().replace("</body>", "<!--previous build--></body>"));
+    const mock = mockFetch(fixture);
+    const freshFromAttempt = LIVE_RETRY_DELAYS_MS.length;
+    const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = new URL(input.toString());
+      const attempt = Number(url.searchParams.get("hosted-demo-attempt") ?? "1");
+      if (attempt < freshFromAttempt && fixture.manifest.routes.includes(url.pathname)) return response(stale, "text/html");
+      return mock.fetchImpl(input, init);
+    };
+    const options = {
+      target: TARGETS["sample-editor"],
+      baseUrl: "https://demo.example.test",
+      artifactDirectory: fixture.root,
+      expectedSourceRevision: SOURCE_REVISION,
+      fetchImpl,
+      delayImpl: async () => {},
+    };
+    const proof = await verifyLiveWithRetries(options);
+    expect(proof.routes).toHaveLength(fixture.manifest.routes.length);
+    // The comparison is unchanged: a document that never becomes the built
+    // artifact still fails, however many attempts the budget allows.
+    await expect(verifyLiveWithRetries({ ...options, retryDelaysMs: [0, 0, 0] })).rejects.toThrow(/navigation HTML does not match/);
+    await expect(verifyLiveWithRetries({
+      ...options,
+      fetchImpl: async (input: URL | RequestInfo, init?: RequestInit) => {
+        const url = new URL(input.toString());
+        if (fixture.manifest.routes.includes(url.pathname)) return response(stale, "text/html");
+        return mock.fetchImpl(input, init);
+      },
+    })).rejects.toThrow(/navigation HTML does not match/);
   });
 });
 
