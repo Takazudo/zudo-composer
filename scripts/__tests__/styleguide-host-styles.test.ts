@@ -26,6 +26,14 @@ describe("sample styleguide host styles", () => {
     );
 
     expect(css).toContain('@import "@zudo-composer/ui/styles/composer.css"');
+    expect(css).toContain('@import "@takazudo/zudo-doc/theme-no-reset.css"');
+    expect(css).not.toContain('@import "@takazudo/zudo-doc/theme.css"');
+    expect(
+      css.indexOf('@import "@zudo-composer/ui/styles/composer.css"'),
+    ).toBeLessThan(
+      css.indexOf('@import "@takazudo/zudo-doc/theme-no-reset.css"'),
+    );
+    expect(css).not.toMatch(/--color-(?:border|surface-2)\s*:/);
     expect(css).toContain('@import "@takazudo/zudo-doc/safelist.css"');
     expect(css).toContain('@import "@takazudo/zudo-sg/styles.css"');
     expect(css).toContain('@import "@takazudo/zudo-sg/safelist.css"');

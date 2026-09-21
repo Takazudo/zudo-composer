@@ -24,8 +24,8 @@ importers:
         specifier: 5.26.2
         version: 5.26.2(@takazudo/zdtp@0.8.0(preact@10.29.8))(@takazudo/zfb-md-wasm@2.20.0)(@takazudo/zfb-runtime@2.20.0(@takazudo/zfb@2.20.0))(@takazudo/zfb@2.20.0)(@types/node@22.20.4)(diff@8.0.4)(katex@0.16.47)(preact@10.29.8)(zod@4.6.5)
       '@takazudo/zudo-sg':
-        specifier: ^0.2.2
-        version: 0.2.2(@takazudo/zdtp@0.8.0(preact@10.29.8))(@takazudo/zfb@2.20.0)(@takazudo/zudo-doc@5.26.2(@takazudo/zdtp@0.8.0(preact@10.29.8))(@takazudo/zfb-md-wasm@2.20.0)(@takazudo/zfb-runtime@2.20.0(@takazudo/zfb@2.20.0))(@takazudo/zfb@2.20.0)(@types/node@22.20.4)(diff@8.0.4)(katex@0.16.47)(preact@10.29.8)(zod@4.6.5))(preact@10.29.8)
+        specifier: ^0.3.0
+        version: 0.3.0(@takazudo/zdtp@0.8.0(preact@10.29.8))(@takazudo/zfb@2.20.0)(@takazudo/zudo-doc@5.26.2(@takazudo/zdtp@0.8.0(preact@10.29.8))(@takazudo/zfb-md-wasm@2.20.0)(@takazudo/zfb-runtime@2.20.0(@takazudo/zfb@2.20.0))(@takazudo/zfb@2.20.0)(@types/node@22.20.4)(diff@8.0.4)(katex@0.16.47)(preact@10.29.8)(zod@4.6.5))(preact@10.29.8)
       '@zudo-composer/component-contract':
         specifier: git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0
         version: https://codeload.github.com/Takazudo/zudo-composer/tar.gz/c0b452da075b66757c60bd0d721a47062d4354d0
@@ -588,8 +588,8 @@ packages:
       katex:
         optional: true
 
-  '@takazudo/zudo-sg@0.2.2':
-    resolution: {integrity: sha512-itiCZBvxfhscbFmCgRQ/wLO7HyWPWUYhB+63zDddEmYcrQjoZUpP2sxThaY+7IDZc7SujjjzIN2oA4xZ1tczIA==}
+  '@takazudo/zudo-sg@0.3.0':
+    resolution: {integrity: sha512-qKXNYebsNAuuArPNAau4DeKCsj8wF6felVnnVQ3QdZMU6dCnZ4UtBbFBTTlqBZCd4nd7ND2rezxcpvHHLGPPow==}
     hasBin: true
     peerDependencies:
       '@takazudo/zdtp': ^0.8.0
@@ -1505,7 +1505,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  '@takazudo/zudo-sg@0.2.2(@takazudo/zdtp@0.8.0(preact@10.29.8))(@takazudo/zfb@2.20.0)(@takazudo/zudo-doc@5.26.2(@takazudo/zdtp@0.8.0(preact@10.29.8))(@takazudo/zfb-md-wasm@2.20.0)(@takazudo/zfb-runtime@2.20.0(@takazudo/zfb@2.20.0))(@takazudo/zfb@2.20.0)(@types/node@22.20.4)(diff@8.0.4)(katex@0.16.47)(preact@10.29.8)(zod@4.6.5))(preact@10.29.8)':
+  '@takazudo/zudo-sg@0.3.0(@takazudo/zdtp@0.8.0(preact@10.29.8))(@takazudo/zfb@2.20.0)(@takazudo/zudo-doc@5.26.2(@takazudo/zdtp@0.8.0(preact@10.29.8))(@takazudo/zfb-md-wasm@2.20.0)(@takazudo/zfb-runtime@2.20.0(@takazudo/zfb@2.20.0))(@takazudo/zfb@2.20.0)(@types/node@22.20.4)(diff@8.0.4)(katex@0.16.47)(preact@10.29.8)(zod@4.6.5))(preact@10.29.8)':
     dependencies:
       '@codemirror/commands': 6.11.1
       '@codemirror/lang-css': 6.3.1
