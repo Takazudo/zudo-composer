@@ -363,6 +363,19 @@ describe("SiteDelivery", () => {
     expect(strip().textContent).not.toContain("Workspace provider offline");
   });
 
+  it("keeps a render recovered by Retry when a later re-capture fails", async () => {
+    const fx = await recapturable();
+    fx.failNextCapture("First capture offline");
+    render(<SiteDelivery source={working(fx.providers)} pathname="/website-preview/about" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Retry loading site" }, SLOW));
+    expect(await screen.findByRole("heading", { name: "A studio built around useful clarity" }, SLOW)).toBeInTheDocument();
+    fx.failNextCapture("Second capture offline");
+    fx.emitChange();
+    await waitFor(() => expect(strip().textContent).toContain("Second capture offline"), SLOW);
+    expect(screen.getByRole("heading", { name: "A studio built around useful clarity" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Site unavailable" })).toBeNull();
+  });
+
   it("cancels a capture in flight on unmount and stops listening for changes", async () => {
     const fx = await recapturable();
     const gate = fx.holdNextCapture();

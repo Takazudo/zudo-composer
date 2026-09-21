@@ -162,6 +162,10 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
   const [recaptureError, setRecaptureError] = useState<string | undefined>(undefined);
   const request = useRef(0);
   const focusAfterRetry = useRef(false);
+  // Whether a working page has ever reached the screen, which decides whether
+  // a later failure replaces it or is reported beside it. A retry renders one
+  // too, so this cannot live in the re-capture effect's own closure.
+  const rendered = useRef(false);
   useEffect(() => source.kind === "working-preview" ? subscribePendingState(setPending) : undefined, [source]);
   useEffect(() => {
     if (source.kind !== "working-preview") {
@@ -174,7 +178,6 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
     let running = false;
     let again = false;
     let initial = true;
-    let rendered = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const schedule = (): void => {
       if (disposed) return;
@@ -188,10 +191,10 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
       running = false;
       if (disposed) return;
       if (request.current !== current) { setRefreshing(false); return; }
-      if (next.status === "ready") { rendered = true; setRecaptureError(undefined); setState(next); }
+      if (next.status === "ready") { rendered.current = true; setRecaptureError(undefined); setState(next); }
       // A re-capture that fails keeps the last good render on screen and
       // reports why through the strip; only a first load has nothing to keep.
-      else if (rendered) setRecaptureError(recaptureFailure(next));
+      else if (rendered.current) setRecaptureError(recaptureFailure(next));
       else setState(next);
       if (again) { again = false; schedule(); return; }
       if (!snapshot) { setRefreshing(false); return; }
@@ -248,14 +251,14 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
     focusAfterRetry.current = true;
     setRecaptureError(undefined);
     setState({ status: "loading" });
-    void retryDeliverySnapshot(source).then((next) => { if (request.current === current) setState(next); });
+    void retryDeliverySnapshot(source).then((next) => { if (request.current !== current) return; if (next.status === "ready") rendered.current = true; setState(next); });
   };
   const label = source.kind === "activated" ? "Activated local release — not deployed" : "Live working preview — not activated";
-  // A site delivered at its own origin root is the published document itself,
-  // so only the tool's own base paths carry the strip.
   // Freshness is a working-preview concern only; an activated release is a
   // finished artifact and passes none of these.
   const freshness = source.kind === "working-preview" ? { pending, refreshing, error: recaptureError } : {};
+  // A site delivered at its own origin root is the published document itself,
+  // so only the tool's own base paths carry the strip.
   const withPreviewStrip = (content: JSX.Element, routes?: readonly SiteCompiledRoute[]): JSX.Element => basePath === "/" ? content : <>
     <PreviewStrip label={label} basePath={basePath} pathname={pathname} hostedDemo={hostedDemo} routes={routes} {...freshness} />
     {content}
