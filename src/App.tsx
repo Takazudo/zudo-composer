@@ -8,6 +8,7 @@ import { WorkspaceContext } from "./app/workspace-context";
 import { parseIntent, formatIntent } from "./app/route-intents";
 import { Button } from "./components/ui";
 import { PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "./app/persistence-channels";
+import { publishPendingState } from "./shared/pending-broadcast";
 import { createProjectAssetUsageInspection } from "./site-project/assets/usage";
 import { Shell } from "./app/shell";
 import { createWorkspaceSummary } from "./app/workspace-summary";
@@ -196,6 +197,13 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [providers, release]);
+  // Hint other tabs (the working preview) whether this editor has unflushed
+  // writes. Editor documents only — the visitor documents mounted by
+  // src/main.tsx never publish.
+  useEffect(() => publishPendingState({
+    getPending: () => providers.sessions.hasPending,
+    subscribe: (listener) => providers.sessions.subscribe(listener),
+  }), [providers]);
   const assetContentServices = useMemo(() => createAssetContentServices(
     providers.contentProviders,
     () => providers.sessions.flush(),
