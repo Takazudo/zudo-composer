@@ -166,11 +166,31 @@ async function writeFixture(directory, dependencies) {
   await writeFile(path.join(directory, 'pnpm-workspace.yaml'), `packages: []\nallowBuilds:\n  '${contractName}': true\n`);
 }
 
-/** @returns {Promise<string[]>} */
-async function packedFileList() {
-  const { stdout } = await run(pnpmExecutable, ['pack', '--dry-run', '--json'], packageRoot);
-  const metadata = JSON.parse(stdout.slice(stdout.indexOf('{')));
-  return metadata.files.map((/** @type {{path: string}} */ entry) => entry.path).sort();
+/** @param {string} treeish @returns {Promise<string>} */
+async function readPackageManifestAt(treeish) {
+  return (await run('git', ['show', `${treeish}:${handoff.sourcePath}/package.json`], repositoryRoot)).stdout;
+}
+
+/**
+ * The independent source for what belongs in the package: git's own record of
+ * `packages/ui` at `treeish`, filtered by that commit's own "files" field. This
+ * never reads `pnpm pack` output, so it cannot agree with a pack run of the
+ * working tree merely because both sides are the same directory.
+ * @param {string} treeish @returns {Promise<string[]>}
+ */
+async function expectedPackageFiles(treeish) {
+  const manifest = JSON.parse(await readPackageManifestAt(treeish));
+  assert(Array.isArray(manifest.files) && manifest.files.length > 0, `${handoff.sourcePath}/package.json at ${treeish} must declare a non-empty "files" array`);
+  const tracked = (await run('git', ['ls-tree', '-r', '--name-only', `${treeish}:${handoff.sourcePath}`], repositoryRoot)).stdout
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  // Mirrors npm/pnpm's always-included top-level files (manifest, README, LICENSE, CHANGELOG)
+  // regardless of the "files" field, per npm's package-file-inclusion rules.
+  const alwaysIncluded = /^(package\.json|readme(\..*)?|license(\..*)?|licence(\..*)?|changelog(\..*)?|notice(\..*)?)$/iu;
+  return tracked
+    .filter((file) => alwaysIncluded.test(file) || manifest.files.some((/** @type {string} */ entry) => file === entry || file.startsWith(`${entry}/`)))
+    .sort();
 }
 
 /** @param {string} directory @param {string} [prefix] @returns {Promise<string[]>} */
@@ -204,13 +224,13 @@ async function assertInstalledPackage(directory) {
   assert(wasm === expectedMarkdownRuntime, `@takazudo/zfb-md-wasm resolved to ${wasm}, expected ${expectedMarkdownRuntime}`);
 
   const installedFiles = (await listFiles(root)).sort();
-  const packedFiles = await packedFileList();
-  assert(JSON.stringify(installedFiles) === JSON.stringify(packedFiles), `installed file list differs from pnpm pack of packages/ui:\n${installedFiles.filter((file) => !packedFiles.includes(file)).concat(packedFiles.filter((file) => !installedFiles.includes(file))).join('\n')}`);
+  const packedFiles = await expectedPackageFiles('HEAD');
+  assert(JSON.stringify(installedFiles) === JSON.stringify(packedFiles), `installed file list differs from HEAD:${handoff.sourcePath}:\n${installedFiles.filter((file) => !packedFiles.includes(file)).concat(packedFiles.filter((file) => !installedFiles.includes(file))).join('\n')}`);
   const [installedManifest, sourceManifest] = await Promise.all([
-    readFile(path.join(root, 'package.json')),
-    readFile(path.join(packageRoot, 'package.json')),
+    readFile(path.join(root, 'package.json'), 'utf8'),
+    readPackageManifestAt('HEAD'),
   ]);
-  assert(installedManifest.equals(sourceManifest), 'installed package.json bytes must equal packages/ui/package.json');
+  assert(installedManifest === sourceManifest, `installed package.json bytes must equal HEAD:${handoff.sourcePath}/package.json`);
 
   const packSource = await readFile(path.join(root, 'src/composer-pack.ts'), 'utf8');
   assert(new RegExp(`packId:\\s*["']${packageName.replace('/', '\\/')}["']`, 'u').test(packSource), `composer pack must declare packId ${packageName}`);
@@ -266,9 +286,9 @@ async function runPackageProof() {
     assert(artifacts.length === 1, `expected one packed ui artifact, found ${artifacts.length}`);
     const artifact = path.join(artifactDirectory, artifacts[0]);
     await run('tar', ['-xzf', artifact, '-C', consumerDirectory], repositoryRoot);
-    const packedFiles = await packedFileList();
+    const packedFiles = await expectedPackageFiles('HEAD');
     const extracted = (await listFiles(path.join(consumerDirectory, 'package'))).sort();
-    assert(JSON.stringify(extracted) === JSON.stringify(packedFiles), 'packed ui artifact differs from pnpm pack --dry-run');
+    assert(JSON.stringify(extracted) === JSON.stringify(packedFiles), `packed ui artifact differs from HEAD:${handoff.sourcePath}:\n${extracted.filter((file) => !packedFiles.includes(file)).concat(packedFiles.filter((file) => !extracted.includes(file))).join('\n')}`);
     console.log(`Local package proof passed from ${path.basename(artifact)}; the current commit was not claimed as externally reachable.`);
   } finally {
     await Promise.all([
