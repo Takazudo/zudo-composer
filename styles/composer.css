@@ -1,8 +1,21 @@
-@import "tailwindcss/preflight";
+/* An unlayered preflight beats every cascade layer a consumer declares — e.g. zudo-doc's
+   `@layer zd-flow` owl rule (#768) — so it lives in the pack's own lowest layer. Utilities stay
+   unlayered on purpose: zudo-doc's content.css contract needs unlayered `mt-*` to beat `zd-flow`. */
+@layer zc-preflight, zc-base;
+@import "tailwindcss/preflight" layer(zc-preflight);
 @import "tailwindcss/utilities";
 @import "./tokens.css";
 @import "./colors.css";
 @import "./syntax-highlight.css";
 @import "../src/content/prose-md/prose-md.css";
+
+/* The page paints its own tokens instead of the UA canvas (#734). Layered so any host `body`
+   rule — unlayered, or in a layer declared after this one — still wins. */
+@layer zc-base {
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+  }
+}
 
 @source "../src";

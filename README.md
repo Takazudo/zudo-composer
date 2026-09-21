@@ -22,6 +22,16 @@ import "@zudo-composer/ui/styles/composer.css";
 the trusted Preact components and optional render/inline-editor adapters. Both
 are generated from co-located `src/**/*.composer.tsx` sidecars.
 
+## Stylesheet cascade
+
+- `composer.css` declares two cascade layers: `zc-preflight` (Tailwind
+  preflight) and `zc-base` (the `body` background/foreground).
+- Import `composer.css` before any other stylesheet, or put
+  `@layer zc-preflight, zc-base;` as the first line of the host entry, so both
+  sort below every host layer.
+- Utilities are emitted unlayered by design, so a host's cascade-layered rules
+  never beat them.
+
 ## Component authoring rule
 
 - Put the definition beside the component as `<name>.composer.tsx`.
