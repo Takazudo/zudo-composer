@@ -1,7 +1,7 @@
 # Upstream integration notes
 
-This host was rechecked on 2026-09-20 with `@takazudo/zudo-sg@0.2.2`,
-`create-zudo-sg@0.1.2`, `@takazudo/zfb@2.20.0`,
+This host was rechecked on 2026-09-21 with `@takazudo/zudo-sg@0.3.0`,
+`create-zudo-sg@0.1.3`, `@takazudo/zfb@2.20.0`,
 `@takazudo/zudo-doc@5.26.2`, Node `24.13.1`, and pnpm `11.5.2`.
 The installed UI pack still keeps its separate `@takazudo/zfb-md-wasm`
 dependency at `2.10.1`; the standalone host uses the 2.20.0 markdown WASM.
@@ -55,12 +55,15 @@ token manifest remain ignored build outputs.
 ## 5. Fresh engine releases need exact release-age exceptions
 
 - Status: **resolved-upstream** — [zudo-sg #750](https://github.com/Takazudo/zudo-sg/issues/750).
-- The 0.1.2 starter emits exact release-age exemptions for zdtp, zfb and
-  its platform packages, zudo-doc, and zudo-sg. The host's
-  `pnpm-workspace.yaml` retains the same exact 2.20.0 / 5.26.2 / 0.2.2
-  entries as an explicit consumer policy; no bare package names are used.
-- Verification: the unpacked template and the host workspace policy match,
-  and the frozen install succeeds under pnpm 11.5.2.
+- The `create-zudo-sg@0.1.3` template emits exact release-age exemptions for
+  `zdtp@0.8.0`, the `zfb@2.20.0` family including its platform binaries,
+  `zudo-doc@5.26.2`, and `zudo-sg@0.3.0`. This host's `pnpm-workspace.yaml`
+  carries the same exact entries as an explicit consumer policy, with the
+  `zudo-sg` entry moved `0.2.2` → `0.3.0` by this adoption; no bare package
+  names are used.
+- Verification: the exclusion list in `npm pack create-zudo-sg@0.1.3`'s
+  unpacked template and the host's list are byte-identical after the bump, and
+  the frozen install succeeds under pnpm 11.5.2.
 
 ## 6. Dev readiness precedes the island bundle
 
@@ -102,15 +105,30 @@ token manifest remain ignored build outputs.
 ## 10. The initializer omits the catalog's global stylesheet
 
 - Status: **resolved-upstream** — [zudo-sg #753](https://github.com/Takazudo/zudo-sg/issues/753).
-- The 0.1.1 starter now supplies the complete global-entry import order,
-  dashboard/catalog chrome, safelists, and source globs. This host keeps its
-  consumer-specific `@zudo-composer/ui/styles/composer.css` import and
-  Composer-first token/cascade behavior, while retaining the canonical docs
-  content source glob and all zudo-doc, zdtp, and zudo-sg imports.
-- Verification: the unpacked starter stylesheet was compared with the host;
-  root `styleguide-host-styles.test.ts` and the host build gates remain green.
-  The Composer import is intentionally not replaced by the starter's local
-  token file because this host consumes the Git-installed UI pack.
+- The `create-zudo-sg@0.1.3` starter still supplies the complete global-entry
+  import order, dashboard/catalog chrome, safelists, and source globs. This
+  host keeps `@zudo-composer/ui/styles/composer.css` first and its
+  Composer-first cascade order — that ordering is unchanged by this epic.
+- What did change: `@takazudo/zudo-doc/theme.css`'s `--color-*: initial` prune
+  (item 14) wipes the pack's `--color-border` / `--color-surface-2` at
+  compile time, before zudo-doc's own theme reaches the emitted sheet, which
+  in turn leaves Tailwind's `.border-border` utility ungenerated and
+  ProseMd's `--color-surface-2` references unresolved. The host now imports
+  `@takazudo/zudo-doc/theme-no-reset.css` in `theme.css`'s exact former
+  position — same order, same other imports — so the pack's own `--color-*`
+  roles survive while zudo-doc still wins every reserved bare role by last
+  declaration.
+- Accepted residual risk: nothing in this import graph currently pulls in the
+  `tailwindcss` bundle or `tailwindcss/theme`, so the omitted reset's only
+  job — keeping Tailwind's default palette out — has nothing to guard today.
+  A future upstream change that re-prepends that bundle into this graph would
+  remove that guardrail.
+- Verification: `scripts/__tests__/styleguide-host-styles.test.ts` asserts the
+  `theme-no-reset.css` import sits after `composer.css`, that `theme.css` is
+  absent, and that no `--color-border`/`--color-surface-2` declaration was
+  added locally; the host build gates remain green. The Composer import is
+  intentionally not replaced by the starter's local token file because this
+  host consumes the Git-installed UI pack.
 
 ## 11. Layered `hidden` loses to an unlayered consumer SVG reset
 
@@ -128,29 +146,99 @@ token manifest remain ignored build outputs.
 
 ## 12. The initializer omits favicons requested by the catalog head
 
-- Status: **filed; local workaround retained** —
+- Status: **resolved-upstream, with a documented host divergence** —
   [zudo-sg #789](https://github.com/Takazudo/zudo-sg/issues/789).
-- The 0.1.1 template has no favicon assets, but the zudo-doc-backed head
-  requests `favicon.ico`, `favicon.svg`, `favicon-32x32.png`, and
-  `favicon-16x16.png`. A clean built host therefore logged four 404 errors.
-- Workaround: this host reuses the repository's canonical documentation-site
-  favicon assets under `styleguide/sample/public/`; the root regression test
-  requires all four files to remain byte-identical.
-- Verification: a fresh browser context loads the built catalog with all four
-  requests returning 200 and no console errors.
+- The 0.1.1 template had no favicon assets while the zudo-doc-backed head
+  requested `favicon.ico`, `favicon.svg`, `favicon-32x32.png`, and
+  `favicon-16x16.png`, so a clean built host logged four 404 errors.
+  `create-zudo-sg@0.1.3` fixes this upstream by switching the starter to an
+  inline `favicon: "auto"` — no `public/` assets required.
+- This host deliberately does not adopt `favicon: "auto"`. It keeps its four
+  real favicon assets under `styleguide/sample/public/` — byte-identical to
+  the documentation site's own (`doc/public/`) and enforced by
+  `scripts/__tests__/styleguide-host-styles.test.ts`'s "ships the favicon
+  assets advertised by the catalog head" case — because an inline generated
+  icon would make this catalog visually inconsistent with our own doc site for
+  no gain. This is a deliberate divergence, not an unfixed defect.
+- Verification: the favicon-identity test passes; a fresh browser context
+  loads the built catalog with all four favicon requests returning 200 and no
+  console errors.
 
 ## 13. Minimal hosts omit engine-owned header navigation
 
 - Status: **resolved-upstream** — [zudo-sg #791](https://github.com/Takazudo/zudo-sg/pull/791).
-- The 0.2.2 `withZudoSg` composition fills zudo-doc's otherwise empty minimal
-  header with Components and Design Tokens links plus Search. A host with
-  configured navigation remains authoritative, and `chromeDefaults: false`
-  preserves an intentionally empty header.
-- Verification: the built catalog exposes both engine-owned links and the
-  working Search control at desktop width; its mobile drawer opens and closes,
-  and all template routes load without console or network errors.
+- The `withZudoSg` composition, introduced in 0.2.2 and carried unchanged into
+  0.3.0, fills zudo-doc's otherwise empty minimal header with Components and
+  Design Tokens links plus Search. A host with configured navigation remains
+  authoritative, and `chromeDefaults: false` preserves an intentionally empty
+  header.
+- This epic's 0.3.0 restructure changed the chrome's token namespace (item 14)
+  and the pack's `--color-*` cascade (item 10), not the header navigation
+  composition or `chromeDefaults` handling, so this defect and its fix are
+  unaffected by this epic.
+- Verification: last confirmed by browser on `@takazudo/zudo-sg@0.2.2` — the
+  built catalog exposed both engine-owned links and the working Search control
+  at desktop width; its mobile drawer opened and closed, and all template
+  routes loaded without console or network errors. Not re-run under 0.3.0 in
+  this documentation wave; general regression coverage is Wave 6 (#767).
 
-The three `local-misuse` entries remain as host operating guidance. The seven
-original upstream defects and the minimal-header defect are resolved in the
-published releases; the two confirmation findings above remain tracked with
-local workarounds.
+## 14. `zudo-sg`'s catalog chrome read the pack's reserved `--color-*` keys, which `zudo-doc`'s reset wipes
+
+- Status: **resolved-upstream** — `@takazudo/zudo-sg@0.3.0`.
+- `@takazudo/zudo-doc/theme.css` declares `--color-*: initial` at its
+  "Namespace contract" boundary — a compile-time `@theme` prune that removes
+  every bare `--color-*` key declared before it from the merged theme; it
+  never appears in the emitted CSS. `zudo-sg@0.2.2`'s catalog chrome read
+  those bare keys directly, so any host that also imports zudo-doc's reset
+  theme silently had its chrome tokens wiped. `zudo-sg@0.3.0` moves the
+  chrome to its own `--sg-*` namespace, declared in `:where(:root)` as
+  `var(--zd-*, <oklch fallback>)` with zero-specificity literal fallbacks, so
+  it no longer depends on the pack's reserved names at all.
+- **Retired**: no host-side workaround existed for this specific symptom —
+  this host never themed the chrome (no `--sg-*` or bare `--color-*` override
+  anywhere in `src`/`pages`), so the defect had no locally visible failure to
+  work around, and none is retired here.
+- **Not retired**: the same reset also wipes `--color-border` and
+  `--color-surface-2`, which `@zudo-composer/ui`'s ProseMd typography, its
+  syntax highlighting, and the `Card` / `Callout` / `PlaceholderBox` /
+  `CtaButton` `border-border` utility still depend on. The 0.3.0 namespace
+  move is scoped to zudo-sg's own chrome and does not touch that — it is a
+  `packages/ui` consumer concern. See item 10 for the workaround this host
+  retains for that half.
+- Verification (measured on the emitted stylesheet during this epic's Wave 2):
+  all 11 `--sg-*` chrome tokens are declared in `:where(:root)` via
+  `var(--zd-*, <fallback>)` with no `--color-*` dependency
+  (`zudo-sg@0.3.0/styles.css:32-63`), and a host-source grep for `--sg-` in
+  `src`/`pages` returns nothing, confirming no override was ever needed.
+
+## Starter structural diff (`create-zudo-sg@0.1.3`)
+
+To keep the "targeted adoption, no starter delta skipped" claim auditable,
+this host is periodically diffed against the initializer's own template
+(`npm pack create-zudo-sg@0.1.3`, unpacked to `templates/default/`). Re-run
+for this epic:
+
+- `zfb.config.ts` differs only in `siteName` ("Sample Styleguide" vs. the
+  starter's "Styleguide Starter"), the starter's `favicon: "auto"` line and
+  its comment (item 12: this host keeps real favicon assets instead), and the
+  starter's top-of-file / `mermaid` explanatory comments.
+- `tsconfig.json` differs only in `include` (this host's `stories` vs. the
+  starter's `ui`).
+- `src/styles/preview-entry.css` differs because this host consumes the
+  installed `@zudo-composer/ui` pack's `composer.css` and the `stories`/pack
+  `@source` globs, rather than the starter's local `ui-tokens.css` and its
+  `ui/` corpus.
+- `zudo-sg.config.mjs`, `package.json`, and `.gitignore`/`_gitignore` also
+  differ, but only in ways already covered by items 1, 7, 8, and 9 above
+  (provider package name, generated-output ignores, component roots, token
+  manifest paths) — no new delta beyond those.
+
+No other structural file in the starter template has a counterpart on this
+host outside this comparison.
+
+The three `local-misuse` entries (4, 6, 8) remain as host operating guidance.
+Ten entries (1, 2, 3, 5, 7, 9, 10, 12, 13, 14) are resolved in the published
+releases — nine cleanly, and item 12's favicons with a deliberate host
+divergence recorded above. One confirmation finding (11, `SidebarToggle`)
+remains tracked with a local workaround, pending
+[zudo-doc #4355](https://github.com/zudolab/zudo-doc/issues/4355).
