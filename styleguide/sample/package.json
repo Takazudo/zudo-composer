@@ -11,12 +11,12 @@
     "check": "pnpm gen && tsc --noEmit"
   },
   "dependencies": {
-    "@takazudo/zdtp": "0.8.0",
-    "@takazudo/zfb": "2.20.0",
-    "@takazudo/zfb-md-wasm": "2.20.0",
-    "@takazudo/zfb-runtime": "2.20.0",
-    "@takazudo/zudo-doc": "5.26.2",
-    "@takazudo/zudo-sg": "^0.3.0",
+    "@takazudo/zdtp": "0.8.1",
+    "@takazudo/zfb": "2.20.1",
+    "@takazudo/zfb-md-wasm": "2.20.1",
+    "@takazudo/zfb-runtime": "2.20.1",
+    "@takazudo/zudo-doc": "5.26.3",
+    "@takazudo/zudo-sg": "^0.3.1",
     "@zudo-composer/component-contract": "git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
     "@zudo-composer/ui": "git+https://github.com/Takazudo/zudo-composer.git#847b582c911a3c2e5461ed89caf2b78a874331d7",
     "diff": "^8.0.4",
