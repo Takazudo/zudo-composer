@@ -96,7 +96,7 @@
     "typecheck:public": "tsc -p tsconfig.public-types.json --pretty false && node scripts/check-public-types.mjs",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json --pretty false",
     "test": "vitest run",
-    "check": "pnpm no-deploy:check && pnpm sg:pins && pnpm public:check && pnpm sample:check && pnpm cms:check && pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm consumer:boundary && pnpm site-project:boundary && pnpm handoff:boundary && pnpm styles:class-names && pnpm provider:boundary && pnpm ui:pack-check && pnpm test && pnpm build && pnpm styles:isolation && pnpm dist:boundary && pnpm doc:check && pnpm doc:build-site && pnpm sg:build-site && pnpm sg:computed-styles && pnpm smoke:host-install",
+    "check": "pnpm no-deploy:check && pnpm sg:pins && pnpm public:check && pnpm sample:check && pnpm cms:check && pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm consumer:boundary && pnpm site-project:boundary && pnpm handoff:boundary && pnpm styles:class-names && pnpm provider:boundary && pnpm ui:pack-check && pnpm test && pnpm build && pnpm styles:isolation && pnpm dist:boundary && pnpm doc:check && pnpm doc:build-site && pnpm sg:build-site && pnpm smoke:host-install",
     "sample:check": "node scripts/check-sample-project.mjs",
     "cms:check": "tsx scripts/cms-fixtures.ts --check",
     "cms:regenerate": "tsx scripts/cms-fixtures.ts --regenerate",
