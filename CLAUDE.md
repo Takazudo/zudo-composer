@@ -110,12 +110,12 @@ fast-forward branch whose root tree equals the package directory:
 | Package | Source | Handoff file | Branch | Package commit |
 | --- | --- | --- | --- | --- |
 | `@zudo-composer/component-contract@1.0.0` | `packages/component-contract` | `contract-handoff.json` | `package/component-contract-v1` | `c0b452da075b66757c60bd0d721a47062d4354d0` |
-| `@zudo-composer/ui@0.1.0` (pack `@zudo-composer/ui@1.0.0`) | `packages/ui` | `ui-handoff.json` | `package/ui-v1` | `847b582c911a3c2e5461ed89caf2b78a874331d7` |
+| `@zudo-composer/ui@0.1.0` (pack `@zudo-composer/ui@1.0.0`) | `packages/ui` | `ui-handoff.json` | `package/ui-v1` | `2ea02290e5a09e4995a1c1c3f5f1f08a59a94b7d` |
 
 External hosts install each through its exact root Git spec,
 `git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0`
 for the contract and
-`git+https://github.com/Takazudo/zudo-composer.git#847b582c911a3c2e5461ed89caf2b78a874331d7`
+`git+https://github.com/Takazudo/zudo-composer.git#2ea02290e5a09e4995a1c1c3f5f1f08a59a94b7d`
 for the UI pack — never through a branch/tag, sibling checkout, `workspace:`,
 `file:`, `link:`, `path:`, copied source, or a pnpm Git subdirectory selector.
 Inside this monorepo both relationships are `workspace:*` development
@@ -144,7 +144,7 @@ The host installs the UI pack and component contract by their exact root Git
 specs, so its dependencies show the pinned package commits recorded by the
 handoff files:
 
-- `@zudo-composer/ui`: `git+https://github.com/Takazudo/zudo-composer.git#847b582c911a3c2e5461ed89caf2b78a874331d7`
+- `@zudo-composer/ui`: `git+https://github.com/Takazudo/zudo-composer.git#2ea02290e5a09e4995a1c1c3f5f1f08a59a94b7d`
 - `@zudo-composer/component-contract`: `git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0`
 
 This is the proven Git-spec state from the scaffold; it does not fall back to

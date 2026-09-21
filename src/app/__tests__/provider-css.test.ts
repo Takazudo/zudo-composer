@@ -79,17 +79,21 @@ describe("host and tool CSS ownership", () => {
     const cssPath = fileURLToPath(import.meta.resolve("@zudo-composer/ui/styles/composer.css"));
     const css = readFileSync(cssPath, "utf8");
     const markers = [
-      '@import "tailwindcss/preflight";',
+      '@layer zc-preflight, zc-base;',
+      '@import "tailwindcss/preflight" layer(zc-preflight);',
       '@import "tailwindcss/utilities";',
       '@import "./tokens.css";',
       '@import "./colors.css";',
       '@import "./syntax-highlight.css";',
       '@import "../src/content/prose-md/prose-md.css";',
+      '@layer zc-base {',
       '@source "../src";',
     ];
     const positions = markers.map((marker) => css.indexOf(marker));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    expect(css).not.toMatch(/tailwindcss\/utilities"\s+layer\(/);
+    expect(css).toMatch(/@layer zc-base \{\s*body \{\s*background-color: var\(--color-bg\);\s*color: var\(--color-fg\);\s*\}\s*\}/);
   });
 
   it("keeps app tokens structural and enables the Tailwind Vite plugin", () => {

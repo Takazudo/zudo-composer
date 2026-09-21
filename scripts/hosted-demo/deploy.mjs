@@ -295,6 +295,19 @@ function partialFirstDeploymentRunbook(target) {
 }
 
 /**
+ * A rollout that reached the rollback path proved a prior active deployment in
+ * preflight, so it was never in a partial-first-deploy state and the Worker
+ * must not be deleted. Only the failed-rollback branch leaves production in an
+ * operator-visible state, and what it needs is a manual version restore.
+ * @param {DeployTarget} target
+ * @param {string} rollbackVersionId
+ * @returns {string}
+ */
+function failedRollbackRunbook(target, rollbackVersionId) {
+  return `Runbook: check which version ${target.workerName} is serving and restore ${rollbackVersionId} manually before rerunning target ${target.key}.`;
+}
+
+/**
  * @param {{ target?: DeployTarget, artifactDirectory?: string, expectedSourceRevision?: string, environment?: Record<string, string | undefined>, runner?: typeof runCommand, artifactVerifier?: import("./targets.mjs").ArtifactVerifier }} [options]
  */
 export async function preflightDeployment(options = {}) {
@@ -524,11 +537,11 @@ export async function deployHostedDemo(options = {}) {
         "--yes",
       ], { environment, runner });
       await waitForVersion({ target, expectedVersionId: preflight.state.rollbackVersionId, environment, runner, retryDelaysMs, delayImpl });
-      throw new Error(`${failure.message}; automatic rollback to ${preflight.state.rollbackVersionId} completed and was verified; ${partialFirstDeploymentRunbook(target)}`, { cause: error });
+      throw new Error(`${failure.message}; automatic rollback to ${preflight.state.rollbackVersionId} completed and was verified`, { cause: error });
     } catch (rollbackError) {
       const rollbackFailure = asError(rollbackError);
       if (rollbackFailure.message.startsWith(`${failure.message}; automatic rollback to ${preflight.state.rollbackVersionId} completed`)) throw rollbackFailure;
-      throw new Error(`${failure.message}; automatic rollback failed or was refused: ${rollbackFailure.message}; ${partialFirstDeploymentRunbook(target)}`, { cause: rollbackError });
+      throw new Error(`${failure.message}; automatic rollback failed or was refused: ${rollbackFailure.message}; ${failedRollbackRunbook(target, preflight.state.rollbackVersionId)}`, { cause: rollbackError });
     }
   }
 }

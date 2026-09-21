@@ -31,12 +31,6 @@
 @source "../../src/content/**/*.{mdx,md}";
 @source "../../node_modules/@zudo-composer/ui/src/**/*.{tsx,ts,jsx,js}";
 
-/* Work around https://github.com/zudolab/zudo-doc/issues/4355 until its
- * sidebar icon state survives unlayered consumer SVG resets. */
-[data-zfb-island="SidebarToggle"] > button > .hidden {
-  display: none;
-}
-
 /* The host-owned index does not render through zudo-doc's route layout, so it
  * cannot depend on the route-scoped token variables injected by that layout. */
 .sg-home {

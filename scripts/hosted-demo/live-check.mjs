@@ -17,10 +17,15 @@ function requireTarget(target) {
 }
 
 export const HTTP_TIMEOUT_MS = 10_000;
-export const LIVE_CHECK_TIMEOUT_MS = 120_000;
-// A deploy can take a short time to reach every edge. Keep retries bounded so
-// a broken production rollout cannot hold the workflow indefinitely.
-export const LIVE_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
+export const LIVE_CHECK_TIMEOUT_MS = 180_000;
+// `waitForVersion` proves only that Cloudflare's control plane activated the
+// new version; a PoP can still answer the next request from its cache of the
+// previous build. Measured on `main`: 6 of 10 production deploys failed this
+// way, on a route that moved between runs, with `cf-cache-status HIT` and a
+// body that was byte-for-byte an earlier build. The former ~7s budget did not
+// span that window. Keep retries bounded so a genuinely broken rollout cannot
+// hold the workflow indefinitely; the comparison itself never loosens.
+export const LIVE_RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 15_000, 30_000, 30_000, 30_000];
 
 /** @param {Response} response @returns {string} */
 export function responseMime(response) {
@@ -48,10 +53,22 @@ async function fetchWithTimeout(fetchImpl, url, timeoutMs, headers = {}, deadlin
   });
 }
 
-/** @param {URL} url @param {string | undefined} sourceRevision @returns {URL} */
-function cacheBusted(url, sourceRevision) {
+/**
+ * Every attempt must ask for a URL this run has never requested before.
+ * Retrying the identical URL after an edge cache answered HIT can only return
+ * the same stale bytes, which is why the earlier retries never rescued a
+ * propagation-lag failure. The revision alone does not achieve that: it is
+ * constant for the whole run, so the attempt ordinal is what makes each retry
+ * a fresh cache key.
+ * @param {URL} url
+ * @param {string | undefined} sourceRevision
+ * @param {number | undefined} attempt
+ * @returns {URL}
+ */
+function cacheBusted(url, sourceRevision, attempt) {
   const result = new URL(url);
   if (sourceRevision !== undefined) result.searchParams.set("hosted-demo-revision", sourceRevision);
+  if (attempt !== undefined && attempt > 1) result.searchParams.set("hosted-demo-attempt", String(attempt));
   return result;
 }
 
@@ -156,7 +173,7 @@ export async function verifyLiveDeployment(options) {
   const sourceRevision = artifact.manifest.sourceRevision;
   const deadlineAt = Date.now() + overallTimeoutMs;
 
-  const manifestUrl = cacheBusted(new URL(`/${manifestFileName}`, origin), sourceRevision);
+  const manifestUrl = cacheBusted(new URL(`/${manifestFileName}`, origin), sourceRevision, attempt);
   const manifestResponse = await fetchWithTimeout(fetchImpl, manifestUrl, requestTimeoutMs, { accept: "application/json" }, deadlineAt);
   assert.ok(manifestResponse.ok, `/${manifestFileName}: expected HTTP 2xx, received ${manifestResponse.status}`);
   assert.equal(responseMime(manifestResponse), "application/json", `/${manifestFileName}: expected application/json, received ${responseMime(manifestResponse) || "no Content-Type"}`);
@@ -178,7 +195,7 @@ export async function verifyLiveDeployment(options) {
     const file = filesByPath.get(expectedPath);
     assert.ok(file, `${route}: deploy artifact must include route file ${expectedPath}`);
     assert.equal(file.mime, "text/html", `${route}: route file ${file.path} must be HTML, received ${file.mime}`);
-    const response = await fetchWithTimeout(fetchImpl, cacheBusted(new URL(route, origin), sourceRevision), requestTimeoutMs, {
+    const response = await fetchWithTimeout(fetchImpl, cacheBusted(new URL(route, origin), sourceRevision, attempt), requestTimeoutMs, {
       accept: "text/html",
       "sec-fetch-mode": "navigate",
     }, deadlineAt);
@@ -214,7 +231,7 @@ export async function verifyLiveDeployment(options) {
       assert.ok(verifiedRouteFiles.has(file.path), `/${file.path}: asset fetch cannot be skipped without a verified route for this file`);
       return null;
     }
-    const response = await fetchWithTimeout(fetchImpl, cacheBusted(new URL(assetPath, origin), sourceRevision), requestTimeoutMs, {}, deadlineAt);
+    const response = await fetchWithTimeout(fetchImpl, cacheBusted(new URL(assetPath, origin), sourceRevision, attempt), requestTimeoutMs, {}, deadlineAt);
     assert.ok(response.ok, `/${file.path}: expected HTTP 2xx, received ${response.status}`);
     const bytes = Buffer.from(await response.arrayBuffer());
     assert.equal(sha256(bytes), file.sha256, `/${file.path}: response SHA-256 does not match the built artifact`);
@@ -226,7 +243,7 @@ export async function verifyLiveDeployment(options) {
       assert.equal(response.headers.get("content-length"), String(bytes.byteLength), `/${file.path}: byte length header is wrong`);
       const disposition = assetContentDisposition(file.mime, checksum);
       assert.equal(response.headers.get("content-disposition"), disposition ?? null, `/${file.path}: download disposition is wrong`);
-      const head = await fetchWithTimeout(fetchImpl, cacheBusted(new URL(assetPath, origin), sourceRevision), requestTimeoutMs, {}, deadlineAt, "HEAD");
+      const head = await fetchWithTimeout(fetchImpl, cacheBusted(new URL(assetPath, origin), sourceRevision, attempt), requestTimeoutMs, {}, deadlineAt, "HEAD");
       assert.ok(head.ok, `/${file.path}: HEAD expected HTTP 2xx, received ${head.status}`);
       for (const header of ["content-type", "content-length", "cache-control", "x-content-type-options", "content-disposition"]) {
         assert.equal(head.headers.get(header), response.headers.get(header), `/${file.path}: GET and HEAD ${header} headers differ`);
