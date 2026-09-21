@@ -68,8 +68,14 @@ async function filesUnder(root, prefix = "") {
   return files;
 }
 
-/** @param {string[]} paths @returns {string[]} */
-function routesForFiles(paths) {
+/**
+ * The route a doc-site's HTML files serve at: `index.html` -> "/",
+ * `dir/index.html` -> "/dir/", `page.html` -> "/page". `404.html` is a file,
+ * never a route. Shared with `check-sg-computed-styles.mjs`, which crawls the
+ * already-built sample styleguide catalog by the same mapping.
+ * @param {string[]} paths @returns {string[]}
+ */
+export function routesForFiles(paths) {
   return [...new Set(paths.filter((path) => path.endsWith(".html") && path !== "404.html").map((path) => {
     if (path === "index.html") return "/";
     if (path.endsWith("/index.html")) return `/${path.slice(0, -"index.html".length)}`;
