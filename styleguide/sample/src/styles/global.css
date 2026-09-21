@@ -2,9 +2,14 @@
  * design tokens, syntax paint, and ProseMd typography. */
 @import "@zudo-composer/ui/styles/composer.css";
 
-/* The zudo-doc theme follows so its overlapping chrome roles win while the
- * pack-only preview/catalog roles remain available. */
-@import "@takazudo/zudo-doc/theme.css";
+/* zudo-doc's theme follows the pack so its reserved bare `--color-*` roles win
+ * by last declaration (theme.css "Namespace contract"). The no-reset entry
+ * (zudolab/zudo-doc#4051) keeps the pack-only roles — `--color-border`,
+ * `--color-surface-2` — and the utilities Tailwind generates from them;
+ * `theme.css`'s `--color-*: initial` prunes every pack key declared above it at
+ * compile time. Nothing in this graph imports the `tailwindcss` bundle, so the
+ * reset's default-palette guardrail has nothing to guard here. */
+@import "@takazudo/zudo-doc/theme-no-reset.css";
 @import "@takazudo/zudo-doc/safelist.css";
 @import "@takazudo/zudo-doc/content.css";
 @import "@takazudo/zudo-doc/features.css";
