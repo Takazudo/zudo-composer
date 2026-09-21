@@ -62,8 +62,12 @@ token manifest remain ignored build outputs.
   `zudo-sg` entry moved `0.2.2` → `0.3.0` by this adoption; no bare package
   names are used.
 - Verification: the exclusion list in `npm pack create-zudo-sg@0.1.3`'s
-  unpacked template and the host's list are byte-identical after the bump, and
-  the frozen install succeeds under pnpm 11.5.2.
+  unpacked template and the host's list carry the same eleven entries in the
+  same order after the bump — they differ only in YAML quote style (the
+  template double-quotes, this host single-quotes) and in the host's extra
+  `allowBuilds` entry for `@zudo-composer/component-contract`, neither of
+  which changes the resolved policy. The frozen install succeeds under
+  pnpm 11.5.2.
 
 ## 6. Dev readiness precedes the island bundle
 
@@ -228,13 +232,34 @@ for this epic:
   installed `@zudo-composer/ui` pack's `composer.css` and the `stories`/pack
   `@source` globs, rather than the starter's local `ui-tokens.css` and its
   `ui/` corpus.
+- `src/styles/global.css` differs per item 10 (the `composer.css` import and
+  `theme-no-reset.css` in place of `theme.css`) and additionally omits the
+  starter's `@layer zd-preflight, zd-flow;` declaration and its layered
+  `@import "tailwindcss/preflight" layer(zd-preflight);`: this host takes an
+  unlayered preflight from the pack's `composer.css` instead. That predates
+  this epic and is the reason the host still needs the trailing
+  `@import "tailwindcss/utilities"` and the item 11 `SidebarToggle`
+  workaround; it is recorded here as a known, unadopted starter delta.
+  Tracked as [#768](https://github.com/Takazudo/zudo-composer/issues/768) —
+  adopting the starter's layered form needs a `packages/ui` change, since this
+  host's preflight arrives transitively inside `composer.css` rather than
+  through its own import.
 - `zudo-sg.config.mjs`, `package.json`, and `.gitignore`/`_gitignore` also
   differ, but only in ways already covered by items 1, 7, 8, and 9 above
   (provider package name, generated-output ignores, component roots, token
   manifest paths) — no new delta beyond those.
 
-No other structural file in the starter template has a counterpart on this
-host outside this comparison.
+The starter's remaining files are content or generated output rather than
+structure: `pages/lib/_zudo-sg-islands.ts` is byte-identical here;
+`src/content/docs/getting-started.mdx` and `pages/index.tsx` carry this
+catalog's own copy and its `.sg-home` shell in place of the starter's
+`bg-bg`/`text-fg` utility markup, which is host content by design and not a
+skipped starter delta; `src/styleguide/sg-registry.ts` is a generated,
+gitignored output here (items 2 and 7). The starter's `ui/` corpus and
+`src/styles/ui-tokens.css` have no counterpart because this host consumes the
+installed `@zudo-composer/ui` pack instead (items 8 and 10). No other
+structural file in the starter template has a counterpart on this host
+outside this comparison.
 
 The three `local-misuse` entries (4, 6, 8) remain as host operating guidance.
 Ten entries (1, 2, 3, 5, 7, 9, 10, 12, 13, 14) are resolved in the published
