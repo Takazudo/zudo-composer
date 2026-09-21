@@ -1,4 +1,5 @@
 import { test } from "@playwright/test";
+import { expectBodyBackgroundTracksColorScheme } from "./computed-styles";
 import { requireDemosLaneContext } from "./isolated-context";
 import { crawlDemoRoutes, expectNoMobileOverflow } from "./route-crawl";
 
@@ -8,4 +9,5 @@ test("crawls every Sample Studio route and keeps the narrow layout usable", asyn
   test.setTimeout(180_000);
   await crawlDemoRoutes(page, routes);
   await expectNoMobileOverflow(page, "/");
+  await expectBodyBackgroundTracksColorScheme(page, "/");
 });

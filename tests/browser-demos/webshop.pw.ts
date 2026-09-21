@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { toSiteHref } from "../../src/features/delivery/routing";
+import { expectBodyBackgroundTracksColorScheme } from "./computed-styles";
 import { requireDemosLaneContext } from "./isolated-context";
 import { crawlDemoRoutes, expectNoMobileOverflow, expectPrimaryNavTappable } from "./route-crawl";
 
@@ -12,6 +13,7 @@ test("crawls every Nightjar Supply route and keeps the mobile chrome usable", as
   // The header hides its inline nav behind a "Menu" toggle below `shop-md`;
   // the delivery chrome's own footer nav duplicates the same links without one.
   await expectPrimaryNavTappable(page, { opensViaToggle: /^menu$/i });
+  await expectBodyBackgroundTracksColorScheme(page, "/");
 });
 
 test("adding a product to the cart updates the header count", async ({ page }) => {

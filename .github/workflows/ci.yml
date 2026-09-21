@@ -284,6 +284,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: corepack pnpm sg:pins
       - run: corepack pnpm sg:build-site
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: corepack pnpm sg:computed-styles
       - run: pnpm -C styleguide/sample check
       - run: pnpm hosted-demo:verify styleguide/sample/dist "${{ github.sha }}"
         env:
