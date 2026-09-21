@@ -55,20 +55,15 @@ token manifest remain ignored build outputs.
 ## 5. Fresh engine releases need exact release-age exceptions
 
 - Status: **resolved-upstream** — [zudo-sg #750](https://github.com/Takazudo/zudo-sg/issues/750).
-- The `create-zudo-sg@0.1.3` template's `pnpm-workspace.yaml` emits exact
-  `minimumReleaseAgeExclude` entries for `zdtp@0.8.0`, the `zfb@2.20.0` family,
+- The `create-zudo-sg@0.1.3` template emits exact release-age exemptions for
+  `zdtp@0.8.0`, the `zfb@2.20.0` family including its platform binaries,
   `zudo-doc@5.26.2`, and `zudo-sg@0.3.0`. This host's `pnpm-workspace.yaml`
-  currently carries exact entries only for `zudo-doc@5.26.2` /
-  `zudo-doc-history-server@5.26.2` and the `zfb@2.20.0` family; no bare
-  package names are used anywhere in the list. `zdtp@0.8.0` and
-  `@takazudo/zudo-sg` (tracked here by the `^0.3.0` range, not an exact pin)
-  have never carried an entry in this file's history — by the time this host
-  adopts each release its age has already cleared the exclusion window, so
-  neither currently needs one.
-- Verification: `npm pack create-zudo-sg@0.1.3` was unpacked and diffed
-  against the host's `pnpm-workspace.yaml`; `git log -p -- pnpm-workspace.yaml`
-  confirms `zdtp` and `zudo-sg` have never appeared in this file. Frozen
-  install succeeds under pnpm 11.5.2.
+  carries the same exact entries as an explicit consumer policy, with the
+  `zudo-sg` entry moved `0.2.2` → `0.3.0` by this adoption; no bare package
+  names are used.
+- Verification: the exclusion list in `npm pack create-zudo-sg@0.1.3`'s
+  unpacked template and the host's list are byte-identical after the bump, and
+  the frozen install succeeds under pnpm 11.5.2.
 
 ## 6. Dev readiness precedes the island bundle
 
