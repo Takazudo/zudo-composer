@@ -137,6 +137,11 @@ describe('App', () => {
   // best-effort head start on activation, before the browser opens the new
   // tab. A ready integration with an overridable `sessions` stands in for a
   // real save registry so `hasPending` and `flush` can be driven directly.
+  //
+  // The flush is NOT gated on `hasPending` (see the comment on
+  // `flushOnPreviewActivation`): a value still being typed lives in the detail
+  // session's pending props, which `hasPending` does not observe, so the guard
+  // #795 specified skipped the flush in exactly the case the feature targets.
   async function readyIntegrationWithSessions(hasPending: boolean, flush: WorkspaceSaveRegistry['flush']) {
     const { host } = await emptyHost();
     const project = createEmptySiteProject('Preview flush');
@@ -144,7 +149,7 @@ describe('App', () => {
     return { ...base, sessions: { ...base.sessions, hasPending, flush } };
   }
 
-  it('gives the preview flush a head start on pointerdown and Enter, exactly once per activation, only while sessions are pending', async () => {
+  it('gives the preview flush a head start on pointerdown and Enter, exactly once per activation', async () => {
     const flush = vi.fn(async () => ({ status: 'ready', generation: 0 }) as const);
     const integration = await readyIntegrationWithSessions(true, flush);
     render(<App integration={integration} />);
@@ -158,12 +163,21 @@ describe('App', () => {
     // A non-Enter key never counts as activation.
     fireEvent.keyDown(preview, { key: ' ' });
     expect(flush).toHaveBeenCalledTimes(2);
+  });
 
-    flush.mockClear();
-    integration.sessions.hasPending = false;
-    fireEvent.pointerDown(preview);
-    fireEvent.keyDown(preview, { key: 'Enter' });
-    expect(flush).not.toHaveBeenCalled();
+  it('still flushes when the registry reports nothing pending, because a value being typed is not yet pending', async () => {
+    // The regression #798 caught on the dev browser lane: `hasPending` stays
+    // false while an edit sits in the detail session's pending props, so the
+    // guard #795 specified skipped the one flush that would have committed it
+    // — `WorkspaceSaveHandle.flush` runs `flushPendingProps` before draining
+    // the queue. The preview then sat on the pending indicator indefinitely.
+    const flush = vi.fn(async () => ({ status: 'ready', generation: 0 }) as const);
+    const integration = await readyIntegrationWithSessions(false, flush);
+    render(<App integration={integration} />);
+    await screen.findByRole('heading', { name: GREETING });
+
+    fireEvent.pointerDown(screen.getByRole('link', { name: 'Website preview — choose preview source' }));
+    expect(flush).toHaveBeenCalledTimes(1);
   });
 
   it('treats a second flush fired while the first is still in flight as harmless', async () => {

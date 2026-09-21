@@ -79,8 +79,19 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
   // awaiting it before `window.open` loses the user gesture and gets
   // pop-up-blocked (ruled out in #731). The registry keeps its own failure
   // state, so a rejection here has nothing useful to do but stop.
+  //
+  // Deliberately NOT gated on `sessions.hasPending`, though #795 specified that
+  // guard. `hasPending` only turns true once an editor has accepted a draft
+  // (`registered.changed()` fires on a `draftRevision` change), while a value
+  // still being typed lives in the detail session's *pending props*, which
+  // `WorkspaceSaveHandle.flush` pushes via `flushPendingProps` before draining
+  // the queue. So the guard read false in exactly the case this feature exists
+  // for — edit a field, click "Website preview" without blurring first — and
+  // skipped the flush that would have committed the edit. Confirmed on the dev
+  // browser lane (#798): the preview sat on the pending indicator indefinitely.
+  // An unguarded flush with nothing outstanding just settles every session once
+  // and returns, so the guard bought nothing.
   const flushOnPreviewActivation = () => {
-    if (!providers.sessions.hasPending) return;
     void providers.sessions.flush().catch(() => undefined);
   };
   const navigate = async (href: string, replace = false): Promise<boolean> => {
