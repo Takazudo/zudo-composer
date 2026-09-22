@@ -108,12 +108,24 @@ async function authorOneSitemap(page) {
     // An empty project's default Sitemap already carries one "Home" page with
     // an unassigned source (`src/app/empty-site-project.ts:12-46`) and no
     // asset references at all, so this is the earliest point the working
-    // preview can prove it blocks for that reason — never for a missing
-    // asset (epic #823 decision 1, which the generated-ready-host check
-    // further below proves the other side of).
+    // preview can prove it never blocks on a missing asset (epic #823
+    // decision 1, which the generated-ready-host check further below proves
+    // the other side of).
+    //
+    // The reason this route renders is the asset-capture wrapper, not the
+    // root-cause `unassigned-page` diagnostic: a blocked compilation marks
+    // the impact index incomplete (`src/site-project/assets/capture.ts:22`),
+    // so `compileWithCapturedAsset` short-circuits to `asset-capture-blocked`
+    // (`src/site-project/assets/compile.ts:22`) and
+    // `src/features/delivery/site-delivery.tsx:283` prints only that message.
+    // "The Sitemap page has no assigned source." (`compiler.ts:452`) reaches
+    // the authoring-preview surfaces, never this one. Measured on the real
+    // installed host, not read off the compiler.
+    step("checking the empty project's working preview blocks, and never on a missing asset");
     await page.goto(`${ORIGIN}/website-preview`);
     await page.getByRole("heading", { name: "Site build blocked", exact: true }).waitFor({ timeout: 90_000 });
-    await page.getByText("The Sitemap page has no assigned source.").first().waitFor({ timeout: 90_000 });
+    await page.getByText("Assets impact inspection is incomplete; exact release capture is blocked.").first().waitFor({ timeout: 90_000 });
+    assert.equal(await page.getByText("Required Assets asset is missing.").count(), 0, "Empty project's working preview unexpectedly blocked on a missing asset");
     await page.goto(`${ORIGIN}/sitemapper`);
 
     await page.getByRole("heading", { name: "Sitemaps", exact: true }).waitFor({ timeout: 90_000 });
