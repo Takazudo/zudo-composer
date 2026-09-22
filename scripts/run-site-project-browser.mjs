@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { cp, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { authoringSiteRoutes, readVerifiedHostManifest } from "./host-site-routes.mjs";
+import { SAMPLE_ASSETS_DIR } from "./sample-assets-path.mjs";
 import { tmpdir } from "node:os";
 
 /** @typedef {import("node:child_process").SpawnOptions} SpawnOptions */
@@ -45,7 +46,7 @@ try {
   await Promise.all([mkdir(releaseRoot), mkdir(assetsRoot), mkdir(dataRoot)]);
   // Seed reads the sample's pinned managed URLs, so the isolated store needs
   // the same committed Assets bytes they resolve against.
-  await cp(join(root, "packages/demo-sample/cms/assets"), assetsRoot, { recursive: true });
+  await cp(join(root, SAMPLE_ASSETS_DIR), assetsRoot, { recursive: true });
   const environment = { SITE_PROJECT_LANE_ROUTES: JSON.stringify(routes), ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_ASSETS_STORE_ROOT: assetsRoot, ZUDO_DATA_ROOT: dataRoot };
   const seeded = await run(process.execPath, [join(root, "bin/zudo-composer.mjs"), "seed", "--from", join(root, "packages/demo-sample/site-project.json")], {
     env: { ...process.env, ...environment },

@@ -1,9 +1,10 @@
 // @ts-check
 
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { SAMPLE_ASSETS_DIR } from "./sample-assets-path.mjs";
 
 /** @typedef {import("node:child_process").SpawnOptions} SpawnOptions */
 /** @typedef {{status: number | null, signal: NodeJS.Signals | null}} RunResult */
@@ -63,6 +64,9 @@ for (const target of specTargets) {
     const releaseRoot = join(temporaryRoot, "release"), assetsRoot = join(temporaryRoot, "assets"),
       compositionsRoot = join(temporaryRoot, "compositions"), dataRoot = join(temporaryRoot, "data");
     await Promise.all([mkdir(releaseRoot), mkdir(assetsRoot), mkdir(compositionsRoot), mkdir(dataRoot)]);
+    // Seed reads the sample's pinned managed URLs, so the isolated store needs
+    // the same committed Assets bytes they resolve against.
+    await cp(join(root, SAMPLE_ASSETS_DIR), assetsRoot, { recursive: true });
     // The data root covers content, mappings, sitemaps and the workspace registry.
     // Isolating compositions alone left the registry in this repository, so the
     // NEXT run opened a workspace whose composition tree had been deleted.
