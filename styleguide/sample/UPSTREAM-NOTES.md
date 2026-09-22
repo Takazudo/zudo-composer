@@ -182,13 +182,17 @@ token manifest remain ignored build outputs.
   class on either. `scripts/__tests__/styleguide-host-styles.test.ts` now
   asserts the host rule is **absent**.
 - **Measured.** `scripts/check-sg-computed-styles.mjs` (`pnpm sg:computed-styles`)
-  drives the built catalog at a 390×844 viewport, in both color schemes: with
+  drives the built catalog at a 390×844 viewport, in both color schemes. With
   the drawer open, `document.elementFromPoint()` at the toggle button's centre
-  hits the button itself (not the backdrop `<div>`), and the toggle's X icon
-  computes visible; clicking the button closes the drawer; reopening and
-  pressing Escape closes it and returns focus to the toggle. Every assertion
-  fails with the measured element, z-indexes, and viewport so a regression is
-  diagnosable from the gate's log alone.
+  returns the button's own icon `<path>` — inside the toggle, never the
+  backdrop `<div>` — because the open state raises the button to `z-index: 60`
+  over the backdrop's `50`; the toggle's X icon computes visible; clicking the
+  button closes the drawer; and reopening, moving focus onto the drawer's
+  filter input, then pressing Escape closes it and returns focus to the toggle.
+  Focus is moved off the toggle first on purpose: clicking it open already
+  leaves focus there, so without that step the focus-return assertion could not
+  fail. Every assertion fails with the measured element, z-indexes, and
+  viewport so a regression is diagnosable from the gate's log alone.
 
 ## 12. The initializer omits favicons requested by the catalog head
 

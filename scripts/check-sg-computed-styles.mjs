@@ -46,8 +46,18 @@ async function pinCatalogTheme(page, colorScheme) {
 // needs its own narrow context/page rather than the shared `page` below.
 const DRAWER_VIEWPORT = { width: 390, height: 844 };
 const islandSelector = '[data-zfb-island="SidebarToggle"]';
-const toggleButtonSelector = `${islandSelector} > button[aria-label="Open sidebar"]`;
-const backdropSelector = `${islandSelector} > div[aria-hidden="true"]`;
+// Neither the button nor the backdrop may be matched on the attribute values
+// that the drawer's own state flips: the button's `aria-label` swaps
+// "Open sidebar" -> "Close sidebar" and the backdrop's `aria-hidden` swaps
+// "true" -> "false" the moment the drawer opens. Pinning either value makes
+// every post-open query silently match nothing.
+const toggleButtonSelector = `${islandSelector} > button[aria-expanded]`;
+const backdropSelector = `${islandSelector} > div[aria-hidden]`;
+// Focus has to be moved off the toggle before Escape, or the #769 focus-return
+// assertion cannot fail: clicking the toggle open already leaves focus on it.
+const drawerFocusTargetSelector = `${islandSelector} aside[data-zd-mobile-sidebar] input`;
+const ATTRIBUTE_TIMEOUT_MS = 5_000;
+const CLICK_TIMEOUT_MS = 5_000;
 
 /**
  * Poll the toggle button's `aria-expanded` attribute until it reaches
@@ -63,12 +73,82 @@ const backdropSelector = `${islandSelector} > div[aria-hidden="true"]`;
  */
 async function pollAriaExpanded(page, expected, timeoutMs = 3_000) {
   const deadline = Date.now() + timeoutMs;
-  let actual = await page.locator(toggleButtonSelector).getAttribute("aria-expanded");
+  const read = () => page.locator(toggleButtonSelector).getAttribute("aria-expanded", { timeout: ATTRIBUTE_TIMEOUT_MS });
+  let actual = await read();
   while (actual !== expected && Date.now() < deadline) {
     await new Promise((resolveDelay) => { setTimeout(resolveDelay, 50); });
-    actual = await page.locator(toggleButtonSelector).getAttribute("aria-expanded");
+    actual = await read();
   }
   return actual;
+}
+
+/**
+ * Hit-test the centre of the toggle button and report who owns that point,
+ * with the z-indexes that decide it. This is the #785 measurement, and also
+ * the diagnostic for a click Playwright refused to deliver.
+ * @param {import("@playwright/test").Page} page
+ * @returns {Promise<{
+ *   point: { x: number, y: number },
+ *   target: string,
+ *   targetAncestors: string,
+ *   targetZIndex: string | null,
+ *   isToggleOrDescendant: boolean,
+ *   isBackdrop: boolean,
+ *   toggleZIndex: string | null,
+ *   backdropZIndex: string | null,
+ * } | null>}
+ */
+async function describeToggleHitTest(page) {
+  const box = await page.locator(toggleButtonSelector).boundingBox().catch(() => null);
+  if (!box) return null;
+  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  /* eslint-disable no-undef -- this callback runs inside the browser via page.evaluate, not in this Node process */
+  const hit = await page.evaluate(
+    ({ x, y, toggleSelector, backdropSelector: backdropQuery }) => {
+      // `getAttribute("class")`, never `.className`: on an SVG element
+      // `className` is an SVGAnimatedString and stringifies to the useless
+      // "[object SVGAnimatedString]" — and elementFromPoint at the toggle's
+      // centre lands on the icon's <path>, so that is the common case.
+      /** @param {Element | null} element */
+      const describe = (element) => {
+        if (!(element instanceof Element)) return "nothing";
+        const className = element.getAttribute("class");
+        return `<${element.tagName.toLowerCase()}${className ? ` class="${className}"` : ""}>`;
+      };
+      /** @param {Element | null} element */
+      const ancestorsOf = (element) => {
+        const tags = [];
+        for (let node = element?.parentElement; node && tags.length < 4; node = node.parentElement) {
+          tags.push(node.tagName.toLowerCase());
+        }
+        return tags.join(" < ") || "(none)";
+      };
+      const target = document.elementFromPoint(x, y);
+      const toggle = document.querySelector(toggleSelector);
+      const backdrop = document.querySelector(backdropQuery);
+      return {
+        target: describe(target),
+        targetAncestors: ancestorsOf(target),
+        targetZIndex: target ? getComputedStyle(target).zIndex : null,
+        isToggleOrDescendant: !!(target && toggle && (target === toggle || toggle.contains(target))),
+        isBackdrop: !!(target && backdrop && (target === backdrop || backdrop.contains(target))),
+        toggleZIndex: toggle ? getComputedStyle(toggle).zIndex : null,
+        backdropZIndex: backdrop ? getComputedStyle(backdrop).zIndex : null,
+      };
+    },
+    { x: point.x, y: point.y, toggleSelector: toggleButtonSelector, backdropSelector },
+  );
+  /* eslint-enable no-undef */
+  return { point, ...hit };
+}
+
+/**
+ * Render a hit test as the one sentence a CI reader needs.
+ * @param {Awaited<ReturnType<typeof describeToggleHitTest>>} hit
+ */
+function formatHitTest(hit) {
+  if (!hit) return "the toggle button had no bounding box, so the point could not be hit-tested";
+  return `document.elementFromPoint(${hit.point.x}, ${hit.point.y}) at the toggle's centre hit ${hit.target} (ancestors ${hit.targetAncestors}, z-index ${hit.targetZIndex}${hit.isBackdrop ? " — the backdrop" : ""}); toggle z-index ${hit.toggleZIndex}, backdrop z-index ${hit.backdropZIndex}`;
 }
 
 /**
@@ -83,10 +163,20 @@ async function pollAriaExpanded(page, expected, timeoutMs = 3_000) {
  */
 async function clickToggleAndWaitForAriaExpanded(page, expected, context) {
   const button = page.locator(toggleButtonSelector);
-  let lastObserved = await button.getAttribute("aria-expanded");
+  let lastObserved = await button.getAttribute("aria-expanded", { timeout: ATTRIBUTE_TIMEOUT_MS });
   const maxAttempts = 10;
   for (let attempt = 0; attempt < maxAttempts && lastObserved !== expected; attempt += 1) {
-    await button.click();
+    try {
+      await button.click({ timeout: CLICK_TIMEOUT_MS });
+    } catch (error) {
+      // Playwright's own actionability check fails with an opaque timeout when
+      // something covers the button — which is exactly the #785 regression this
+      // proves absent. Re-raise with the hit test that explains it.
+      throw new Error(
+        `${context}: Playwright refused to deliver the click to the toggle button (${error instanceof Error ? error.message.split("\n")[0] : String(error)}) — ${formatHitTest(await describeToggleHitTest(page))}. A layer covering the toggle is the #785 regression.`,
+        { cause: error },
+      );
+    }
     lastObserved = await pollAriaExpanded(page, expected, 500);
   }
   assert.equal(
@@ -94,6 +184,62 @@ async function clickToggleAndWaitForAriaExpanded(page, expected, context) {
     expected,
     `${context}: toggle button aria-expanded never reached "${expected}" after ${maxAttempts} click attempts (last observed "${lastObserved}") — either the drawer fix regressed or the island (data-when="visible") never hydrated.`,
   );
+}
+
+/**
+ * Move keyboard focus onto a control inside the open drawer, returning a short
+ * description of it (or `null` if it could not be focused).
+ * @param {import("@playwright/test").Page} page
+ * @returns {Promise<string | null>}
+ */
+async function focusInsideDrawer(page) {
+  /* eslint-disable no-undef -- this callback runs inside the browser via page.evaluate, not in this Node process */
+  return await page.evaluate((selector) => {
+    const target = document.querySelector(selector);
+    if (!(target instanceof HTMLElement)) return null;
+    target.focus();
+    return document.activeElement === target ? `<${target.tagName.toLowerCase()} ${target.getAttribute("aria-label") ?? ""}>` : null;
+  }, drawerFocusTargetSelector);
+  /* eslint-enable no-undef */
+}
+
+/**
+ * Close the open drawer with Escape and report the resulting `aria-expanded`.
+ *
+ * Focus is moved into the drawer before every press: clicking the toggle open
+ * already leaves focus on the toggle, so pressing Escape from there would make
+ * the focus-return half of #769 unfalsifiable.
+ *
+ * The press is retried for the same reason the click is. The island's
+ * document-level keydown listener is attached by an effect that runs after the
+ * commit which flips `aria-expanded`, so an Escape sent the instant the
+ * attribute reads "true" is reliably swallowed — measured here: the first press
+ * is lost every time, the second always closes the drawer. Retrying is bounded,
+ * so an Escape handler that never lands still fails the gate.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} context
+ * @returns {Promise<string>} a description of the control focus was moved to before the closing press
+ */
+async function pressEscapeAndWaitForClose(page, context) {
+  const maxAttempts = 10;
+  let lastObserved = await page.locator(toggleButtonSelector).getAttribute("aria-expanded", { timeout: ATTRIBUTE_TIMEOUT_MS });
+  let focusMovedInto = null;
+  for (let attempt = 0; attempt < maxAttempts && lastObserved !== "false"; attempt += 1) {
+    focusMovedInto = await focusInsideDrawer(page);
+    assert.ok(
+      focusMovedInto,
+      `${context}: could not move focus onto "${drawerFocusTargetSelector}" inside the open drawer — without that the focus-return assertion proves nothing, because clicking the toggle open already leaves focus on the toggle (#769).`,
+    );
+    await page.keyboard.press("Escape");
+    lastObserved = await pollAriaExpanded(page, "false", 500);
+  }
+  assert.equal(
+    lastObserved,
+    "false",
+    `${context}: Escape did not close the drawer after ${maxAttempts} presses with focus moved into the drawer (${focusMovedInto}) — aria-expanded last observed "${lastObserved}" (#769).`,
+  );
+  assert.ok(focusMovedInto, `${context}: the drawer was already closed before Escape was pressed, so #769 was never exercised.`);
+  return focusMovedInto;
 }
 
 /**
@@ -112,32 +258,14 @@ async function verifyDrawerInteractions(page, route, colorScheme) {
 
   await clickToggleAndWaitForAriaExpanded(page, "true", context);
 
-  const box = await button.boundingBox();
-  assert.ok(box, `${context}: toggle button has no bounding box while open — is it hidden by an "lg:hidden" breakpoint mismatch at this viewport?`);
-  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-
-  /* eslint-disable no-undef -- this callback runs inside the browser via page.evaluate, not in this Node process */
-  const hit = await page.evaluate(
-    ({ x, y, toggleButtonSelector, backdropSelector }) => {
-      const target = document.elementFromPoint(x, y);
-      const toggle = document.querySelector(toggleButtonSelector);
-      const backdrop = document.querySelector(backdropSelector);
-      return {
-        tag: target?.tagName ?? null,
-        className: target instanceof Element ? target.className.toString() : "",
-        zIndex: target ? getComputedStyle(target).zIndex : null,
-        isToggleOrDescendant: !!(target && toggle && (target === toggle || toggle.contains(target))),
-        isBackdrop: !!(target && backdrop && (target === backdrop || backdrop.contains(target))),
-        toggleZIndex: toggle ? getComputedStyle(toggle).zIndex : null,
-        backdropZIndex: backdrop ? getComputedStyle(backdrop).zIndex : null,
-      };
-    },
-    { x: point.x, y: point.y, toggleButtonSelector, backdropSelector },
+  const hit = await describeToggleHitTest(page);
+  assert.ok(
+    hit,
+    `${context}: toggle button has no bounding box while open — is it hidden by an "lg:hidden" breakpoint mismatch at this viewport?`,
   );
-  /* eslint-enable no-undef */
   assert.ok(
     hit.isToggleOrDescendant,
-    `${context}: document.elementFromPoint(${point.x}, ${point.y}) at the open toggle's centre hit <${hit.tag ?? "nothing"} class="${hit.className}"> (z-index ${hit.zIndex}${hit.isBackdrop ? ", the backdrop" : ""}) instead of the toggle button (z-index ${hit.toggleZIndex}, backdrop z-index ${hit.backdropZIndex}) — the backdrop or another layer is stealing the click again (#785).`,
+    `${context}: ${formatHitTest(hit)} — that point belongs to neither the toggle button nor its icon, so the backdrop or another layer is stealing the click again (#785).`,
   );
 
   const iconDisplays = await button.evaluate(
@@ -163,36 +291,31 @@ async function verifyDrawerInteractions(page, route, colorScheme) {
   );
 
   await clickToggleAndWaitForAriaExpanded(page, "true", context);
-  await page.keyboard.press("Escape");
-  const ariaExpandedAfterEscape = await pollAriaExpanded(page, "false");
+  const focusMovedInto = await pressEscapeAndWaitForClose(page, context);
   /* eslint-disable no-undef -- this callback runs inside the browser via page.evaluate, not in this Node process */
   const focus = await page.evaluate(
-    (toggleButtonSelector) => {
-      const toggle = document.querySelector(toggleButtonSelector);
+    (toggleSelector) => {
+      const toggle = document.querySelector(toggleSelector);
       const active = document.activeElement;
       return {
         returnedToToggle: active === toggle,
-        activeTag: active?.tagName ?? null,
-        activeLabel: active instanceof Element ? (active.getAttribute("aria-label") ?? active.className.toString()) : "",
+        activeTag: active?.tagName.toLowerCase() ?? null,
+        activeLabel: active instanceof Element ? (active.getAttribute("aria-label") ?? active.getAttribute("class") ?? "") : "",
       };
     },
     toggleButtonSelector,
   );
   /* eslint-enable no-undef */
-  assert.equal(
-    ariaExpandedAfterEscape,
-    "false",
-    `${context}: Escape did not close the drawer (aria-expanded observed "${ariaExpandedAfterEscape}") (#769).`,
-  );
   assert.ok(
     focus.returnedToToggle,
-    `${context}: after Escape closed the drawer, focus landed on <${focus.activeTag ?? "nothing"} ${focus.activeLabel}> instead of returning to the toggle button (#769).`,
+    `${context}: after Escape closed the drawer, focus stayed on <${focus.activeTag ?? "nothing"} ${focus.activeLabel}> instead of returning from ${focusMovedInto} to the toggle button (#769).`,
   );
 
   return {
     route,
     colorScheme,
-    elementFromPointTag: hit.tag,
+    elementFromPoint: hit.target,
+    point: hit.point,
     toggleZIndex: hit.toggleZIndex,
     backdropZIndex: hit.backdropZIndex,
     viewport: `${DRAWER_VIEWPORT.width}x${DRAWER_VIEWPORT.height}`,
@@ -294,7 +417,7 @@ try {
 
     console.log(`Styleguide computed styles verified on ${flowRoute}: "${flowSelector}" margin-top ${marginTop}; body background ${bodyColors.light} light / ${bodyColors.dark} dark.`);
     for (const measurement of drawerMeasurements) {
-      console.log(`Mobile drawer verified on ${measurement.route} (${measurement.colorScheme}, ${measurement.viewport}): open elementFromPoint hit <${measurement.elementFromPointTag}> inside the toggle (toggle z-index ${measurement.toggleZIndex}, backdrop z-index ${measurement.backdropZIndex}); click-close, reopen, and Escape-close with focus return all verified (#785, #769).`);
+      console.log(`Mobile drawer verified on ${measurement.route} (${measurement.colorScheme}, ${measurement.viewport}): open elementFromPoint(${measurement.point.x}, ${measurement.point.y}) hit ${measurement.elementFromPoint} inside the toggle (toggle z-index ${measurement.toggleZIndex}, backdrop z-index ${measurement.backdropZIndex}); X icon visible, click-close, reopen, and Escape-close with focus return all verified (#785, #769).`);
     }
   } finally {
     await browser.close();
