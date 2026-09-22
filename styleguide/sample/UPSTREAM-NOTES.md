@@ -181,13 +181,14 @@ token manifest remain ignored build outputs.
   hamburger `<svg>` beside an X `<svg style=display:none>`, with no `hidden`
   class on either. `scripts/__tests__/styleguide-host-styles.test.ts` now
   asserts the host rule is **absent**.
-- **Not measured here.** The 390px browser confirmation for this retirement —
-  exactly one icon rendered, a ~24px toggle, and the drawer opening and closing
-  without console errors — is recorded by the Wave 2 confirm
-  ([#780](https://github.com/Takazudo/zudo-composer/issues/780)), which is
-  instructed to restore this rule if two icons appear. No such measurement was
-  taken by the change that retired the workaround; the retirement rests on the
-  code-level evidence above.
+- **Measured.** `scripts/check-sg-computed-styles.mjs` (`pnpm sg:computed-styles`)
+  drives the built catalog at a 390×844 viewport, in both color schemes: with
+  the drawer open, `document.elementFromPoint()` at the toggle button's centre
+  hits the button itself (not the backdrop `<div>`), and the toggle's X icon
+  computes visible; clicking the button closes the drawer; reopening and
+  pressing Escape closes it and returns focus to the toggle. Every assertion
+  fails with the measured element, z-indexes, and viewport so a regression is
+  diagnosable from the gate's log alone.
 
 ## 12. The initializer omits favicons requested by the catalog head
 
