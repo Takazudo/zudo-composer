@@ -1,8 +1,8 @@
 # Upstream integration notes
 
-This host was rechecked on 2026-09-21 with `@takazudo/zudo-sg@0.3.1`,
+This host was rechecked on 2026-09-22 with `@takazudo/zudo-sg@0.3.1`,
 `create-zudo-sg@0.1.3`, `@takazudo/zfb@2.20.1`, `@takazudo/zdtp@0.8.1`,
-`@takazudo/zudo-doc@5.26.3`, Node `24.13.1`, and pnpm `11.5.2`.
+`@takazudo/zudo-doc@5.26.4`, Node `24.13.1`, and pnpm `11.5.2`.
 The installed UI pack still keeps its separate `@takazudo/zfb-md-wasm`
 dependency at `2.10.1`; the standalone host uses the 2.20.1 markdown WASM.
 
@@ -61,7 +61,7 @@ token manifest remain ignored build outputs.
 - **The host list is no longer a copy of the template's.** Until this bump the
   two matched entry-for-entry (`zdtp@0.8.0`, the `zfb@2.20.0` family with its
   five platform binaries, `zudo-doc@5.26.2`, `zudo-sg@0.3.0`). Adopting
-  `zudo-sg@0.3.1`, `zudo-doc@5.26.3`, `zdtp@0.8.1` and the `zfb@2.20.1` family
+  `zudo-sg@0.3.1`, `zudo-doc@5.26.4`, `zdtp@0.8.1` and the `zfb@2.20.1` family
   moves this host **ahead** of a template that is still pinned to the older
   set, and `create-zudo-sg` will keep lagging every time this host adopts a
   release before the initializer is refreshed. The parity that earlier
@@ -181,13 +181,18 @@ token manifest remain ignored build outputs.
   hamburger `<svg>` beside an X `<svg style=display:none>`, with no `hidden`
   class on either. `scripts/__tests__/styleguide-host-styles.test.ts` now
   asserts the host rule is **absent**.
-- **Not measured here.** The 390px browser confirmation for this retirement —
-  exactly one icon rendered, a ~24px toggle, and the drawer opening and closing
-  without console errors — is recorded by the Wave 2 confirm
-  ([#780](https://github.com/Takazudo/zudo-composer/issues/780)), which is
-  instructed to restore this rule if two icons appear. No such measurement was
-  taken by the change that retired the workaround; the retirement rests on the
-  code-level evidence above.
+- **Measured.** `scripts/check-sg-computed-styles.mjs` (`pnpm sg:computed-styles`)
+  drives the built catalog at a 390×844 viewport, in both color schemes. With
+  the drawer open, `document.elementFromPoint()` at the toggle button's centre
+  returns the button's own icon `<path>` — inside the toggle, never the
+  backdrop `<div>` — because the open state raises the button to `z-index: 60`
+  over the backdrop's `50`; the toggle's X icon computes visible; clicking the
+  button closes the drawer; and reopening, moving focus onto the drawer's
+  filter input, then pressing Escape closes it and returns focus to the toggle.
+  Focus is moved off the toggle first on purpose: clicking it open already
+  leaves focus there, so without that step the focus-return assertion could not
+  fail. Every assertion fails with the measured element, z-indexes, and
+  viewport so a regression is diagnosable from the gate's log alone.
 
 ## 12. The initializer omits favicons requested by the catalog head
 
