@@ -19,6 +19,7 @@ import { cpSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSyn
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { SAMPLE_ASSETS_DIR } from "./sample-assets-path.mjs";
 import { UI_PACK } from "./ui-pack-identity.mjs";
 
 /** @typedef {import("node:child_process").SpawnOptions} SpawnOptions */
@@ -75,7 +76,7 @@ function createHostFixture(parent) {
   cpSync(join(root, "packages/demo-sample/site-project.json"), join(hostRoot, "site-project.json"));
   // The host's own Assets store, so `seed` resolves the sample's pinned
   // managed URLs against real committed bytes instead of an empty store.
-  cpSync(join(root, "packages/demo-sample/cms/assets"), join(hostRoot, "cms/assets"), { recursive: true });
+  cpSync(join(root, SAMPLE_ASSETS_DIR), join(hostRoot, "cms/assets"), { recursive: true });
   // The manifest is generated rather than copied, because a release attests how
   // its pack was installed and therefore reads the pack's dependency spec out of
   // the HOST manifest. The spec is taken from this package's own manifest so the
