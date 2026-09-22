@@ -22,14 +22,31 @@ import { resolveComposerModules } from "../plugins/module-resolution.mjs";
  */
 export function createModuleEvaluator(root) {
   return async (modulePath) => {
-    const { module } = await runnerImport(pathToFileURL(modulePath).href, {
-      configFile: false,
-      root,
-      resolve: resolveComposerModules(),
-      // The Preact preset does not run here, so state the JSX runtime for
-      // both tool and host `.tsx` modules; the default would import React.
-      oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
-    });
-    return /** @type {Record<string, unknown>} */ (module);
+    const nodeEnv = process.env.NODE_ENV;
+    // Vite's runnerImport resolves its own config with command "serve" before
+    // loading the target module, and that resolveConfig call assigns
+    // process.env.NODE_ENV globally (defaulting to "development") whenever it
+    // was unset — before the config file even loads. Force a definite value
+    // first so that assignment never fires, then restore exactly what the
+    // caller had, including unset. An evaluated module that deliberately
+    // chose a different value (e.g. a host config setting NODE_ENV itself)
+    // is left as that module set it, for the caller to see.
+    if (!nodeEnv) process.env.NODE_ENV = "production";
+    try {
+      const { module } = await runnerImport(pathToFileURL(modulePath).href, {
+        configFile: false,
+        root,
+        resolve: resolveComposerModules(),
+        // The Preact preset does not run here, so state the JSX runtime for
+        // both tool and host `.tsx` modules; the default would import React.
+        oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
+      });
+      return /** @type {Record<string, unknown>} */ (module);
+    } finally {
+      if (!nodeEnv && process.env.NODE_ENV === "production") {
+        if (nodeEnv === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = nodeEnv;
+      }
+    }
   };
 }

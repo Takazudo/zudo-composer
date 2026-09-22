@@ -13,14 +13,21 @@ const vite = resolve(dirname(createRequire(import.meta.url).resolve("vite/packag
 
 /** Run Vite in a separate process so each host gets a fresh module graph.
  * @param {string} hostDir
+ * @param {{execFile?: (file: string, args: string[], options: {cwd: string, env: NodeJS.ProcessEnv, encoding: "utf8", maxBuffer: number}) => Promise<{stdout: string, stderr: string}>, verifyDemoEditorArtifact?: (options: {directory: string}) => ReturnType<typeof verifyDemoEditorArtifact>}} [deps]
  */
-export async function buildDemoEditor(hostDir) {
+export async function buildDemoEditor(hostDir, deps = {}) {
   const host = resolveDemoEditorHost(hostDir);
+  const exec = deps.execFile ?? execFile;
+  const verify = deps.verifyDemoEditorArtifact ?? verifyDemoEditorArtifact;
   console.log(`Building demo editor: ${host}`);
   try {
-    const { stdout, stderr } = await execFile(process.execPath, [vite, "build", "--config", resolve(root, "vite.demo-editor.config.ts")], {
+    const { stdout, stderr } = await exec(process.execPath, [vite, "build", "--config", resolve(root, "vite.demo-editor.config.ts")], {
       cwd: root,
-      env: { ...process.env, ZUDO_DEMO_EDITOR_HOST: host },
+      // Pin production explicitly: a prior host's post-build verification
+      // (verifyDemoEditorArtifact -> createModuleEvaluator) can otherwise
+      // leave the parent's own NODE_ENV changed, which this child would
+      // then inherit through ...process.env.
+      env: { ...process.env, NODE_ENV: "production", ZUDO_DEMO_EDITOR_HOST: host },
       encoding: "utf8",
       maxBuffer: 16 * 1024 * 1024,
     });
@@ -33,7 +40,7 @@ export async function buildDemoEditor(hostDir) {
     if (failure.stderr) process.stderr.write(failure.stderr);
     throw error;
   }
-  const artifact = await verifyDemoEditorArtifact({ directory: resolve(host, "dist-editor") });
+  const artifact = await verify({ directory: resolve(host, "dist-editor") });
   console.log(`Demo editor verified: ${artifact.manifest.hostId}, ${Object.keys(artifact.manifest.assets).length} asset files, ${artifact.manifest.routes.length} routes, source ${artifact.manifest.sourceRevision}.`);
 }
 
