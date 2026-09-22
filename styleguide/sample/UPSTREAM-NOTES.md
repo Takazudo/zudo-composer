@@ -2,7 +2,7 @@
 
 This host was rechecked on 2026-09-21 with `@takazudo/zudo-sg@0.3.1`,
 `create-zudo-sg@0.1.3`, `@takazudo/zfb@2.20.1`, `@takazudo/zdtp@0.8.1`,
-`@takazudo/zudo-doc@5.26.3`, Node `24.13.1`, and pnpm `11.5.2`.
+`@takazudo/zudo-doc@5.26.4`, Node `24.13.1`, and pnpm `11.5.2`.
 The installed UI pack still keeps its separate `@takazudo/zfb-md-wasm`
 dependency at `2.10.1`; the standalone host uses the 2.20.1 markdown WASM.
 
@@ -61,7 +61,7 @@ token manifest remain ignored build outputs.
 - **The host list is no longer a copy of the template's.** Until this bump the
   two matched entry-for-entry (`zdtp@0.8.0`, the `zfb@2.20.0` family with its
   five platform binaries, `zudo-doc@5.26.2`, `zudo-sg@0.3.0`). Adopting
-  `zudo-sg@0.3.1`, `zudo-doc@5.26.3`, `zdtp@0.8.1` and the `zfb@2.20.1` family
+  `zudo-sg@0.3.1`, `zudo-doc@5.26.4`, `zdtp@0.8.1` and the `zfb@2.20.1` family
   moves this host **ahead** of a template that is still pinned to the older
   set, and `create-zudo-sg` will keep lagging every time this host adopts a
   release before the initializer is refreshed. The parity that earlier
