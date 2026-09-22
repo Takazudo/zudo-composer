@@ -74,6 +74,13 @@ export function publishPendingState({ workspaceId, getPending, subscribe }: Pend
   return () => {
     unsubscribe();
     window.removeEventListener("pagehide", pagehide);
+    // Same announcement `pagehide` makes, for the teardown a switch causes: a
+    // new workspace means a new publisher with a new sender id, so a reader
+    // still scoped to the old one would never hear from this sender again and
+    // would keep counting it until a re-query expired it — and it only
+    // re-queries on focus or visibility, which a preview left open and visible
+    // never does.
+    post(false);
     channel.onmessage = null;
     channel.close();
   };
@@ -114,8 +121,10 @@ export function subscribePendingState(workspaceId: string | undefined, listener:
   channel.onmessage = ({ data }) => {
     if (!isPendingMessage(data) || data.type !== "pending") return;
     if (data.workspaceId !== workspaceId) {
-      // A sender we were counting now speaks for another workspace: that tab
-      // switched, so drop it now instead of letting it latch until expiry.
+      // Defensive only: today's publisher mints a fresh sender id per
+      // workspace, so an ordinary switch is announced by the teardown `false`
+      // instead and never reaches here. Kept so a future publisher that keeps
+      // one sender id across a switch still cannot latch this reader on.
       if (!senders.has(data.sender)) return;
       clearAwait(data.sender);
       senders.delete(data.sender);

@@ -172,6 +172,22 @@ describe("workspace pending-state broadcast", () => {
     spy.close();
   });
 
+  it("announces false when the publisher tears down, not only on pagehide", () => {
+    // A workspace switch replaces the publisher, and the replacement carries a
+    // new sender id, so the reader must be told about the old one here or it
+    // counts a tab nobody is editing until a re-query it may never make.
+    const editor = fakeEditor("ws-a", true);
+    const stopPublish = publishPendingState(editor.source);
+    const received: boolean[] = [];
+    const stopRead = subscribePendingState("ws-a", (pending) => received.push(pending));
+    expect(received).toEqual([true]);
+
+    stopPublish();
+    expect(received).toEqual([true, false]);
+
+    stopRead();
+  });
+
   it("ignores another workspace's pending state", () => {
     // The whole point of the scoping: the reader renders this sentence to the
     // user, so another workspace's unsaved edits must not raise it here.
