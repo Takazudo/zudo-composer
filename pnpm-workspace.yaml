@@ -27,8 +27,8 @@ minimumReleaseAgeExclude:
   - miniflare@5.20260908.0-alpha
   - workerd@1.20260908.1
   - wrangler@4.130.0
-  - '@takazudo/zudo-doc-history-server@5.26.3'
-  - '@takazudo/zudo-doc@5.26.3'
+  - '@takazudo/zudo-doc-history-server@5.26.4'
+  - '@takazudo/zudo-doc@5.26.4'
   - '@takazudo/zfb-darwin-arm64@2.20.1'
   - '@takazudo/zfb-darwin-x64@2.20.1'
   - '@takazudo/zfb-linux-arm64-gnu@2.20.1'

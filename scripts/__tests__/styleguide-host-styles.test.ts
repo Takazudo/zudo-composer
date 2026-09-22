@@ -42,7 +42,7 @@ describe("sample styleguide host styles", () => {
     );
     expect(css).toContain(".sg-home__main");
     expect(css).toContain(".sg-home__link:focus-visible");
-    // zudo-doc 5.26.3 hides the inactive SidebarToggle icon with an inline
+    // zudo-doc 5.26.4 hides the inactive SidebarToggle icon with an inline
     // `display:none` (zudolab/zudo-doc#4355), which no consumer stylesheet can
     // outrank, so the host's unlayered override is retired — see
     // UPSTREAM-NOTES item 11.
