@@ -3,17 +3,28 @@
 // rests on persisted mutation tokens and `persistence-generation`'s own
 // change notifications. With no `BroadcastChannel` (or a throwing one), both
 // sides are silent no-ops and a reader reports `false`.
+//
+// Every message carries the workspace it speaks for, and both sides drop
+// anything from another workspace. The channel name stays shared because the
+// workspace id resolves late (it is `undefined` until initialization lands),
+// so a per-workspace channel could not be opened at subscribe time. Unlike
+// `persistence-generation` — whose false positives only cost a re-capture —
+// this value is rendered verbatim to the user ("The editor has unsaved
+// changes…"), so another workspace's pending state is a false statement about
+// this one, not a cheap retry.
 
 import { createUuidIdFactory } from "./id-factory";
 
 export interface PendingSource {
+  /** `undefined` until the workspace resolves; publishing is a no-op until then. */
+  readonly workspaceId: string | undefined;
   getPending(): boolean;
   subscribe(listener: () => void): () => void;
 }
 
 type PendingMessage =
-  | { readonly type: "pending"; readonly sender: string; readonly value: boolean }
-  | { readonly type: "query" };
+  | { readonly type: "pending"; readonly sender: string; readonly workspaceId: string; readonly value: boolean }
+  | { readonly type: "query"; readonly workspaceId: string };
 
 const CHANNEL_NAME = "zudo-workspace-pending-v1";
 
@@ -26,6 +37,7 @@ export const PENDING_QUERY_TIMEOUT_MS = 2000;
 
 function isPendingMessage(data: unknown): data is PendingMessage {
   if (!data || typeof data !== "object") return false;
+  if (typeof (data as { workspaceId?: unknown }).workspaceId !== "string") return false;
   const type = (data as { type?: unknown }).type;
   if (type === "query") return true;
   return type === "pending"
@@ -38,17 +50,18 @@ function openChannel(): BroadcastChannel | undefined {
   try { return new BroadcastChannel(CHANNEL_NAME); } catch { return undefined; }
 }
 
-/** Editor side: answers `query` messages and announces every `getPending()` transition. */
-export function publishPendingState({ getPending, subscribe }: PendingSource): () => void {
+/** Editor side: answers this workspace's `query` messages and announces every `getPending()` transition. */
+export function publishPendingState({ workspaceId, getPending, subscribe }: PendingSource): () => void {
+  if (workspaceId === undefined) return () => { /* no workspace yet: silent no-op */ };
   const channel = openChannel();
   if (!channel) return () => { /* no BroadcastChannel: silent no-op */ };
   const sender = createUuidIdFactory()("pending-sender");
   let last = getPending();
   const post = (value: boolean) => {
-    try { channel.postMessage({ type: "pending", sender, value } satisfies PendingMessage); } catch { /* hint only */ }
+    try { channel.postMessage({ type: "pending", sender, workspaceId, value } satisfies PendingMessage); } catch { /* hint only */ }
   };
   channel.onmessage = ({ data }) => {
-    if (isPendingMessage(data) && data.type === "query") post(last);
+    if (isPendingMessage(data) && data.type === "query" && data.workspaceId === workspaceId) post(last);
   };
   const unsubscribe = subscribe(() => {
     const value = getPending();
@@ -67,12 +80,13 @@ export function publishPendingState({ getPending, subscribe }: PendingSource): (
 }
 
 /**
- * Reader side. State is "any sender currently true" so one tab's `false`
- * cannot clear another tab's `true`. Queries on start, on becoming visible,
- * and on focus, since the query is the only way a preview opened after
- * writes went pending ever learns about them.
+ * Reader side. State is "any sender for this workspace currently true" so one
+ * tab's `false` cannot clear another tab's `true`. Queries on start, on
+ * becoming visible, and on focus, since the query is the only way a preview
+ * opened after writes went pending ever learns about them.
  */
-export function subscribePendingState(listener: (pending: boolean) => void): () => void {
+export function subscribePendingState(workspaceId: string | undefined, listener: (pending: boolean) => void): () => void {
+  if (workspaceId === undefined) return () => { /* no workspace yet: silent no-op */ };
   const channel = openChannel();
   if (!channel) { listener(false); return () => { /* no BroadcastChannel: silent no-op */ }; }
   const senders = new Set<string>();
@@ -95,10 +109,19 @@ export function subscribePendingState(listener: (pending: boolean) => void): () 
     for (const sender of senders) {
       awaiting.set(sender, setTimeout(() => { senders.delete(sender); awaiting.delete(sender); notify(); }, PENDING_QUERY_TIMEOUT_MS));
     }
-    try { channel.postMessage({ type: "query" } satisfies PendingMessage); } catch { /* hint only */ }
+    try { channel.postMessage({ type: "query", workspaceId } satisfies PendingMessage); } catch { /* hint only */ }
   };
   channel.onmessage = ({ data }) => {
     if (!isPendingMessage(data) || data.type !== "pending") return;
+    if (data.workspaceId !== workspaceId) {
+      // A sender we were counting now speaks for another workspace: that tab
+      // switched, so drop it now instead of letting it latch until expiry.
+      if (!senders.has(data.sender)) return;
+      clearAwait(data.sender);
+      senders.delete(data.sender);
+      notify();
+      return;
+    }
     clearAwait(data.sender);
     if (data.value) senders.add(data.sender); else senders.delete(data.sender);
     notify();

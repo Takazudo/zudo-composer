@@ -166,7 +166,9 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
   // a later failure replaces it or is reported beside it. A retry renders one
   // too, so this cannot live in the re-capture effect's own closure.
   const rendered = useRef(false);
-  useEffect(() => source.kind === "working-preview" ? subscribePendingState(setPending) : undefined, [source]);
+  // The `undefined` workspace id is a placeholder until #821 wires it; the
+  // reader delivers nothing until then.
+  useEffect(() => source.kind === "working-preview" ? subscribePendingState(undefined, setPending) : undefined, [source]);
   useEffect(() => {
     if (source.kind !== "working-preview") {
       const current = ++request.current;
