@@ -45,7 +45,7 @@ function workspace(id = "one") {
     contentCatalog: { listModels: async () => ({ entries: [], failures: [] }) }, compositionCatalog: { listCompositions: async () => ({ entries: [], failures: [] }) },
   };
 }
-afterEach(() => { cleanup(); localStorage.clear(); window.history.replaceState(null, "", "/"); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); localStorage.clear(); window.history.replaceState(null, "", "/"); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("application workspace lifetime", () => {
   it("shows the hosted demo notice on authoring routes and leaves local mode unchanged", async () => {
     render(<App integration={workspace() as unknown as ProductionProviderIntegration} hostedDemo />);
@@ -219,5 +219,32 @@ describe("application workspace lifetime", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry opening" }));
     await waitFor(() => expect(integration.initialization.retry).toHaveBeenCalledOnce());
     await screen.findByRole("heading", { name: "Workspace one" }); expect(integration.workspace.reset).not.toHaveBeenCalled();
+  });
+  it("publishes pending state under the workspace id only once initialization resolves it", async () => {
+    const channels: string[] = [];
+    const posted: unknown[] = [];
+    class RecordingChannel {
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      constructor(readonly name: string) { channels.push(name); }
+      postMessage(data: unknown) { posted.push(data); }
+      close() { this.onmessage = null; }
+    }
+    vi.stubGlobal("BroadcastChannel", RecordingChannel);
+    const integration = workspace();
+    let workspaceId: string | undefined;
+    Object.defineProperty(integration.workspace, "id", { get: () => workspaceId, configurable: true });
+    // The id lands inside `initialize()`, as it really does, so the mount
+    // effect has already run once against an undefined one.
+    integration.initialization.initialize.mockImplementation((async () => { await Promise.resolve(); workspaceId = "late-one"; return { status: "ready" }; }) as never);
+    const session = integration.sessions.register({ feature: "Content", providerId: "content-filesystem", recordId: "draft" }, { flush: async () => undefined });
+    render(<App integration={integration as unknown as ProductionProviderIntegration} />);
+    await screen.findByRole("heading", { name: "Workspace late-one" });
+    // The mount effect had no id and opened nothing; the channel exists only
+    // because the resolved id re-ran the effect. The name mirrors the private
+    // `CHANNEL_NAME` in src/shared/pending-broadcast.ts.
+    await waitFor(() => expect(channels).toEqual(["zudo-workspace-pending-v1"]));
+    expect(posted).toEqual([]);
+    await act(async () => session.changed());
+    expect(posted).toEqual([expect.objectContaining({ type: "pending", workspaceId: "late-one", value: true })]);
   });
 });

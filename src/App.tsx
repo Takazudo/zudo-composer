@@ -211,13 +211,15 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
   // Hint other tabs (the working preview) whether this editor has unflushed
   // writes. Editor documents only — the visitor documents mounted by
   // src/main.tsx never publish.
+  // The id is undefined until `initialization.initialize()` lands, and the
+  // module publishes nothing until then, so it is itself the dependency: the
+  // render `setReady(true)` causes is where the resolved id is re-read.
+  const publishingWorkspaceId = providers.workspace.id;
   useEffect(() => publishPendingState({
-    // Placeholder until #821 wires `providers.workspace.id`; an undefined id
-    // publishes nothing.
-    workspaceId: undefined,
+    workspaceId: publishingWorkspaceId,
     getPending: () => providers.sessions.hasPending,
     subscribe: (listener) => providers.sessions.subscribe(listener),
-  }), [providers]);
+  }), [providers, publishingWorkspaceId]);
   const assetContentServices = useMemo(() => createAssetContentServices(
     providers.contentProviders,
     () => providers.sessions.flush(),
