@@ -2,7 +2,7 @@
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEMO_EDITOR_HOSTS, resolveDemoEditorHost } from "../demo-editor-hosts.mjs";
 import { buildDemoEditor } from "../build-demo-editor.mjs";
 import { buildDemoEditors } from "../build-demo-editors.mjs";
@@ -11,6 +11,7 @@ import { discoverPackedHosts } from "../packed-host-helpers.mjs";
 const root = resolve(import.meta.dirname, "../..");
 const directories: string[] = [];
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 async function temporary() {
@@ -74,25 +75,22 @@ describe("demo editor child process environment", () => {
     expect(hosts.length).toBeGreaterThan(0);
     for (const hostDir of hosts) {
       let capturedEnv: NodeJS.ProcessEnv | undefined;
-      // A prior host's post-build verification (verifyDemoEditorArtifact ->
-      // createModuleEvaluator) can leave the parent's own NODE_ENV changed;
-      // this proves the spawned child is pinned regardless of that.
-      process.env.NODE_ENV = "development";
-      try {
-        await buildDemoEditor(hostDir, {
-          execFile: async (_file, _args, options) => {
-            capturedEnv = options.env;
-            return { stdout: "", stderr: "" };
-          },
-          verifyDemoEditorArtifact: async () => ({
-            root: hostDir,
-            manifest: { schemaVersion: 1, tool: { name: "zudo-composer", version: "0.0.0" }, hostId: "fake", projectId: "fake", sourceRevision: "0".repeat(40), projectSourceRevision: "0".repeat(40), mode: "disposable-demo-editor", assets: {}, routes: [], files: {} },
-            files: [],
-          }),
-        });
-      } finally {
-        delete process.env.NODE_ENV;
-      }
+      // An operator shell, or a caller that changed its own NODE_ENV, must not
+      // reach the child through `...process.env`; stub rather than assign, so
+      // the spec restores vitest's own NODE_ENV instead of unsetting it.
+      vi.stubEnv("NODE_ENV", "development");
+      await buildDemoEditor(hostDir, {
+        execFile: async (_file, _args, options) => {
+          capturedEnv = options.env;
+          return { stdout: "", stderr: "" };
+        },
+        verifyDemoEditorArtifact: async () => ({
+          root: hostDir,
+          manifest: { schemaVersion: 1, tool: { name: "zudo-composer", version: "0.0.0" }, hostId: "fake", projectId: "fake", sourceRevision: "0".repeat(40), projectSourceRevision: "0".repeat(40), mode: "disposable-demo-editor", assets: {}, routes: [], files: {} },
+          files: [],
+        }),
+      });
+      expect(process.env.NODE_ENV).toBe("development");
       expect(capturedEnv?.NODE_ENV).toBe("production");
       expect(capturedEnv?.ZUDO_DEMO_EDITOR_HOST).toBe(hostDir);
     }

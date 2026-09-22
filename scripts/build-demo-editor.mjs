@@ -23,10 +23,10 @@ export async function buildDemoEditor(hostDir, deps = {}) {
   try {
     const { stdout, stderr } = await exec(process.execPath, [vite, "build", "--config", resolve(root, "vite.demo-editor.config.ts")], {
       cwd: root,
-      // Pin production explicitly: a prior host's post-build verification
-      // (verifyDemoEditorArtifact -> createModuleEvaluator) can otherwise
-      // leave the parent's own NODE_ENV changed, which this child would
-      // then inherit through ...process.env.
+      // Pin production explicitly: an editor artifact is only ever a
+      // production build, so an operator shell (or any caller) that already
+      // exports NODE_ENV must not reach the child through ...process.env and
+      // silently ship development Preact and dev-JSX source metadata.
       env: { ...process.env, NODE_ENV: "production", ZUDO_DEMO_EDITOR_HOST: host },
       encoding: "utf8",
       maxBuffer: 16 * 1024 * 1024,
