@@ -67,6 +67,10 @@ describe("per-host demo editor Vite config", () => {
     // stylesheet or store. The host's config alone supplies those paths.
     vi.stubEnv("ZUDO_COMPOSER_STYLES", "missing-root-styles.css");
     vi.stubEnv("ZUDO_ASSETS_STORE_ROOT", join(APP_ROOT, "cms/assets"));
+    // The demo editor's configResolved guard requires isProduction, which
+    // scripts/build-demo-editor.mjs pins via its spawned child's env; this
+    // direct in-process build() call needs the same pin.
+    vi.stubEnv("NODE_ENV", "production");
     const config = await resolveDemoEditorConfig(host);
     expect(config.configFile).toBe(false);
     expect(config.root).toBe(host);

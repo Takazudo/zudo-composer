@@ -47,6 +47,14 @@ export async function resolveDemoEditorConfig(hostDir: string): Promise<InlineCo
   const demo: Plugin = {
     name: "explicit-demo-editor",
     enforce: "pre",
+    configResolved(resolved) {
+      // A leaked development NODE_ENV ships development-mode Preact (via its
+      // NODE_ENV define) as well as dev-mode JSX __source metadata, so guard
+      // on Vite's own isProduction rather than trusting the caller's env
+      // directly. `mode: "production"` would not catch this: isProduction
+      // derives from NODE_ENV only.
+      if (resolved.command === "build" && !resolved.isProduction) throw new Error(`Demo editor build for ${hostRoot} requires NODE_ENV=production; isProduction was false.`);
+    },
     transformIndexHtml: { order: "pre", handler: (html) => rewriteAppEntry(html, DEMO_EDITOR_ENTRY).replace(/\s*<!--[\s\S]*?-->/g, "") },
     resolveId(id, _importer, { isEntry }) {
       // Vite emits HTML relative to root. Give the tool-owned shell a host-rooted

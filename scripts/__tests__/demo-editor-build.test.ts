@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DEMO_EDITOR_HOSTS, resolveDemoEditorHost } from "../demo-editor-hosts.mjs";
+import { buildDemoEditor } from "../build-demo-editor.mjs";
 import { buildDemoEditors } from "../build-demo-editors.mjs";
 import { discoverPackedHosts } from "../packed-host-helpers.mjs";
 
@@ -64,5 +65,36 @@ describe("demo editor host selection", () => {
       throw new Error("Invalid host project");
     })).rejects.toThrow("Invalid host project");
     expect(failed).toEqual([built[0]]);
+  });
+});
+
+describe("demo editor child process environment", () => {
+  it("pins NODE_ENV to production in the spawn env for every discovered host", async () => {
+    const hosts = discoverPackedHosts(root);
+    expect(hosts.length).toBeGreaterThan(0);
+    for (const hostDir of hosts) {
+      let capturedEnv: NodeJS.ProcessEnv | undefined;
+      // A prior host's post-build verification (verifyDemoEditorArtifact ->
+      // createModuleEvaluator) can leave the parent's own NODE_ENV changed;
+      // this proves the spawned child is pinned regardless of that.
+      process.env.NODE_ENV = "development";
+      try {
+        await buildDemoEditor(hostDir, {
+          execFile: async (_file, _args, options) => {
+            capturedEnv = options.env;
+            return { stdout: "", stderr: "" };
+          },
+          verifyDemoEditorArtifact: async () => ({
+            root: hostDir,
+            manifest: { schemaVersion: 1, tool: { name: "zudo-composer", version: "0.0.0" }, hostId: "fake", projectId: "fake", sourceRevision: "0".repeat(40), projectSourceRevision: "0".repeat(40), mode: "disposable-demo-editor", assets: {}, routes: [], files: {} },
+            files: [],
+          }),
+        });
+      } finally {
+        delete process.env.NODE_ENV;
+      }
+      expect(capturedEnv?.NODE_ENV).toBe("production");
+      expect(capturedEnv?.ZUDO_DEMO_EDITOR_HOST).toBe(hostDir);
+    }
   });
 });
