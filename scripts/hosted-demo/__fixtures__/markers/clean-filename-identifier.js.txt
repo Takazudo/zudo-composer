@@ -1,0 +1,4 @@
+export function assetDownloadFileName(fileName, mimeType) {
+  return fileName === "" ? mimeType : fileName;
+}
+export const label = `Download ${assetDownloadFileName("cover.png", "image/png")}`;
