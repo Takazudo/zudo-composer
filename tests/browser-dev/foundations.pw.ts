@@ -207,6 +207,12 @@ test("every delivery path is its own visitor document, on a direct load and on a
   // It runs before the listeners below so the shell modules the dashboard loads
   // are not recorded as this document's own requests.
   await ensureDevWorkspace(page);
+  // Bootstrapping before the listeners is not enough on its own: the
+  // bootstrap's `reload()` resolves at `load`, and the dashboard's Vite module
+  // graph keeps requesting past it — `/src/style.css` landed 3ms into the
+  // recording. Tearing the shell document down first makes the isolation
+  // deterministic rather than a race with that tail.
+  await page.goto("about:blank");
   const failures = watchRuntimeFailures(page);
   const requested: string[] = [];
   page.on("request", (request) => requested.push(request.url()));
