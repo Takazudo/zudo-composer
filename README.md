@@ -359,7 +359,10 @@ declares none renders the light arm regardless of the visitor's OS setting.
 themeset must guarantee for tool-drawn surfaces to follow the OS. A host that
 writes its own `styles` entry without that declaration (or without importing
 a pack sheet that has it) gets the light arm on these surfaces even on a dark
-site.
+site. `packages/demo-webshop/styles/base.css` is one of this repository's own
+demo hosts in exactly that state: it is a dark site declaring no
+`color-scheme`, so its skip link and state pages render the light arm today;
+`demo-landing` and `demo-blog` are light sites where the light arm matches.
 
 ### Release identity for a host-self pack
 
