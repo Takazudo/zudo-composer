@@ -214,9 +214,11 @@ test("every delivery path is its own visitor document, on a direct load and on a
       await expect(page.getByRole("navigation", { name: "Main navigation" })).toHaveCount(0);
       expect(await editorTopbarToken(page), `${path} (${load})`).toBe("");
       await expect(page.locator("main#main-content, main[data-site-delivery-state]").first()).toBeVisible();
-      // The picker exists only once a build is ready, and a ready build must
-      // render the site's own page rather than a tool state screen.
-      if (await page.locator(".zc-preview-strip__select").count()) await expect(page.locator("main#main-content")).toBeVisible();
+      // With the Assets store seeded (#824), `/website-preview` always builds
+      // the site's own page. `/site` has no activated release on this lane and
+      // renders the `Site unavailable` state by design, so it stays on the
+      // alternative locator above instead of this stricter assertion.
+      if (path !== "/site") await expect(page.locator("main#main-content")).toBeVisible();
     }
   }
 
@@ -271,11 +273,10 @@ test("the sitemap canvas geometry stays fixed after opening", async ({ page }) =
 test("a fresh edit in the editor reaches a newly opened working preview", async ({ page, context }) => {
   test.setTimeout(120_000);
   const failures = watchRuntimeFailures(page);
-  // This lane's workspace is a freshly created empty directory tree, so the
-  // bootstrapped sample content's asset references resolve to nothing and the
-  // editor logs a 404 per missing upload. Recording the URLs rather than
-  // exempting the console lines blindly keeps the guard tight: the assertion
-  // below fails if a 404 ever comes from anything but a missing upload.
+  // `run-dev-browser.mjs` now seeds this lane's workspace with the sample's
+  // committed Assets bytes (#824), so every asset reference the bootstrapped
+  // content makes should resolve. Recording every 404 keeps the guard tight:
+  // the assertion below requires the list to be empty.
   const notFound: string[] = [];
   page.on("response", (response) => { if (response.status() === 404) notFound.push(new URL(response.url()).pathname); });
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -305,33 +306,27 @@ test("a fresh edit in the editor reaches a newly opened working preview", async 
 
   await expect(preview.locator("main#main-content, main[data-site-delivery-state]").first()).toBeVisible({ timeout: RECAPTURE_READY_TIMEOUT_MS });
 
-  // Leaving the pending state is the end-to-end proof this lane can give, and
-  // it exercises the whole chain: the anchor's head-start flush commits the
-  // in-field edit, the editor broadcasts the transition (#796), and this
-  // document's reader clears the indicator (#797). Eventually consistent by
-  // design, hence the poll rather than a synchronous read.
-  //
-  // Asserting the edited TEXT is deliberately not done here: `run-dev-browser.mjs`
-  // gives every dev-lane spec a freshly created empty workspace, so
-  // `ZUDO_ASSETS_STORE_ROOT` is an empty directory and the bootstrapped sample
-  // content's asset references cannot resolve — the working preview reports
-  // "Site build blocked: Required Assets asset is missing." and can never
-  // render the composition on this lane, before or after this epic. The
-  // sibling spec above encodes the same limitation by asserting
-  // `main#main-content` only when the strip's source picker exists. Tracked in
-  // the issue linked from #798; proving the rendered text needs a lane whose
-  // workspace can actually build a site.
+  // Leaving the pending state is one side of the proof, and it exercises the
+  // whole chain: the anchor's head-start flush commits the in-field edit, the
+  // editor broadcasts the transition (#796), and this document's reader
+  // clears the indicator (#797). Eventually consistent by design, hence the
+  // poll rather than a synchronous read.
   const status = preview.locator(".zc-preview-strip").getByRole("status");
   await expect(status).not.toHaveText(PREVIEW_STRIP_PENDING_COPY, { timeout: RECAPTURE_READY_TIMEOUT_MS });
 
+  // The other side: the newly opened preview actually rendered the edit.
+  // `run-dev-browser.mjs` now seeds this lane's `ZUDO_ASSETS_STORE_ROOT` from
+  // the sample's committed Assets bytes (#824), so the bootstrapped content's
+  // asset references resolve and the working preview can build the
+  // composition instead of reporting "Site build blocked: Required Assets
+  // asset is missing."
+  await expect(preview.locator("main#main-content")).toContainText(edited, { timeout: RECAPTURE_READY_TIMEOUT_MS });
+
   await preview.close();
 
-  // Every 404 must be a missing uploaded asset — the known consequence of this
-  // lane's empty asset store, tracked in the issue linked from #798. Anything
-  // else is a real failure and still fails here.
-  const unexpected = notFound.filter((pathname) => !pathname.startsWith("/uploaded-assets/"));
-  expect(unexpected, `unexpected 404s: ${unexpected.join(", ")}`).toEqual([]);
-  const NOT_FOUND_CONSOLE = "console: Failed to load resource: the server responded with a status of 404 (Not Found)";
-  expect(failures.filter((failure) => failure !== NOT_FOUND_CONSOLE)).toEqual([]);
-  expect(previewFailures.filter((failure) => failure !== NOT_FOUND_CONSOLE)).toEqual([]);
+  // The seeded store means every asset reference should resolve, so any 404
+  // at all is a real failure now.
+  expect(notFound).toEqual([]);
+  expect(failures).toEqual([]);
+  expect(previewFailures).toEqual([]);
 });
