@@ -212,6 +212,9 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
   // writes. Editor documents only — the visitor documents mounted by
   // src/main.tsx never publish.
   useEffect(() => publishPendingState({
+    // Placeholder until #821 wires `providers.workspace.id`; an undefined id
+    // publishes nothing.
+    workspaceId: undefined,
     getPending: () => providers.sessions.hasPending,
     subscribe: (listener) => providers.sessions.subscribe(listener),
   }), [providers]);
