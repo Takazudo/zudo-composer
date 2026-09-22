@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { build, type InlineConfig } from "vite";
 import { APP_ROOT, SITE_BUILD_ENTRY, appModuleId } from "../../plugins/roots.mjs";
+import { createModuleEvaluator } from "../module-evaluator.mjs";
 import { runSiteBuild } from "../site-build/run.mjs";
 
 let directory: string;
@@ -121,6 +122,19 @@ describe("static build environment", () => {
     const build = vi.fn();
     await expect(runSiteBuild({ workspaceRoot: host }, { build })).rejects.toThrow("Config evaluation failed");
     expect(build).not.toHaveBeenCalled();
+    expect(process.env.NODE_ENV).toBe(nodeEnv);
+  });
+});
+
+describe("module evaluator NODE_ENV", () => {
+  it.each([
+    { label: "unset stays unset", nodeEnv: undefined },
+    { label: "set stays the same value", nodeEnv: "test" },
+  ])("leaves process.env.NODE_ENV unchanged: $label", async ({ nodeEnv }) => {
+    vi.stubEnv("NODE_ENV", nodeEnv);
+    const modulePath = join(directory, "tiny-evaluator-module.mjs");
+    await writeFile(modulePath, "export const value = 1;\n");
+    await createModuleEvaluator(directory)(modulePath);
     expect(process.env.NODE_ENV).toBe(nodeEnv);
   });
 });

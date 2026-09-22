@@ -3851,6 +3851,8 @@ var FORBIDDEN_ARTIFACT_MARKERS = [
 	"sourceMappingURL",
 	"/Users/",
 	"/home/",
+	"/root/",
+	"columnNumber",
 	"node:fs",
 	"node:path",
 	"node:crypto",
