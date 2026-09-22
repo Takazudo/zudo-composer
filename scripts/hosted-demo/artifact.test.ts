@@ -134,6 +134,18 @@ describe("forbidden-marker regressions", () => {
     }
   });
 
+  it("catches build-machine absolute paths and minified dev-JSX metadata on Linux, not just macOS", async () => {
+    const directory = join(import.meta.dirname, "__fixtures__/markers");
+    for (const file of ["absolute-path-home.js.txt", "absolute-path-macos.js.txt", "dev-jsx-metadata.js.txt"]) {
+      const source = await readFile(join(directory, file), "utf8");
+      expect(() => assertDemoEditorText(source, "assets/demo-pack.js")).toThrow("forbidden marker");
+    }
+    // A legitimate `fileName` identifier (unlike the dev-JSX `columnNumber`
+    // triple above) must not false-positive.
+    const clean = await readFile(join(directory, "clean-filename-identifier.js.txt"), "utf8");
+    expect(() => assertDemoEditorText(clean, "assets/demo-pack.js")).not.toThrow();
+  });
+
   it.each([
     'import "./src/runtime.js";',
     'export { pack } from "./styleguide/runtime.js";',

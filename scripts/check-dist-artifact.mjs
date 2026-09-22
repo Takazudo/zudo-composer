@@ -45,6 +45,9 @@ for (const forbidden of [
   "zfb app",
   "/src/",
   "/Users/",
+  "/home/",
+  "/root/",
+  "columnNumber",
   "sourceMappingURL",
 ]) {
   assert.ok(!assetText.includes(forbidden), `production artifact leaked forbidden marker: ${forbidden}`);
