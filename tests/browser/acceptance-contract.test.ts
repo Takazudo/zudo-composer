@@ -110,6 +110,12 @@ describe("final browser acceptance source contract", () => {
       for (const text of ['join(temporaryRoot, "release")', 'join(temporaryRoot, "assets")', 'join(temporaryRoot, "compositions")',
         'join(temporaryRoot, "data")', "ZUDO_SITE_PROJECT_ROOT: releaseRoot", "ZUDO_ASSETS_STORE_ROOT: assetsRoot",
         "ZUDO_COMPOSITIONS_ROOT: compositionsRoot", "ZUDO_DATA_ROOT: dataRoot"]) expect(runner).toContain(text);
+      // Two foundations assertions (the unconditional `main#main-content` on
+      // `/website-preview`, and the rendered-edit check) only hold while the
+      // lane seeds its disposable Assets store, so the seeding is pinned here
+      // exactly as it is for the other two runners below.
+      expect(runner).toContain('cp(join(root, SAMPLE_ASSETS_DIR), assetsRoot, { recursive: true })');
+      expect(runner).toContain('import { SAMPLE_ASSETS_DIR } from "./sample-assets-path.mjs"');
       expect(runner).toMatch(/finally\s*\{\s*await rm\(temporaryRoot, \{ recursive: true, force: true \}\)/);
       expect(runner).not.toMatch(/process\.env\.\w+\s*=/); expect(runner).not.toContain(".zudo-site-project"); expect(runner).not.toContain('resolve(root, "assets-store")');
       expect(config).toContain("requireDevBrowserRoots(process.env)"); expect(config).toContain("reuseExistingServer: false");

@@ -199,6 +199,14 @@ test("the isolated preview document loads no shell stylesheet and no shell modul
 });
 
 test("every delivery path is its own visitor document, on a direct load and on a reload", async ({ page }) => {
+  test.setTimeout(120_000);
+  // Bootstrapped here rather than inherited from an earlier test in this file:
+  // `/website-preview` is now asserted to build the site's own page, so this
+  // spec needs a workspace even when Playwright is given a `-g` filter (which
+  // `run-dev-browser.mjs` passes straight through to a fresh disposable root).
+  // It runs before the listeners below so the shell modules the dashboard loads
+  // are not recorded as this document's own requests.
+  await ensureDevWorkspace(page);
   const failures = watchRuntimeFailures(page);
   const requested: string[] = [];
   page.on("request", (request) => requested.push(request.url()));

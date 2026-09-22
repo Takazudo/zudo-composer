@@ -124,8 +124,11 @@ async function authorOneSitemap(page) {
     step("checking the empty project's working preview blocks, and never on a missing asset");
     await page.goto(`${ORIGIN}/website-preview`);
     await page.getByRole("heading", { name: "Site build blocked", exact: true }).waitFor({ timeout: 90_000 });
-    await page.getByText("Assets impact inspection is incomplete; exact release capture is blocked.").first().waitFor({ timeout: 90_000 });
+    // Read before waiting on the expected message: a blocked build renders one
+    // joined diagnostic string, so checking the missing-asset wording afterwards
+    // could never fail — the wrong reason would surface as a bare 90s timeout.
     assert.equal(await page.getByText("Required Assets asset is missing.").count(), 0, "Empty project's working preview unexpectedly blocked on a missing asset");
+    await page.getByText("Assets impact inspection is incomplete; exact release capture is blocked.").first().waitFor({ timeout: 90_000 });
     await page.goto(`${ORIGIN}/sitemapper`);
 
     await page.getByRole("heading", { name: "Sitemaps", exact: true }).waitFor({ timeout: 90_000 });
@@ -369,6 +372,14 @@ async function verifyGeneratedReadyHost(hostRoot) {
     // specifically that no gate opened `/website-preview` on a generated host.
     step("checking the generated host's working preview renders the starter page");
     await page.goto(`${ORIGIN}/website-preview`);
+    // The blocked state renders `main[data-site-delivery-state]`, never
+    // `main#main-content`, so both blocked-state assertions are read once the
+    // delivery document has settled on either main. Waiting for
+    // `main#main-content` first would turn a blocked build into a bare 90s
+    // locator timeout and leave the two assertions below unreachable.
+    await page.locator("main#main-content, main[data-site-delivery-state]").first().waitFor({ state: "visible", timeout: 90_000 });
+    assert.equal(await page.getByRole("heading", { name: "Site build blocked", exact: true }).count(), 0, "Generated ready host's working preview unexpectedly blocked on a build error");
+    assert.equal(await page.getByText("Required Assets asset is missing.").count(), 0, "Generated ready host's working preview is unexpectedly missing an asset");
     const generatedPreviewMain = page.locator("main#main-content");
     await generatedPreviewMain.waitFor({ state: "visible", timeout: 90_000 });
     await generatedPreviewMain.getByRole("heading", { name: "Welcome to your site", exact: true }).waitFor({ timeout: 90_000 });
@@ -376,8 +387,6 @@ async function verifyGeneratedReadyHost(hostRoot) {
       "Your first page is ready. Edit its content, arrange components, and make it yours.",
       { exact: true },
     ).waitFor({ timeout: 90_000 });
-    assert.equal(await page.getByRole("heading", { name: "Site build blocked", exact: true }).count(), 0, "Generated ready host's working preview unexpectedly blocked on a build error");
-    assert.equal(await page.getByText("Required Assets asset is missing.").count(), 0, "Generated ready host's working preview is unexpectedly missing an asset");
 
     assert.deepEqual(errors, [], "Generated host reported browser runtime errors");
     await assert.rejects(lstat(join(hostRoot, ".zudo-site-project")), { code: "ENOENT" }, "Opening ready CMS must not create an activated release");
