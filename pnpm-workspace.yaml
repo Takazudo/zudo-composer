@@ -18,6 +18,15 @@ allowBuilds:
   esbuild: true
   workerd: true
 
+# Entries are keyed by package NAME and the FIRST match wins, so a name can be
+# excluded at only one version at a time. Bumping a package that is still inside
+# the minimumReleaseAge window is therefore a two-step edit: the pre-install
+# lockfile audit reads the OLD version from pnpm-lock.yaml, so list the old
+# version ABOVE the new one, run `corepack pnpm install`, then delete the old
+# line. Swapping the version in place instead makes the audit reject the
+# still-committed old entry; `pnpm clean --lockfile` clears that error but
+# re-resolves every `^` range in the repo, which is a much wider change than
+# the bump itself.
 minimumReleaseAgeExclude:
   - '@cloudflare/workerd-darwin-64@1.20260908.1'
   - '@cloudflare/workerd-darwin-arm64@1.20260908.1'
