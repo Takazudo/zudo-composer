@@ -346,6 +346,21 @@ missing file is a loud config error. Every custom property the editor chrome
 consumes is declared in the tool's own `src/styles/app-tokens.css`, so a themeset
 that ships none of them still leaves a working editor.
 
+The `styles` entry also carries a contract for the visitor document. The
+tool's own visitor sheet (`src/features/delivery/visitor.css`) colours the
+only tool-rendered surfaces of a delivered site — the skip link and the
+loading/error/not-found state pages — with `light-dark()` pairs and
+deliberately declares no `color-scheme`, so a host's pinned `data-theme` keeps
+winning. `light-dark()` only resolves against a declared `color-scheme`,
+though, so the host's `styles` entry owns that declaration; a host that
+declares none renders the light arm regardless of the visitor's OS setting.
+`@zudo-composer/ui/styles/colors.css` declares `color-scheme: light dark` on
+`:root`, so any host that imports the pack sheet inherits it — part of what a
+themeset must guarantee for tool-drawn surfaces to follow the OS. A host that
+writes its own `styles` entry without that declaration (or without importing
+a pack sheet that has it) gets the light arm on these surfaces even on a dark
+site.
+
 ### Release identity for a host-self pack
 
 A release's `installedPackDigest` attests an installed themeset by hashing its
