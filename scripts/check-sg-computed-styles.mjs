@@ -147,7 +147,7 @@ async function describeToggleHitTest(page) {
  * @param {Awaited<ReturnType<typeof describeToggleHitTest>>} hit
  */
 function formatHitTest(hit) {
-  if (!hit) return "the toggle button had no bounding box, so the point could not be hit-tested";
+  if (!hit) return "the toggle's centre point could not be hit-tested (no bounding box, or the page was no longer evaluable)";
   return `document.elementFromPoint(${hit.point.x}, ${hit.point.y}) at the toggle's centre hit ${hit.target} (ancestors ${hit.targetAncestors}, z-index ${hit.targetZIndex}${hit.isBackdrop ? " — the backdrop" : ""}); toggle z-index ${hit.toggleZIndex}, backdrop z-index ${hit.backdropZIndex}`;
 }
 
@@ -171,9 +171,13 @@ async function clickToggleAndWaitForAriaExpanded(page, expected, context) {
     } catch (error) {
       // Playwright's own actionability check fails with an opaque timeout when
       // something covers the button — which is exactly the #785 regression this
-      // proves absent. Re-raise with the hit test that explains it.
+      // proves absent. Re-raise with the hit test that explains it. The hit
+      // test is itself guarded: a page that is closed or unevaluable would
+      // otherwise reject here and replace the click failure it exists to
+      // explain, dropping `cause` with it.
+      const hit = await describeToggleHitTest(page).catch(() => null);
       throw new Error(
-        `${context}: Playwright refused to deliver the click to the toggle button (${error instanceof Error ? error.message.split("\n")[0] : String(error)}) — ${formatHitTest(await describeToggleHitTest(page))}. A layer covering the toggle is the #785 regression.`,
+        `${context}: Playwright refused to deliver the click to the toggle button (${error instanceof Error ? error.message.split("\n")[0] : String(error)}) — ${formatHitTest(hit)}. A layer covering the toggle is the #785 regression.`,
         { cause: error },
       );
     }
@@ -268,6 +272,18 @@ async function verifyDrawerInteractions(page, route, colorScheme) {
     `${context}: ${formatHitTest(hit)} — that point belongs to neither the toggle button nor its icon, so the backdrop or another layer is stealing the click again (#785).`,
   );
 
+  // Without a rendered backdrop the hit test above cannot fail, so the #785
+  // proof would pass vacuously on a build whose backdrop stopped rendering.
+  const backdropDisplayWhileOpen = await page.locator(backdropSelector).evaluate(
+    // eslint-disable-next-line no-undef -- this callback runs inside the browser via page.evaluate, not in this Node process
+    (element) => getComputedStyle(element).display,
+  );
+  assert.notEqual(
+    backdropDisplayWhileOpen,
+    "none",
+    `${context}: backdrop computes display:none while the drawer is open, so nothing was competing for the toggle's point and the hit test above proves nothing (#785).`,
+  );
+
   const iconDisplays = await button.evaluate(
     // eslint-disable-next-line no-undef -- this callback runs inside the browser via page.evaluate, not in this Node process
     (element) => Array.from(element.querySelectorAll("svg")).map((svg) => getComputedStyle(svg).display),
@@ -277,6 +293,17 @@ async function verifyDrawerInteractions(page, route, colorScheme) {
     xIconDisplay,
     "none",
     `${context}: toggle button's first <svg> (the X/close icon) computed display:none while the drawer is open (icons observed: [${iconDisplays.join(", ")}]) — the inline HIDDEN_ICON_STYLE swap regressed (zudo-doc#4355).`,
+  );
+  // #780's restore condition for the retired host override is literally "two
+  // icons appear", and the assertion above cannot see it: `notEqual` passes
+  // for a second visible <svg> and passes on `undefined` when the button
+  // renders no <svg> at all. Count instead. Measured on the built catalog the
+  // open state is ["block", "none"] — the X shown, the hamburger hidden.
+  const renderedIcons = iconDisplays.filter((display) => display !== "none");
+  assert.equal(
+    renderedIcons.length,
+    1,
+    `${context}: expected exactly one visible <svg> in the toggle button while the drawer is open, observed ${renderedIcons.length} (icons observed: [${iconDisplays.join(", ")}]) — restore the host's unlayered SidebarToggle override (UPSTREAM-NOTES item 11, #780).`,
   );
 
   await clickToggleAndWaitForAriaExpanded(page, "false", context);

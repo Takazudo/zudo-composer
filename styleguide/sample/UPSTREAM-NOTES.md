@@ -1,6 +1,6 @@
 # Upstream integration notes
 
-This host was rechecked on 2026-09-21 with `@takazudo/zudo-sg@0.3.1`,
+This host was rechecked on 2026-09-22 with `@takazudo/zudo-sg@0.3.1`,
 `create-zudo-sg@0.1.3`, `@takazudo/zfb@2.20.1`, `@takazudo/zdtp@0.8.1`,
 `@takazudo/zudo-doc@5.26.4`, Node `24.13.1`, and pnpm `11.5.2`.
 The installed UI pack still keeps its separate `@takazudo/zfb-md-wasm`
