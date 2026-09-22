@@ -45,6 +45,13 @@ describe("per-host demo editor Vite config", () => {
     await expect(resolveDemoEditorConfig(host)).rejects.toThrow(/incompatible with demo-webshop\/components/);
   });
 
+  it("fails the build when NODE_ENV leaked development instead of silently shipping dev JSX", async () => {
+    const host = await webshop();
+    vi.stubEnv("NODE_ENV", "development");
+    const config = await resolveDemoEditorConfig(host);
+    await expect(build({ ...config, logLevel: "silent" })).rejects.toThrow(/requires NODE_ENV=production/);
+  });
+
   it.each([false, true])("builds the webshop self-reference and selected seed/styles with host HTML present: %s", async (withHostHtml) => {
     const host = await webshop();
     const hostHtml = '<!doctype html><title>Host-owned HTML</title><script type="module" src="/missing-host-entry.ts"></script>';
@@ -67,6 +74,10 @@ describe("per-host demo editor Vite config", () => {
     // stylesheet or store. The host's config alone supplies those paths.
     vi.stubEnv("ZUDO_COMPOSER_STYLES", "missing-root-styles.css");
     vi.stubEnv("ZUDO_ASSETS_STORE_ROOT", join(APP_ROOT, "cms/assets"));
+    // The demo editor's configResolved guard requires isProduction, which
+    // scripts/build-demo-editor.mjs pins via its spawned child's env; this
+    // direct in-process build() call needs the same pin.
+    vi.stubEnv("NODE_ENV", "production");
     const config = await resolveDemoEditorConfig(host);
     expect(config.configFile).toBe(false);
     expect(config.root).toBe(host);

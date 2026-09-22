@@ -21,6 +21,12 @@ const FORBIDDEN_ARTIFACT_MARKERS = [
   "sourceMappingURL",
   "/Users/",
   "/home/",
+  "/root/",
+  // Path-independent proof that a development JSX transform reached a
+  // published artifact: `jsxDEV` emits a `{fileName, lineNumber, columnNumber}`
+  // triple, which survives minification while the build-machine path prefixes
+  // above do not exist at all on a container checkout such as `/__w` or `/app`.
+  "columnNumber",
   "node:fs",
   "node:path",
   "node:crypto",

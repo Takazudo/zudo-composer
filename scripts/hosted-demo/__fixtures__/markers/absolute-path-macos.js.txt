@@ -1,0 +1,2 @@
+var _jsxFileName = "/Users/takazudo/repos/zp/zudo-composer/packages/demo-blog/components/hero.tsx";
+export const Hero = () => jsx("div", { __self: this }, _jsxFileName);

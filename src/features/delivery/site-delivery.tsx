@@ -166,7 +166,14 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
   // a later failure replaces it or is reported beside it. A retry renders one
   // too, so this cannot live in the re-capture effect's own closure.
   const rendered = useRef(false);
-  useEffect(() => source.kind === "working-preview" ? subscribePendingState(setPending) : undefined, [source]);
+  // This document builds its own integration, whose id resolves inside the
+  // first capture, so the id is itself the dependency: the render that settles
+  // that snapshot is where it is re-read and the subscription finally opens.
+  // The id must come from the same identity source the publisher uses — a
+  // capture can settle `unavailable`, and a reader waiting on one would never
+  // subscribe at all.
+  const readingWorkspaceId = source.kind === "working-preview" ? source.providers.workspace.id : undefined;
+  useEffect(() => source.kind === "working-preview" ? subscribePendingState(readingWorkspaceId, setPending) : undefined, [source, readingWorkspaceId]);
   useEffect(() => {
     if (source.kind !== "working-preview") {
       const current = ++request.current;

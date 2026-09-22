@@ -94,6 +94,18 @@ The host's `styles` file is resolved through
 `@import` and `@source` statements. A missing styles file is a configuration
 error; zudo-composer does not silently select another stylesheet.
 
+The `styles` entry also decides how a delivered site's tool-rendered surfaces
+follow the OS. The tool's own visitor sheet colours the skip link and the
+loading/error/not-found state pages with `light-dark()` pairs and
+deliberately declares no `color-scheme`, so a host's pinned `data-theme` keeps
+winning over it. `light-dark()` only resolves against a declared
+`color-scheme`, so the host's `styles` entry owns that declaration — a host
+that declares none renders the light arm regardless of the visitor's OS
+setting. `@zudo-composer/ui/styles/colors.css` declares
+`color-scheme: light dark` on `:root`, so a host that imports the pack sheet
+inherits it; that declaration is load-bearing for any themeset that wants
+these surfaces to follow the OS.
+
 ## Worked fixtures
 
 The repository keeps two focused host examples that exercise the two admitted

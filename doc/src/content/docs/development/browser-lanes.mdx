@@ -14,7 +14,7 @@ Playwright configs are the executable source of truth:
 | Lane | Command | Port | Config | What it proves |
 | --- | --- | ---: | --- | --- |
 | Host | `corepack pnpm test:browser:host` | 4173 | `playwright.host.config.ts` | Runs `zudo-composer dev` through the package's installed-bin shape against a disposable host, after activating the Sample Studio project, and exercises the `tests/browser` authoring proof (excluding the SiteProject spec). |
-| Development | `corepack pnpm test:browser:dev` | 5173 | `playwright.dev.config.ts` | Runs this repository's own `pnpm dev` with disposable release, Assets, Composition, and CMS roots and exercises `tests/browser-dev`. |
+| Development | `corepack pnpm test:browser:dev` | 5173 | `playwright.dev.config.ts` | Runs this repository's own `pnpm dev` with disposable release, Assets, Composition, and CMS roots, the Assets root pre-seeded with the sample's committed bytes, and exercises `tests/browser-dev`. |
 | SiteProject | `corepack pnpm test:browser:site-project` | 4174 | `playwright.site-project.config.ts` | Verifies the Sample Studio static artifact and frozen route parity, activates the committed project into isolated roots, and crawls `site-project-acceptance.pw.ts` against the repository Vite app. |
 | Demos | `corepack pnpm test:browser:demos` | 4176 | `playwright.demos.config.ts` | Visits each of `demo-sample`, `demo-webshop`, `demo-landing`, and `demo-blog` in turn through its installed host dev server, crawls every verified static route, and performs the demo's one mock interaction. |
 | Demo editor | `corepack pnpm test:browser:demo-editor [sample\|shop\|landing\|blog]` | 4175 | `playwright.demo-editor.config.ts` | Serves each prepared per-host `dist-editor` artifact in turn, verifies its `demo-editor-manifest.json`, and runs the editor acceptance proof. |
@@ -57,7 +57,8 @@ package as a host dependency, runs the installed `seed` command, and removes
 the tree afterward. This proves the installed-host boundary rather than a
 Vite preview of the checkout. The development lane gives each spec file a
 fresh set of disposable filesystem roots so one spec's writes cannot leak into
-the next invocation.
+the next invocation, with the Assets root pre-seeded from the sample's
+committed bytes so its bootstrapped content's asset references resolve.
 
 The SiteProject lane reads `packages/demo-sample/dist-site/site-manifest.json`
 through its verified-manifest helper, compares the authoring routes with

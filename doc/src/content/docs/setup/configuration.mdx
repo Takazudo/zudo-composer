@@ -25,7 +25,7 @@ the environment column is the exact variable used for its override.
 | `sitemapsDir` | `cms/sitemaps` | `ZUDO_COMPOSER_SITEMAPS_DIR` | Sitemapper-domain JSON. |
 | `assetsDir` | `cms/assets` | `ZUDO_COMPOSER_ASSETS_DIR` | Content-addressed Assets store (`catalog.json` and `versions/`). |
 | `publicAssetsDir` | `public/uploaded-assets` | `ZUDO_COMPOSER_PUBLIC_ASSETS_DIR` | Published asset bytes the host commits and serves. |
-| `styles` | `styles/base.css` | `ZUDO_COMPOSER_STYLES` | Host base CSS entry; it imports pack CSS and declares Tailwind sources. |
+| `styles` | `styles/base.css` | `ZUDO_COMPOSER_STYLES` | Host base CSS entry; it imports pack CSS, declares Tailwind sources, and owns the `color-scheme` declaration the visitor document's `light-dark()` colours resolve against. |
 | `pack` | *(required, no default)* | `ZUDO_COMPOSER_PACK` | Component-pack package module specifier. |
 
 These eight defaulted settings are `DEFAULT_SETTINGS`; together with the
