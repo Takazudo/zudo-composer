@@ -1,14 +1,14 @@
 import { createHash } from "node:crypto";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../../test/workspace-providers";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createProductionProviderIntegration, type ProductionProviderIntegration } from "../../../app/provider-integration";
 import { activeComponentProvider } from "../../composer/active-pack";
 import { loadSampleSiteProject } from "../../../test/site-project-fixture";
 import { captureSampleAssetLock, SAMPLE_ASSETS_STORE_ROOT } from "../../../test/sample-asset-lock";
 import { serializeSiteProject } from "../../../site-project/model/canonical";
 import { RECAPTURE_DEBOUNCE_MS, SiteDelivery, loadWorkingPreviewSnapshot } from "../site-delivery";
-import { PREVIEW_REFRESHING_COPY } from "../preview-strip";
+import { PREVIEW_PENDING_COPY, PREVIEW_REFRESHING_COPY } from "../preview-strip";
 import { compileSiteProject } from "../../../site-project/compiler";
 import type { ActivatedDeliveryArtifact, ActivatedDeliverySource, DeliverySourceContract } from "../source";
 import { validateActivatedDeliveryArtifact } from "../source";
@@ -411,5 +411,99 @@ describe("SiteDelivery", () => {
     await providers.contentProvider.store.putEntry({ ...loaded.record, updatedAt: "2026-08-31T01:00:00.000Z", values: { ...loaded.record.values, "about-heading-field": "Persisted delivery heading" } });
     cleanup(); render(<SiteDelivery source={working(providers)} pathname="/website-preview/about" />);
     expect(await screen.findByRole("heading", { name: "Persisted delivery heading" })).toBeInTheDocument();
+  });
+});
+
+/** Mirrors the private `CHANNEL_NAME` in src/shared/pending-broadcast.ts. */
+const PENDING_CHANNEL = "zudo-workspace-pending-v1";
+
+/** A same-origin `BroadcastChannel` stand-in: peers sharing a name see each other's posts, never their own. */
+class FakePendingChannel {
+  static peers = new Set<FakePendingChannel>();
+  onmessage: ((event: { data: unknown }) => void) | null = null;
+  constructor(readonly name: string) { FakePendingChannel.peers.add(this); }
+  postMessage(data: unknown) { for (const peer of FakePendingChannel.peers) if (peer !== this && peer.name === this.name) peer.onmessage?.({ data }); }
+  close() { FakePendingChannel.peers.delete(this); }
+}
+
+/**
+ * One editor tab's announcement, posted and closed without a live publisher
+ * behind it, so nothing can answer the reader's own re-query afterwards: a
+ * message the reader was not listening for stays lost, which is exactly what
+ * the "before the id resolved" case has to prove.
+ */
+function announcePending(workspaceId: string, value: boolean, sender = "editor-tab"): void {
+  const peer = new FakePendingChannel(PENDING_CHANNEL);
+  peer.postMessage({ type: "pending", sender, workspaceId, value });
+  peer.close();
+}
+
+/**
+ * A peer that only listens. The reader queries the channel the moment it
+ * subscribes, so a counted query is the signal that its effect has run —
+ * Preact flushes effects after paint, and a bare `findBy*` can return first.
+ */
+function observeQueries(): { count(): number; close(): void } {
+  const peer = new FakePendingChannel(PENDING_CHANNEL);
+  let queries = 0;
+  peer.onmessage = ({ data }) => { if ((data as { type?: string }).type === "query") queries += 1; };
+  return { count: () => queries, close: () => peer.close() };
+}
+
+/**
+ * A working-preview integration that withholds its workspace id until its
+ * first capture resolves it, as the real one does — the preview document
+ * builds its own integration and only `captureWorkspace` initializes it.
+ */
+async function lateWorkspaceId(): Promise<{ providers: ProductionProviderIntegration; id: string }> {
+  const base = await workingIntegration();
+  const id = base.workspace.id!;
+  let resolved = false;
+  const providers = { ...base,
+    workspace: { ...base.workspace, get id() { return resolved ? id : undefined; } },
+    captureWorkspace: async () => { const outcome = await base.captureWorkspace(); resolved = true; return outcome; },
+  } as unknown as ProductionProviderIntegration;
+  return { providers, id };
+}
+
+describe("SiteDelivery working-preview pending broadcast", () => {
+  beforeEach(() => { FakePendingChannel.peers.clear(); vi.stubGlobal("BroadcastChannel", FakePendingChannel); });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("reports an editor's unsaved changes for its own workspace and ignores another's", async () => {
+    const providers = await workingIntegration();
+    const id = providers.workspace.id!;
+    const listening = observeQueries();
+    render(<SiteDelivery source={working(providers)} pathname="/website-preview/about" />);
+    await screen.findByRole("heading", { name: "A studio built around useful clarity" });
+    await waitFor(() => expect(listening.count()).toBe(1));
+    expect(strip().textContent).not.toContain(PREVIEW_PENDING_COPY);
+
+    await act(async () => { announcePending("another-workspace", true, "foreign-tab"); });
+    expect(strip().textContent).not.toContain(PREVIEW_PENDING_COPY);
+
+    await act(async () => { announcePending(id, true); });
+    expect(strip().textContent).toContain(PREVIEW_PENDING_COPY);
+
+    await act(async () => { announcePending(id, false); });
+    expect(strip().textContent).not.toContain(PREVIEW_PENDING_COPY);
+    listening.close();
+  });
+
+  it("subscribes once the workspace id resolves rather than staying deaf for the document's life", async () => {
+    const { providers, id } = await lateWorkspaceId();
+    const listening = observeQueries();
+    // Announced while the id is still undefined: nobody is listening yet, and
+    // the one-shot peer is gone before the reader's first query goes out.
+    announcePending(id, true);
+    render(<SiteDelivery source={working(providers)} pathname="/website-preview/about" />);
+    await screen.findByRole("heading", { name: "A studio built around useful clarity" });
+    // No query until the resolved id re-runs the subscribe effect.
+    await waitFor(() => expect(listening.count()).toBe(1));
+    expect(strip().textContent).not.toContain(PREVIEW_PENDING_COPY);
+
+    await act(async () => { announcePending(id, true); });
+    expect(strip().textContent).toContain(PREVIEW_PENDING_COPY);
+    listening.close();
   });
 });
