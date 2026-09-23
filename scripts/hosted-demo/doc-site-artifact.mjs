@@ -136,6 +136,9 @@ export async function verifyDocSiteArtifact({ directory, expectedSourceRevision 
     assert.ok(Object.hasOwn(manifest.files, path), `Doc site artifact file is missing from manifest: ${path}`);
     const digest = sha256(await readFile(join(root, path)));
     assert.equal(digest, manifest.files[path], `Doc site artifact checksum mismatch: ${path}`);
+    // Workers consumes the root _headers file as response policy; it is
+    // integrity-checked above but is not served as a public asset.
+    if (path === "_headers") continue;
     const extension = extname(path).toLowerCase();
     const mime = MIME_BY_EXTENSION.get(extension);
     assert.ok(mime, `Unknown doc site artifact extension ${extension || "(none)"}: ${path}`);
