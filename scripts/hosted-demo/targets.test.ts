@@ -15,10 +15,24 @@ const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))); });
 
 describe("hosted-demo deploy targets", () => {
-  it("names all ten Workers, configs, domains, host directories and artifact directories", () => {
-    expect(TARGET_KEYS).toEqual(["doc", "sample", "shop", "landing", "blog", "sample-editor", "shop-editor", "landing-editor", "blog-editor", "sample-sg"]);
+  it("names all thirteen Workers, configs, domains, host directories and artifact directories", () => {
+    expect(TARGET_KEYS).toEqual(["doc", "sample", "shop", "landing", "blog", "sample-editor", "shop-editor", "landing-editor", "blog-editor", "sample-sg", "shop-sg", "landing-sg", "blog-sg"]);
     expect(TARGETS.doc).toMatchObject({ workerName: "zudo-composer", configPath: "wrangler.doc.jsonc", domain: "zudo-composer.zudolab.dev", kind: "doc-site" });
     expect(TARGETS["sample-sg"]).toMatchObject({ workerName: "zc-sg-sample", configPath: "wrangler.sample-sg.jsonc", domain: "zc-sg-sample.zudolab.dev", kind: "doc-site", artifactDirectory: resolve(import.meta.dirname, "../..", "styleguide/sample/dist"), manifestFileName: DOC_SITE_MANIFEST, ciArtifactName: expect.any(Function) });
+    for (const [key, slug] of [["shop-sg", "shop"], ["landing-sg", "landing"], ["blog-sg", "blog"]]) {
+      const target = TARGETS[key];
+      expect(target).toMatchObject({
+        workerName: `zc-sg-${slug}`,
+        configPath: `wrangler.${slug}-sg.jsonc`,
+        domain: `zc-sg-${slug}.zudolab.dev`,
+        hostDirectory: resolve(import.meta.dirname, "../..", `styleguide/${slug}`),
+        artifactDirectory: resolve(import.meta.dirname, "../..", `styleguide/${slug}/dist`),
+        manifestFileName: DOC_SITE_MANIFEST,
+        ciArtifactName: expect.any(Function),
+      });
+      expect(target.ciArtifactName("a".repeat(40))).toBe(`${slug}-sg-site-${"a".repeat(40)}`);
+      expect(target.verifyArtifact).toBe(verifyDocSiteArtifact);
+    }
     expect(TARGETS.sample).toMatchObject({ workerName: "zc-demo-sample", configPath: "wrangler.demo-sample.jsonc", domain: "zc-demo-sample.zudolab.dev", kind: "site-static" });
     expect(TARGETS.shop).toMatchObject({ workerName: "zc-demo-shop", configPath: "wrangler.demo-shop.jsonc", domain: "zc-demo-shop.zudolab.dev", kind: "site-static" });
     expect(TARGETS.landing).toMatchObject({ workerName: "zc-demo-landing", configPath: "wrangler.demo-landing.jsonc", domain: "zc-demo-landing.zudolab.dev", kind: "site-static" });
@@ -73,8 +87,8 @@ describe("hosted-demo deploy targets", () => {
     expect(TARGETS.shop.liveRoutes({ routes: ["/", "/about"] })).toEqual(["/", "/about"]);
   });
 
-  it("maps sample styleguide routes and assets through the doc-site target", () => {
-    const target = TARGETS["sample-sg"];
+  it.each(["sample-sg", "shop-sg", "landing-sg", "blog-sg"])("maps %s routes and assets through the doc-site target", (key) => {
+    const target = TARGETS[key];
     expect(target.routeFile?.("/", {})).toBe("index.html");
     expect(target.routeFile?.("/components/", {})).toBe("components/index.html");
     expect(target.routeFile?.("/components/cta-button/", {})).toBe("components/cta-button/index.html");
@@ -92,10 +106,14 @@ describe("hosted-demo deploy targets", () => {
       const target = TARGETS[key];
       const config = JSON.parse(await readFile(join(root, target.configPath), "utf8")) as {
         name: string;
+        workers_dev: boolean;
+        preview_urls: boolean;
         assets: { directory: string; not_found_handling: string };
         routes: Array<{ pattern: string; custom_domain?: boolean }>;
       };
       expect(config.name).toBe(target.workerName);
+      expect(config.workers_dev).toBe(false);
+      expect(config.preview_urls).toBe(false);
       expect(config.routes).toEqual([{ pattern: target.domain, custom_domain: true }]);
       expect(config.assets.directory.replace(/^\.\//u, "").split("/").join(sep)).toBe(relative(root, target.artifactDirectory));
       expect(config.assets.not_found_handling).toBe(target.kind === "doc-site" ? "404-page" : "single-page-application");

@@ -13,20 +13,26 @@ afterEach(async () => { await Promise.all(temporaries.splice(0).map((root) => rm
 async function fixture(uiSpec = "git+https://example.test/repo.git#ui", contractSpec = "git+https://example.test/repo.git#contract", handoffUiSpec = uiSpec, handoffContractSpec = contractSpec) {
   const root = await mkdtemp(join(tmpdir(), "styleguide-pins-test-"));
   temporaries.push(root);
-  await mkdir(join(root, "styleguide/sample"), { recursive: true });
+  for (const host of ["sample", "shop", "landing", "blog"]) await mkdir(join(root, `styleguide/${host}`), { recursive: true });
   await writeFile(join(root, "ui-handoff.json"), JSON.stringify({ rootGitSpec: handoffUiSpec }));
   await writeFile(join(root, "contract-handoff.json"), JSON.stringify({ rootGitSpec: handoffContractSpec }));
   await writeFile(join(root, "styleguide/sample/package.json"), JSON.stringify({ dependencies: { "@zudo-composer/ui": uiSpec, "@zudo-composer/component-contract": contractSpec } }));
   await writeFile(join(root, "styleguide/sample/README.md"), "The documented fallback is link:../../packages/ui and link:../../packages/component-contract.");
+  for (const host of ["shop", "landing", "blog"]) {
+    await writeFile(join(root, `styleguide/${host}/package.json`), JSON.stringify({ dependencies: { "@zudo-composer/component-contract": handoffContractSpec } }));
+  }
   return root;
 }
 
-describe("sample styleguide dependency pins", () => {
-  it("matches both standalone dependencies to the root handoff specs", () => {
+describe("standalone styleguide dependency contracts", () => {
+  it("matches Sample's two pins and each demo host's contract pin to the root handoffs", () => {
     expect(checkStyleguidePins({ root: repositoryRoot })).toEqual({
       pins: [
         "@zudo-composer/ui=git+https://github.com/Takazudo/zudo-composer.git#e33643e672554a321f34aed6f035a42ce90f5354",
         "@zudo-composer/component-contract=git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
+        "shop:@zudo-composer/component-contract=git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
+        "landing:@zudo-composer/component-contract=git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
+        "blog:@zudo-composer/component-contract=git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
       ],
       fallbacks: [],
     });
@@ -35,7 +41,11 @@ describe("sample styleguide dependency pins", () => {
   it("accepts a documented link fallback and reports it distinctly", async () => {
     const root = await fixture("link:../../packages/ui", "link:../../packages/component-contract", "git+https://example.test/repo.git#ui", "git+https://example.test/repo.git#contract");
     expect(checkStyleguidePins({ root })).toEqual({
-      pins: [],
+      pins: [
+        "shop:@zudo-composer/component-contract=git+https://example.test/repo.git#contract",
+        "landing:@zudo-composer/component-contract=git+https://example.test/repo.git#contract",
+        "blog:@zudo-composer/component-contract=git+https://example.test/repo.git#contract",
+      ],
       fallbacks: ["@zudo-composer/ui=link:../../packages/ui", "@zudo-composer/component-contract=link:../../packages/component-contract"],
     });
   });
@@ -50,5 +60,29 @@ describe("sample styleguide dependency pins", () => {
     const root = await fixture("link:../../packages/ui", "git+https://example.test/repo.git#contract", "git+https://example.test/repo.git#ui", "git+https://example.test/repo.git#contract");
     await writeFile(join(root, "styleguide/sample/README.md"), "Use the root Git handoff pins.");
     expect(() => checkStyleguidePins({ root })).toThrow(/documented fallback/);
+  });
+
+  it("rejects a demo styleguide that declares Sample's UI pack", async () => {
+    const root = await fixture();
+    await writeFile(join(root, "styleguide/shop/package.json"), JSON.stringify({ dependencies: {
+      "@zudo-composer/component-contract": "git+https://example.test/repo.git#contract",
+      "@zudo-composer/ui": "git+https://example.test/repo.git#ui",
+    } }));
+    expect(() => checkStyleguidePins({ root })).toThrow(/styleguide\/shop.*must not declare @zudo-composer\/ui/);
+  });
+
+  it("rejects a demo styleguide that declares Sample's UI pack in another dependency section", async () => {
+    const root = await fixture();
+    await writeFile(join(root, "styleguide/shop/package.json"), JSON.stringify({
+      dependencies: { "@zudo-composer/component-contract": "git+https://example.test/repo.git#contract" },
+      devDependencies: { "@zudo-composer/ui": "git+https://example.test/repo.git#ui" },
+    }));
+    expect(() => checkStyleguidePins({ root })).toThrow(/styleguide\/shop.*must not declare @zudo-composer\/ui/);
+  });
+
+  it("rejects a stale or floating contract dependency in a demo styleguide", async () => {
+    const root = await fixture();
+    await writeFile(join(root, "styleguide/blog/package.json"), JSON.stringify({ dependencies: { "@zudo-composer/component-contract": "^1.0.0" } }));
+    expect(() => checkStyleguidePins({ root })).toThrow(/styleguide\/blog.*component-contract pin mismatch/);
   });
 });

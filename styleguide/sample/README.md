@@ -61,3 +61,8 @@ name an exact version.
 
 Integration friction and local workarounds are recorded in
 [UPSTREAM-NOTES.md](./UPSTREAM-NOTES.md).
+
+The hosted catalog is <https://zc-sg-sample.zudolab.dev> (`sample-sg`). From
+the repository root, `corepack pnpm sg:build-site` builds and verifies
+`styleguide/sample/dist`. Deployment and the other styleguide hosts are
+documented in [`docs/hosted-demo.md`](../../docs/hosted-demo.md).

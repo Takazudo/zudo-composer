@@ -25,3 +25,9 @@ images and copied public paths, then typechecks. The host has `/` home,
 notes. Engine chrome supplies search, theme, sidebar, and responsive
 navigation. Preview iframes load the real Landing stylesheet without catalog
 chrome; their light canvas and text colors use Landing's semantic tokens.
+
+The hosted catalog is <https://zc-sg-landing.zudolab.dev> (`landing-sg`). From
+the repository root, `corepack pnpm sg:build-styleguide landing-sg` builds and
+verifies `styleguide/landing/dist`; the command performs this host's frozen
+install. This host pins `@zudo-composer/component-contract` to the exact root
+handoff and does not install Sample's `@zudo-composer/ui` package.

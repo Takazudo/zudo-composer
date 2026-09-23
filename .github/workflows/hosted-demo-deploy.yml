@@ -19,10 +19,12 @@ on:
         required: true
         type: string
       target:
-        description: "Optional target key to deploy (defaults to all targets)"
+        description: "Deploy one target or all hosted demo targets"
         required: false
+        default: all
         type: choice
         options:
+          - all
           - doc
           - sample
           - shop
@@ -33,6 +35,9 @@ on:
           - landing-editor
           - blog-editor
           - sample-sg
+          - shop-sg
+          - landing-sg
+          - blog-sg
 
 permissions:
   contents: read
@@ -52,7 +57,7 @@ jobs:
         github.event.workflow_run.conclusion == 'success'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # One production deploy at a time per target; the ten targets are
+    # One production deploy at a time per target; the thirteen targets are
     # independent Workers/domains and may roll out concurrently with each other.
     concurrency:
       group: hosted-demo-production-${{ matrix.target }}
@@ -91,23 +96,36 @@ jobs:
           - target: sample-sg
             artifact_name: sample-sg-site
             dist_dir: styleguide/sample/dist
+          - target: shop-sg
+            artifact_name: shop-sg-site
+            dist_dir: styleguide/shop/dist
+          - target: landing-sg
+            artifact_name: landing-sg-site
+            dist_dir: styleguide/landing/dist
+          - target: blog-sg
+            artifact_name: blog-sg-site
+            dist_dir: styleguide/blog/dist
         # `jobs.<job_id>.if` is evaluated before matrix expansion, so filter
         # dispatches in the matrix itself. Workflow-run events have no target
         # input and therefore retain every entry.
         exclude: >-
           ${{ fromJSON(
             inputs.target == '' && '[]' ||
-            inputs.target == 'doc' && '[{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"}]' ||
-            inputs.target == 'sample' && '[{"target":"doc"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"}]' ||
-            inputs.target == 'shop' && '[{"target":"doc"},{"target":"sample"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"}]' ||
-            inputs.target == 'landing' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"}]' ||
-            inputs.target == 'blog' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"}]' ||
-            inputs.target == 'sample-editor' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"}]' ||
-            inputs.target == 'shop-editor' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"}]' ||
-            inputs.target == 'landing-editor' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"blog-editor"},{"target":"sample-sg"}]' ||
-            inputs.target == 'blog-editor' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"sample-sg"}]' ||
-            inputs.target == 'sample-sg' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"}]' ||
-            '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"}]'
+            inputs.target == 'all' && '[]' ||
+            inputs.target == 'doc' && '[{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"},{"target":"shop-sg"},{"target":"landing-sg"},{"target":"blog-sg"}]' ||
+            inputs.target == 'sample' && '[{"target":"doc"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"},{"target":"shop-sg"},{"target":"landing-sg"},{"target":"blog-sg"}]' ||
+            inputs.target == 'shop' && '[{"target":"doc"},{"target":"sample"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"},{"target":"shop-sg"},{"target":"landing-sg"},{"target":"blog-sg"}]' ||
+            inputs.target == 'landing' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"},{"target":"shop-sg"},{"target":"landing-sg"},{"target":"blog-sg"}]' ||
+            inputs.target == 'blog' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"},{"target":"shop-sg"},{"target":"landing-sg"},{"target":"blog-sg"}]' ||
+            inputs.target == 'sample-editor' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"},{"target":"shop-sg"},{"target":"landing-sg"},{"target":"blog-sg"}]' ||
+            inputs.target == 'shop-editor' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"},{"target":"shop-sg"},{"target":"landing-sg"},{"target":"blog-sg"}]' ||
+            inputs.target == 'landing-editor' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"blog-editor"},{"target":"sample-sg"},{"target":"shop-sg"},{"target":"landing-sg"},{"target":"blog-sg"}]' ||
+            inputs.target == 'blog-editor' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"sample-sg"},{"target":"shop-sg"},{"target":"landing-sg"},{"target":"blog-sg"}]' ||
+            inputs.target == 'sample-sg' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"shop-sg"},{"target":"landing-sg"},{"target":"blog-sg"}]' ||
+            inputs.target == 'shop-sg' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"},{"target":"landing-sg"},{"target":"blog-sg"}]' ||
+            inputs.target == 'landing-sg' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"},{"target":"shop-sg"},{"target":"blog-sg"}]' ||
+            inputs.target == 'blog-sg' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"},{"target":"shop-sg"},{"target":"landing-sg"}]' ||
+            '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"},{"target":"sample-sg"},{"target":"shop-sg"},{"target":"landing-sg"},{"target":"blog-sg"}]'
           ) }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5

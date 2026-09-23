@@ -39,13 +39,16 @@ unpublished-package preview, and which generated files to commit.
 
 ## Deployed sites
 
-Ten hosted targets are deployed from `main` (each is its own Worker; see
+Thirteen hosted targets are deployed from `main` (each is its own Worker; see
 `scripts/hosted-demo/targets.mjs`):
 
 | Site | URL | Worker config |
 | --- | --- | --- |
 | Developer documentation (`doc`) | <https://zudo-composer.zudolab.dev> | [`wrangler.doc.jsonc`](./wrangler.doc.jsonc) |
 | Sample styleguide (`sample-sg`) | <https://zc-sg-sample.zudolab.dev> | [`wrangler.sample-sg.jsonc`](./wrangler.sample-sg.jsonc) |
+| Shop styleguide (`shop-sg`) | <https://zc-sg-shop.zudolab.dev> | [`wrangler.shop-sg.jsonc`](./wrangler.shop-sg.jsonc) |
+| Landing styleguide (`landing-sg`) | <https://zc-sg-landing.zudolab.dev> | [`wrangler.landing-sg.jsonc`](./wrangler.landing-sg.jsonc) |
+| Blog styleguide (`blog-sg`) | <https://zc-sg-blog.zudolab.dev> | [`wrangler.blog-sg.jsonc`](./wrangler.blog-sg.jsonc) |
 | Sample Studio site (`sample`) | <https://zc-demo-sample.zudolab.dev> | [`wrangler.demo-sample.jsonc`](./wrangler.demo-sample.jsonc) |
 | Nightjar Supply site (`shop`) | <https://zc-demo-shop.zudolab.dev> | [`wrangler.demo-shop.jsonc`](./wrangler.demo-shop.jsonc) |
 | Orrery site (`landing`) | <https://zc-demo-landing.zudolab.dev> | [`wrangler.demo-landing.jsonc`](./wrangler.demo-landing.jsonc) |
@@ -84,6 +87,34 @@ corepack pnpm -C styleguide/sample build
 corepack pnpm -C styleguide/sample check
 corepack pnpm sg:build-site
 ```
+
+## Demo styleguides
+
+`styleguide/shop/`, `styleguide/landing/`, and `styleguide/blog/` are
+standalone catalogs for the corresponding demo's real, host-owned component
+pack. Each has its own lockfile and stays outside the root workspace. They
+install the exact component-contract handoff pin and do not depend on Sample's
+`@zudo-composer/ui` pack.
+
+From a clean checkout, install the root and selected host, then check or develop
+it. The root build commands install each host from its frozen lockfile by
+default, write a verified `doc-site-manifest.json`, and use the target key to
+select the right output directory:
+
+```sh
+corepack pnpm install --frozen-lockfile
+corepack pnpm -C styleguide/shop install --frozen-lockfile
+corepack pnpm -C styleguide/shop check
+corepack pnpm -C styleguide/shop dev
+corepack pnpm sg:build-styleguide shop-sg
+corepack pnpm sg:build-styleguides
+```
+
+The equivalent target/build pairs are `landing-sg` with
+`styleguide/landing/` and `blog-sg` with `styleguide/blog/`. Sample keeps its
+existing `corepack pnpm sg:build-site` command. `corepack pnpm sg:pins` checks
+Sample's UI and contract pins plus the contract-only pins and UI-pack boundary
+for all three demo styleguides.
 
 ## Documentation site
 
@@ -599,7 +630,7 @@ or used in place of, the immutable external UI-pack Git spec.
 
 The installed tool and ordinary local workflow remain local-first. The scoped
 exception publishes four static demo sites, four disposable per-host editors,
-the developer documentation site, and the standalone sample styleguide; none
+the developer documentation site, and four standalone styleguides; none
 adds hosted persistence, an API,
 authentication, arbitrary host-project access or a deployment target for
 installed applications. The registry and Wrangler contracts are:
@@ -608,6 +639,9 @@ installed applications. The registry and Wrangler contracts are:
 | --- | --- | --- | --- | --- |
 | `doc` | `doc-site` | `zudo-composer` | `wrangler.doc.jsonc` | `zudo-composer.zudolab.dev` |
 | `sample-sg` | `doc-site` | `zc-sg-sample` | `wrangler.sample-sg.jsonc` | `zc-sg-sample.zudolab.dev` |
+| `shop-sg` | `doc-site` | `zc-sg-shop` | `wrangler.shop-sg.jsonc` | `zc-sg-shop.zudolab.dev` |
+| `landing-sg` | `doc-site` | `zc-sg-landing` | `wrangler.landing-sg.jsonc` | `zc-sg-landing.zudolab.dev` |
+| `blog-sg` | `doc-site` | `zc-sg-blog` | `wrangler.blog-sg.jsonc` | `zc-sg-blog.zudolab.dev` |
 | `sample` | `site-static` | `zc-demo-sample` | `wrangler.demo-sample.jsonc` | `zc-demo-sample.zudolab.dev` |
 | `shop` | `site-static` | `zc-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` |
 | `landing` | `site-static` | `zc-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` |
@@ -641,9 +675,11 @@ the pre-rollout cleanup of retired Workers, partial-first-deploy recovery,
 targeted `workflow_dispatch` runs, token scopes and captured-version rollback:
 [`docs/hosted-demo.md`](./docs/hosted-demo.md).
 
-The `sample-sg` target runs `pnpm sg:build-site`, verifies
-`styleguide/sample/dist` with the `doc-site-manifest.json` contract, and takes
-the missing-Worker path on its first rollout.
+The `sample-sg` target runs `pnpm sg:build-site`; the other styleguide targets
+run `pnpm sg:build-styleguide <sample-sg|shop-sg|landing-sg|blog-sg>`. Each
+verifies its own `styleguide/<host>/dist` with the `doc-site-manifest.json`
+contract and takes the missing-Worker path on its first rollout. Run
+`pnpm sg:build-styleguides` to build all four catalogs serially.
 
 Prove the exact local artifact with:
 

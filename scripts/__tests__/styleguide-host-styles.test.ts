@@ -65,3 +65,33 @@ describe("sample styleguide host styles", () => {
     }
   });
 });
+
+describe("demo styleguide host contracts", () => {
+  it.each(["shop", "landing", "blog"])("keeps %s on its own pack and the exact shared contract pin", (slug) => {
+    const manifest = JSON.parse(readFileSync(resolve(repositoryRoot, `styleguide/${slug}/package.json`), "utf8"));
+    const handoff = JSON.parse(readFileSync(resolve(repositoryRoot, "contract-handoff.json"), "utf8"));
+    const readme = readFileSync(resolve(repositoryRoot, `styleguide/${slug}/README.md`), "utf8");
+
+    expect(manifest.name).toBe(`zc-sg-${slug}`);
+    expect(manifest.dependencies["@zudo-composer/component-contract"]).toBe(handoff.rootGitSpec);
+    expect(manifest.dependencies).not.toHaveProperty("@zudo-composer/ui");
+    expect(readme).toContain(`https://zc-sg-${slug}.zudolab.dev`);
+    expect(readme).toContain(`sg:build-styleguide ${slug}-sg`);
+  });
+
+  it.each([
+    ["shop", "demo-webshop"],
+    ["landing", "demo-landing"],
+    ["blog", "demo-blog"],
+  ])("keeps %s catalog chrome separate from the demo preview stylesheet", (slug, demoPackage) => {
+    const globalCss = readFileSync(resolve(repositoryRoot, `styleguide/${slug}/src/styles/global.css`), "utf8");
+    const previewCss = readFileSync(resolve(repositoryRoot, `styleguide/${slug}/src/styles/preview-entry.css`), "utf8");
+
+    expect(globalCss).toContain('@import "@takazudo/zudo-doc/theme.css"');
+    expect(globalCss).toContain('@import "@takazudo/zudo-sg/styles.css"');
+    expect(globalCss).not.toContain('@import "@zudo-composer/ui/');
+    expect(previewCss).toContain(`packages/${demoPackage}/styles/base.css`);
+    expect(previewCss).not.toContain("@takazudo/zudo-doc");
+    expect(previewCss).not.toContain("@takazudo/zudo-sg");
+  });
+});
