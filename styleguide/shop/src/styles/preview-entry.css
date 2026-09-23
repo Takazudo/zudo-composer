@@ -1,3 +1,13 @@
 /* Preview documents receive the actual Shop stylesheet, never the doc chrome. */
 @import "../../../../packages/demo-webshop/styles/base.css";
 @source "../../stories/**/*.{tsx,ts}";
+
+/* zudo-sg gives its iframe body a catalog utility class. Keep the preview
+ * document on Shop's dark canvas even when catalog utilities load later. */
+html,
+body {
+  min-height: 100%;
+  background-color: var(--color-shop-bg);
+  color: var(--color-shop-fg);
+  color-scheme: dark;
+}
