@@ -86,16 +86,19 @@ Verification for the deployment/acceptance lane:
 
 Deployment gates must validate this exact artifact before publishing its bytes.
 
-## Ten deploy targets, one pipeline
+## Thirteen deploy targets, one pipeline
 
 The trusted-run deploy pipeline (`scripts/hosted-demo/deploy.mjs`,
-`live-check.mjs` and `scripts/check-hosted-demo.mjs`) deploys ten independent
+`live-check.mjs` and `scripts/check-hosted-demo.mjs`) deploys thirteen independent
 Cloudflare Workers, each on its own custom domain:
 
 | Target key | Worker | Config file | Domain | Artifact directory | Manifest | CI artifact |
 | --- | --- | --- | --- | --- | --- | --- |
 | `doc` | `zudo-composer` | `wrangler.doc.jsonc` | `zudo-composer.zudolab.dev` | `doc/dist` | `doc-site-manifest.json` | `doc-site-<sha>` |
 | `sample-sg` | `zc-sg-sample` | `wrangler.sample-sg.jsonc` | `zc-sg-sample.zudolab.dev` | `styleguide/sample/dist` | `doc-site-manifest.json` | `sample-sg-site-<sha>` |
+| `shop-sg` | `zc-sg-shop` | `wrangler.shop-sg.jsonc` | `zc-sg-shop.zudolab.dev` | `styleguide/shop/dist` | `doc-site-manifest.json` | `shop-sg-site-<sha>` |
+| `landing-sg` | `zc-sg-landing` | `wrangler.landing-sg.jsonc` | `zc-sg-landing.zudolab.dev` | `styleguide/landing/dist` | `doc-site-manifest.json` | `landing-sg-site-<sha>` |
+| `blog-sg` | `zc-sg-blog` | `wrangler.blog-sg.jsonc` | `zc-sg-blog.zudolab.dev` | `styleguide/blog/dist` | `doc-site-manifest.json` | `blog-sg-site-<sha>` |
 | `sample` | `zc-demo-sample` | `wrangler.demo-sample.jsonc` | `zc-demo-sample.zudolab.dev` | `packages/demo-sample/dist-site` | `site-manifest.json` | `demo-site-sample-<sha>` |
 | `shop` | `zc-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` | `packages/demo-webshop/dist-site` | `site-manifest.json` | `demo-site-shop-<sha>` |
 | `landing` | `zc-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` | `packages/demo-landing/dist-site` | `site-manifest.json` | `demo-site-landing-<sha>` |
@@ -105,11 +108,15 @@ Cloudflare Workers, each on its own custom domain:
 | `landing-editor` | `zc-demo-landing-editor` | `wrangler.demo-landing-editor.jsonc` | `zc-demo-landing-editor.zudolab.dev` | `packages/demo-landing/dist-editor` | `demo-editor-manifest.json` | `demo-editor-landing-<sha>` |
 | `blog-editor` | `zc-demo-blog-editor` | `wrangler.demo-blog-editor.jsonc` | `zc-demo-blog-editor.zudolab.dev` | `packages/demo-blog/dist-editor` | `demo-editor-manifest.json` | `demo-editor-blog-<sha>` |
 
-`scripts/hosted-demo/targets.mjs` is the single place naming these ten rows
+`scripts/hosted-demo/targets.mjs` is the single place naming these thirteen rows
 and each target's artifact-verification shape. The `doc` target verifies
 `doc/dist` against the documentation manifest contract above. The `sample-sg`
 target verifies `styleguide/sample/dist` with the same doc-site manifest
-contract, built by `pnpm sg:build-site`. The four demo websites verify a
+contract. `shop-sg`, `landing-sg` and `blog-sg` verify their matching
+`styleguide/<host>/dist` directories with that contract. Sample is built by
+`pnpm sg:build-site`; one demo styleguide is built with
+`pnpm sg:build-styleguide <shop-sg|landing-sg|blog-sg>`, and
+`pnpm sg:build-styleguides` builds all four serially. The four demo websites verify a
 `dist-site` directory (built by `pnpm demo:build-site
 <sample|webshop|landing|blog>`, see [`docs/demo-sites/README.md`](./demo-sites/README.md))
 against the static-site manifest contract in
@@ -133,15 +140,20 @@ passes the doc-history preBuild.
 
 The doc target's first production rollout happens after merge to `main` through
 the pipeline's new-Worker path. It has no previous deployment to roll back to.
-The `sample-sg` target is also a new Worker: `pnpm sg:build-site` builds the
-standalone `styleguide/sample/` host into `styleguide/sample/dist`, and its
-first rollout takes the same missing-Worker path.
+All four styleguide targets are new Workers. Sample keeps
+`pnpm sg:build-site`; Shop, Landing and Blog use
+`pnpm sg:build-styleguide <target>`. Each build writes the shared verified
+`doc-site-manifest.json` into its own `styleguide/<host>/dist` directory. The
+first rollout of each target uses the existing missing-Worker path to bind its
+custom domain after a successful `main` CI run. A conflicting Worker or DNS
+binding fails closed and must be resolved by the owner; the workflow never
+deletes or unbinds another Worker or domain.
 
 `deploy.mjs`'s `preflightDeployment`/`deployHostedDemo`
 and `live-check.mjs`'s `verifyLiveDeployment`/`verifyLiveWithRetries` take an
 optional `target` (or the lower-level `manifestFileName`/`artifactVerifier`/
 `liveRoutes` a target supplies). CLI callers must pass `--target` or set
-`HOSTED_DEMO_TARGET`; there is no implicit target because the ten contracts
+`HOSTED_DEMO_TARGET`; there is no implicit target because the thirteen contracts
 have different artifact shapes.
 `scripts/hosted-demo/workflow-guard.mjs` needed no target parameter at all —
 its trusted-run checks (successful same-repo `main` CI run, fresh `main` head)
@@ -153,20 +165,19 @@ or the deploy script's `--target` option. For example,
 `HOSTED_DEMO_TARGET=shop-editor pnpm hosted-demo:verify` and
 `HOSTED_DEMO_TARGET=shop-editor pnpm hosted-demo:deploy` operate on the
 shop editor's Worker, config and `packages/demo-webshop/dist-editor`; use the
-same form for any of the ten keys in the table above.
+same form for any of the thirteen keys in the table above.
 
 ## Production rollout
 
 The production workflow is `.github/workflows/hosted-demo-deploy.yml`, run as
-a matrix of the ten targets above. A successful `main` run of `CI` is its
+a matrix of the thirteen targets above. A successful `main` run of `CI` is its
 only automatic trigger. Each matrix leg downloads the artifact whose name
-contains that target's prefix (`doc-site-`, `sample-sg-site-`,
-`demo-site-<name>-` or
-`demo-editor-<name>-`) and that
+contains that target's prefix (`doc-site-`, `<name>-sg-site-`,
+`demo-site-<name>-` or `demo-editor-<name>-`) and that
 run's full commit SHA, verifies the artifact again, and passes the matching
 directory to Wrangler. Each target has its own concurrency group
 (`hosted-demo-production-<target>`), so two rollouts of the *same* target
-cannot overlap, but the ten targets can roll out concurrently with each
+cannot overlap, but the thirteen targets can roll out concurrently with each
 other. A manual `workflow_dispatch` requires `target`, `run_id` and `sha`:
 `target` is one registry key from the table, while `run_id` and `sha` identify
 a successful same-repository `main` CI run. The guard is loaded from a fresh
@@ -175,8 +186,8 @@ trusted `main` checkout before the selected artifact checkout is used.
 The deploy step requires both `CLOUDFLARE_ACCOUNT_ID` and a Cloudflare API
 token. It fails visibly when either is absent or partial. Local Wrangler OAuth
 sessions are useful for read-only checks and must never be copied into GitHub
-secrets. The checked-in `wrangler.doc.jsonc`, `wrangler.sample-sg.jsonc`, the
-four `wrangler.demo-*.jsonc` site configs and the four
+secrets. The checked-in `wrangler.doc.jsonc` and four `wrangler.*-sg.jsonc` styleguide
+configs, plus the four `wrangler.demo-*.jsonc` site configs and the four
 `wrangler.demo-*-editor.jsonc` configs each keep
 `workers_dev: false`, `preview_urls: false`, and that target's own
 custom-domain binding. The compatibility date is pinned in each file; no
@@ -199,8 +210,11 @@ delete the retired Workers `zudo-composer`, `zudo-composer-doc`,
 old custom-domain bindings and DNS records are gone, then let the current
 target's plain `wrangler deploy` create the replacement Worker and binding. The
 new `doc` target intentionally reuses the `zudo-composer` name after this clean
-break. The `sample-sg` target has no retired Worker: it is a new
-`zc-sg-sample` Worker and follows the missing-Worker first-rollout path.
+break. The four styleguide Workers (`zc-sg-sample`, `zc-sg-shop`, `zc-sg-landing`
+and `zc-sg-blog`) have no retired workers and follow the missing-Worker
+first-rollout path. Bind only the domain declared by each target's config; if
+Cloudflare reports a collision, stop and resolve that exact target with the
+owner. Never delete or unbind a different Worker or domain.
 Delete only those exact retired names; never delete a current `zc-demo-*` or
 editor Worker as part of this cleanup.
 
@@ -230,13 +244,15 @@ red and is recovered by a later run after the operator has inspected it.
 For a targeted manual run, the `workflow_dispatch` form is:
 
 ```text
-target=<doc|sample-sg|sample|shop|landing|blog|sample-editor|shop-editor|landing-editor|blog-editor>
+target=<all|doc|sample-sg|shop-sg|landing-sg|blog-sg|sample|shop|landing|blog|sample-editor|shop-editor|landing-editor|blog-editor>
 run_id=<successful-main-ci-run-id>
 sha=<full-main-commit-sha>
 ```
 
-The guard still checks that the run is successful, belongs to this repository,
-was produced by a `main` push, and matches the current `main` head.
+Selecting `target: all` (the default) includes every registry target exactly
+once; selecting one key limits the matrix to that target. The guard still
+checks that the run is successful, belongs to this repository, was produced by
+a `main` push, and matches the current `main` head.
 
 ### First rollout of a new target
 
@@ -274,7 +290,7 @@ static assets, and bind a custom domain in the `zudolab.dev` zone:
 
 | Scope                                  | Why                                                        |
 | --------------------------------------- | ----------------------------------------------------------- |
-| Account › Workers Scripts › Edit        | create/update all ten Workers and upload their assets      |
+| Account › Workers Scripts › Edit        | create/update all thirteen Workers and upload their assets      |
 | Account › Account Settings › Read       | `wrangler whoami`, the preflight's first call               |
 | Zone › Workers Routes › Edit            | attach each `*.zudolab.dev` custom domain to its Worker     |
 | Zone › DNS › Edit                       | the CNAME record a custom domain creates                    |
@@ -288,7 +304,7 @@ After activation, the live checker fetches the manifest, every emitted asset,
 and every route over bounded HTTPS requests — the static-site manifest
 `routes` for the four demo sites, the editor manifest and editor route contract
 for the four `demo-editor` targets, or the doc-site manifest `routes` for the
-documentation and sample-styleguide sites. Navigation route
+documentation and all four styleguide sites. Navigation route
 requests send `Accept: text/html` and `Sec-Fetch-Mode: navigate`; asset requests
 do not receive navigation headers. Responses must match the downloaded
 manifest's bytes, checksums and MIME types. Cloudflare Web Analytics can inject
@@ -326,6 +342,15 @@ corepack pnpm exec wrangler rollback <captured-version-id> \
 
 corepack pnpm exec wrangler rollback <captured-version-id> \
   --name zc-sg-sample --config wrangler.sample-sg.jsonc --yes
+
+corepack pnpm exec wrangler rollback <captured-version-id> \
+  --name zc-sg-shop --config wrangler.shop-sg.jsonc --yes
+
+corepack pnpm exec wrangler rollback <captured-version-id> \
+  --name zc-sg-landing --config wrangler.landing-sg.jsonc --yes
+
+corepack pnpm exec wrangler rollback <captured-version-id> \
+  --name zc-sg-blog --config wrangler.blog-sg.jsonc --yes
 
 corepack pnpm exec wrangler rollback <captured-version-id> \
   --name zc-demo-sample --config wrangler.demo-sample.jsonc --yes

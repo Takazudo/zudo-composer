@@ -296,3 +296,102 @@ jobs:
           path: styleguide/sample/dist
           if-no-files-found: error
           retention-days: 7
+
+  shop-sg-site-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            styleguide/shop/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -C styleguide/shop install --frozen-lockfile
+      - run: corepack pnpm sg:pins
+      - run: pnpm -C styleguide/shop check
+      - run: corepack pnpm sg:build-styleguide shop-sg --skip-install
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: corepack pnpm sg:computed-styles shop-sg
+      - run: pnpm hosted-demo:verify styleguide/shop/dist "${{ github.sha }}"
+        env:
+          HOSTED_DEMO_TARGET: shop-sg
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: shop-sg-site-${{ github.sha }}
+          path: styleguide/shop/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  landing-sg-site-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            styleguide/landing/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -C styleguide/landing install --frozen-lockfile
+      - run: corepack pnpm sg:pins
+      - run: pnpm -C styleguide/landing check
+      - run: corepack pnpm sg:build-styleguide landing-sg --skip-install
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: corepack pnpm sg:computed-styles landing-sg
+      - run: pnpm hosted-demo:verify styleguide/landing/dist "${{ github.sha }}"
+        env:
+          HOSTED_DEMO_TARGET: landing-sg
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: landing-sg-site-${{ github.sha }}
+          path: styleguide/landing/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  blog-sg-site-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            styleguide/blog/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -C styleguide/blog install --frozen-lockfile
+      - run: corepack pnpm sg:pins
+      - run: pnpm -C styleguide/blog check
+      - run: corepack pnpm sg:build-styleguide blog-sg --skip-install
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: corepack pnpm sg:computed-styles blog-sg
+      - run: pnpm hosted-demo:verify styleguide/blog/dist "${{ github.sha }}"
+        env:
+          HOSTED_DEMO_TARGET: blog-sg
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: blog-sg-site-${{ github.sha }}
+          path: styleguide/blog/dist
+          if-no-files-found: error
+          retention-days: 7

@@ -31,3 +31,9 @@ Routes: `/` home, `/components` catalog, `/tokens` Shop tokens, and
 `/docs/getting-started` host notes. Engine chrome supplies search, theme,
 sidebar and responsive navigation. Component previews load the Shop base CSS;
 the rest of the site uses zudo-doc styles.
+
+The hosted catalog is <https://zc-sg-shop.zudolab.dev> (`shop-sg`). From the
+repository root, `corepack pnpm sg:build-styleguide shop-sg` builds and verifies
+`styleguide/shop/dist`; the command performs this host's frozen install. This
+host pins `@zudo-composer/component-contract` to the exact root handoff and does
+not install Sample's `@zudo-composer/ui` package.

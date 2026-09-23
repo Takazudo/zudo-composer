@@ -10,14 +10,14 @@
 // *` computing a non-zero `margin-top` (#768 — an unlayered preflight beat
 // `@layer zd-flow`). "The rule is in the file" is not "the rule wins the
 // cascade". This proves both against the already-built sample styleguide
-// catalog (`styleguide/sample/dist`). It never builds the catalog itself —
-// run `pnpm sg:build-site` first.
+// catalog. It never builds the catalog itself — build the selected target first.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
-import { extname, join, relative, resolve, sep } from "node:path";
+import { extname, join, relative, sep } from "node:path";
 import { chromium } from "@playwright/test";
 import { readBodyBackgroundProbe } from "./computed-body-background.mjs";
+import { STYLEGUIDE_TARGET_KEYS, TARGETS } from "./hosted-demo/targets.mjs";
 import { routesForFiles } from "./hosted-demo/doc-site-artifact.mjs";
 import { startHostedDemoStaticServer } from "./hosted-demo/static-server.mjs";
 
@@ -357,8 +357,9 @@ async function verifyDrawerInteractions(page, route, colorScheme) {
  * @param {import("@playwright/test").Browser} browser
  * @param {string} baseUrl
  * @param {string[]} routes
+ * @param {string} targetKey
  */
-async function verifyMobileDrawer(browser, baseUrl, routes) {
+async function verifyMobileDrawer(browser, baseUrl, routes, targetKey) {
   const browserContext = await browser.newContext({ viewport: DRAWER_VIEWPORT });
   try {
     const page = await browserContext.newPage();
@@ -373,7 +374,7 @@ async function verifyMobileDrawer(browser, baseUrl, routes) {
     }
     assert.ok(
       drawerRoute,
-      `No page under styleguide/sample/dist renders "${toggleButtonSelector}" — add (or fix) a catalog page with the mobile sidebar toggle island so the drawer proof (#785/#769) has something to prove itself against. Checked routes: ${routes.join(", ") || "(none)"}`,
+      `No page under ${targetKey} renders "${toggleButtonSelector}" — add (or fix) a catalog page with the mobile sidebar toggle island so the drawer proof (#785/#769) has something to prove itself against. Checked routes: ${routes.join(", ") || "(none)"}`,
     );
 
     const measurements = [];
@@ -387,11 +388,14 @@ async function verifyMobileDrawer(browser, baseUrl, routes) {
   }
 }
 
-const root = resolve(import.meta.dirname, "..");
-const distDirectory = join(root, "styleguide/sample/dist");
+const targetKey = process.argv[2] ?? "sample-sg";
+assert.ok(STYLEGUIDE_TARGET_KEYS.some((key) => key === targetKey), `Usage: check-sg-computed-styles.mjs [${STYLEGUIDE_TARGET_KEYS.join("|")}]`);
+const target = TARGETS[targetKey];
+const distDirectory = target.artifactDirectory;
+const buildCommand = targetKey === "sample-sg" ? "pnpm sg:build-site" : `pnpm sg:build-styleguide ${targetKey}`;
 
 if (!existsSync(distDirectory)) {
-  throw new Error(`Missing styleguide/sample/dist — run "pnpm sg:build-site" before "pnpm sg:computed-styles" (this script never builds the catalog itself).`);
+  throw new Error(`Missing ${targetKey} artifact at ${distDirectory} — run "${buildCommand}" before "pnpm sg:computed-styles ${targetKey}" (this script never builds the catalog itself).`);
 }
 
 const htmlPaths = (await readdir(distDirectory, { recursive: true, withFileTypes: true }))
@@ -399,7 +403,7 @@ const htmlPaths = (await readdir(distDirectory, { recursive: true, withFileTypes
   .map((entry) => relative(distDirectory, join(entry.parentPath, entry.name)).split(sep).join("/"));
 const routes = routesForFiles(htmlPaths);
 if (routes.length === 0) {
-  throw new Error(`styleguide/sample/dist has no HTML pages — rebuild it with "pnpm sg:build-site".`);
+  throw new Error(`${targetKey} has no HTML pages — rebuild it with "${buildCommand}".`);
 }
 
 // Nested try/finally so a `chromium.launch()` failure after the server is
@@ -421,7 +425,7 @@ try {
     }
     assert.ok(
       flowRoute,
-      `No page under styleguide/sample/dist renders ".zd-content" with at least two flow children — add (or fix) a catalog story with a multi-block ProseMd/prose body so the flow-margin rule (#768) has something to prove itself against. Checked routes: ${routes.join(", ") || "(none)"}`,
+      `No page under ${targetKey} renders ".zd-content" with at least two flow children — add (or fix) a catalog story with a multi-block ProseMd/prose body so the flow-margin rule (#768) has something to prove itself against. Checked routes: ${routes.join(", ") || "(none)"}`,
     );
 
     // eslint-disable-next-line no-undef -- this callback runs inside the browser via page.evaluate, not in this Node process
@@ -440,9 +444,9 @@ try {
     }
     assert.notEqual(bodyColors.light, bodyColors.dark, `${flowRoute}: light and dark body backgrounds are identical — the dark color scheme never engaged despite pinning data-theme.`);
 
-    const drawerMeasurements = await verifyMobileDrawer(browser, server.url, routes);
+    const drawerMeasurements = await verifyMobileDrawer(browser, server.url, routes, targetKey);
 
-    console.log(`Styleguide computed styles verified on ${flowRoute}: "${flowSelector}" margin-top ${marginTop}; body background ${bodyColors.light} light / ${bodyColors.dark} dark.`);
+    console.log(`${targetKey} computed styles verified on ${flowRoute}: "${flowSelector}" margin-top ${marginTop}; body background ${bodyColors.light} light / ${bodyColors.dark} dark.`);
     for (const measurement of drawerMeasurements) {
       console.log(`Mobile drawer verified on ${measurement.route} (${measurement.colorScheme}, ${measurement.viewport}): open elementFromPoint(${measurement.point.x}, ${measurement.point.y}) hit ${measurement.elementFromPoint} inside the toggle (toggle z-index ${measurement.toggleZIndex}, backdrop z-index ${measurement.backdropZIndex}); X icon visible, click-close, reopen, and Escape-close with focus return all verified (#785, #769).`);
     }

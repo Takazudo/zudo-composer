@@ -11,7 +11,7 @@ import { parse } from "yaml";
 import { discoverConsumerHosts } from "./check-consumer-boundary.mjs";
 
 const self = fileURLToPath(import.meta.url);
-const localEntries = ["check", "sg:pins", "sg:build-site", "sg:computed-styles", "smoke:host-install", "packed-host:matrix", "consumer:boundary", "creator:check", "cms:check", "cms:regenerate", "public:check", "public:installed", "sample:check", "demo:build-sites", "demo:build-site", "demo:build-editor", "demo:build-editors", "test:browser:demo-editor", "site-static:verify", "doc:build-site", "doc:build", "doc:check"];
+const localEntries = ["check", "sg:pins", "sg:build-site", "sg:build-styleguide", "sg:build-styleguides", "sg:computed-styles", "smoke:host-install", "packed-host:matrix", "consumer:boundary", "creator:check", "cms:check", "cms:regenerate", "public:check", "public:installed", "sample:check", "demo:build-sites", "demo:build-site", "demo:build-editor", "demo:build-editors", "test:browser:demo-editor", "site-static:verify", "doc:build-site", "doc:build", "doc:check"];
 const packageOperations = new Set(["install", "pack", "add", "remove", "rebuild"]);
 // zfb is a static site generator; it never talks to Cloudflare.
 const localBinaries = new Set(["vite", "vitest", "tsc", "eslint", "playwright", "rollup", "zudo-composer", "zfb", "zudo-sg"]);
@@ -95,11 +95,16 @@ export function checkNoDeploy({ root = resolve(import.meta.dirname, ".."), entri
     }
   }
   for (const host of hostRoots) manifests.set(resolve(host), JSON.parse(readFileSync(join(host, "package.json"), "utf8")));
-  // The sample styleguide is deliberately outside the root pnpm workspace, but
-  // its standalone validation/build scripts still run on CI and must receive
+  // Standalone styleguide hosts are deliberately outside the root pnpm
+  // workspace, but their validation/build scripts run on CI and must receive
   // the same no-deploy audit as discovered consumer hosts.
-  const standaloneStyleguide = join(root, "styleguide/sample");
-  if (existsSync(join(standaloneStyleguide, "package.json"))) manifests.set(standaloneStyleguide, object(JSON.parse(readFileSync(join(standaloneStyleguide, "package.json"), "utf8"))));
+  for (const manifest of globSync("styleguide/*/package.json", {
+    cwd: root,
+    exclude: (path) => path.split(/[/\\]/u).some((part) => ["node_modules", ".git", "bower_components"].includes(part)),
+  })) {
+    const directory = dirname(resolve(root, manifest));
+    manifests.set(directory, object(JSON.parse(readFileSync(resolve(root, manifest), "utf8"))));
+  }
   // Keep the existing package/fixture command discovery above, but include
   // every pnpm workspace member when following lifecycle hooks. Documentation
   // is a workspace package without a consumer-host role, so its ordinary

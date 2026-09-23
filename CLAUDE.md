@@ -162,13 +162,30 @@ corepack pnpm -C styleguide/sample check
 corepack pnpm sg:build-site
 ```
 
+## Demo styleguides
+
+`styleguide/shop/`, `styleguide/landing/` and `styleguide/blog/` are standalone
+catalog hosts for the demo-owned component packs. Each host has its own frozen
+lockfile outside the root workspace, pins `@zudo-composer/component-contract`
+to `contract-handoff.json`, and must not depend on Sample's `@zudo-composer/ui`
+pack. `pnpm sg:pins` enforces that distinction and preserves Sample's existing
+two exact handoff pins.
+
+Use `pnpm sg:build-styleguide shop-sg`, `pnpm sg:build-styleguide landing-sg`,
+or `pnpm sg:build-styleguide blog-sg` for one verified artifact. The command
+performs that host's frozen install; `pnpm sg:build-styleguides` builds Sample,
+Shop, Landing and Blog serially. CI checks and publishes each target's own
+artifact after a root frozen install and that host's frozen install. Sample's
+existing `pnpm sg:build-site` entry point remains unchanged.
+
 ## Commands and completion gates
 
 - Install: `corepack pnpm install --frozen-lockfile`.
 - Develop: `corepack pnpm dev`.
 - Aggregate gate: `corepack pnpm check`, including the complete packed-install
   proof. It needs network access, Playwright Chromium and exclusive browser
-  port 4175; run it with the other browser lanes stopped.
+  port 4175; run it with the other browser lanes stopped. It also builds the
+  four standalone styleguides and writes their verified doc-site manifests.
 - Package handoffs: `corepack pnpm contract:conformance`, `corepack pnpm
   contract:negative-scan`, `corepack pnpm contract:external-install --
   --exact`, and `corepack pnpm ui:external-install -- --exact`.
@@ -195,17 +212,20 @@ handoffs, or the 12-component runtime/CSS/WASM proof to make a gate pass.
 ## Scoped hosted demo exception
 
 The installed tool and ordinary local workflow remain local-first. The scoped
-exception publishes the documentation site, the standalone sample styleguide,
-four static demo websites and four disposable per-host editors. None adds
+exception publishes the documentation site, four standalone styleguides, four
+static demo websites and four disposable per-host editors. None adds
 hosted persistence, a hosted API,
 authentication, arbitrary host project access or deployment support for
 installed applications. `scripts/hosted-demo/targets.mjs` is the source of
-truth for this ten-target registry:
+truth for this thirteen-target registry:
 
 | Target key | Kind | Worker | Wrangler config | Domain |
 | --- | --- | --- | --- | --- |
 | `doc` | `doc-site` | `zudo-composer` | `wrangler.doc.jsonc` | `zudo-composer.zudolab.dev` |
 | `sample-sg` | `doc-site` | `zc-sg-sample` | `wrangler.sample-sg.jsonc` | `zc-sg-sample.zudolab.dev` |
+| `shop-sg` | `doc-site` | `zc-sg-shop` | `wrangler.shop-sg.jsonc` | `zc-sg-shop.zudolab.dev` |
+| `landing-sg` | `doc-site` | `zc-sg-landing` | `wrangler.landing-sg.jsonc` | `zc-sg-landing.zudolab.dev` |
+| `blog-sg` | `doc-site` | `zc-sg-blog` | `wrangler.blog-sg.jsonc` | `zc-sg-blog.zudolab.dev` |
 | `sample` | `site-static` | `zc-demo-sample` | `wrangler.demo-sample.jsonc` | `zc-demo-sample.zudolab.dev` |
 | `shop` | `site-static` | `zc-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` |
 | `landing` | `site-static` | `zc-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` |
@@ -238,10 +258,13 @@ deployment, performs a Wrangler dry run, uploads the verified directory with
 Wrangler 4.130.0, and activates only the version returned by that upload.
 Pull-request validation has no Cloudflare secrets.
 
-The `sample-sg` target runs `pnpm sg:build-site`, verifies the standalone
-`styleguide/sample/dist` artifact with the same `doc-site-manifest.json`
-contract, and publishes the `zudo-sg` catalog as a new Worker. Its first
-rollout therefore takes the missing-Worker path.
+The `sample-sg` target runs `pnpm sg:build-site`; `shop-sg`, `landing-sg` and
+`blog-sg` run `pnpm sg:build-styleguide <target>`. These four standalone
+styleguide targets build `styleguide/<host>/dist` with the shared
+`doc-site-manifest.json` contract. Their Workers are new and use the existing
+missing-Worker first-rollout path. `pnpm sg:build-styleguides` builds all four
+serially; `pnpm sg:pins` keeps Sample's two handoff pins while checking the
+contract-only pins and no-UI dependency boundary for the three demo hosts.
 
 Missing credentials, stale `main`, missing rollback state, split traffic or an
 artifact/source mismatch fail before mutation. A target whose Worker does not

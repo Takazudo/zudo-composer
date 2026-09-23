@@ -1,8 +1,8 @@
 // @ts-check
 // The trusted-run deploy pipeline (deploy.mjs, live-check.mjs,
-// check-hosted-demo.mjs) is shared by ten Cloudflare Workers: four static demo
-// websites, four per-host editors, the documentation site and the sample
-// styleguide site.
+// check-hosted-demo.mjs) is shared by thirteen Cloudflare Workers: four static
+// demo websites, four per-host editors, the documentation site and four
+// standalone styleguide sites.
 // This module is the single place that names each target's Worker, config file,
 // host/artifact directories, domain and artifact-verification shape so those
 // scripts stay generic. workflow-guard.mjs needs none of this: its trusted-run
@@ -60,7 +60,7 @@ async function verifySiteStaticTargetArtifact({ directory, expectedSourceRevisio
  *   workerName: string,
  *   configPath: string,
  *   domain: string,
- *   hostDirectory?: string,
+ *   hostDirectory: string,
  *   artifactDirectory: string,
  *   manifestFileName: string,
  *   ciArtifactName: (sha: string) => string,
@@ -111,14 +111,15 @@ function createStaticTarget(key, hostDirectory, workerName, configPath, domain) 
   };
 }
 
-/** @param {string} key @param {string} workerName @param {string} configPath @param {string} domain @param {string} artifactDirectory @param {string} artifactPrefix @returns {DeployTarget} */
-function createDocSiteTarget(key, workerName, configPath, domain, artifactDirectory, artifactPrefix) {
+/** @param {string} key @param {string} workerName @param {string} configPath @param {string} domain @param {string} artifactDirectory @param {string} artifactPrefix @param {string} hostDirectory @returns {DeployTarget} */
+function createDocSiteTarget(key, workerName, configPath, domain, artifactDirectory, artifactPrefix, hostDirectory) {
   return {
     key,
     kind: "doc-site",
     workerName,
     configPath,
     domain,
+    hostDirectory: resolve(root, hostDirectory),
     artifactDirectory: resolve(root, artifactDirectory),
     manifestFileName: DOC_SITE_MANIFEST,
     ciArtifactName: (sha) => `${artifactPrefix}-${sha}`,
@@ -139,7 +140,7 @@ function createDocSiteTarget(key, workerName, configPath, domain, artifactDirect
 
 /** @type {Record<string, DeployTarget>} */
 export const TARGETS = {
-  doc: createDocSiteTarget("doc", "zudo-composer", "wrangler.doc.jsonc", "zudo-composer.zudolab.dev", "doc/dist", "doc-site"),
+  doc: createDocSiteTarget("doc", "zudo-composer", "wrangler.doc.jsonc", "zudo-composer.zudolab.dev", "doc/dist", "doc-site", "doc"),
   sample: createStaticTarget("sample", "packages/demo-sample", "zc-demo-sample", "wrangler.demo-sample.jsonc", "zc-demo-sample.zudolab.dev"),
   shop: createStaticTarget("shop", "packages/demo-webshop", "zc-demo-shop", "wrangler.demo-shop.jsonc", "zc-demo-shop.zudolab.dev"),
   landing: createStaticTarget("landing", "packages/demo-landing", "zc-demo-landing", "wrangler.demo-landing.jsonc", "zc-demo-landing.zudolab.dev"),
@@ -148,10 +149,14 @@ export const TARGETS = {
   "shop-editor": createDemoEditorTarget("shop-editor", "packages/demo-webshop"),
   "landing-editor": createDemoEditorTarget("landing-editor", "packages/demo-landing"),
   "blog-editor": createDemoEditorTarget("blog-editor", "packages/demo-blog"),
-  "sample-sg": createDocSiteTarget("sample-sg", "zc-sg-sample", "wrangler.sample-sg.jsonc", "zc-sg-sample.zudolab.dev", "styleguide/sample/dist", "sample-sg-site"),
+  "sample-sg": createDocSiteTarget("sample-sg", "zc-sg-sample", "wrangler.sample-sg.jsonc", "zc-sg-sample.zudolab.dev", "styleguide/sample/dist", "sample-sg-site", "styleguide/sample"),
+  "shop-sg": createDocSiteTarget("shop-sg", "zc-sg-shop", "wrangler.shop-sg.jsonc", "zc-sg-shop.zudolab.dev", "styleguide/shop/dist", "shop-sg-site", "styleguide/shop"),
+  "landing-sg": createDocSiteTarget("landing-sg", "zc-sg-landing", "wrangler.landing-sg.jsonc", "zc-sg-landing.zudolab.dev", "styleguide/landing/dist", "landing-sg-site", "styleguide/landing"),
+  "blog-sg": createDocSiteTarget("blog-sg", "zc-sg-blog", "wrangler.blog-sg.jsonc", "zc-sg-blog.zudolab.dev", "styleguide/blog/dist", "blog-sg-site", "styleguide/blog"),
 };
 
-export const TARGET_KEYS = /** @type {const} */ (["doc", "sample", "shop", "landing", "blog", "sample-editor", "shop-editor", "landing-editor", "blog-editor", "sample-sg"]);
+export const STYLEGUIDE_TARGET_KEYS = /** @type {const} */ (["sample-sg", "shop-sg", "landing-sg", "blog-sg"]);
+export const TARGET_KEYS = /** @type {const} */ (["doc", "sample", "shop", "landing", "blog", "sample-editor", "shop-editor", "landing-editor", "blog-editor", ...STYLEGUIDE_TARGET_KEYS]);
 
 /** @param {string | undefined} key @returns {DeployTarget} */
 export function resolveTarget(key) {
