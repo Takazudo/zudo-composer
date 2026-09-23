@@ -1,0 +1,3 @@
+/* Preview documents receive the actual Shop stylesheet, never the doc chrome. */
+@import "../../../../packages/demo-webshop/styles/base.css";
+@source "../../stories/**/*.{tsx,ts}";
