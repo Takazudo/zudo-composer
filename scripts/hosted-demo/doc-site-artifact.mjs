@@ -18,6 +18,7 @@ const MIME_BY_EXTENSION = new Map([
   [".txt", "text/plain"],
   [".svg", "image/svg+xml"],
   [".png", "image/png"],
+  [".webp", "image/webp"],
   [".ico", "image/vnd.microsoft.icon"],
   [".woff2", "font/woff2"],
   [".wasm", "application/wasm"],

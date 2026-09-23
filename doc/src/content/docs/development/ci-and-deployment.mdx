@@ -8,7 +8,7 @@ description: The continuous-integration and deployment workflows that verify and
 
 `.github/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
 current job names are `validate`, `packed-host-matrix`, `packed-host-install`,
-`demo-sites-build`, and `doc-site-build`.
+`demo-sites-build`, `doc-site-build`, and four styleguide artifact jobs.
 
 | Job | Shape | Main responsibility and artifact |
 | --- | --- | --- |
@@ -17,6 +17,8 @@ current job names are `validate`, `packed-host-matrix`, `packed-host-install`,
 | `packed-host-install` | Fail-fast-disabled matrix from the previous job | Gives every discovered host its own isolated packed-install job and runs `smoke:host-install -- --host <name>`. |
 | `demo-sites-build` | Fail-fast-disabled `sample`, `shop`, `landing`, `blog` matrix | Builds and verifies each static `dist-site`, then uploads `demo-site-<site>-<sha>`. |
 | `doc-site-build` | One Ubuntu documentation artifact job | Runs `pnpm doc:build-site` from the default shallow checkout, verifies `doc/dist` with the `doc-site` contract, and uploads `doc-site-<sha>` from `doc/dist`. |
+| `sample-sg-site-build` | One standalone styleguide artifact job | Frozen installs, runs Sample checks and computed styles, verifies the exact two pins, then uploads `sample-sg-site-<sha>`. The `validate` job retains the twelve-component pack proof. |
+| `shop-sg-site-build`, `landing-sg-site-build`, `blog-sg-site-build` | One isolated Ubuntu job per standalone demo styleguide | Frozen installs root and host, checks the host dependency contract and computed styles, verifies the target manifest, and uploads its `<name>-sg-site-<sha>` artifact. |
 
 The validation job's browser steps consume prepared artifacts and never rebuild
 them. `demo:build-sites` runs before the SiteProject and demos lanes, while
@@ -32,16 +34,22 @@ pages explain the local equivalents and port ownership.
 
 `.github/workflows/hosted-demo-deploy.yml` is an independent production
 workflow. Its automatic trigger is only a successful `CI` workflow run for a
-push to `main` in this repository. A manual dispatch must provide one registry
-`target`, the CI `run_id` and full `sha`; the same guard still verifies the run
-through the GitHub API and checks that `origin/main` has not moved.
+push to `main` in this repository. A manual dispatch provides `target` (`all`
+or one registry key), the CI `run_id` and full `sha`; the same guard still
+verifies the run through the GitHub API and checks that `origin/main` has not
+moved.
 
-The production matrix contains ten current hosted targets:
+The production matrix contains thirteen current hosted targets. Dispatching with
+`target: all` (the default) selects every target once; selecting a registry key
+runs only that target.
 
 | Target key | Worker | Wrangler config | Domain | Artifact directory | Manifest | CI artifact |
 | --- | --- | --- | --- | --- | --- | --- |
 | `doc` | `zudo-composer` | `wrangler.doc.jsonc` | `zudo-composer.zudolab.dev` | `doc/dist` | `doc-site-manifest.json` | `doc-site-<sha>` |
 | `sample-sg` | `zc-sg-sample` | `wrangler.sample-sg.jsonc` | `zc-sg-sample.zudolab.dev` | `styleguide/sample/dist` | `doc-site-manifest.json` | `sample-sg-site-<sha>` |
+| `shop-sg` | `zc-sg-shop` | `wrangler.shop-sg.jsonc` | `zc-sg-shop.zudolab.dev` | `styleguide/shop/dist` | `doc-site-manifest.json` | `shop-sg-site-<sha>` |
+| `landing-sg` | `zc-sg-landing` | `wrangler.landing-sg.jsonc` | `zc-sg-landing.zudolab.dev` | `styleguide/landing/dist` | `doc-site-manifest.json` | `landing-sg-site-<sha>` |
+| `blog-sg` | `zc-sg-blog` | `wrangler.blog-sg.jsonc` | `zc-sg-blog.zudolab.dev` | `styleguide/blog/dist` | `doc-site-manifest.json` | `blog-sg-site-<sha>` |
 | `sample` | `zc-demo-sample` | `wrangler.demo-sample.jsonc` | `zc-demo-sample.zudolab.dev` | `packages/demo-sample/dist-site` | `site-manifest.json` | `demo-site-sample-<sha>` |
 | `shop` | `zc-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` | `packages/demo-webshop/dist-site` | `site-manifest.json` | `demo-site-shop-<sha>` |
 | `landing` | `zc-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` | `packages/demo-landing/dist-site` | `site-manifest.json` | `demo-site-landing-<sha>` |
@@ -51,7 +59,7 @@ The production matrix contains ten current hosted targets:
 | `landing-editor` | `zc-demo-landing-editor` | `wrangler.demo-landing-editor.jsonc` | `zc-demo-landing-editor.zudolab.dev` | `packages/demo-landing/dist-editor` | `demo-editor-manifest.json` | `demo-editor-landing-<sha>` |
 | `blog-editor` | `zc-demo-blog-editor` | `wrangler.demo-blog-editor.jsonc` | `zc-demo-blog-editor.zudolab.dev` | `packages/demo-blog/dist-editor` | `demo-editor-manifest.json` | `demo-editor-blog-<sha>` |
 
-The `doc` and `sample-sg` targets are multi-page static sites. Keep each
+The `doc` and all four `*-sg` targets are multi-page static sites. Keep each
 target key, Worker, config, domain, artifact directory, manifest, and CI
 artifact name aligned with the registry. Both `verifyArtifact` hooks directly
 use `verifyDocSiteArtifact`, and `liveRoutes` reads each manifest's routes. The
@@ -65,9 +73,12 @@ contracts and artifact directories; the editor build is per-host and uses the
 `sourceRevision`, but production preflight requires the full expected SHA and
 the same recorded artifact revision before Wrangler.
 
-The `sample-sg` doc-site artifact is built by root `pnpm sg:build-site` from the
-standalone `styleguide/sample/` project. Its first deployment creates the new
-`zc-sg-sample` Worker through the missing-Worker path.
+Sample's doc-site artifact keeps the root `pnpm sg:build-site` command. Shop,
+Landing and Blog use `pnpm sg:build-styleguide <shop-sg|landing-sg|blog-sg>`;
+`pnpm sg:build-styleguides` builds all four catalogs serially. Each standalone
+host has its own frozen lockfile and target-specific artifact directory. Their
+new Workers use the existing missing-Worker path to bind their configured
+domains after main CI.
 
 ## Rollout sequence
 

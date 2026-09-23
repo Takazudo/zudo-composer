@@ -1,0 +1,12 @@
+/* The iframe loads the real Landing stylesheet without catalog chrome. */
+@import "../../../../packages/demo-landing/styles/base.css";
+@source "../../stories/**/*.{tsx,ts}";
+
+/* The engine mounts previews on its own canvas; set its document colors
+   explicitly so the host's light token palette reaches every story. */
+:where(html, body) {
+  min-height: 100%;
+  background: var(--color-land-bg);
+  color: var(--color-land-fg);
+  color-scheme: light;
+}

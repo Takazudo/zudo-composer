@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.zfb/
+.zfb-build/
+.zfb-esbuild-entry-*.tsx
+.zfb-islands-tsconfig-*.json
+.zfb-virtual-*.mjs
+.zudo-doc/
+src/styleguide/sg-registry.ts
+src/styleguide/token-manifest.ts
+src/generated/
+public/uploaded-assets/

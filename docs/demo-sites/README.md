@@ -7,12 +7,21 @@ the way a real host exercises it — through its `bin`, its `zudo-composer/confi
 subpath and a host-owned component pack — without any of them leaking into the
 published package.
 
-| Package | Site | Editor | Token namespace | One-off dev port |
-| --- | --- | --- | --- | --- |
-| `packages/demo-sample` | `zc-demo-sample.zudolab.dev` | `zc-demo-sample-editor.zudolab.dev` | provider | 4184 |
-| `packages/demo-webshop` | `zc-demo-shop.zudolab.dev` | `zc-demo-shop-editor.zudolab.dev` | `shop-` | 4181 |
-| `packages/demo-landing` | `zc-demo-landing.zudolab.dev` | `zc-demo-landing-editor.zudolab.dev` | `land-` | 4182 |
-| `packages/demo-blog` | `zc-demo-blog.zudolab.dev` | `zc-demo-blog-editor.zudolab.dev` | `blog-` | 4183 |
+| Package | Site | Editor | Styleguide | Token namespace | One-off dev port |
+| --- | --- | --- | --- | --- | --- |
+| `packages/demo-sample` | `zc-demo-sample.zudolab.dev` | `zc-demo-sample-editor.zudolab.dev` | `zc-sg-sample.zudolab.dev` | provider | 4184 |
+| `packages/demo-webshop` | `zc-demo-shop.zudolab.dev` | `zc-demo-shop-editor.zudolab.dev` | `zc-sg-shop.zudolab.dev` | `shop-` | 4181 |
+| `packages/demo-landing` | `zc-demo-landing.zudolab.dev` | `zc-demo-landing-editor.zudolab.dev` | `zc-sg-landing.zudolab.dev` | `land-` | 4182 |
+| `packages/demo-blog` | `zc-demo-blog.zudolab.dev` | `zc-demo-blog-editor.zudolab.dev` | `zc-sg-blog.zudolab.dev` | `blog-` | 4183 |
+
+Each styleguide is a standalone `styleguide/<name>/` host with its own frozen
+lockfile. Sample catalogs the repository-owned `@zudo-composer/ui` pack; Shop,
+Landing and Blog catalog their corresponding host-owned packs and install only
+the shared component-contract handoff. Use `pnpm sg:build-site` for Sample,
+`pnpm sg:build-styleguide <shop-sg|landing-sg|blog-sg>` for one demo catalog,
+or `pnpm sg:build-styleguides` to build all four serially. Their setup and
+ownership details are in the individual `styleguide/*/README.md` files and the
+[hosted demo runbook](../hosted-demo.md).
 
 Sample Studio is the symmetric fourth host, `packages/demo-sample`. It uses
 the repository-owned `@zudo-composer/ui` pack and preserves the original project

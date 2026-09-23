@@ -1,0 +1,33 @@
+{
+  "name": "zc-sg-landing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.5.2",
+  "scripts": {
+    "gen": "node scripts/prepare-source.mjs && zudo-sg gen-registry && node scripts/generate-tokens.mjs",
+    "dev": "pnpm gen && zfb dev",
+    "build": "pnpm gen && zfb build",
+    "check": "pnpm gen && node scripts/check-inventory.mjs && tsc --noEmit"
+  },
+  "dependencies": {
+    "@takazudo/zdtp": "0.8.1",
+    "@takazudo/zfb": "2.20.1",
+    "@takazudo/zfb-md-wasm": "2.20.1",
+    "@takazudo/zfb-runtime": "2.20.1",
+    "@takazudo/zudo-doc": "5.26.4",
+    "@takazudo/zudo-sg": "^0.3.1",
+    "@zudo-composer/component-contract": "git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
+    "diff": "^8.0.4",
+    "esbuild": "0.28.2",
+    "katex": "^0.16.38",
+    "preact": "^10.29.8",
+    "preact-render-to-string": "^6.6.6",
+    "tailwindcss": "^4.2.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0"
+  }
+}

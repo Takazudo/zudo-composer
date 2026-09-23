@@ -1,8 +1,8 @@
 // @ts-check
-// Keep the standalone sample styleguide on the exact package revisions handed
-// off by the root build. A branch name, floating version or accidental local
-// link would make its hosted artifact differ from the component contract that
-// the rest of this repository validates.
+// Keep every standalone styleguide on the exact component-contract revision
+// handed off by the root build. Sample also catalogs the repository-owned UI
+// pack; the three demo styleguides own their component packs and must not take
+// a dependency on that Sample-only package.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -12,6 +12,13 @@ const PINNED_PACKAGES = [
   { name: "@zudo-composer/ui", handoff: "ui-handoff.json", sourcePath: "packages/ui" },
   { name: "@zudo-composer/component-contract", handoff: "contract-handoff.json", sourcePath: "packages/component-contract" },
 ];
+const STYLEGUIDE_HOSTS = [
+  { name: "sample", directory: "styleguide/sample", includesUi: true },
+  { name: "shop", directory: "styleguide/shop", includesUi: false },
+  { name: "landing", directory: "styleguide/landing", includesUi: false },
+  { name: "blog", directory: "styleguide/blog", includesUi: false },
+];
+const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 
 /** @param {unknown} value @returns {Record<string, unknown>} */
 function object(value) {
@@ -29,34 +36,50 @@ function fallbackSpec(value) {
 }
 
 /**
- * Verify the two standalone-host dependency specs against root handoffs.
+ * Verify each standalone styleguide's applicable dependency specs against the root handoffs.
  *
  * @param {{ root?: string }} [options]
  * @returns {{ pins: string[], fallbacks: string[] }}
  */
 export function checkStyleguidePins({ root = resolve(import.meta.dirname, "..") } = {}) {
-  const host = readJson(join(root, "styleguide/sample/package.json"));
-  const dependencies = object(host.dependencies);
   const fallbacks = [];
   const pins = [];
-  for (const entry of PINNED_PACKAGES) {
-    const handoff = readJson(join(root, entry.handoff));
-    const expected = handoff.rootGitSpec;
-    assert.equal(typeof expected, "string", `${entry.handoff} must contain a rootGitSpec`);
-    const actual = dependencies[entry.name];
-    assert.equal(typeof actual, "string", `styleguide/sample/package.json must declare ${entry.name}`);
-    if (actual === expected) {
-      pins.push(`${entry.name}=${actual}`);
-      continue;
+  for (const host of STYLEGUIDE_HOSTS) {
+    const manifest = readJson(join(root, host.directory, "package.json"));
+    const dependencies = object(manifest.dependencies);
+    const uiSections = DEPENDENCY_FIELDS.filter((section) => Object.hasOwn(object(manifest[section]), "@zudo-composer/ui"));
+    assert.equal(
+      uiSections.length,
+      host.includesUi ? 1 : 0,
+      `${host.directory}/package.json ${host.includesUi ? "must declare @zudo-composer/ui once" : "must not declare @zudo-composer/ui"}`,
+    );
+    if (host.includesUi) assert.deepEqual(uiSections, ["dependencies"], `${host.directory}/package.json must declare @zudo-composer/ui as a dependency`);
+    for (const section of DEPENDENCY_FIELDS.filter((field) => field !== "dependencies")) {
+      assert.ok(
+        !Object.hasOwn(object(manifest[section]), "@zudo-composer/component-contract"),
+        `${host.directory}/package.json must declare @zudo-composer/component-contract only under dependencies`,
+      );
     }
-    const fallback = fallbackSpec(entry.sourcePath);
-    if (actual === fallback) {
-      const readme = readFileSync(join(root, "styleguide/sample/README.md"), "utf8");
-      assert.ok(readme.includes(fallback) && /fallback/iu.test(readme), `${entry.name} uses ${fallback}, but the documented fallback is missing from styleguide/sample/README.md`);
-      fallbacks.push(`${entry.name}=${actual}`);
-      continue;
+    for (const entry of PINNED_PACKAGES) {
+      if (entry.name === "@zudo-composer/ui" && !host.includesUi) continue;
+      const handoff = readJson(join(root, entry.handoff));
+      const expected = handoff.rootGitSpec;
+      assert.equal(typeof expected, "string", `${entry.handoff} must contain a rootGitSpec`);
+      const actual = dependencies[entry.name];
+      assert.equal(typeof actual, "string", `${host.directory}/package.json must declare ${entry.name}`);
+      if (actual === expected) {
+        pins.push(`${host.name === "sample" ? "" : `${host.name}:`}${entry.name}=${actual}`);
+        continue;
+      }
+      const fallback = fallbackSpec(entry.sourcePath);
+      if (host.includesUi && actual === fallback) {
+        const readme = readFileSync(join(root, host.directory, "README.md"), "utf8");
+        assert.ok(readme.includes(fallback) && /fallback/iu.test(readme), `${entry.name} uses ${fallback}, but the documented fallback is missing from ${host.directory}/README.md`);
+        fallbacks.push(`${entry.name}=${actual}`);
+        continue;
+      }
+      throw new Error(`${host.directory} ${entry.name} pin mismatch: expected ${expected}, received ${actual}`);
     }
-    throw new Error(`${entry.name} pin mismatch: expected ${expected}, received ${actual}`);
   }
   return { pins, fallbacks };
 }
@@ -65,5 +88,5 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
   if (process.argv.length !== 2) throw new Error("Usage: check-styleguide-pins.mjs");
   const result = checkStyleguidePins();
   const details = [...result.pins.map((pin) => `${pin} (rootGitSpec)`), ...result.fallbacks.map((pin) => `${pin} (documented fallback)`)];
-  console.log(`Styleguide pin check passed: ${details.join(", ")}`);
+  console.log(`Styleguide dependency check passed: ${details.join(", ")}`);
 }

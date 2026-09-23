@@ -74,7 +74,7 @@ describe("doc site artifact", () => {
     const mimeEntries = [
       [".html", "text/html"], [".css", "text/css"], [".js", "text/javascript"], [".mjs", "text/javascript"],
       [".json", "application/json"], [".xml", "application/xml"], [".txt", "text/plain"], [".svg", "image/svg+xml"],
-      [".png", "image/png"], [".ico", "image/vnd.microsoft.icon"], [".woff2", "font/woff2"],
+      [".png", "image/png"], [".webp", "image/webp"], [".ico", "image/vnd.microsoft.icon"], [".woff2", "font/woff2"],
       [".wasm", "application/wasm"], [".webmanifest", "application/manifest+json"],
     ];
     const { directory } = await site(Object.fromEntries(mimeEntries.map(([extension]) => [`assets/file${extension}`, "asset bytes"])));
