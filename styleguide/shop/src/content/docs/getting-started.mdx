@@ -1,0 +1,19 @@
+---
+title: About the Shop catalog
+---
+
+The [component catalog](/components) shows all 35 components in the Nightjar
+Supply pack. The stories import the host's actual `components/pack.ts` through
+a generated source adapter. They include default and contextual examples; cart,
+product gallery, filters, FAQ, newsletter, contact and checkout remain live.
+
+The [design tokens](/tokens) come from the Shop's `styles/base.css`. Its dark
+palette, spacing, type and sizes are separate from the documentation chrome.
+Preview iframes load that stylesheet alone, so the catalog's UI cannot change
+how a Shop component looks. The token dashboard's Palette tab is empty because
+this demo's raw variables use `--shop-palette-*`; they appear with the semantic
+colors in the Color tab using their actual CSS variable names.
+
+Cart stories reset the demo cart when opened and when unmounted. The checkout
+is a mock form: it validates entries, displays a fake order number, and sends
+nothing.
