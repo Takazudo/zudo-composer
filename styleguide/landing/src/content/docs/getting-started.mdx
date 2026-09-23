@@ -1,0 +1,20 @@
+---
+title: About the Landing catalog
+---
+
+The [component catalog](/components) shows all 30 components in Orrery's
+landing-page pack. Stories use the real host `components/pack.ts` through a
+source adapter and offer pack defaults, realistic content, and alternate
+contexts. The pricing switch changes the displayed rates; FAQ rows expand;
+signup and contact forms validate, show a sending state, and finish with a
+mock confirmation. Nothing is sent.
+
+The [design tokens](/tokens) come from Landing's `styles/base.css`: a light
+neutral ramp, cobalt accent, spacing, type, and sizes. Preview documents load
+that host stylesheet and set their canvas colors from its tokens, keeping the
+catalog chrome out of component rendering. The raw `--land-palette-*` variables
+appear in the Color tab alongside the semantic color tokens.
+
+Uploaded images are copied from the demo host at their real public URLs during
+`gen`. The adapter bundles the actual TypeScript source and leaves Preact and
+the component contract external to resolve from this standalone host.
