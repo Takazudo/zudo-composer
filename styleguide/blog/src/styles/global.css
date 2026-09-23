@@ -1,0 +1,108 @@
+@layer zd-preflight, zd-flow;
+@import "tailwindcss/preflight" layer(zd-preflight);
+@import "tailwindcss/utilities";
+
+@import "@takazudo/zudo-doc/theme.css";
+@import "@takazudo/zudo-doc/safelist.css";
+@import "@takazudo/zudo-doc/content.css";
+@import "@takazudo/zudo-doc/features.css";
+@import "@takazudo/zudo-doc/page-loading.css";
+@import "@takazudo/zdtp/dashboard/styles.css";
+
+/* zudo-sg ships its chrome rules and generated utility safelist separately. */
+@import "@takazudo/zudo-sg/styles.css";
+@import "@takazudo/zudo-sg/safelist.css";
+
+
+@source "../../pages/**/*.{tsx,ts,jsx,js}";
+@source "../../stories/**/*.{tsx,ts,jsx,js,mdx,md}";
+@source "../../src/content/**/*.{mdx,md}";
+
+/* The host-owned index does not render through zudo-doc's route layout, so it
+ * cannot depend on the route-scoped token variables injected by that layout. */
+.sg-home {
+  color-scheme: light dark;
+  min-height: 100vh;
+  margin: 0;
+  background: light-dark(#fafbff, #1a2133);
+  color: light-dark(#202940, #f1f4ff);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.sg-home__main {
+  display: flex;
+  min-height: 100vh;
+  max-width: 56rem;
+  box-sizing: border-box;
+  margin-inline: auto;
+  padding: 4rem 2rem;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.sg-home__eyebrow {
+  margin: 0 0 0.5rem;
+  color: light-dark(#3758d7, #a9b9ff);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sg-home__title {
+  margin: 0 0 1rem;
+  font-size: clamp(2.25rem, 7vw, 4.5rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.sg-home__intro {
+  max-width: 42rem;
+  margin: 0;
+  color: light-dark(#526077, #bdc9e7);
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+.sg-home__nav {
+  margin-top: 2.5rem;
+}
+
+.sg-home__links {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 1rem;
+  list-style: none;
+}
+
+.sg-home__link {
+  display: block;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#cbd4e7, #4b5875);
+  border-radius: 0.5rem;
+  background: light-dark(#fff, #283550);
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  transition: border-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.sg-home__link:hover {
+  border-color: light-dark(#3758d7, #a9b9ff);
+  color: light-dark(#3758d7, #a9b9ff);
+  transform: translateY(-2px);
+}
+
+.sg-home__link:focus-visible {
+  outline: 2px solid light-dark(#3758d7, #a9b9ff);
+  outline-offset: 3px;
+}
+
+@media (min-width: 40rem) {
+  .sg-home__links {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
