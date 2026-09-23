@@ -1,0 +1,18 @@
+/* The iframe loads the real Blog stylesheet without catalog chrome. */
+@import "../../../../packages/demo-blog/styles/base.css";
+@source "../../stories/**/*.{tsx,ts}";
+
+/* The engine mounts previews on its own canvas; set its document colors
+   explicitly so the host's light token palette reaches every story. */
+html[data-sg-preview-doc] {
+  color-scheme: light;
+  background-color: var(--color-blog-bg);
+}
+
+html[data-sg-preview-doc] body {
+  min-height: 100%;
+  background-color: var(--color-blog-bg);
+  color: var(--color-blog-fg);
+  font-family: var(--font-blog-serif);
+  color-scheme: light;
+}

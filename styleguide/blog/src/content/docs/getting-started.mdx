@@ -1,0 +1,13 @@
+---
+title: About the Blog catalog
+---
+
+The [component catalog](/components) covers all 24 components in the Margin Notes Blog pack. Every component has pack defaults and contextual stories. Article cards use the eight authored articles, actual cover images, and real bylines. The prose story includes full essays so the reading measure, headings, lists, and drop cap can be judged over a long page.
+
+The article list has clickable tag chips. Its additional stories place the preview iframe at an author URL or an article URL, demonstrating the real `by-route-author` and `exclude-route` rules. The header story places the iframe at an article URL to show the current nav item. Comment list and form stories use an article URL with matching authored comments. Submit a comment to add it locally; try invalid fields first to see validation. The newsletter likewise validates and confirms locally. No form sends data.
+
+Only each preview iframe's history changes for these fixtures. The catalog's own URL, search, sidebar, and theme controls remain separate. The story keeps zudo-sg's preview query parameters when it sets the fixture path, so selecting tags changes the preview's `tag` parameter without changing catalog navigation.
+
+The [design tokens](/tokens) are generated from Blog's `styles/base.css`: paper-like neutrals, oxblood accents, serif and sans typography, and the reading measure. Preview documents load that host stylesheet and set their canvas color from Blog semantic tokens. The raw `--blog-palette-*` variables appear beside semantic colors.
+
+`gen` bundles the actual Blog TypeScript pack, leaves Preact and the component contract external to resolve from this standalone host, and copies published uploaded images to their real URLs. It derives story article, author, and comment fixtures from the committed host CMS records.
