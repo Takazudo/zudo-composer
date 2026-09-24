@@ -143,8 +143,12 @@ the pipeline's new-Worker path. It has no previous deployment to roll back to.
 All four styleguide targets are new Workers. Sample keeps
 `pnpm sg:build-site`; Shop, Landing and Blog use
 `pnpm sg:build-styleguide <target>`. Each build writes the shared verified
-`doc-site-manifest.json` into its own `styleguide/<host>/dist` directory. The
-first rollout of each target uses the existing missing-Worker path to bind its
+`doc-site-manifest.json` into its own `styleguide/<host>/dist` directory.
+Shop, Landing and Blog ship `public/_headers` rules so their copied
+checksum-named images receive immutable caching and `nosniff` from Workers
+Static Assets. The artifact manifest hashes those rules, while live checks
+verify the resulting image response headers and bytes.
+The first rollout of each target uses the existing missing-Worker path to bind its
 custom domain after a successful `main` CI run. A conflicting Worker or DNS
 binding fails closed and must be resolved by the owner; the workflow never
 deletes or unbinds another Worker or domain.

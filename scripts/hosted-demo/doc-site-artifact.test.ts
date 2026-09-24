@@ -88,6 +88,14 @@ describe("doc site artifact", () => {
     }
   });
 
+  it("hashes Workers header policy without treating it as a live asset", async () => {
+    const headers = "/uploaded-assets/*\n  Cache-Control: public, max-age=31536000, immutable\n  X-Content-Type-Options: nosniff\n";
+    const { directory, manifest } = await site({ _headers: headers });
+    const artifact = await verifyDocSiteArtifact({ directory });
+    expect(manifest.files._headers).toBe(createHash("sha256").update(headers).digest("hex"));
+    expect(artifact.files.some((file) => file.path === "_headers")).toBe(false);
+  });
+
   it("rejects a missing file and names its nested path", async () => {
     const { directory } = await site();
     await rm(join(directory, "assets/app.js"));

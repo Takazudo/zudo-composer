@@ -67,6 +67,11 @@ describe("sample styleguide host styles", () => {
 });
 
 describe("demo styleguide host contracts", () => {
+  it.each(["shop", "landing", "blog"])("serves %s checksum assets with immutable cache and nosniff headers", (slug) => {
+    const headers = readFileSync(resolve(repositoryRoot, `styleguide/${slug}/public/_headers`), "utf8");
+    expect(headers).toBe("/uploaded-assets/*\n  Cache-Control: public, max-age=31536000, immutable\n  X-Content-Type-Options: nosniff\n");
+  });
+
   it.each(["shop", "landing", "blog"])("keeps %s on its own pack and the exact shared contract pin", (slug) => {
     const manifest = JSON.parse(readFileSync(resolve(repositoryRoot, `styleguide/${slug}/package.json`), "utf8"));
     const handoff = JSON.parse(readFileSync(resolve(repositoryRoot, "contract-handoff.json"), "utf8"));
