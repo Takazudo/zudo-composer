@@ -28,7 +28,7 @@ function response(body: string | Buffer | null, mime: string, status = 200, head
   return new Response(body, { status, headers: { "content-type": mime, ...headers } });
 }
 
-function mockFetch(fixture: Awaited<ReturnType<typeof writeArtifact>>, options: { corruptPath?: string; staleManifest?: boolean; injectAnalytics?: boolean } = {}) {
+function mockFetch(fixture: Awaited<ReturnType<typeof writeArtifact>>, options: { corruptPath?: string; staleManifest?: boolean; injectAnalytics?: boolean; headLength?: "omit" | "wrong" } = {}) {
   const requests: Array<{ url: URL; path: string; init: RequestInit | undefined }> = [];
   const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = new URL(input.toString());
@@ -55,7 +55,12 @@ function mockFetch(fixture: Awaited<ReturnType<typeof writeArtifact>>, options: 
       "x-content-type-options": ASSET_NOSNIFF,
       ...(checksum === undefined || assetContentDisposition(mime, checksum) === undefined ? {} : { "content-disposition": assetContentDisposition(mime, checksum)! }),
     } : {};
-    return response(relative === options.corruptPath ? Buffer.from("changed") : bytes, mime, 200, headers);
+    const result = response(relative === options.corruptPath ? Buffer.from("changed") : bytes, mime, 200, headers);
+    if (asset && init?.method === "HEAD") {
+      if (options.headLength === "omit") result.headers.delete("content-length");
+      if (options.headLength === "wrong") result.headers.set("content-length", "1");
+    }
+    return result;
   };
   return { fetchImpl, requests };
 }
@@ -556,6 +561,19 @@ describe("multi-page static site live verification", () => {
         expect(methods).toEqual(["GET", "HEAD"]);
       }
     }
+  });
+
+  it("accepts an omitted HEAD length but rejects an incorrect one", async () => {
+    const fixture = await writeArtifact();
+    fixtures.push(fixture.root);
+    await expect(verifyLiveDeployment({
+      target: TARGETS["sample-editor"], baseUrl: "https://demo.example.test",
+      artifactDirectory: fixture.root, fetchImpl: mockFetch(fixture, { headLength: "omit" }).fetchImpl,
+    })).resolves.toHaveProperty("assets");
+    await expect(verifyLiveDeployment({
+      target: TARGETS["sample-editor"], baseUrl: "https://demo.example.test",
+      artifactDirectory: fixture.root, fetchImpl: mockFetch(fixture, { headLength: "wrong" }).fetchImpl,
+    })).rejects.toThrow(/GET and HEAD content-length headers differ/);
   });
 });
 
