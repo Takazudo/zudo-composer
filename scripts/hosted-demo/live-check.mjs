@@ -245,7 +245,14 @@ export async function verifyLiveDeployment(options) {
       assert.equal(response.headers.get("content-disposition"), disposition ?? null, `/${file.path}: download disposition is wrong`);
       const head = await fetchWithTimeout(fetchImpl, cacheBusted(new URL(assetPath, origin), sourceRevision, attempt), requestTimeoutMs, {}, deadlineAt, "HEAD");
       assert.ok(head.ok, `/${file.path}: HEAD expected HTTP 2xx, received ${head.status}`);
-      for (const header of ["content-type", "content-length", "cache-control", "x-content-type-options", "content-disposition"]) {
+      // HTTP permits HEAD to omit Content-Length even when GET includes it.
+      // The GET body and its length are checked above; reject a wrong HEAD
+      // length whenever the server does provide one.
+      const headLength = head.headers.get("content-length");
+      if (headLength !== null) {
+        assert.equal(headLength, response.headers.get("content-length"), `/${file.path}: GET and HEAD content-length headers differ`);
+      }
+      for (const header of ["content-type", "cache-control", "x-content-type-options", "content-disposition"]) {
         assert.equal(head.headers.get(header), response.headers.get(header), `/${file.path}: GET and HEAD ${header} headers differ`);
       }
     }
