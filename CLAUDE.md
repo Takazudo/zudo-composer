@@ -29,7 +29,7 @@ This repository also owns its dogfood component set in `packages/ui`
 (`@zudo-composer/ui`): typed component sidecars, the runtime pack, and
 canonical Composer CSS. Its package metadata is `@zudo-composer/ui@0.1.0`
 and its component-pack protocol identity is `@zudo-composer/ui@1.0.0`. The
-pack's focused `@takazudo/zfb-md-wasm` dependency, exactly `2.10.1`, is allowed
+pack's focused `@takazudo/zfb-md-wasm` dependency, exactly `2.20.3`, is allowed
 for `ProseMd` as a dependency of `packages/ui`, never of the tool; no zudo-doc,
 zfb application runtime/config, virtual-zfb, or styleguide registry may enter
 this tool. The tool never lists the pack under `dependencies` or
