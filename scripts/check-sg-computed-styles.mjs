@@ -388,6 +388,305 @@ async function verifyMobileDrawer(browser, baseUrl, routes, targetKey) {
   }
 }
 
+// #866/#869: the "Preview tokens" trigger (page button, workbench button,
+// header trigger) only dispatched an event nothing listened for — three
+// pieces of host wiring were missing (tabs module, bootstrap island,
+// bundled zdtp). Selectors below are confirmed against the wired build's
+// actual DOM (a manual probe), not the older `sg-preview-design-token-panel-modal`
+// class name the panel never used.
+const TOKEN_PANEL_ROOT_SELECTOR = "#sg-preview-tweak-root";
+const TOKEN_PANEL_SHELL_SELECTOR = `${TOKEN_PANEL_ROOT_SELECTOR} .tokenpanel-shell`;
+const TOKEN_PANEL_CLOSE_BUTTON_SELECTOR = `${TOKEN_PANEL_SHELL_SELECTOR} .tokenpanel-close-btn`;
+const TOKEN_PANEL_APPLY_SELECTOR = `${TOKEN_PANEL_SHELL_SELECTOR} [data-zdtp-action="apply"]`;
+const HEADER_PREVIEW_TOKENS_TRIGGER_SELECTOR = "#sg-preview-tokens-trigger";
+const TOKEN_PANEL_TIMEOUT_MS = 8_000;
+// The test color only needs to differ from whatever the token's built-in
+// default is; the assertion below compares before/after values rather than
+// matching this literal, so it survives the token's default changing.
+const TOKEN_EDIT_TEST_COLOR = "#ff00ff";
+
+/**
+ * Locate the "Preview tokens" trigger button by its visible text. Playwright's
+ * `hasText` string form is a substring match, so this also matches the
+ * `/tokens/` page button's "Preview tokens →" label.
+ * @param {import("@playwright/test").Page} page
+ */
+function previewTokensTriggerButton(page) {
+  return page.locator("button", { hasText: "Preview tokens" }).first();
+}
+
+/**
+ * Poll `read()` until it satisfies `isDone`, returning the last observed value
+ * regardless of whether it timed out — callers assert on the return value so a
+ * timeout still produces a failure message carrying the actual last-seen state
+ * rather than a bare "timed out".
+ * @template T
+ * @param {() => Promise<T>} read
+ * @param {(value: T) => boolean} isDone
+ * @param {number} [timeoutMs]
+ * @returns {Promise<T>}
+ */
+async function pollUntil(read, isDone, timeoutMs = TOKEN_PANEL_TIMEOUT_MS) {
+  const deadline = Date.now() + timeoutMs;
+  let value = await read();
+  while (!isDone(value) && Date.now() < deadline) {
+    await new Promise((resolveDelay) => { setTimeout(resolveDelay, 100); });
+    value = await read();
+  }
+  return value;
+}
+
+/** @typedef {{ exists: boolean, visible: boolean, tabCount: number, tokenInputCount: number }} TokenPanelState */
+
+/**
+ * Read the token panel's DOM state directly rather than tracking an open/close
+ * flag: `.tokenpanel-shell` is created on open and removed on close, so
+ * `exists`/`visible` alone prove the mount, and the tab/input counts prove the
+ * panel actually rendered content instead of an empty shell.
+ * @param {import("@playwright/test").Page} page
+ * @returns {Promise<TokenPanelState>}
+ */
+async function readTokenPanelState(page) {
+  /* eslint-disable no-undef -- this callback runs inside the browser via page.evaluate, not in this Node process */
+  return page.evaluate((selector) => {
+    const shell = document.querySelector(selector);
+    return {
+      exists: !!shell,
+      visible: !!shell && shell.checkVisibility(),
+      tabCount: shell ? shell.querySelectorAll(".tokenpanel-tab-button").length : 0,
+      tokenInputCount: shell ? shell.querySelectorAll("[data-css-var] input").length : 0,
+    };
+  }, TOKEN_PANEL_SHELL_SELECTOR);
+  /* eslint-enable no-undef */
+}
+
+/**
+ * Click `triggerLocator` and wait for the token panel to become visible and
+ * populated, retrying the click itself a few times: the trigger's listener may
+ * not be attached on the very first click right after navigation, the same
+ * hydration race `clickToggleAndWaitForAriaExpanded` above retries for the
+ * drawer toggle. The dedicated hydration proof below issues a single
+ * deliberately-early click instead of using this retrying helper.
+ * @param {import("@playwright/test").Page} page
+ * @param {import("@playwright/test").Locator} triggerLocator
+ * @param {string} context a short label (target, route, trigger) for failure messages
+ */
+async function clickTriggerAndWaitForPanelOpen(page, triggerLocator, context) {
+  /** @param {TokenPanelState} state */
+  const isOpenAndPopulated = (state) => state.visible && state.tabCount > 0 && state.tokenInputCount > 0;
+  let state = await readTokenPanelState(page);
+  const maxAttempts = 5;
+  for (let attempt = 0; attempt < maxAttempts && !isOpenAndPopulated(state); attempt += 1) {
+    await triggerLocator.click({ timeout: CLICK_TIMEOUT_MS });
+    state = await pollUntil(() => readTokenPanelState(page), isOpenAndPopulated, 1_500);
+  }
+  assert.ok(
+    state.visible,
+    `${context}: "${TOKEN_PANEL_SHELL_SELECTOR}" never became visible after up to ${maxAttempts} clicks on the trigger (exists=${state.exists}) — the trigger did not open the panel (#866/#869).`,
+  );
+  assert.ok(
+    state.tabCount > 0 && state.tokenInputCount > 0,
+    `${context}: token panel opened but is not populated — ${state.tabCount} tab button(s), ${state.tokenInputCount} token input(s) found under "${TOKEN_PANEL_SHELL_SELECTOR}" (#866/#869).`,
+  );
+  return state;
+}
+
+/**
+ * Wait for the token panel to close (the `.tokenpanel-shell` element is
+ * removed, or at least stops being visible).
+ * @param {import("@playwright/test").Page} page
+ * @param {string} context
+ */
+async function waitForTokenPanelClosed(page, context) {
+  const state = await pollUntil(() => readTokenPanelState(page), (candidate) => !candidate.visible);
+  assert.ok(!state.visible, `${context}: token panel is still visible after clicking its close button (#866/#869).`);
+}
+
+/**
+ * Open `triggerLocator`, confirm the panel is visible and populated, close it,
+ * then reopen it with the same trigger — the full per-trigger contract from
+ * #869 ("each trigger: the panel becomes visible and populated, then close it
+ * and reopen with the same trigger").
+ * @param {import("@playwright/test").Page} page
+ * @param {import("@playwright/test").Locator} triggerLocator
+ * @param {string} context
+ */
+async function verifyTriggerOpensAndRecloses(page, triggerLocator, context) {
+  await clickTriggerAndWaitForPanelOpen(page, triggerLocator, `${context}, first open`);
+  await page.locator(TOKEN_PANEL_CLOSE_BUTTON_SELECTOR).click({ timeout: CLICK_TIMEOUT_MS });
+  await waitForTokenPanelClosed(page, `${context}, close`);
+  await clickTriggerAndWaitForPanelOpen(page, triggerLocator, `${context}, reopen`);
+}
+
+/**
+ * Read a CSS custom property's computed value from the first same-origin
+ * "preview" iframe on the page (`iframe[src^="/components/preview"]`), or
+ * `null` if no such iframe exists or it could not be read. Iframe access is
+ * same-origin (the preview graph is isolated but same-origin, per this repo's
+ * CLAUDE.md), so `contentDocument` is directly reachable.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} cssVar
+ * @returns {Promise<string | null>}
+ */
+async function readPreviewIframeCustomProperty(page, cssVar) {
+  /* eslint-disable no-undef -- this callback runs inside the browser via page.evaluate, not in this Node process */
+  return page.evaluate(({ selector, propertyName }) => {
+    const frame = document.querySelector(selector);
+    if (!(frame instanceof HTMLIFrameElement) || !frame.contentDocument) return null;
+    return getComputedStyle(frame.contentDocument.documentElement).getPropertyValue(propertyName).trim();
+  }, { selector: 'iframe[src^="/components/preview"]', propertyName: cssVar });
+  /* eslint-enable no-undef */
+}
+
+/**
+ * Pick one editable token row to drive the live-preview proof: the first
+ * `[data-css-var]` row whose var name contains "color" (both Sample's
+ * unprefixed `--color-bg` and the demo hosts' namespaced `--color-shop-*` /
+ * `--color-land-*` / `--color-blog-*` semantic tokens match, per
+ * `styleguide/shared/generate-demo-token-manifest.mjs`), falling back to
+ * whichever row comes first so the check never depends on a target-specific
+ * token name.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} context
+ * @returns {Promise<{ locator: import("@playwright/test").Locator, varName: string }>}
+ */
+async function findEditableTokenRow(page, context) {
+  const rows = page.locator(`${TOKEN_PANEL_SHELL_SELECTOR} [data-css-var] input.tokenpanel-row-text-input`);
+  const count = await rows.count();
+  assert.ok(count > 0, `${context}: no editable token text input ("${TOKEN_PANEL_SHELL_SELECTOR} [data-css-var] input.tokenpanel-row-text-input") found — the open panel has nothing to edit.`);
+  const varNames = await rows.evaluateAll((inputs) => inputs.map((input) => input.closest("[data-css-var]")?.getAttribute("data-css-var") ?? ""));
+  let index = varNames.findIndex((name) => /color/iu.test(name));
+  if (index === -1) index = 0;
+  const varName = varNames[index];
+  assert.ok(varName, `${context}: matched token input at index ${index} has no "data-css-var" ancestor attribute to read.`);
+  return { locator: rows.nth(index), varName };
+}
+
+/**
+ * Edit one token in the already-open panel and confirm the same-origin
+ * preview iframe's computed custom property actually changes — proving the
+ * panel is wired to live preview, not just visually open.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} context
+ */
+async function verifyTokenEditChangesPreview(page, context) {
+  const { locator, varName } = await findEditableTokenRow(page, context);
+  const before = await readPreviewIframeCustomProperty(page, varName);
+  assert.ok(before !== null, `${context}: no same-origin preview iframe ("iframe[src^=\\"/components/preview\\"]") found to read "${varName}" from.`);
+
+  await locator.fill(TOKEN_EDIT_TEST_COLOR);
+  await locator.press("Enter");
+
+  const after = await pollUntil(() => readPreviewIframeCustomProperty(page, varName), (value) => value !== before);
+  assert.notEqual(
+    after,
+    before,
+    `${context}: editing "${varName}" to "${TOKEN_EDIT_TEST_COLOR}" did not change the preview iframe's computed "${varName}" (before "${before}", after "${after}") — live preview is not wired to the panel (#866/#869).`,
+  );
+}
+
+/**
+ * The Apply control must stay disabled: the reference wiring is tabs-only
+ * (no `routingFile`/`writeRoot` dev Apply endpoint), so live preview works
+ * only through `applySink`, never a dev-time write.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} context
+ */
+async function verifyApplyControlDisabled(page, context) {
+  const applyLocator = page.locator(TOKEN_PANEL_APPLY_SELECTOR);
+  await applyLocator.waitFor({ state: "attached", timeout: TOKEN_PANEL_TIMEOUT_MS });
+  const ariaDisabled = await applyLocator.getAttribute("aria-disabled");
+  assert.equal(
+    ariaDisabled,
+    "true",
+    `${context}: Apply control ("${TOKEN_PANEL_APPLY_SELECTOR}") has aria-disabled="${ariaDisabled}", expected "true" — this host must stay tabs-only (no dev Apply endpoint).`,
+  );
+}
+
+/**
+ * Run `run` against a brand-new browser context/page, closing it afterwards.
+ * The token panel persists across navigation within one context and then
+ * covers the workbench trigger button, so each trigger needs its own fresh
+ * context rather than reusing one page across triggers.
+ * @param {import("@playwright/test").Browser} browser
+ * @param {(page: import("@playwright/test").Page) => Promise<void>} run
+ */
+async function withFreshPage(browser, run) {
+  const browserContext = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  try {
+    await run(await browserContext.newPage());
+  } finally {
+    await browserContext.close();
+  }
+}
+
+/**
+ * Prove every Preview tokens trigger opens the panel (#866/#869): the
+ * `/tokens/` page button, a real component-detail route's workbench button
+ * and header trigger, a token edit reaching the same-origin preview iframe,
+ * the Apply control staying disabled, and one click issued before hydration
+ * settles still ending with the panel open.
+ * @param {import("@playwright/test").Browser} browser
+ * @param {string} baseUrl
+ * @param {string[]} routes
+ * @param {string} targetKey
+ * @returns {Promise<{ tokensRoute: string, componentDetailRoute: string }>}
+ */
+async function verifyPreviewTokenPanel(browser, baseUrl, routes, targetKey) {
+  const tokensRoute = routes.find((route) => route === "/tokens/");
+  assert.ok(tokensRoute, `${targetKey}: no "/tokens/" route in the build — cannot verify the page-level Preview tokens trigger (#866/#869).`);
+
+  // "/components/preview/" is the iframe content route itself, not a detail
+  // page, and "/components/" is the catalog index — neither renders a
+  // workbench or header trigger.
+  const componentDetailRoute = routes.find((route) => route.startsWith("/components/") && route !== "/components/" && route !== "/components/preview/");
+  assert.ok(
+    componentDetailRoute,
+    `${targetKey}: no real component detail route ("/components/<slug>/", other than the index or "/components/preview/") found in the build — checked routes: ${routes.join(", ") || "(none)"} (#866/#869).`,
+  );
+
+  await withFreshPage(browser, async (page) => {
+    const context = `${targetKey} ${tokensRoute} (page button)`;
+    await page.goto(new URL(tokensRoute, baseUrl).toString(), { waitUntil: "load" });
+    await verifyTriggerOpensAndRecloses(page, previewTokensTriggerButton(page), context);
+  });
+
+  // The token-edit and Apply checks ride the already-open panel from this
+  // trigger's reopen, rather than opening a fourth time.
+  await withFreshPage(browser, async (page) => {
+    const context = `${targetKey} ${componentDetailRoute} (workbench button)`;
+    await page.goto(new URL(componentDetailRoute, baseUrl).toString(), { waitUntil: "load" });
+    await verifyTriggerOpensAndRecloses(page, previewTokensTriggerButton(page), context);
+    await verifyTokenEditChangesPreview(page, context);
+    await verifyApplyControlDisabled(page, context);
+  });
+
+  await withFreshPage(browser, async (page) => {
+    const context = `${targetKey} ${componentDetailRoute} (header trigger)`;
+    await page.goto(new URL(componentDetailRoute, baseUrl).toString(), { waitUntil: "load" });
+    await verifyTriggerOpensAndRecloses(page, page.locator(HEADER_PREVIEW_TOKENS_TRIGGER_SELECTOR), context);
+  });
+
+  // Hydration (#869): a click issued right after `domcontentloaded` — before
+  // waiting for `load`/idle, before the bootstrap island has necessarily
+  // mounted — must still end with the panel open. This exercises the capture
+  // script that queues a pre-hydration click and replays it once the island
+  // mounts. A single click, not the retrying helper above: this proves one
+  // early click is enough, not that repeated clicking eventually works.
+  await withFreshPage(browser, async (page) => {
+    const context = `${targetKey} ${componentDetailRoute} (early click before hydration)`;
+    await page.goto(new URL(componentDetailRoute, baseUrl).toString(), { waitUntil: "domcontentloaded" });
+    await previewTokensTriggerButton(page).click({ timeout: CLICK_TIMEOUT_MS });
+    const state = await pollUntil(() => readTokenPanelState(page), (candidate) => candidate.visible && candidate.tabCount > 0 && candidate.tokenInputCount > 0);
+    assert.ok(
+      state.visible && state.tabCount > 0 && state.tokenInputCount > 0,
+      `${context}: a click issued right after domcontentloaded did not end with a visible, populated panel (visible=${state.visible}, tabCount=${state.tabCount}, tokenInputCount=${state.tokenInputCount}) — the pre-hydration capture script did not replay it (#869).`,
+    );
+  });
+
+  return { tokensRoute, componentDetailRoute };
+}
+
 const targetKey = process.argv[2] ?? "sample-sg";
 assert.ok(STYLEGUIDE_TARGET_KEYS.some((key) => key === targetKey), `Usage: check-sg-computed-styles.mjs [${STYLEGUIDE_TARGET_KEYS.join("|")}]`);
 const target = TARGETS[targetKey];
@@ -445,11 +744,13 @@ try {
     assert.notEqual(bodyColors.light, bodyColors.dark, `${flowRoute}: light and dark body backgrounds are identical — the dark color scheme never engaged despite pinning data-theme.`);
 
     const drawerMeasurements = await verifyMobileDrawer(browser, server.url, routes, targetKey);
+    const tokenPanelRoutes = await verifyPreviewTokenPanel(browser, server.url, routes, targetKey);
 
     console.log(`${targetKey} computed styles verified on ${flowRoute}: "${flowSelector}" margin-top ${marginTop}; body background ${bodyColors.light} light / ${bodyColors.dark} dark.`);
     for (const measurement of drawerMeasurements) {
       console.log(`Mobile drawer verified on ${measurement.route} (${measurement.colorScheme}, ${measurement.viewport}): open elementFromPoint(${measurement.point.x}, ${measurement.point.y}) hit ${measurement.elementFromPoint} inside the toggle (toggle z-index ${measurement.toggleZIndex}, backdrop z-index ${measurement.backdropZIndex}); X icon visible, click-close, reopen, and Escape-close with focus return all verified (#785, #769).`);
     }
+    console.log(`${targetKey} Preview tokens panel verified: page button (${tokenPanelRoutes.tokensRoute}), workbench button and header trigger (${tokenPanelRoutes.componentDetailRoute}) each open/close/reopen a populated panel; token edit reaches the preview iframe; Apply stays disabled; an early pre-hydration click still opens the panel (#866, #869).`);
   } finally {
     await browser.close();
   }
