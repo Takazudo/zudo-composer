@@ -43,8 +43,9 @@ export async function repositoryRoots(root) {
 
 /** @param {string[]} roots @param {string} workspace */
 export async function assertExternalWorkspace(roots, workspace) {
+  const actualRoots = await Promise.all(roots.map((root) => realpath(root)));
   const actual = await realpath(workspace);
-  if (roots.some((root) => inside(root, actual))) throw new Error(`Packed hosts must be outside the repository: ${actual}`);
+  if (actualRoots.some((root) => inside(root, actual))) throw new Error(`Packed hosts must be outside the repository: ${actual}`);
   // A parent workspace or ambient node_modules would make even a /tmp install
   // depend on something other than the consumer's declared dependencies.
   for (let parent = dirname(actual); ; parent = dirname(parent)) {
