@@ -1,10 +1,10 @@
 # Upstream integration notes
 
-This host was rechecked on 2026-09-22 with `@takazudo/zudo-sg@0.3.1`,
-`create-zudo-sg@0.1.3`, `@takazudo/zfb@2.20.1`, `@takazudo/zdtp@0.8.1`,
-`@takazudo/zudo-doc@5.26.4`, Node `24.13.1`, and pnpm `11.5.2`.
+This host was rechecked on 2026-09-25 with `@takazudo/zudo-sg@0.3.6`,
+`create-zudo-sg@0.1.3`, `@takazudo/zfb@2.20.3`, `@takazudo/zdtp@0.8.3`,
+`@takazudo/zudo-doc@5.27.0`, Node `24.13.1`, and pnpm `11.5.2`.
 The installed UI pack still keeps its separate `@takazudo/zfb-md-wasm`
-dependency at `2.10.1`; the standalone host uses the 2.20.1 markdown WASM.
+dependency at `2.10.1`; the standalone host uses the 2.20.3 markdown WASM.
 
 Each upstream report below was verified against the published package before
 the corresponding local workaround was removed. The generated registry and
