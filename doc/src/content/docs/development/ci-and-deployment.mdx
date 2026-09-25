@@ -8,7 +8,8 @@ description: The continuous-integration and deployment workflows that verify and
 
 `.github/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
 current job names are `validate`, `packed-host-matrix`, `packed-host-install`,
-`demo-sites-build`, `doc-site-build`, and four styleguide artifact jobs.
+`demo-sites-build`, `demo-editors-build`, `demo-editors-batch`,
+`doc-site-build`, and four styleguide artifact jobs.
 
 | Job | Shape | Main responsibility and artifact |
 | --- | --- | --- |
@@ -16,6 +17,8 @@ current job names are `validate`, `packed-host-matrix`, `packed-host-install`,
 | `packed-host-matrix` | One Ubuntu discovery job | Runs `packed-host-matrix --github-output` and exposes the disk-discovered host matrix. It does not run the host proof itself. |
 | `packed-host-install` | Fail-fast-disabled matrix from the previous job | Gives every discovered host its own isolated packed-install job and runs `smoke:host-install -- --host <name>`. |
 | `demo-sites-build` | Fail-fast-disabled `sample`, `shop`, `landing`, `blog` matrix | Builds and verifies each static `dist-site`, then uploads `demo-site-<site>-<sha>`. |
+| `demo-editors-build` | Fail-fast-disabled `sample`, `shop`, `landing`, `blog` matrix | Builds each editor host in its own job/process with `demo:build-editor <name>`, verifies its `dist-editor`, uploads `demo-editor-<name>-<sha>`, then runs that host's `test:browser:demo-editor` lane. |
+| `demo-editors-batch` | One Ubuntu job, no matrix, no `needs` | Runs `pnpm demo:build-editors` — the same serial, single-parent-process batch a developer runs locally to build all four editors at once — timing the step, then verifies all four editor targets and greps `packages/demo-*/dist-editor/assets` for leaked `/home/` paths or `columnNumber` dev sourcemap markers. `demo-editors-build`'s one-process-per-host matrix cannot exercise a leak that only appears from the second host onward in one parent process (Epic [#827](https://github.com/Takazudo/zudo-composer/issues/827)); this job exists to make that bug class visible to CI. |
 | `doc-site-build` | One Ubuntu documentation artifact job | Runs `pnpm doc:build-site` from the default shallow checkout, verifies `doc/dist` with the `doc-site` contract, and uploads `doc-site-<sha>` from `doc/dist`. |
 | `sample-sg-site-build` | One standalone styleguide artifact job | Frozen installs, runs Sample checks and computed styles, verifies the exact two pins, then uploads `sample-sg-site-<sha>`. The `validate` job retains the twelve-component pack proof. |
 | `shop-sg-site-build`, `landing-sg-site-build`, `blog-sg-site-build` | One isolated Ubuntu job per standalone demo styleguide | Frozen installs root and host, checks the host dependency contract and computed styles, verifies the target manifest, and uploads its `<name>-sg-site-<sha>` artifact. |
