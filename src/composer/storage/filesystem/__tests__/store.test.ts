@@ -5,6 +5,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rename,
   rm,
   symlink,
@@ -57,8 +58,44 @@ async function names(): Promise<string[]> {
   return (await readdir(root)).sort();
 }
 
+const RENAME_WAIT_TIMEOUT_MS = 5_000;
+
+async function waitForRenameStart(
+  renameStarted: Promise<void>,
+  saving: Promise<unknown>,
+  expectedTarget: string,
+  observedTargets: string[],
+): Promise<void> {
+  const describeObserved = () =>
+    observedTargets.length ? observedTargets.join(", ") : "(none)";
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      renameStarted,
+      saving.then(() => {
+        throw new Error(
+          `writer settled before renaming to ${expectedTarget}; observed rename targets: ${describeObserved()}`,
+        );
+      }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(
+            `timed out after ${RENAME_WAIT_TIMEOUT_MS}ms waiting for a rename to ${expectedTarget}; ` +
+              `observed rename targets: ${describeObserved()}`,
+          ));
+        }, RENAME_WAIT_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 beforeEach(async () => {
-  sandbox = await mkdtemp(join(tmpdir(), "zudo-composer-files-"));
+  // realpath: on macOS tmpdir() resolves under /var, which is a symlink to
+  // /private/var; SafeRootFilesystem writes through the realpath'd root, so
+  // an un-resolved sandbox path never string-equals its own write targets.
+  sandbox = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-files-")));
   root = join(sandbox, "compositions");
 });
 
@@ -491,15 +528,18 @@ describe("filesystem composition store serialization and conservative CRUD", () 
       let markRenameStarted!: () => void;
       const renameStarted = new Promise<void>((resolve) => { markRenameStarted = resolve; });
       const events: string[] = [];
+      const expectedRenameTarget = jsonPath("consumer");
+      const observedRenameTargets: string[] = [];
       const writer = await createStore({
         operations: {
           rename: async (from, to) => {
-            if (to === jsonPath("consumer")) {
+            observedRenameTargets.push(to);
+            if (to === expectedRenameTarget) {
               markRenameStarted();
               await mayRename;
             }
             await rename(from, to);
-            if (to === jsonPath("consumer")) events.push("canonical saved");
+            if (to === expectedRenameTarget) events.push("canonical saved");
           },
         },
       });
@@ -518,19 +558,25 @@ describe("filesystem composition store serialization and conservative CRUD", () 
 
       const edited = { ...consumer, updatedAt: T2 };
       const saving = writer.put(edited, `jsx:consumer:${T2}`);
-      await renameStarted;
-      // On the old path, readdir starts immediately while the rename is held.
-      // A queued snapshot instead begins only after the save releases the root.
-      const reading = operation === "get" ? reader.get("source")
-        : operation === "put" ? reader.put(record("extra"))
-        : reader[operation]();
-      releaseRename();
-      await Promise.all([saving, reading]);
+      try {
+        await waitForRenameStart(renameStarted, saving, expectedRenameTarget, observedRenameTargets);
 
-      expect(events).toEqual(["canonical saved", "snapshot started"]);
-      expect(JSON.parse(await readFile(jsonPath("consumer"), "utf8"))).toEqual(edited);
-      expect(await readFile(jsxPath("consumer"), "utf8")).toBe(`jsx:consumer:${T2}`);
-      if (operation === "get") await expect(reading).resolves.toMatchObject({ status: "loaded", record: source });
+        // On the old path, readdir starts immediately while the rename is held.
+        // A queued snapshot instead begins only after the save releases the root.
+        const reading = operation === "get" ? reader.get("source")
+          : operation === "put" ? reader.put(record("extra"))
+          : reader[operation]();
+        releaseRename();
+        await Promise.all([saving, reading]);
+
+        expect(events).toEqual(["canonical saved", "snapshot started"]);
+        expect(JSON.parse(await readFile(jsonPath("consumer"), "utf8"))).toEqual(edited);
+        expect(await readFile(jsxPath("consumer"), "utf8")).toBe(`jsx:consumer:${T2}`);
+        if (operation === "get") await expect(reading).resolves.toMatchObject({ status: "loaded", record: source });
+      } finally {
+        releaseRename();
+        await saving.catch(() => {});
+      }
     },
   );
 
