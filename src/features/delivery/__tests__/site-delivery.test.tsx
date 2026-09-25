@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../../test/workspace-providers";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createProductionProviderIntegration, type ProductionProviderIntegration } from "../../../app/provider-integration";
+import { createEmptySiteProject } from "../../../app/empty-site-project";
 import { activeComponentProvider } from "../../composer/active-pack";
 import { loadSampleSiteProject } from "../../../test/site-project-fixture";
 import { captureSampleAssetLock, SAMPLE_ASSETS_STORE_ROOT } from "../../../test/sample-asset-lock";
@@ -151,6 +152,15 @@ describe("SiteDelivery", () => {
     expect((await loadWorkingPreviewSnapshot(fixture(project))).status).toBe("compiler-error");
     vi.spyOn(provider.store, "resolveVersion").mockRejectedValue(new Error("Corrupt bytes"));
     expect((await loadWorkingPreviewSnapshot(providers)).status).toBe("compiler-error");
+  });
+  it("renders a blocked compile's root cause before the asset-capture wrapper text", async () => {
+    // A brand-new project's default Sitemap page has no assigned source
+    // (`src/app/empty-site-project.ts`); its compile diagnostic is the root
+    // cause the asset-capture wrapper would otherwise hide (issue #850).
+    const providers = await workingIntegration(createEmptySiteProject("Empty"));
+    render(<SiteDelivery source={working(providers)} pathname="/website-preview" />);
+    expect(await screen.findByRole("heading", { name: "Site build blocked" })).toBeInTheDocument();
+    expect(screen.getByRole("status").textContent).toContain("The Sitemap page has no assigned source.");
   });
   it.each(["assets", "project"])("rejects a changed %s aggregate token rather than recapturing latest", async (domain) => {
     const { provider, filesystem } = await providerFixture({ seedFrom: SAMPLE_ASSETS_STORE_ROOT });
