@@ -282,14 +282,54 @@ token manifest remain ignored build outputs.
   `html` tag, so client code can detect "this page can use the preview token
   panel" after each navigation. Nothing to configure.
 - The 0.3.1 `ZdtpApplyProxyOptions` relaxation (`tabsModule` accepted without
-  `routingFile`/`writeRoot`) has **no host impact**: `zudo-sg.config.mjs` sets
-  no `zdtpApplyProxy`.
+  `routingFile`/`writeRoot`) now has host impact: this epic (Wave 1)
+  wires it tabs-only. `zudo-sg.config.mjs` sets
+  `zdtpApplyProxy: { tabsModule: "./src/config/preview-token-panel-tabs.ts" }`.
+  With no `routingFile`/`writeRoot`, this host gets no dev Apply endpoint and
+  the panel's Apply button stays disabled; live preview still works through
+  `applySink`. `zfb.config.ts` sets `bundleZdtp: true` and
+  `chromeBindingsModule` to a module exporting `BodyEndIslands`, which mounts
+  the inline preview-token-panel capture script plus a `when: "load"`
+  `PreviewTokenPanelBootstrap` island (wrapped so it only renders on
+  `[data-sg-engine-route]` pages). `pages/index.tsx` statically imports and
+  renders `BodyEndIslands` so zfb's island scanner registers it. The tabs
+  module itself is generated from `src/styleguide/token-manifest.ts` via
+  `buildUiTokenTabs` (`@takazudo/zudo-sg/token-dashboard`), matching the
+  `create-zudo-sg@0.1.8` starter's reference wiring.
 - Verification (built artifact, no browser): `dist/components/index.html`
   contains the header trigger's `toggle-preview-token-panel` control and the
   `data-sg-engine-route` marker, and `dist/components/preview/index.html`
   opens with `<html data-sg-engine-route=true data-sg-preview-doc=true …>`.
   Visual confirmation of the header control belongs to the Wave 2 confirm
   ([#780](https://github.com/Takazudo/zudo-composer/issues/780)).
+
+## 16. Upstream report: preview-token triggers are dead controls when unwired, with no warning
+
+- Status: **reported upstream, open** —
+  [zudo-sg #872](https://github.com/Takazudo/zudo-sg/issues/872).
+- Before this epic wired the tabs module (item 15), all three preview-token
+  triggers — the `/tokens` "Preview tokens" button
+  (`routes-src/tokens.tsx:42-45`), the component-detail workbench button
+  (`dist/preview/detail-workbench.js:51`), and the header trigger
+  (`headerTokenTrigger` defaults to `true`, `dist/config/index.js:123`) —
+  rendered as dead controls: each only dispatches `toggle-preview-token-panel`,
+  and `PreviewTokenPanelBootstrap` (`dist/token-tweak/preview-token-panel-bootstrap.js:11`)
+  silently returns without doing anything when `tabs` is `undefined`. No
+  build-time or dev-time signal exists for a host that renders these triggers
+  without wiring `zdtpApplyProxy.tabsModule` and the bootstrap island.
+- Suggested fix filed upstream: gate/hide the triggers when no tabs module is
+  configured, or add a build-time/dev warning when a trigger is enabled but
+  the panel isn't wired.
+- Checked for duplicates against zudo-sg #813–#818, #855, #858, #866–#869
+  before filing: #813–#818 implement the header-trigger control itself
+  (unrelated to what happens when a host doesn't wire it); #855, #858,
+  #866–#869 cover a different, already-wired-but-racy SPA-navigation timing
+  defect, not the permanent silent no-op this item reports. No true duplicate
+  existed, so a new issue was filed.
+- This host is no longer affected in practice — item 15's tabs-only wiring
+  means all three triggers now open a populated panel — but the upstream
+  defect (silent failure for any host that doesn't wire it, including future
+  scaffolds) remains open.
 
 ## Starter structural diff (`create-zudo-sg@0.1.3`)
 
@@ -342,6 +382,8 @@ The three `local-misuse` entries (4, 6, 8) remain as host operating guidance.
 Eleven entries (1, 2, 3, 5, 7, 9, 10, 11, 12, 13, 14) are resolved in the
 published releases — ten cleanly, and item 12's favicons with a deliberate
 host divergence recorded above. Item 11's `SidebarToggle` workaround was the
-last local CSS workaround and is retired by `@takazudo/zudo-doc@5.26.3`; no
-upstream report is still open against a local workaround. Item 15 records an
-adopted 0.3.1 feature rather than a defect.
+last local CSS workaround and is retired by `@takazudo/zudo-doc@5.26.3`. Item
+15 records an adopted 0.3.1 feature rather than a defect. Item 16 is the one
+upstream report still open — [zudo-sg #872](https://github.com/Takazudo/zudo-sg/issues/872),
+filed against this epic's own findings and with no host-side workaround
+(this host's own triggers are wired by item 15's tabs-only setup).
