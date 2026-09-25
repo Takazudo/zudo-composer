@@ -112,23 +112,23 @@ async function authorOneSitemap(page) {
     // decision 1, which the generated-ready-host check further below proves
     // the other side of).
     //
-    // The reason this route renders is the asset-capture wrapper, not the
-    // root-cause `unassigned-page` diagnostic: a blocked compilation marks
-    // the impact index incomplete (`src/site-project/assets/capture.ts:22`),
-    // so `compileWithCapturedAsset` short-circuits to `asset-capture-blocked`
-    // (`src/site-project/assets/compile.ts:22`) and
-    // `src/features/delivery/site-delivery.tsx:283` prints only that message.
-    // "The Sitemap page has no assigned source." (`compiler.ts:452`) reaches
-    // the authoring-preview surfaces, never this one. Measured on the real
+    // A blocked compilation marks the impact index incomplete
+    // (`src/site-project/assets/capture.ts`), and `compileWithCapturedAsset`
+    // carries the originating compile diagnostics as leading `causes` ahead of
+    // its own `asset-capture-blocked` wrapper (`src/site-project/assets/compile.ts`),
+    // so `src/features/delivery/site-delivery.tsx` renders the root cause
+    // first. For this empty project that root cause is `unassigned-page`:
+    // "The Sitemap page has no assigned source." (`compiler.ts`) — the same
+    // text the authoring-preview surfaces show. Measured on the real
     // installed host, not read off the compiler.
-    step("checking the empty project's working preview blocks, and never on a missing asset");
+    step("checking the empty project's working preview blocks on its root cause, and never on a missing asset");
     await page.goto(`${ORIGIN}/website-preview`);
     await page.getByRole("heading", { name: "Site build blocked", exact: true }).waitFor({ timeout: 90_000 });
     // Read before waiting on the expected message: a blocked build renders one
     // joined diagnostic string, so checking the missing-asset wording afterwards
     // could never fail — the wrong reason would surface as a bare 90s timeout.
     assert.equal(await page.getByText("Required Assets asset is missing.").count(), 0, "Empty project's working preview unexpectedly blocked on a missing asset");
-    await page.getByText("Assets impact inspection is incomplete; exact release capture is blocked.").first().waitFor({ timeout: 90_000 });
+    await page.getByText("The Sitemap page has no assigned source.").first().waitFor({ timeout: 90_000 });
     await page.goto(`${ORIGIN}/sitemapper`);
 
     await page.getByRole("heading", { name: "Sitemaps", exact: true }).waitFor({ timeout: 90_000 });

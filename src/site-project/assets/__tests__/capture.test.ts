@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { componentCatalog, composition, entry, mapping, model, page, project } from "../../compiler/__tests__/fixtures";
 import { compileSiteProject } from "../../compiler";
 import { captureSiteProjectAssetLock } from "../capture";
+import { compileWithCapturedAsset } from "../compile";
 import { createProjectAssetUsageInspection } from "../usage";
 import type { VersionedAssetStore } from "../../../assets/library";
 import { createAssetRecord, assetVersionUrl } from "../../../assets";
@@ -82,5 +83,24 @@ describe("coherent project assets inspection", () => {
 
     const unsupported = await compileSiteProject(assetProject("title"), { componentCatalog: assetCatalog, assetLock: captured.lock });
     expect(unsupported).toMatchObject({ status: "blocked", diagnostics: [expect.objectContaining({ code: "asset-lock-required" })] });
+  });
+
+  it("carries the blocked compile's root cause on the capture result, ahead of the asset-capture-blocked wrapper", async () => {
+    const value = project({ root: page("home", undefined, { kind: "unassigned" }) });
+    const captured = await captureSiteProjectAssetLock(value, componentCatalog, undefined);
+    expect(captured.status).toBe("blocked");
+    if (captured.status !== "blocked") return;
+    // Not folded into `diagnostics`: `review.ts` maps capture diagnostics to
+    // `asset-${code}` release checks and pushes compile diagnostics separately,
+    // so putting causes there too would duplicate them.
+    expect(captured.diagnostics).toEqual([{ code: "unrecognized", message: "Assets impact inspection is incomplete; exact release capture is blocked." }]);
+    expect(captured.causes).toEqual([expect.objectContaining({ code: "unassigned-page", message: "The Sitemap page has no assigned source." })]);
+
+    const compiled = await compileWithCapturedAsset(value, { catalog: componentCatalog });
+    expect(compiled.status).toBe("blocked");
+    if (compiled.status !== "blocked") return;
+    expect(compiled.diagnostics).toHaveLength(2);
+    expect(compiled.diagnostics[0]).toMatchObject({ code: "unassigned-page", message: "The Sitemap page has no assigned source." });
+    expect(compiled.diagnostics[1]).toMatchObject({ code: "asset-capture-blocked" });
   });
 });

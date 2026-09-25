@@ -3723,7 +3723,10 @@ async function compileSiteProject(project, options) {
 }
 //#endregion
 //#region src/site-project/assets/capture.ts
-async function inspectSiteProjectAsset(project, catalog, snapshot, providerId) {
+/** Inspect impact plus the compile diagnostics that made it incomplete, if any:
+* the raw root cause `captureSiteProjectAssetLock` carries as `causes`, kept out
+* of `inspectSiteProjectAsset`'s own return so `usage.ts` stays unaffected. */
+async function inspectSiteProjectAssetWithCauses(project, catalog, snapshot, providerId) {
 	const compilation = await compileSiteProject(project, {
 		componentCatalog: catalog,
 		policy: "authoring-preview"
@@ -3746,15 +3749,19 @@ async function inspectSiteProjectAsset(project, catalog, snapshot, providerId) {
 			reason: `Route materialization is incomplete: ${diagnostic.message}`
 		});
 	}
-	return index;
+	return {
+		index,
+		causes: compilation.status === "blocked" ? compilation.diagnostics : []
+	};
 }
 async function captureSiteProjectAssetLock(project, catalog, store, suppliedSnapshot) {
 	try {
 		const snapshot = suppliedSnapshot ?? await store?.snapshot();
-		const index = await inspectSiteProjectAsset(project, catalog, snapshot, store?.provider.id);
+		const { index, causes } = await inspectSiteProjectAssetWithCauses(project, catalog, snapshot, store?.provider.id);
 		if (!index.complete) return {
 			status: "blocked",
 			index,
+			causes,
 			diagnostics: [{
 				code: "unrecognized",
 				message: "Assets impact inspection is incomplete; exact release capture is blocked."
@@ -3767,7 +3774,8 @@ async function captureSiteProjectAssetLock(project, catalog, store, suppliedSnap
 		};
 		return {
 			...await createAssetReferenceLock(store, index.references.map(({ ref }) => ref), snapshot),
-			index
+			index,
+			causes
 		};
 	} catch (error) {
 		return {
@@ -3777,6 +3785,7 @@ async function captureSiteProjectAssetLock(project, catalog, store, suppliedSnap
 				references: [],
 				advisory: []
 			},
+			causes: [],
 			diagnostics: [{
 				code: "unavailable",
 				message: error instanceof Error ? error.message : "Assets impact capture failed."
@@ -3804,7 +3813,7 @@ async function compileStaticSite(options) {
 	const catalog = createComponentCatalog(options.pack.manifest);
 	const store = await hostAssetStore(options.assetsStoreRoot);
 	const captured = await captureSiteProjectAssetLock(validated.project, catalog, store);
-	if (captured.status !== "ready") throw new Error(`Assets capture blocked: ${captured.diagnostics.map(({ message }) => message).join(" ")}`);
+	if (captured.status !== "ready") throw new Error(`Assets capture blocked: ${[...captured.causes, ...captured.diagnostics].map(({ message }) => message).join(" ")}`);
 	const compilation = await compileSiteProject(validated.project, {
 		componentCatalog: catalog,
 		policy: "release",
