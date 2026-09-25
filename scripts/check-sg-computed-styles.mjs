@@ -477,7 +477,9 @@ async function clickTriggerAndWaitForPanelOpen(page, triggerLocator, context) {
   let state = await readTokenPanelState(page);
   const maxAttempts = 5;
   for (let attempt = 0; attempt < maxAttempts && !isOpenAndPopulated(state); attempt += 1) {
-    await triggerLocator.click({ timeout: CLICK_TIMEOUT_MS });
+    // The trigger toggles: re-clicking once the shell exists (still populating)
+    // would close the panel again, so only click while it is absent.
+    if (!state.exists) await triggerLocator.click({ timeout: CLICK_TIMEOUT_MS });
     state = await pollUntil(() => readTokenPanelState(page), isOpenAndPopulated, 1_500);
   }
   assert.ok(
