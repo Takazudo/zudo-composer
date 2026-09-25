@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, delimiter, join, resolve } from "node:path";
@@ -22,7 +22,7 @@ const temporaries: string[] = [];
 afterEach(async () => { await Promise.all(temporaries.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
 
 async function temporary() {
-  const path = await mkdtemp(join(tmpdir(), "packed-host-helper-test-"));
+  const path = await realpath(await mkdtemp(join(tmpdir(), "packed-host-helper-test-")));
   temporaries.push(path);
   return path;
 }
@@ -151,6 +151,26 @@ describe("packed host discovery and manifest isolation", () => {
     await rm(join(outside, "pnpm-workspace.yaml"));
     await mkdir(join(outside, "node_modules"));
     await expect(assertExternalWorkspace([root], external)).rejects.toThrow("ambient parent");
+  });
+
+  it("realpaths a symlinked alias root before the containment check", async () => {
+    const checkout = await temporary();
+    const workspace = join(checkout, "nested/workspace");
+    await mkdir(workspace, { recursive: true });
+    const outside = await temporary();
+    const alias = join(outside, "checkout-alias");
+    await symlink(checkout, alias);
+    await expect(assertExternalWorkspace([alias], workspace)).rejects.toThrow("outside the repository");
+  });
+
+  it("fails closed on a missing or dangling root", async () => {
+    const workspace = await temporary();
+    const outside = await temporary();
+    const missingRoot = join(outside, "missing-root");
+    await expect(assertExternalWorkspace([missingRoot], workspace)).rejects.toThrow();
+    const danglingRoot = join(outside, "dangling-root");
+    await symlink(join(outside, "absent-target"), danglingRoot);
+    await expect(assertExternalWorkspace([danglingRoot], workspace)).rejects.toThrow();
   });
 
   it("copies host-owned CMS, binary assets and tests while excluding installed/output trees", async () => {
