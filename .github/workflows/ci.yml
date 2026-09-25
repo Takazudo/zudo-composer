@@ -282,10 +282,12 @@ jobs:
       # in this job's own log, not only inside the verifier. `grep -l` prints
       # any offending file before `&& false` fails the step (no `if`: the
       # no-deploy audit reviews workflow shell text command by command and
-      # does not recognize shell keywords).
+      # does not recognize shell keywords). Text files only, like the
+      # verifier: the prebuilt zfb-md WASM embeds `/home/runner/.cargo` panic
+      # paths from its upstream Rust build and would always match.
       - name: Reject leaked filesystem paths or dev sourcemap markers
         run: |
-          grep -rlE '/home/|columnNumber' packages/demo-*/dist-editor/assets && false
+          grep -rlE --include='*.js' --include='*.mjs' --include='*.css' --include='*.html' '/home/|columnNumber' packages/demo-*/dist-editor/assets && false
           echo "No forbidden markers found in demo editor batch output"
 
   doc-site-build:
