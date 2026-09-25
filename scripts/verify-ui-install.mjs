@@ -29,7 +29,7 @@ const forceExact = process.argv.slice(2).includes('--exact');
 const forceLocal = process.argv.slice(2).includes('--local');
 const isCi = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
 const expectedSidecars = 12;
-const expectedMarkdownRuntime = '2.10.1';
+const expectedMarkdownRuntime = '2.20.3';
 
 /** @param {string} message @returns {never} */
 function fail(message) {

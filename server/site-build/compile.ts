@@ -36,7 +36,7 @@ export async function compileStaticSite(options: { projectPath: string; pack: Tr
   const catalog = createComponentCatalog(options.pack.manifest);
   const store = await hostAssetStore(options.assetsStoreRoot);
   const captured = await captureSiteProjectAssetLock(validated.project, catalog, store);
-  if (captured.status !== "ready") throw new Error(`Assets capture blocked: ${captured.diagnostics.map(({ message }) => message).join(" ")}`);
+  if (captured.status !== "ready") throw new Error(`Assets capture blocked: ${[...captured.causes, ...captured.diagnostics].map(({ message }) => message).join(" ")}`);
   const compilation = await compileSiteProject(validated.project, { componentCatalog: catalog, policy: "release", assetLock: captured.lock });
   if (compilation.status === "blocked") throw new Error(`Site compilation blocked: ${compilation.diagnostics.map(({ message }) => message).join(" ")}`);
   const assetFiles: StaticSiteCompilation["assetFiles"] = [];

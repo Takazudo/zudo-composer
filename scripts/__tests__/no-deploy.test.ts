@@ -329,6 +329,26 @@ describe("CI and aggregate packed-host coverage", () => {
     expect(workflow.jobs.validate.steps.some((step: { run?: string }) => step.run?.includes(["build", "hosted-demo"].join(":")))).toBe(false);
   });
 
+  it("runs the serial demo-editors batch on CI so Epic #827's second-host-onward leak is not invisible to it", async () => {
+    const workflow = parse(await readFile(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8"));
+    const job = workflow.jobs["demo-editors-batch"];
+    expect(job.needs).toBeUndefined();
+    expect(job.steps.some((step: { run?: string }) => step.run?.includes("pnpm demo:build-editors"))).toBe(true);
+    const shaExpression = "${{ github.sha }}";
+    const editorTargets = TARGET_KEYS.filter((key) => TARGETS[key].kind === "demo-editor");
+    expect(editorTargets).toHaveLength(4);
+    for (const key of editorTargets) {
+      const step = job.steps.find((candidate: { env?: { HOSTED_DEMO_TARGET?: string } }) => candidate.env?.HOSTED_DEMO_TARGET === key);
+      expect(step).toBeDefined();
+      expect(step.run).toBe(`pnpm hosted-demo:verify ${relative(repositoryRoot, TARGETS[key].artifactDirectory).split(sep).join("/")} "${shaExpression}"`);
+    }
+    const markerStep = job.steps.find((step: { run?: string }) => step.run?.includes("grep"));
+    expect(markerStep).toBeDefined();
+    expect(markerStep.run).toContain("/home/");
+    expect(markerStep.run).toContain("columnNumber");
+    expect(markerStep.run).toContain("packages/demo-*/dist-editor/assets");
+  });
+
   it("uses disk discovery for all four hosts, generated output and the retained synthesized proof", async () => {
     const workflow = parse(await readFile(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8"));
     const matrixJob = workflow.jobs["packed-host-matrix"];

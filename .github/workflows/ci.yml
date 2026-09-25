@@ -239,6 +239,57 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  demo-editors-batch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Epic #827's leak appears only from the second host onward when the
+      # four editors build serially in one parent process
+      # (scripts/build-demo-editors.mjs). The matrix job above builds one
+      # host per process, so it never exercises that path; this job runs the
+      # real serial batch and times it on a runner. #827 declined a batch job
+      # on a "~45 min each" estimate; the whole four-host batch measured 15s
+      # locally (WSL2, Vite 8.2.2) -- see the correction on #827.
+      - name: Build all four demo editors serially
+        run: |
+          SECONDS=0
+          pnpm demo:build-editors
+          echo "demo:build-editors took ${SECONDS}s"
+      - run: pnpm hosted-demo:verify packages/demo-sample/dist-editor "${{ github.sha }}"
+        env:
+          HOSTED_DEMO_TARGET: sample-editor
+      - run: pnpm hosted-demo:verify packages/demo-webshop/dist-editor "${{ github.sha }}"
+        env:
+          HOSTED_DEMO_TARGET: shop-editor
+      - run: pnpm hosted-demo:verify packages/demo-landing/dist-editor "${{ github.sha }}"
+        env:
+          HOSTED_DEMO_TARGET: landing-editor
+      - run: pnpm hosted-demo:verify packages/demo-blog/dist-editor "${{ github.sha }}"
+        env:
+          HOSTED_DEMO_TARGET: blog-editor
+      # Restates FORBIDDEN_ARTIFACT_MARKERS (scripts/hosted-demo/artifact.mjs)
+      # as an explicit grep so the #827 regression class is visible directly
+      # in this job's own log, not only inside the verifier. `grep -l` prints
+      # any offending file before `&& false` fails the step (no `if`: the
+      # no-deploy audit reviews workflow shell text command by command and
+      # does not recognize shell keywords). Text files only, like the
+      # verifier: the prebuilt zfb-md WASM embeds `/home/runner/.cargo` panic
+      # paths from its upstream Rust build and would always match.
+      - name: Reject leaked filesystem paths or dev sourcemap markers
+        run: |
+          grep -rlE --include='*.js' --include='*.mjs' --include='*.css' --include='*.html' '/home/|columnNumber' packages/demo-*/dist-editor/assets && false
+          echo "No forbidden markers found in demo editor batch output"
+
   doc-site-build:
     runs-on: ubuntu-latest
     timeout-minutes: 20

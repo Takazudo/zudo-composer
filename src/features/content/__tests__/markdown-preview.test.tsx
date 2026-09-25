@@ -8,7 +8,7 @@ type MarkdownRenderResult = {
 };
 
 const { renderMarkdownMock } = vi.hoisted(() => ({ renderMarkdownMock: vi.fn() }));
-vi.mock("@zudo-composer/ui/src/content/prose-md/markdown-runtime", () => ({ renderMarkdown: renderMarkdownMock }));
+vi.mock("../../../../packages/ui/src/content/prose-md/markdown-runtime", () => ({ renderMarkdown: renderMarkdownMock }));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

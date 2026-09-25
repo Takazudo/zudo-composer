@@ -2,7 +2,7 @@ import type { ComponentCatalog } from "../../composer/model/types";
 import type { VersionedAssetStore } from "../../assets/library";
 import type { AssetSnapshot } from "../../assets/model";
 import { checkAssetLockPreconditions, verifyAssetLockIntegrity } from "../../assets/references";
-import { compileSiteProject, type SiteProjectCompilation } from "../compiler";
+import { compileSiteProject, type SiteCompilerDiagnostic, type SiteProjectCompilation } from "../compiler";
 import type { SiteProject } from "../model";
 import { captureSiteProjectAssetLock } from "./capture";
 
@@ -15,11 +15,14 @@ export async function compileWithCapturedAsset(project: SiteProject, options: {
   isCaptureCurrent?(): Promise<boolean>;
 }): Promise<SiteProjectCompilation & { consistency: "captured" | "detached" }> {
   const consistency = options.isCaptureCurrent ? "captured" as const : "detached" as const;
-  const blocked = (message: string): SiteProjectCompilation & { consistency: "captured" | "detached" } => ({ consistency, status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "asset-capture-blocked", message, path: "$.assetLock" }] });
+  // The wrapper diagnostic stays last: a blocked compile's own root-cause
+  // diagnostics (e.g. `unassigned-page`) lead, so `/website-preview` shows
+  // the actual cause before the generic asset-capture wrapper text.
+  const blocked = (message: string, causes: readonly SiteCompilerDiagnostic[] = []): SiteProjectCompilation & { consistency: "captured" | "detached" } => ({ consistency, status: "blocked", routes: [], diagnostics: [...causes, { severity: "blocking", code: "asset-capture-blocked", message, path: "$.assetLock" }] });
   try {
     if (options.isCaptureCurrent && (!options.snapshot || !options.assetStore)) return blocked("Aggregate Assets capture is unavailable.");
     const captured = await captureSiteProjectAssetLock(project, options.catalog, options.assetStore, options.snapshot);
-    if (captured.status === "blocked") return blocked(captured.diagnostics.map(({ message }) => message).join(" "));
+    if (captured.status === "blocked") return blocked(captured.diagnostics.map(({ message }) => message).join(" "), captured.causes);
     const { lock } = captured;
     const current = async () => {
       if (lock && (!options.assetStore || !await verifyAssetLockIntegrity(lock, options.assetStore))) return false;
