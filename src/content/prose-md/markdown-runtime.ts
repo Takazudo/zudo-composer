@@ -6,14 +6,14 @@
  *
  * ## Fence handling
  *
- * md-wasm 2.10 exposes zfb's native fenced-code class mode at
+ * md-wasm 2.20 exposes zfb's native fenced-code class mode at
  * `pipeline.codeHighlight`. It preserves the fence language and emits the same
  * semantic `hi-*` markup as the build, including fences nested in blockquotes
  * and lists. The former positional source scanner is therefore unnecessary.
  *
  * ## Sanitization is mandatory
  *
- * `renderHtml` is not a sanitizer. Verified against zfb-md-wasm 2.10.1: raw
+ * `renderHtml` is not a sanitizer. Verified against zfb-md-wasm 2.20.3: raw
  * `<script>alert(1)</script>`, `<a onclick="…">`, `<svg onload="…">`,
  * `<iframe src="…">` and `[x](javascript:…)` all pass through with zero
  * diagnostics. Every returned string therefore goes through DOMPurify with an
