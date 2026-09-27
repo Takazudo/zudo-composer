@@ -19,8 +19,8 @@ allowBuilds:
   workerd: true
 
 # Exact exclusions can list multiple versions with `||`. When an existing
-# lockfile and the updated resolution both need an exception, list the old
-# version above the new one, run `corepack pnpm install`, then prune only
+# lockfile and the updated resolution both need an exception, combine the old
+# and new versions in one entry, run `corepack pnpm install`, then prune only
 # versions no longer present in the lockfile. Swapping the version in place
 # before install makes the audit reject the still-committed old entry;
 # `pnpm clean --lockfile` clears that error but re-resolves every `^` range in
