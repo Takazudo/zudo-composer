@@ -4,7 +4,7 @@ This host was rechecked on 2026-09-27 with `@takazudo/zudo-sg@0.4.1`,
 `create-zudo-sg@0.1.3`, `@takazudo/zfb@2.22.0`, `@takazudo/zdtp@0.8.5`,
 `@takazudo/zudo-doc@5.28.0`, Node `24.13.1`, and pnpm `11.5.2`.
 The installed UI pack's separate `@takazudo/zfb-md-wasm` dependency now
-matches the standalone host's markdown WASM, both at `2.20.3`.
+matches the standalone host's markdown WASM, both at `2.22.0`.
 
 Each upstream report below was verified against the published package before
 the corresponding local workaround was removed. The generated registry and
