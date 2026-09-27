@@ -18,7 +18,7 @@
     "@takazudo/zudo-doc": "5.28.0",
     "@takazudo/zudo-sg": "^0.4.1",
     "@zudo-composer/component-contract": "git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
-    "@zudo-composer/ui": "git+https://github.com/Takazudo/zudo-composer.git#a2639299b54cd7acffeb6d2870c9b02c3c8dff6f",
+    "@zudo-composer/ui": "git+https://github.com/Takazudo/zudo-composer.git#6708a4473e19f5edfa7b00902b2350329e826468",
     "diff": "^8.0.4",
     "katex": "^0.16.38",
     "preact": "^10.29.8",
