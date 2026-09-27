@@ -2,6 +2,6 @@
   "packageName": "@zudo-composer/ui",
   "sourcePath": "packages/ui",
   "packageBranch": "package/ui-v1",
-  "packageCommit": "a2639299b54cd7acffeb6d2870c9b02c3c8dff6f",
-  "rootGitSpec": "git+https://github.com/Takazudo/zudo-composer.git#a2639299b54cd7acffeb6d2870c9b02c3c8dff6f"
+  "packageCommit": "6708a4473e19f5edfa7b00902b2350329e826468",
+  "rootGitSpec": "git+https://github.com/Takazudo/zudo-composer.git#6708a4473e19f5edfa7b00902b2350329e826468"
 }
