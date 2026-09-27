@@ -307,8 +307,8 @@ importers:
   packages/ui:
     dependencies:
       '@takazudo/zfb-md-wasm':
-        specifier: 2.20.3
-        version: 2.20.3
+        specifier: 2.22.0
+        version: 2.22.0
       dompurify:
         specifier: ^3.4.11
         version: 3.4.14
@@ -1699,10 +1699,6 @@ packages:
     resolution: {integrity: sha512-/s+zfs+6PbFsEh3CSOGUhWCOMUsu+b04Uo0nUAYLMv0/KpZQ15RJHNCCfemRYcTzY75KfHbFAcgv9ze6+NKT8g==}
     cpu: [x64]
     os: [linux]
-
-  '@takazudo/zfb-md-wasm@2.20.3':
-    resolution: {integrity: sha512-LaBlbvpgz9H+pF+Eqi4jkjrtAY1BH0EXmqeCl678QDj70aDo+Pq51EVBA/KtVpVgPJUDdWbjuflXIVuxGsPoWA==}
-    engines: {node: '>=20.0.0', pnpm: '>=10.0.0'}
 
   '@takazudo/zfb-md-wasm@2.22.0':
     resolution: {integrity: sha512-5FctTQK28lLjZQXPo4IWPS0DkOfPUnjMuuYxrFXeDaFI1vCotOzQasSujKnoh5kngAcXXiRleL0S1LfswVh/fA==}
@@ -4538,14 +4534,6 @@ snapshots:
 
   '@takazudo/zfb-linux-x64-gnu@2.22.0':
     optional: true
-
-  '@takazudo/zfb-md-wasm@2.20.3':
-    dependencies:
-      '@types/mdast': 4.0.4
-      mdast-util-directive: 3.1.0
-      mdast-util-mdx: 3.0.0
-    transitivePeerDependencies:
-      - supports-color
 
   '@takazudo/zfb-md-wasm@2.22.0':
     dependencies:
