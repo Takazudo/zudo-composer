@@ -65,7 +65,9 @@ export default defineConfig({
           // blow past 20s while passing in isolation. Same reason the server project raises
           // its own timeout; the cost here is real I/O, not a hung promise.
           testTimeout: 60_000,
-          exclude: [...configDefaults.exclude, '**/worktrees/**', 'templates/**', 'server/**', 'packages/image-editor/src/__tests__/**/*.test.ts', 'packages/demo-*/**', 'packages/ui/**', 'styleguide/**', 'tests/ui-pack/**'],
+          // Creator tests can leave generated host specs in `.artifacts/` after
+          // an interrupted run; those are fixtures, not repository tests.
+          exclude: [...configDefaults.exclude, '**/worktrees/**', '**/.artifacts/**', 'templates/**', 'server/**', 'packages/image-editor/src/__tests__/**/*.test.ts', 'packages/demo-*/**', 'packages/ui/**', 'styleguide/**', 'tests/ui-pack/**'],
         },
       },
       {
