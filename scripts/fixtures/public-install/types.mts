@@ -14,6 +14,8 @@ import type {
   ResolvedComposerConfig,
 } from "zudo-composer/config";
 import * as authoring from "zudo-composer/authoring";
+import * as editing from "zudo-composer/editing";
+import type { EditRequest, EditPlan, EditReceipt } from "zudo-composer/editing";
 import { compileStaticSite, createSiteManifest, type StaticSiteCompilation, type SiteManifest, type ToolIdentity } from "zudo-composer/site-build";
 import type { SiteProject } from "zudo-composer/site-project";
 import * as vitePublic from "zudo-composer/vite";
@@ -23,7 +25,13 @@ import type { InlineConfig, Plugin, ViteDevServer } from "vite";
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
-export type AuthoringExports = Assert<Equal<keyof typeof authoring, "ASSET_PROVIDER_ID" | "COMPOSITION_PROVIDER_ID" | "CONTENT_PROVIDER_ID" | "DEFAULT_TIMESTAMP" | "MAPPING_PROVIDER_ID" | "SITEMAP_PROVIDER_ID" | "assetAuthoringUrl" | "assetMimeTypeForExtension" | "createFilesystemAssetStore" | "canonicalStringifyJson" | "defineSite" | "entryRef" | "imageUse" | "node" | "slugify" | "validateSiteProject">>;
+export type AuthoringExports = Assert<Equal<keyof typeof authoring, "ASSET_PROVIDER_ID" | "COMPOSITION_PROVIDER_ID" | "CONTENT_PROVIDER_ID" | "DEFAULT_TIMESTAMP" | "MAPPING_PROVIDER_ID" | "SITEMAP_PROVIDER_ID" | "assetAuthoringUrl" | "assetMimeTypeForExtension" | "createFilesystemAssetStore" | "canonicalStringifyJson" | "defineSite" | "entryRef" | "imageUse" | "initializeAuthoringWorkspace" | "node" | "slugify" | "validateSiteProject">>;
+export type EditingExports = Assert<Equal<keyof typeof editing, "createEditingService">>;
+export type EditingOptions = Assert<Equal<Parameters<typeof editing.createEditingService>[0], { workspaceRoot?: string } | undefined>>;
+type EditingService = Awaited<ReturnType<typeof editing.createEditingService>>;
+export type EditingPlan = Assert<Equal<Awaited<ReturnType<EditingService["plan"]>>, EditPlan>>;
+export type EditingReceipt = Assert<Equal<Awaited<ReturnType<EditingService["apply"]>>, EditReceipt>>;
+export type EditingRequest = Assert<Equal<EditPlan["request"], EditRequest>>;
 export type RootExports = Assert<Equal<keyof typeof rootPublic, "OPTIMIZE_DEPS_EXCLUDE" | "loadHostConfig" | "resolveComposerDevConfig" | "startComposerDevServer">>;
 export type ConfigExports = Assert<Equal<keyof typeof configPublic, "defineComposerConfig">>;
 export type ViteExports = Assert<Equal<keyof typeof vitePublic,

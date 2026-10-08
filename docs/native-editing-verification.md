@@ -39,7 +39,10 @@ All heavy/port-owning commands ran serially through
 
 The environment lacked Playwright's downloaded Chromium binary. The dedicated
 proof used the already-installed `/usr/bin/chromium`, explicitly selected by its
-supported override. No browser provisioning or privileged WebKit repair was run.
+supported override. For the remaining standard lanes, the pinned Playwright CLI
+later downloaded Chromium and its headless shell/FFmpeg unprivileged into
+`/tmp/composer-playwright-browsers` using `PLAYWRIGHT_BROWSERS_PATH`. No system
+packages, privileged browser provisioning, or WebKit repair was attempted.
 
 ## Final gate results
 
@@ -57,9 +60,11 @@ supported override. No browser provisioning or privileged WebKit repair was run.
   followed by `cms:check` (guarded 25 seconds). Only the 16 generated current
   pointers changed; no generated file was hand-edited and mode hashing remains
   unchanged.
-- Final service suite: 23 tests passed, including native ESM cache refusal before
+- `corepack pnpm exec vitest run server/edit/__tests__/service.test.ts`: all
+  23 tests passed, including native ESM cache refusal before
   the first service operation, changed same-version installed dependency bytes,
-  and reopening a service in the same process. The existing source-graph suite
+  and reopening a service in the same process.
+  `corepack pnpm exec vitest run server/site-project-local/__tests__/pack-source-graph.test.ts`
   passed all 18 tests. Independent source review reported no remaining must-fix;
   that reviewer did not run tests.
 - Packed-host shutdown now waits for the descendant's inherited output streams

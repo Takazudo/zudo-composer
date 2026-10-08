@@ -255,8 +255,25 @@ async function proveSynthesizedHost(workspace, tarballs, toolPackage) {
     server = await startHostServer(hostRoot);
     const reopened = await browser.newContext();
     const page = await reopened.newPage();
-    await page.goto(`${ORIGIN}/sitemapper`);
-    await page.getByRole("link", { name: SITEMAP_NAME, exact: true }).waitFor({ timeout: 60_000 });
+    const reopenErrors = /** @type {string[]} */ ([]);
+    page.on("pageerror", error => reopenErrors.push(`pageerror: ${error.message}`));
+    page.on("console", message => {
+      if (message.type() === "error" || message.type() === "warning") reopenErrors.push(`${message.type()}: ${message.text()}`);
+    });
+    try {
+      await page.goto(`${ORIGIN}/sitemapper`);
+      await page.getByRole("link", { name: SITEMAP_NAME, exact: true }).waitFor({ timeout: 60_000 });
+    } catch (cause) {
+      const body = await page.locator("body").innerText().catch(() => "<no body>");
+      throw new Error(`Reopening the authored sitemap after restart failed.
+URL: ${page.url()}
+Page body:
+${body}
+Browser errors:
+${reopenErrors.join("\n") || "<none>"}
+Server output:
+${server.output()}`, { cause });
+    }
     await reopened.close();
     await browser.close();
     browser = undefined;
