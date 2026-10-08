@@ -12,10 +12,10 @@ import { createFilesystemAssetStore } from "../../../src/assets/storage/filesyst
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-async function fixture(prose = false, variant?: "bound" | "defaults" | "wrapper") {
+async function fixture(prose = false, variant?: "bound" | "defaults" | "wrapper" | "metadata" | "external-metadata" | "no-optin" | "missing" | "source") {
   const root = await mkdtemp(join(tmpdir(), "native-service-")); roots.push(root);
   await cp(resolve("fixtures/edit-host"), root, { recursive: true });
-  await writeFile(join(root, "package.json"), JSON.stringify({ name: "native-edit-host", version: "1.0.0", type: "module", exports: { "./components": "./components/pack.mjs" }, dependencies: { preact: "10.27.2", "@zudo-composer/component-contract": "workspace:*" } }));
+  await writeFile(join(root, "package.json"), JSON.stringify({ name: "native-edit-host", version: "1.0.0", type: "module", exports: { "./components": "./components/pack.mjs", "./metadata": "./components/metadata.mjs" }, dependencies: { preact: "10.27.2", "@zudo-composer/component-contract": "workspace:*" } }));
   await mkdir(join(root, "node_modules/@zudo-composer"), { recursive: true });
   await symlink(resolve("."), join(root, "node_modules/zudo-composer"), "dir");
   await symlink(resolve("node_modules/preact"), join(root, "node_modules/preact"), "dir");
@@ -28,6 +28,26 @@ async function fixture(prose = false, variant?: "bound" | "defaults" | "wrapper"
   if (variant) {
     const packPath = join(root, "components/pack.mjs");
     let source = await readFile(packPath, "utf8");
+    if (variant === "metadata" || variant === "external-metadata") {
+      await writeFile(join(root, "components/metadata.mjs"), 'export const paragraphDescription = "Initial native ESM metadata";\n');
+      source = 'import { paragraphDescription } from "native-edit-host/metadata";\n' + source.replace('description: `${title} native editing proof`', 'description: id === "native.paragraph" ? paragraphDescription : `${title} native editing proof`');
+    }
+    if (variant === "external-metadata") {
+      const dependency = join(root, "node_modules/native-metadata");
+      await mkdir(dependency);
+      await writeFile(join(dependency, "package.json"), JSON.stringify({ name: "native-metadata", version: "1.0.0", type: "module", exports: "./index.mjs" }));
+      await writeFile(join(dependency, "index.mjs"), 'export const paragraphDescription = "External metadata version one";\n');
+      source = source.replace('"native-edit-host/metadata"', '"native-metadata"');
+      const packagePath = join(root, "package.json"), pkg = JSON.parse(await readFile(packagePath, "utf8"));
+      pkg.dependencies["native-metadata"] = "1.0.0";
+      await writeFile(packagePath, JSON.stringify(pkg));
+    }
+    if (variant === "no-optin") await writeFile(join(root, "zudo-composer.config.ts"), 'export default { pack: "native-edit-host/components" };\n');
+    if (variant === "missing") {
+      const configPath = join(root, "zudo-composer.config.ts");
+      await writeFile(configPath, (await readFile(configPath, "utf8")).replace('componentId: "native.table"', 'componentId: "missing.table"'));
+    }
+    if (variant === "source") await writeFile(join(root, "site-project.ts"), "export default {};\n");
     if (variant === "bound") source = source.replace('export const Paragraph', 'export const Shell = ({ children }) => h("main", {}, children);\nexport const Paragraph').replace('components: [', 'components: [defineComponent()(Shell, { id: "native.shell", schemaVersion: 1, title: "Shell", category: "Test", description: "Restricted page root", source: { module: "native-edit-host/components", exportKind: "named", exportName: "Shell" }, defaults: {}, fields: [], slots: [{ id: "body", prop: "children", label: "Body", cardinality: "many", accepts: ["native.paragraph", "native.list", "native.table"] }] }),');
     if (variant === "defaults") source = source.replace('{ text: "" }, [{ prop: "text", label: "Text", ...string }]', '{ text: "", caption: "Unrequested caption" }, [{ prop: "text", label: "Text", ...string }, { prop: "caption", label: "Caption", ...string }]');
     if (variant === "wrapper") source = source.replace('defaults, fields,', 'defaults, fields, ...(id === "native.paragraph" ? { slots: [{ id: "children", prop: "children", label: "Children", cardinality: "many" }] } : {}),');
@@ -139,6 +159,29 @@ const approval = (plan: { id: string; digest: string }) => ({ planId: plan.id, a
     await expect(service.plan(request)).rejects.toMatchObject({ code: "unsupported-capability" });
     expect((await captureHost(options)).tokens).toEqual(before);
   });
+
+  it("requires process restart after cached bare self-export metadata changes, including a new service instance", async () => {
+    const { service, root, options } = await fixture(false, "metadata");
+    const input = { workspaceId: "proof", page: "/" };
+    await service.inspect(input); // Establish the process-wide trusted module epoch.
+    const before = (await captureHost(options)).tokens;
+    await writeFile(join(root, "components/metadata.mjs"), 'export const paragraphDescription = "CHANGED native ESM metadata";\n');
+    await expect(service.plan(request)).rejects.toMatchObject({ code: "stale-plan", message: expect.stringMatching(/restart|new process/i) });
+    const reopened = createEditingService(options);
+    await expect(reopened.plan(request)).rejects.toMatchObject({ code: "stale-plan", message: expect.stringMatching(/restart|new process/i) });
+    expect((await captureHost(options)).tokens).toEqual(before);
+  });
+
+  it.each(["metadata", "external-metadata"] as const)("refuses %s byte changes after context load but before the first service operation", async (variant) => {
+    const { service, root, options } = await fixture(false, variant);
+    // fixture loaded host context, but has never inspected or planned through service.
+    const before = (await captureHost(options)).tokens;
+    const file = variant === "metadata" ? join(root, "components/metadata.mjs") : join(root, "node_modules/native-metadata/index.mjs");
+    await writeFile(file, 'export const paragraphDescription = "Same version, changed metadata bytes";\n');
+    await expect(service.plan(request)).rejects.toMatchObject({ code: "stale-plan", message: expect.stringMatching(/restart|new process/i) });
+    await expect(createEditingService(options).inspect({ workspaceId: "proof", page: "/" })).rejects.toMatchObject({ code: "stale-plan" });
+    expect((await captureHost(options)).tokens).toEqual(before);
+  });
   it("rejects changed stylesheet dependencies", async () => {
     const { service, root } = await fixture();
     const plan = await service.plan(request);
@@ -165,14 +208,15 @@ const approval = (plan: { id: string; digest: string }) => ({ planId: plan.id, a
     await initializeAuthoringWorkspace({ composerConfig: options.config, pack: options.pack, project, workspaceId: "different" });
     await expect(service.apply(approval(plan))).rejects.toMatchObject({ code: "wrong-workspace" });
   });
-  it("rejects changed component source and unavailable declared components", async () => {
+  it("rejects changed component source", async () => {
     const { service, root } = await fixture();
     const plan = await service.plan(request);
     const packPath = join(root, "components/pack.mjs");
     await writeFile(packPath, (await readFile(packPath, "utf8")) + "\n// Changed component source.\n");
     await expect(service.apply(approval(plan))).rejects.toMatchObject({ code: "stale-plan" });
-    const configPath = join(root, "zudo-composer.config.ts");
-    await writeFile(configPath, (await readFile(configPath, "utf8")).replace('componentId: "native.table"', 'componentId: "missing.table"'));
+  });
+  it("rejects unavailable declared components on an unchanged host", async () => {
+    const { service } = await fixture(false, "missing");
     await expect(service.plan({ ...request, insert: { kind: "table", columns: ["A"], rows: [["B"]] } })).rejects.toMatchObject({ code: "unsupported-capability" });
   });
 
@@ -203,22 +247,23 @@ const approval = (plan: { id: string; digest: string }) => ({ planId: plan.id, a
     await expect(service.plan({ ...request, after: { nodeId: "prose" } })).rejects.toMatchObject({ code: "unsupported-target" });
     await expect(service.plan({ ...request, after: { kind: "paragraph", ordinal: 2 } })).rejects.toMatchObject({ code: "unsupported-target" });
   });
-  it("refuses undeclared host authority and mapped composition consumers", async () => {
-    const { options, service, root } = await fixture();
-    const configPath = join(root, "zudo-composer.config.ts"), original = await readFile(configPath, "utf8");
-    await writeFile(configPath, 'export default { pack: "native-edit-host/components" };\n');
+  it("refuses undeclared host authority", async () => {
+    const { service } = await fixture(false, "no-optin");
     await expect(service.plan(request)).rejects.toMatchObject({ code: "unsupported-scope" });
-    await writeFile(configPath, original);
+  });
+  it("refuses mapped composition consumers", async () => {
+    const { service, options } = await fixture();
     const state = await captureHost(options);
     await state.stores.mappings.put({ id: "mapping", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", document: { schemaVersion: 2, id: "mapping", name: "Mapping", contentModel: { providerId: "content-filesystem", recordId: "model" }, composition: { providerId: "files", recordId: "home" }, mode: { kind: "single" }, bindings: [] } });
     await expect(service.plan(request)).rejects.toMatchObject({ code: "unsupported-scope" });
   });
-  it("refuses source-authored and shared owners with actionable inspection", async () => {
-    const { service, root, options } = await fixture();
-    await writeFile(join(root, "site-project.ts"), "export default {};\n");
+  it("refuses source-authored owners with actionable inspection", async () => {
+    const { service } = await fixture(false, "source");
     expect((await service.inspect({ workspaceId: "proof", page: "/" })).writeBlockers.join(" ")).toMatch(/Source-authored/);
     await expect(service.plan(request)).rejects.toMatchObject({ code: "unsupported-scope" });
-    await rm(join(root, "site-project.ts"));
+  });
+  it("refuses shared owners", async () => {
+    const { service, options } = await fixture();
     const state = await captureHost(options), sitemap = structuredClone(state.records.sitemaps[0]!);
     sitemap.document.root[0]!.children.push({ ...sitemap.document.root[0]!, id: "shared", slug: "shared", children: [] });
     await state.stores.sitemaps.put(sitemap);

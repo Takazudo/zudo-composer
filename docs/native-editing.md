@@ -124,6 +124,13 @@ with the original IDs. It never rebases an approved plan. The Composer snapshot
 CAS and final pack/source checks run inside the real writer lock. All ordinary
 Composer reads/writes, including JSX repair, now participate in that lock.
 
+A long-lived editing process pins the host source epoch when loading its context.
+The editing fingerprint follows and hashes imported dependency files, including
+bare-package metadata, rather than trusting package versions. After a source
+change, restart the process before planning again; creating another service in
+the same process cannot clear native ESM caches. Graphs that cannot be statically
+resolved are refused. Storage edits do not reset this source epoch.
+
 A durable prepared journal is irrevocable commit intent. It contains the exact
 canonical JSON, JSX and receipt. Roll-forward accepts only recorded before or
 after bytes; unexpected external edits are preserved and block recovery. Every

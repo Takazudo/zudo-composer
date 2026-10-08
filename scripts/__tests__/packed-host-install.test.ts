@@ -356,6 +356,43 @@ async function freePort() {
   return address.port;
 }
 
+describe("packed server shutdown", () => {
+  it("waits for a launcher descendant to release its lease before returning", async () => {
+    const host = await temporary();
+    const port = await freePort();
+    const before = await tree(host);
+    const childFile = join(host, "server.mjs");
+    await writeFile(childFile, `
+      import { createServer } from 'node:http';
+      import { writeFile, unlink } from 'node:fs/promises';
+      await writeFile('.zudo-authoring.lock', 'owned');
+      const server = createServer((_request, response) => response.end('ready'));
+      server.listen(${port}, '127.0.0.1');
+      process.on('SIGTERM', () => {
+        server.close(async () => {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          await unlink('.zudo-authoring.lock');
+          process.exit(0);
+        });
+      });
+    `);
+    const args = ["--input-type=module", "-e", `
+      import { spawn } from 'node:child_process';
+      spawn(process.execPath, [${JSON.stringify(childFile)}], { stdio: 'inherit' });
+      process.on('SIGTERM', () => process.exit(0));
+    `];
+    const server = await startHostServer(host, { port, command: process.execPath, args });
+    try {
+      expect(await readFile(join(host, ".zudo-authoring.lock"), "utf8")).toBe("owned");
+      await server.stop();
+      await expect(readFile(join(host, ".zudo-authoring.lock"))).rejects.toMatchObject({ code: "ENOENT" });
+      await assertConfinedWrites(host, [...before, "server.mjs"]);
+    } finally {
+      await server.stop();
+    }
+  });
+});
+
 describe("failed server startup cleanup", () => {
   it("kills a surviving grandchild when the detached launcher exits during startup", async () => {
     const host = await temporary();

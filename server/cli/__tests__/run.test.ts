@@ -172,6 +172,9 @@ describe("runComposerCli", () => {
 Commands:
   init <dir>  Create a populated host in a new directory.
   dev         Start the authoring dev server, rooted at the current project.
+  edit <verb> Run deterministic draft editing with one JSON request on stdin.
+              Verbs: inspect, resolve, plan, review, apply, receipt, discard,
+              supersede, undo. Options: --root <dir>, --stdin, --json.
   release     Run the SiteProject release API (one JSON request on stdin, one
               canonical JSON response on stdout).
   build-site  Build and verify the host's static website in dist-site.

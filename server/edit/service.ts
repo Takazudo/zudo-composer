@@ -14,6 +14,7 @@ import { planLinkedJsxModules } from "../../src/composer/source/plan-linked-jsx"
 import type { CompositionRecord } from "../../src/composer/library/types";
 import type { JsonObject } from "../../src/composer/model/types";
 import { resolveLocalReleaseToolchain } from "../site-project-local/toolchain-config";
+import { collectPackSourceGraph } from "../site-project-local/pack-source-graph";
 import { workspaceDomainRoots } from "../../src/shared/workspace-scope";
 import { withMutationBarrier } from "../../src/shared/node-fs";
 import type { AssetVersionPin } from "../../src/assets/model/types";
@@ -109,13 +110,6 @@ function candidate(capture: HostCapture, request: EditRequest, generatedId: stri
  * The digest binds content; the caller, not this service, supplies human authority.
  */
 export function createEditingService(options: CaptureHostOptions) {
-  const capture = async () => {
-    // A service can outlive a host module edit. Re-evaluate trusted inputs rather
-    // than attesting fresh source bytes alongside a stale in-memory manifest.
-    const fresh = await loadHostContext({ workspaceRoot: options.config.workspaceRoot });
-    if (editDigest(fresh.composerConfig.paths) !== editDigest(options.config.paths)) throw new EditError("stale-config", "Storage paths changed; reopen the editing service before continuing.");
-    return captureHost({ config: fresh.composerConfig, pack: fresh.pack, packIdentity: fresh.packIdentity });
-  };
   const identity = () => realpath(options.config.workspaceRoot);
   const sourceBytes = async (path: string) => {
     try {
@@ -124,11 +118,40 @@ export function createEditingService(options: CaptureHostOptions) {
       return createHash("sha256").update(await readFile(path)).digest("hex");
     } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
   };
+  // Vite delegates bare imports to native ESM, whose cache outlives evaluator
+  // instances. Never pair cached metadata with a newly attested source graph.
+  // Keep this epoch process-wide, including separately created public services.
+  const epochKey = Symbol.for("zudo-composer.native-edit-source-epochs.v1");
+  const processState = globalThis as typeof globalThis & { [key: symbol]: Map<string, string> | undefined };
+  const epochs = processState[epochKey] ??= new Map<string, string>();
+  const sources = async (state: CaptureHostOptions) => ({
+    executedGraph: await (async () => {
+      const graph = await collectPackSourceGraph({ hostRoot: state.config.workspaceRoot, entryPath: state.packIdentity.entryPath, sourceModules: state.pack.manifest.components.map(component => component.source.module), extraRoots: [state.config.configPath], attestExternalFiles: true });
+      return Promise.all((graph.attestedFiles ?? []).map(async path => [path, await sourceBytes(path)]));
+    })(),
+    hostSources: await Promise.all([state.config.configPath, join(state.config.workspaceRoot, "site-project.ts"), join(state.config.workspaceRoot, "site-project.json")].map(sourceBytes)),
+    toolchain: await resolveLocalReleaseToolchain({ pack: state.pack, packIdentity: state.packIdentity, workspaceRoot: state.config.workspaceRoot, stylesPath: state.config.paths.styles }),
+  });
+  const checkedSources = async (state: CaptureHostOptions) => {
+    const value = await sources(state);
+    const root = await identity(), digest = editDigest(value);
+    const previous = epochs.get(root);
+    if (previous !== undefined && previous !== digest) throw new EditError("stale-plan", "Host source changed in this process. Restart the CLI or public service process before creating or applying another plan; native module metadata may be cached.");
+    epochs.set(root, digest);
+    return value;
+  };
+  const capture = async () => {
+    await checkedSources(options);
+    const fresh = await loadHostContext({ workspaceRoot: options.config.workspaceRoot });
+    if (editDigest(fresh.composerConfig.paths) !== editDigest(options.config.paths)) throw new EditError("stale-config", "Storage paths changed; restart the editing process before continuing.");
+    const inputs = { config: fresh.composerConfig, pack: fresh.pack, packIdentity: fresh.packIdentity };
+    await checkedSources(inputs);
+    return captureHost(inputs);
+  };
   const revisions = async (state: HostCapture) => ({
-    hostSources: await Promise.all([options.config.configPath, join(options.config.workspaceRoot, "site-project.ts"), join(options.config.workspaceRoot, "site-project.json")].map(sourceBytes)),
+    ...await checkedSources(state),
     tokens: state.tokens, workspace: state.workspace, sourceAuthored: state.sourceAuthored,
     config: state.config.nativeEditing ?? null,
-    toolchain: await resolveLocalReleaseToolchain({ pack: state.pack, packIdentity: state.packIdentity, workspaceRoot: state.config.workspaceRoot, stylesPath: state.config.paths.styles }),
   });
   const leased = async <T>(action: () => Promise<T>) => {
     const lease = await acquireAuthoringLease(options.config.workspaceRoot, "reviewed-edit");
@@ -160,6 +183,7 @@ export function createEditingService(options: CaptureHostOptions) {
     return next(0);
   };
   return {
+    async initializeSourceEpoch() { await checkedSources(options); },
     async inspect(input: unknown) { const request = parse(pageSchema, input); return resolvePage(await capture(), request); },
     async resolve(input: unknown) {
       const request = parse(pageSchema.extend({ after: afterSchema }).strict(), input);

@@ -52,6 +52,8 @@ jobs:
       - run: pnpm build
       - run: pnpm dist:boundary
       - run: pnpm exec playwright install --with-deps chromium
+      - name: Verify installed native editing and Composer reopen
+        run: pnpm edit:installed
       - run: pnpm test:browser:host
       - run: pnpm test:browser:dev
         env:

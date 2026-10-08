@@ -271,7 +271,10 @@ export async function startHostServer(hostRoot, { port = 4175, env = process.env
   child.stdout.on("data", (chunk) => { output += String(chunk); });
   child.stderr.on("data", (chunk) => { output += String(chunk); });
   const abort = new AbortController();
-  const stopped = new Promise((settle) => child.once("exit", settle).once("error", settle));
+  // A package-manager launcher can exit before its server finishes async
+  // shutdown. Inherited stdout/stderr keep close pending until that descendant
+  // releases its lease; exit alone would let the fallback kill interrupt it.
+  const stopped = new Promise((settle) => child.once("close", settle).once("error", settle));
   async function stop() {
     abort.abort();
     if (!child.pid) return;
@@ -279,10 +282,11 @@ export async function startHostServer(hostRoot, { port = 4175, env = process.env
     try { process.kill(-child.pid, "SIGTERM"); } catch { return; }
     const timeout = new AbortController();
     try {
-      await Promise.race([stopped, delay(2_000, undefined, { signal: timeout.signal })]);
+      await Promise.race([stopped, delay(5_000, undefined, { signal: timeout.signal })]);
     } finally {
       timeout.abort();
       try { process.kill(-child.pid, "SIGKILL"); } catch { /* Group already gone. */ }
+      await stopped;
     }
   }
   /** @type {((code: number | null) => void) | undefined} */

@@ -2311,6 +2311,7 @@ interface EditReceipt {
  * The digest binds content; the caller, not this service, supplies human authority.
  */
 declare function createEditingService$1(options: CaptureHostOptions): {
+    initializeSourceEpoch(): Promise<void>;
     inspect(input: unknown): Promise<{
         record: CompositionRecord;
         rootPolicy: RootPolicy;
@@ -2386,7 +2387,7 @@ declare function createEditingService$1(options: CaptureHostOptions): {
 /** Trusted local authoring adapter; never expose apply/undo to a proposal runner. */
 declare function createEditingService(options?: {
     workspaceRoot?: string;
-}): Promise<ReturnType<typeof createEditingService$1>>;
+}): Promise<Omit<ReturnType<typeof createEditingService$1>, "initializeSourceEpoch">>;
 
 export { createEditingService };
 export type { EditPlan, EditReceipt, EditRequest };

@@ -37,5 +37,13 @@ export async function loadHostContext(options = {}) {
   const composerConfig = await loadHostConfig(workspaceRoot, options.env);
   const evaluateHost = createModuleEvaluator(workspaceRoot);
   const { identity, pack } = await loadComponentPack(workspaceRoot, composerConfig.settings.pack, evaluateHost);
+  if (composerConfig.nativeEditing) {
+    // The checker implementation is immutable for this process; only host inputs
+    // are re-evaluated. Share its evaluator across repeated context loads.
+    const key = Symbol.for("zudo-composer.editing-epoch-checker.v1");
+    const shared = /** @type {typeof globalThis & { [key: symbol]: Promise<typeof import("./edit/service.js")> | undefined }} */ (globalThis);
+    const module = await (shared[key] ??= createModuleEvaluator(APP_ROOT)(resolve(APP_ROOT, "server/edit/service.ts")));
+    await module.createEditingService({ config: composerConfig, pack, packIdentity: identity }).initializeSourceEpoch();
+  }
   return { composerConfig, pack, packIdentity: identity, workspaceRoot };
 }
