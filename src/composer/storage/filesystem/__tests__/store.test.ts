@@ -749,7 +749,8 @@ describe("filesystem composition store serialization and conservative CRUD", () 
       },
     });
     await store.put(record(), "jsx");
-    expect(seenFlags).toHaveLength(2);
+    // Closure capture and write each acquire an exclusive no-follow writer lock.
+    expect(seenFlags).toHaveLength(4);
     for (const flags of seenFlags) {
       expect(flags & constants.O_EXCL).not.toBe(0);
       if (constants.O_NOFOLLOW !== undefined) expect(flags & constants.O_NOFOLLOW).not.toBe(0);

@@ -1,0 +1,13 @@
+{
+  "name": "native-edit-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Disposable workspace-authored native editing acceptance host.",
+  "packageManager": "pnpm@11.5.2",
+  "exports": { "./components": "./components/pack.mjs" },
+  "devDependencies": {
+    "@zudo-composer/component-contract": "^1.0.0",
+    "preact": "^10.29.8"
+  }
+}

@@ -17,6 +17,7 @@ const entries = { authoring: "server/public/authoring.mts", "site-build": "serve
 // neither needs a generated JavaScript stub.
 const declarationEntries = {
   ...entries,
+  editing: "server/public/editing.mts",
   "site-project": "server/public/site-project.mts",
   vite: "server/public/vite.mts",
   "config-public": "server/public/config.mts",

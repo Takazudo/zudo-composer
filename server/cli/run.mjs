@@ -15,6 +15,7 @@ import { forwardedSignals, spawnSupervised } from "./supervise.mjs";
 /** How long a signal handler waits for `server.close()` before exiting anyway. */
 export const CLOSE_GRACE_MS = 2000;
 
+export const EDIT_ENTRY_PATH = resolve(APP_ROOT, "server/cli/edit-entry.mjs");
 export const RELEASE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/release-entry.mjs");
 export const BUILD_SITE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/build-site-entry.mjs");
 export const ASSETS_IMPORT_ENTRY_PATH = resolve(APP_ROOT, "server/cli/assets-import-entry.mjs");
@@ -28,6 +29,9 @@ export const USAGE = `Usage: zudo-composer <command> [options]
 Commands:
   init <dir>  Create a populated host in a new directory.
   dev         Start the authoring dev server, rooted at the current project.
+  edit <verb> Run deterministic draft editing with one JSON request on stdin.
+              Verbs: inspect, resolve, plan, review, apply, receipt, discard,
+              supersede, undo. Options: --root <dir>, --stdin, --json.
   release     Run the SiteProject release API (one JSON request on stdin, one
               canonical JSON response on stdout).
   build-site  Build and verify the host's static website in dist-site.
@@ -99,6 +103,7 @@ grammar options:
 export function parseArguments(argv) {
   const [command, ...rest] = argv;
   if (command === undefined || command === "--help" || command === "-h" || command === "help") return { command: "help" };
+  if (command === "edit") return { command: "edit", rest };
   if (command === "release") return { command: "release", rest };
   if (command === "init") return parseInit(rest);
   if (command === "assets") return parseAssetsImport(rest);
@@ -255,6 +260,11 @@ export async function runComposerCli(argv, deps = {}) {
   }
   if (parsed.command === "help") {
     proc.stdout.write(USAGE);
+    return;
+  }
+  if (parsed.command === "edit") {
+    spawnSupervised({ command: proc.execPath, args: [EDIT_ENTRY_PATH, ...parsed.rest], label: "the deterministic editor", entryPath: EDIT_ENTRY_PATH,
+      ...(deps.spawn ? { spawn: deps.spawn } : {}), ...(deps.exists ? { exists: deps.exists } : {}), proc });
     return;
   }
   if (parsed.command === "release") {

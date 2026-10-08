@@ -1,3 +1,4 @@
+import { acquireAuthoringLease } from "../server/edit/authoring-lease.mjs";
 // @ts-check
 // Dev-only transport for the Composer filesystem store.
 //
@@ -687,6 +688,13 @@ export default function composerFileProviderPlugin(options = {}) {
     async configureServer(server) {
       const activeCapability = capability;
       if (activeCapability === undefined) return;
+      // Also covers host-authored Vite configurations using this public plugin.
+      // Acquire before any store initializes or any read-repair can run.
+      {
+          const lease = await acquireAuthoringLease(workspaceRoot, "dev-server");
+          const close = server.close.bind(server);
+          server.close = async () => { await close(); await lease.release(); };
+      }
       const {
         createWorkspaceScopedCompositionStore,
         validateCompositionRecord,

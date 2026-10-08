@@ -5,6 +5,7 @@ import * as nodeFs from "node:fs/promises";
 import { link } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ContractValidationError, RESERVED_PERSISTED_KEYS, componentPackManifestSchema, validateFieldValue } from "@zudo-composer/component-contract";
+import { commonmarkLanguage } from "@codemirror/lang-markdown";
 //#region src/assets/library/types.ts
 var ASSET_PROVIDERS = { files: {
 	id: "asset-files",
@@ -1037,8 +1038,289 @@ async function commitDocument(filesystem, operation, path, contents, options = {
 		if (!committed) await filesystem.operations.unlink(temporary.path).catch(() => void 0);
 	}
 }
-constants.O_NOFOLLOW;
-Number.MAX_SAFE_INTEGER;
+//#endregion
+//#region src/shared/node-fs/record-transaction.ts
+var NO_FOLLOW$1 = constants.O_NOFOLLOW ?? 0;
+var POINTER_FILENAME = "current.json";
+var GENERATIONS_DIRECTORY = "generations";
+var MAX_GENERATION = Number.MAX_SAFE_INTEGER;
+function digestOf(json) {
+	return createHash("sha256").update(json, "utf8").digest("hex");
+}
+function isPointer(value, schemaVersion) {
+	if (typeof value !== "object" || value === null) return false;
+	const pointer = value;
+	return pointer.schemaVersion === schemaVersion && Number.isSafeInteger(pointer.generation) && pointer.generation >= 0 && typeof pointer.mutationToken === "string" && /^[a-f0-9]{64}$/.test(pointer.mutationToken) && Array.isArray(pointer.entries) && pointer.entries.every((entry) => typeof entry === "object" && entry !== null && isSafeRecordId(entry.id) && /^[a-f0-9]{64}$/.test(entry.digest));
+}
+/**
+* Multi-record store whose transactions commit or fail whole.
+*
+* A generation directory is a complete, immutable copy of every record. A
+* transaction stages the next generation beside the live one and then swaps a
+* single pointer document with one atomic rename, so the visible record set
+* moves from the whole before-state to the whole after-state in one step. An
+* unchanged record is hard-linked rather than rewritten, so the copy costs one
+* link per untouched record.
+*
+* Failure modes:
+*
+* - Any failure before the pointer rename (validation, write, fsync, crash)
+*   leaves an orphan generation directory that no pointer names. The live
+*   record set is byte-identical to the before-state — no partial records are
+*   ever visible — and the orphan is purged by the next commit.
+* - A failure of the post-rename directory fsync is reported as
+*   `commit-uncertain`: the pointer may or may not survive a power loss. The
+*   mutation lock is retained so the next mutation fails closed, and recovery
+*   is a human reading `current.json` — never a blind retry.
+* - A crash after the commit but before pruning leaves older generation
+*   directories on disk. They are unreferenced and harmless, and the next
+*   commit purges them.
+* - A lock left by a dead process fails every mutation closed with `conflict`.
+*   Reads keep working; removing `.mutation.lock` is a deliberate human act.
+*/
+var TransactionalRecordStore = class TransactionalRecordStore {
+	filesystem;
+	generationsDirectory;
+	schemaVersion;
+	phases;
+	now;
+	link;
+	newMutationToken;
+	constructor(filesystem, generationsDirectory, schemaVersion, phases, now, link, newMutationToken) {
+		this.filesystem = filesystem;
+		this.generationsDirectory = generationsDirectory;
+		this.schemaVersion = schemaVersion;
+		this.phases = phases;
+		this.now = now;
+		this.link = link;
+		this.newMutationToken = newMutationToken;
+	}
+	static async create(options) {
+		const { link: link$1, ...fileOperations } = options.operations ?? {};
+		const filesystem = await SafeRootFilesystem.create({
+			root: options.root,
+			operations: fileOperations,
+			randomToken: options.randomToken,
+			errors: options.errors,
+			rootLabel: options.rootLabel,
+			ownerLabel: options.ownerLabel,
+			recordLabel: options.recordLabel,
+			initializeOperation: options.phases.initialize
+		});
+		const generationsDirectory = filesystem.ownedPath(GENERATIONS_DIRECTORY);
+		try {
+			await filesystem.operations.mkdir(generationsDirectory, { recursive: true });
+			const stats = await filesystem.operations.lstat(generationsDirectory);
+			const realPath = await filesystem.operations.realpath(generationsDirectory);
+			if (stats.isSymbolicLink() || !stats.isDirectory() || realPath !== generationsDirectory) throw options.errors.create(options.phases.initialize, "blocked", `${options.ownerLabel} generations directory is not a real owned directory.`);
+		} catch (cause) {
+			options.errors.rethrow(options.phases.initialize, "read-failed", `Could not initialize ${options.ownerLabel} generation storage.`, cause);
+		}
+		return new TransactionalRecordStore(filesystem, generationsDirectory, options.schemaVersion, options.phases, options.now ?? (() => (/* @__PURE__ */ new Date()).toISOString()), link$1 ?? link, options.newMutationToken ?? (() => randomBytes(32).toString("hex")));
+	}
+	get root() {
+		return this.filesystem.realRoot;
+	}
+	snapshot() {
+		return this.filesystem.run(this.phases.snapshot, () => this.read(this.phases.snapshot));
+	}
+	async mutationToken() {
+		return (await this.snapshot()).mutationToken;
+	}
+	/**
+	* Apply one whole transaction.
+	*
+	* `plan` receives the entire before-state read under both the in-process
+	* queue and the cross-process lock, and returns the entire after-state. It
+	* is the only place a domain validates its graph, and throwing from it
+	* writes nothing at all.
+	*/
+	commit(plan, options = {}) {
+		const operation = this.phases.commit;
+		return this.filesystem.run(operation, () => withMutationLock(this.filesystem, operation, {
+			now: this.now,
+			preflightDirectories: [this.filesystem.realRoot, this.generationsDirectory]
+		}, async () => {
+			const before = await this.read(operation);
+			options.signal?.throwIfAborted();
+			if (options.expectedMutationToken !== void 0 && options.expectedMutationToken !== before.mutationToken) throw this.filesystem.errors.create(operation, "conflict", `${this.filesystem.ownerLabel} changed; reload before retrying.`);
+			const planned = await plan(before);
+			this.assertPlan(operation, planned.records);
+			const pointer = await this.stage(operation, before, planned.records, options.signal);
+			await commitDocument(this.filesystem, operation, this.filesystem.ownedPath(POINTER_FILENAME), `${JSON.stringify(pointer, null, 2)}\n`, {
+				signal: options.signal,
+				uncertainMessage: `${this.filesystem.ownerLabel} pointer rename completed but directory durability is uncertain. Inspect ${POINTER_FILENAME} and the retained lock before recovery; do not retry blindly.`
+			});
+			await this.prune(pointer.generation);
+			return planned.result;
+		}));
+	}
+	assertPlan(operation, records) {
+		const seen = /* @__PURE__ */ new Set();
+		for (const record of records) {
+			if (!isSafeRecordId(record.id)) throw this.filesystem.errors.create(operation, "blocked", `${this.filesystem.ownerLabel} transaction contains a record id that is not a stable path-safe id.`);
+			if (seen.has(record.id)) throw this.filesystem.errors.create(operation, "blocked", `${this.filesystem.ownerLabel} transaction names ${this.filesystem.ownerLabel} id "${record.id}" twice.`);
+			seen.add(record.id);
+			if (typeof record.json !== "string") throw this.filesystem.errors.create(operation, "blocked", `${this.filesystem.ownerLabel} transaction record "${record.id}" is not serialized JSON text.`);
+		}
+	}
+	generationPath(generation) {
+		return join(this.generationsDirectory, String(generation));
+	}
+	recordPath(generation, id) {
+		const path = join(this.generationPath(generation), `${id}.json`);
+		this.filesystem.assertOwnedPath(path);
+		return path;
+	}
+	/**
+	* Read the live generation.
+	*
+	* A writer in another process may commit and prune between reading the
+	* pointer and reading the records it names, which makes those files vanish
+	* mid-read. That is a moved snapshot, not corruption, so the pointer is
+	* re-read and the whole read is retried; only an unchanged pointer whose
+	* records are missing or mismatched is a genuine recovery case.
+	*/
+	async read(operation) {
+		for (let attempt = 0; attempt < 3; attempt += 1) {
+			const pointer = await this.readPointer(operation);
+			if (pointer === void 0) return {
+				schemaVersion: this.schemaVersion,
+				generation: 0,
+				mutationToken: "0".repeat(64),
+				records: []
+			};
+			const records = await this.readRecords(operation, pointer);
+			if (records !== void 0) return {
+				schemaVersion: pointer.schemaVersion,
+				generation: pointer.generation,
+				mutationToken: pointer.mutationToken,
+				records
+			};
+			const current = await this.readPointer(operation);
+			if (current !== void 0 && current.generation === pointer.generation) throw this.filesystem.errors.create(operation, "blocked", `A ${this.filesystem.recordLabel} named by ${POINTER_FILENAME} is missing or does not match its digest. Explicit recovery is required.`);
+		}
+		throw this.filesystem.errors.create(operation, "conflict", `${this.filesystem.ownerLabel} records changed repeatedly during snapshot capture. Retry.`);
+	}
+	async readPointer(operation) {
+		await this.filesystem.assertRoot(operation);
+		const file = await this.filesystem.readFileNoFollow(operation, this.filesystem.ownedPath(POINTER_FILENAME));
+		if (file === void 0) return void 0;
+		let raw;
+		try {
+			raw = JSON.parse(file.text);
+		} catch {}
+		if (!isPointer(raw, this.schemaVersion)) throw this.filesystem.errors.create(operation, "blocked", `${this.filesystem.ownerLabel} ${POINTER_FILENAME} is malformed or uses an unsupported schema. Records are preserved; explicit recovery is required.`);
+		return raw;
+	}
+	/** Undefined when the named generation is no longer completely readable. */
+	async readRecords(operation, pointer) {
+		const records = [];
+		for (const entry of pointer.entries) {
+			const record = await this.filesystem.readFileNoFollow(operation, this.recordPath(pointer.generation, entry.id));
+			if (record === void 0 || digestOf(record.text) !== entry.digest) return void 0;
+			records.push({
+				id: entry.id,
+				json: record.text
+			});
+		}
+		return records;
+	}
+	/**
+	* Write the whole next generation beside the live one. Nothing written here
+	* is reachable until the pointer swap, so a failure at any point is a
+	* complete no-op for readers.
+	*/
+	async stage(operation, before, records, signal) {
+		if (before.generation >= MAX_GENERATION) throw this.filesystem.errors.create(operation, "write-failed", `${this.filesystem.ownerLabel} generation numbering is exhausted.`);
+		const generation = before.generation + 1;
+		const ordered = [...records].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+		const mutationToken = this.newMutationToken({
+			schemaVersion: this.schemaVersion,
+			generation,
+			previousMutationToken: before.mutationToken,
+			records: structuredClone(ordered)
+		});
+		if (typeof mutationToken !== "string" || mutationToken.length !== 64 || !/^[a-f0-9]{64}$/.test(mutationToken) || mutationToken === before.mutationToken) throw this.filesystem.errors.create(operation, "write-failed", `${this.filesystem.ownerLabel} mutation token source must return a new SHA-256-shaped token.`);
+		const directory = this.generationPath(generation);
+		await this.purgeGeneration(generation);
+		try {
+			await this.filesystem.operations.mkdir(directory, { recursive: true });
+		} catch (cause) {
+			this.filesystem.errors.rethrow(operation, "write-failed", `Could not stage the next ${this.filesystem.ownerLabel} generation.`, cause);
+		}
+		const carryForward = new Map(before.records.map((record) => [record.id, digestOf(record.json)]));
+		const entries = [];
+		try {
+			for (const record of ordered) {
+				signal?.throwIfAborted();
+				const digest = digestOf(record.json);
+				const path = this.recordPath(generation, record.id);
+				if (carryForward.get(record.id) === digest) await this.link(this.recordPath(before.generation, record.id), path);
+				else {
+					const handle = await this.filesystem.operations.open(path, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | NO_FOLLOW$1, 384);
+					try {
+						await handle.writeFile(record.json, { encoding: "utf8" });
+						await handle.sync();
+					} finally {
+						await handle.close().catch(() => void 0);
+					}
+				}
+				entries.push({
+					id: record.id,
+					digest
+				});
+			}
+			await syncDirectory(this.filesystem, operation, directory);
+			await syncDirectory(this.filesystem, operation, this.generationsDirectory);
+		} catch (cause) {
+			await this.purgeGeneration(generation).catch(() => void 0);
+			this.filesystem.errors.rethrow(operation, "write-failed", `Could not stage the next ${this.filesystem.ownerLabel} generation.`, cause);
+		}
+		return {
+			schemaVersion: this.schemaVersion,
+			generation,
+			mutationToken,
+			entries
+		};
+	}
+	/** Best effort: unreferenced generations are invisible, never incorrect. */
+	async prune(liveGeneration) {
+		try {
+			const entries = await this.filesystem.operations.readdir(this.generationsDirectory, { withFileTypes: true });
+			for (const entry of entries) {
+				if (!entry.isDirectory() || entry.name === String(liveGeneration)) continue;
+				if (!/^\d+$/.test(entry.name)) continue;
+				await this.purgeGeneration(Number(entry.name));
+			}
+		} catch {}
+	}
+	async purgeGeneration(generation) {
+		const directory = this.generationPath(generation);
+		this.filesystem.assertOwnedPath(directory);
+		let stats;
+		try {
+			stats = await this.filesystem.operations.lstat(directory);
+		} catch (cause) {
+			if (errorCode$1(cause) === "ENOENT") return;
+			throw cause;
+		}
+		if (stats.isSymbolicLink() || !stats.isDirectory()) throw this.filesystem.errors.create(this.phases.commit, "blocked", `${this.filesystem.ownerLabel} generation path is not a real directory: ${generation}`);
+		if (await this.filesystem.operations.realpath(directory) !== directory) throw this.filesystem.errors.create(this.phases.commit, "blocked", `${this.filesystem.ownerLabel} generation directory failed realpath verification: ${generation}`);
+		for (const entry of await this.filesystem.operations.readdir(directory, { withFileTypes: true })) {
+			const path = join(directory, entry.name);
+			this.filesystem.assertOwnedPath(path);
+			const current = await this.filesystem.operations.lstat(path);
+			if (current.isSymbolicLink() || !current.isFile()) throw this.filesystem.errors.create(this.phases.commit, "blocked", `Refusing to remove a non-regular ${this.filesystem.ownerLabel} generation entry: ${entry.name}`);
+			await this.filesystem.operations.unlink(path);
+		}
+		await this.filesystem.operations.rmdir(directory);
+		if (await this.filesystem.operations.lstat(directory).then(() => true, () => false)) throw this.filesystem.errors.create(this.phases.commit, "write-failed", `Could not remove the ${this.filesystem.ownerLabel} generation directory: ${generation}`);
+	}
+};
+function createTransactionalRecordStore(options) {
+	return TransactionalRecordStore.create(options);
+}
 //#endregion
 //#region src/assets/storage/filesystem/store.ts
 var NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
@@ -2139,7 +2421,24 @@ function validateRootForest(roots, policy) {
 	}
 	return { ok: true };
 }
-({ files: "files" }).files;
+var COMPOSITION_PROVIDERS = { files: {
+	id: { files: "files" }.files,
+	label: "Local files",
+	storageLabel: "Development composition files"
+} };
+/** Provider-neutral error used for rejected store/initialization promises. */
+var CompositionPersistenceError = class extends Error {
+	operation;
+	code;
+	retryable;
+	name = "CompositionPersistenceError";
+	constructor(operation, code, message, retryable, options) {
+		super(message, options);
+		this.operation = operation;
+		this.code = code;
+		this.retryable = retryable;
+	}
+};
 //#endregion
 //#region src/composer/model/codec.ts
 /**
@@ -2208,6 +2507,61 @@ function validateCompositionRecord(value) {
 			document: decoded.document
 		}
 	};
+}
+/** Classifies unknown provider data without mutating or discarding the source. */
+function loadCompositionRecord(value) {
+	const result = validateCompositionRecord(value);
+	if (result.ok) return {
+		status: "loaded",
+		record: result.record
+	};
+	if (result.issue.code === "future-schema") return {
+		status: "future-schema",
+		foundSchemaVersion: result.issue.foundSchemaVersion,
+		raw: value
+	};
+	return {
+		status: "invalid",
+		issue: result.issue,
+		raw: value
+	};
+}
+//#endregion
+//#region src/composer/library/helpers.ts
+function countNodes(nodes) {
+	let count = 0;
+	for (const node of nodes) {
+		count += 1;
+		for (const children of Object.values(node.slots)) count += countNodes(children);
+	}
+	return count;
+}
+function countCompositionNodes(document) {
+	return countNodes(document.root);
+}
+function summarizeComposition(record) {
+	const publication = record.document.publication;
+	const reuseStatus = publication === void 0 ? void 0 : record.document.binding !== void 0 ? "invalid" : publication.kind === "pattern" && record.document.root.length === 0 ? "empty-pattern" : "eligible";
+	return {
+		id: record.id,
+		name: record.document.name,
+		createdAt: record.createdAt,
+		updatedAt: record.updatedAt,
+		nodeCount: countCompositionNodes(record.document),
+		rootCount: record.document.root.length,
+		...publication ? { publicationKind: publication.kind } : {},
+		...publication?.kind === "global-template" ? {
+			outletId: publication.outlet.id,
+			outletLabel: publication.outlet.label
+		} : {},
+		...reuseStatus ? { reuseStatus } : {}
+	};
+}
+/** Newest updated record first; equal timestamps use ascending id order. */
+function compareCompositionSummariesNewestFirst(a, b) {
+	if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? -1 : 1;
+	if (a.id === b.id) return 0;
+	return a.id < b.id ? -1 : 1;
 }
 //#endregion
 //#region src/content/model/types.ts
@@ -2512,6 +2866,19 @@ function traverseContentSchema(fields) {
 	for (const field of fields) visit(field, field, [field.id]);
 	return result;
 }
+function summarizeContentModel(record) {
+	return {
+		id: record.id,
+		name: record.document.name,
+		kind: record.document.kind,
+		fieldCount: record.document.fields.length,
+		createdAt: record.createdAt,
+		updatedAt: record.updatedAt
+	};
+}
+function compareContentModelsNewestFirst(a, b) {
+	return b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id);
+}
 function empty(value) {
 	return value === void 0 || value === null || typeof value === "string" && value.trim().length === 0 || Array.isArray(value) && value.length === 0;
 }
@@ -2701,6 +3068,48 @@ function buildContentGraphIndex(snapshots) {
 		incoming: (ref) => relations.filter((edge) => contentEntryRefKey(edge.target) === contentEntryRefKey(ref))
 	};
 }
+//#endregion
+//#region src/content/library/publication.ts
+function canonical(value) {
+	if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+	if (value !== null && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(",")}}`;
+	return JSON.stringify(value);
+}
+/** Exact canonical content fingerprint, collision-free (not a cryptographic hash). */
+function contentEntryDigest(entry) {
+	return canonical({
+		id: entry.id,
+		modelId: entry.modelId,
+		createdAt: entry.createdAt,
+		values: entry.values
+	});
+}
+//#endregion
+//#region src/mapping/model/types.ts
+var MappingPersistenceError = class extends Error {
+	operation;
+	code;
+	retryable;
+	name = "MappingPersistenceError";
+	constructor(operation, code, message, retryable, options) {
+		super(message, options);
+		this.operation = operation;
+		this.code = code;
+		this.retryable = retryable;
+	}
+	/**
+	* Structured context the shared file-provider transport forwards verbatim.
+	* `retryable` is not derivable from the code alone, so it has to cross the
+	* wire rather than be re-guessed browser-side.
+	*/
+	get details() {
+		return { retryable: this.retryable };
+	}
+};
+var MAPPING_PROVIDERS = { filesystem: {
+	id: "mapping-filesystem",
+	label: "Project files"
+} };
 //#endregion
 //#region src/mapping/model/validate.ts
 var RECORD_KEYS$1 = [
@@ -3105,6 +3514,24 @@ function validateSitemapRecord(value) {
 			...value,
 			document: document.document
 		}
+	};
+}
+/** Classify unknown provider data without mutating or discarding it. */
+function loadSitemapRecord(value) {
+	const validation = validateSitemapRecord(value);
+	if (validation.ok) return {
+		status: "loaded",
+		record: validation.record
+	};
+	if (validation.issue.code === "future-schema") return {
+		status: "future-schema",
+		foundSchemaVersion: validation.issue.foundSchemaVersion,
+		raw: value
+	};
+	return {
+		status: "invalid",
+		issue: validation.issue,
+		raw: value
 	};
 }
 //#endregion
@@ -3550,4 +3977,1125 @@ function compareDiagnostics(left, right) {
 	return compareUnicodeCodePoints$1(left.path, right.path) || compareUnicodeCodePoints$1(left.code, right.code) || compareUnicodeCodePoints$1(left.message, right.message);
 }
 //#endregion
-export { validateAssetSnapshot as A, assetMimeTypeForExtension as B, assetDownloadFileName as C, isValidAssetChecksum as D, isValidAssetByteLength as E, assetAuthoringUrl as F, ASSET_PROVIDERS as H, assetVersionUrl as I, ASSET_CHECKSUM_URL_PATTERN as L, validateAssetVersionRef as M, cloneJson as N, isValidAssetFileName as O, ASSET_MAX_BYTE_LENGTH as P, ASSET_IMMUTABLE_CACHE_CONTROL as R, assetByteLabel as S, assetPinKey as T, hostedAssetHeaders as V, canonicalStringifyJson as _, discoverMappingTargets as a, serializeSiteProject as b, isContentAssetUse as c, isStructurallyValidDocument$1 as d, validateRootForest as f, createComponentCatalog as g, VIRTUAL_ROOT_SLOT_ID as h, isSitemapDisplayTitleFieldKind as i, validateAssetVersionPin as j, validateAssetAssetRef as k, isValueValidForField as l, orderedSlotIds as m, browserProviderIdFor as n, validateMappingSourceProjection as o, findLocation as p, safeNavigationUrl as r, validateMappingTransform as s, validateSiteProject as t, diagnoseDocument as u, canonicalizeSiteProject as v, assetTypeLabel as w, createFilesystemAssetStore as x, compareUnicodeCodePoints$1 as y, assetKindForMime as z };
+//#region src/site-project/model/memory.ts
+function deepFreeze(value) {
+	if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+		for (const child of Object.values(value)) deepFreeze(child);
+		Object.freeze(value);
+	}
+	return value;
+}
+function readonlyMap(source) {
+	const facade = Object.freeze({
+		get size() {
+			return source.size;
+		},
+		get: (key) => source.get(key),
+		has: (key) => source.has(key),
+		entries: () => source.entries(),
+		keys: () => source.keys(),
+		values: () => source.values(),
+		forEach: (callback, thisArg) => {
+			source.forEach((value, key) => callback.call(thisArg, value, key, facade));
+		},
+		[Symbol.iterator]: () => source[Symbol.iterator]()
+	});
+	return facade;
+}
+function createDomainAdapters(domain, collections) {
+	const providers = collections.map((collection) => {
+		const records = collection.records;
+		const byId = new Map(records.map((record) => [record.id, record]));
+		const store = Object.freeze({
+			providerId: collection.id,
+			list: () => records,
+			get: (recordId) => byId.get(recordId)
+		});
+		return Object.freeze({
+			descriptor: Object.freeze({
+				id: collection.id,
+				browserProviderId: browserProviderIdFor(domain, collection.id)
+			}),
+			store
+		});
+	});
+	const storeIndex = new Map(providers.map((provider) => [provider.descriptor.id, provider.store]));
+	const stores = readonlyMap(storeIndex);
+	const entries = providers.flatMap((provider) => provider.store.list().map((record) => Object.freeze({
+		ref: Object.freeze({
+			providerId: provider.descriptor.id,
+			recordId: record.id
+		}),
+		record
+	})));
+	const catalog = Object.freeze({
+		list: () => entries,
+		resolve: (ref) => storeIndex.get(ref.providerId)?.get(ref.recordId)
+	});
+	return Object.freeze({
+		providers: Object.freeze(providers),
+		stores,
+		catalog
+	});
+}
+function createContentAdapters(collections) {
+	const providers = collections.map((collection) => {
+		const models = collection.models;
+		const entries = collection.entries;
+		const modelsById = new Map(models.map((record) => [record.id, record]));
+		const entriesById = new Map(entries.map((record) => [record.id, record]));
+		const store = Object.freeze({
+			providerId: collection.id,
+			listModels: () => models,
+			getModel: (recordId) => modelsById.get(recordId),
+			listEntries: (modelId) => modelId === void 0 ? entries : entries.filter((entry) => entry.modelId === modelId),
+			getEntry: (recordId) => entriesById.get(recordId)
+		});
+		return Object.freeze({
+			descriptor: Object.freeze({
+				id: collection.id,
+				browserProviderId: browserProviderIdFor("content", collection.id)
+			}),
+			store
+		});
+	});
+	const storeIndex = new Map(providers.map((provider) => [provider.descriptor.id, provider.store]));
+	const stores = readonlyMap(storeIndex);
+	const modelEntries = providers.flatMap((provider) => provider.store.listModels().map((record) => Object.freeze({
+		ref: Object.freeze({
+			providerId: provider.descriptor.id,
+			recordId: record.id
+		}),
+		record
+	})));
+	const contentEntries = providers.flatMap((provider) => provider.store.listEntries().map((record) => Object.freeze({
+		ref: Object.freeze({
+			providerId: provider.descriptor.id,
+			recordId: record.id
+		}),
+		record
+	})));
+	const catalog = Object.freeze({
+		listModels: () => modelEntries,
+		resolveModel: (ref) => storeIndex.get(ref.providerId)?.getModel(ref.recordId),
+		listEntries: (modelRef) => modelRef === void 0 ? contentEntries : contentEntries.filter((entry) => entry.ref.providerId === modelRef.providerId && entry.record.modelId === modelRef.recordId),
+		resolveEntry: (ref) => storeIndex.get(ref.providerId)?.getEntry(ref.recordId)
+	});
+	return Object.freeze({
+		providers: Object.freeze(providers),
+		stores,
+		catalog
+	});
+}
+/** Builds immutable, read-only provider/store/catalog views over a detached snapshot. */
+function createInMemorySiteProjectAdapters(project) {
+	const snapshot = deepFreeze(canonicalizeSiteProject(project));
+	const compositions = createDomainAdapters("compositions", snapshot.providers.compositions);
+	const content = createContentAdapters(snapshot.providers.content);
+	const mappings = createDomainAdapters("mappings", snapshot.providers.mappings);
+	const sitemaps = createDomainAdapters("sitemaps", snapshot.providers.sitemaps);
+	const activeSitemap = sitemaps.catalog.resolve(snapshot.activeSitemap);
+	if (!activeSitemap) throw new TypeError("SiteProject active Sitemap is missing; validate the project before creating adapters.");
+	return Object.freeze({
+		project: snapshot,
+		compositions,
+		content,
+		mappings,
+		sitemaps,
+		activeSitemap
+	});
+}
+//#endregion
+//#region src/composer/reuse/materialize.ts
+/**
+* Encode arbitrary string identities without relying on URI encoding (which
+* rejects lone surrogate code units). The result is safe to concatenate into a
+* runtime key and injective for all JavaScript strings.
+*/
+function identitySegment(value) {
+	return Array.from(value, (character) => character.codePointAt(0).toString(16).padStart(6, "0")).join("");
+}
+function createLocalRuntimeOwner(recordId) {
+	return {
+		kind: "local",
+		recordId,
+		namespace: `local:${identitySegment(recordId)}`
+	};
+}
+function createGlobalTemplateRuntimeOwner(sourceRecordId) {
+	return {
+		kind: "global-template",
+		sourceRecordId,
+		namespace: `global-template:${identitySegment(sourceRecordId)}`
+	};
+}
+/** Stable owner-qualified identity for runtime keys, DOM attributes, and error boundaries. */
+function materializedRuntimeKey(owner, nodeId) {
+	return `${owner.namespace}:node:${identitySegment(nodeId)}`;
+}
+function cloneDocument(document) {
+	return cloneJson(document);
+}
+function cloneOutlet(outlet) {
+	return cloneJson(outlet);
+}
+function sameTarget(a, b) {
+	return a.parentId === b.parentId && a.slotId === b.slotId;
+}
+function sameBinding$1(a, b) {
+	return a.sourceRecordId === b.sourceRecordId && a.outletId === b.outletId;
+}
+/** The resolver guarantees this normally; materialization rechecks stale input before replacing a slot. */
+function hasEmptyOutletTarget(document, outlet) {
+	let found = false;
+	let empty = false;
+	const visit = (nodes) => {
+		for (const node of nodes) {
+			if (node.id === outlet.target.parentId) {
+				found = true;
+				const children = node.slots[outlet.target.slotId];
+				empty = children === void 0 || Array.isArray(children) && children.length === 0;
+			}
+			for (const children of Object.values(node.slots)) visit(children);
+		}
+	};
+	visit(document.root);
+	return found && empty;
+}
+function materializeNodes(nodes, owner, outlet, localNodes, localOwner, projection) {
+	return nodes.map((node) => {
+		const slots = {};
+		const ownsOutlet = outlet !== void 0 && node.id === outlet.target.parentId;
+		let projectedOutlet = false;
+		for (const [slotId, children] of Object.entries(node.slots)) if (ownsOutlet && slotId === outlet.target.slotId) {
+			projectedOutlet = true;
+			projection.count += 1;
+			slots[slotId] = materializeNodes(localNodes, localOwner, void 0, [], localOwner, { count: 0 });
+		} else slots[slotId] = materializeNodes(children, owner, outlet, localNodes, localOwner, projection);
+		if (ownsOutlet && !projectedOutlet) {
+			projection.count += 1;
+			slots[outlet.target.slotId] = materializeNodes(localNodes, localOwner, void 0, [], localOwner, { count: 0 });
+		}
+		return {
+			id: node.id,
+			componentId: node.componentId,
+			componentVersion: node.componentVersion,
+			props: cloneJson(node.props),
+			slots,
+			owner: { ...owner },
+			runtimeKey: materializedRuntimeKey(owner, node.id)
+		};
+	});
+}
+function localView(consumer) {
+	const localDocument = cloneDocument(consumer.document);
+	const localRuntime = createLocalRuntimeOwner(consumer.id);
+	return {
+		localDocument,
+		localRuntime,
+		renderRoot: materializeNodes(localDocument.root, localRuntime, void 0, [], localRuntime, { count: 0 })
+	};
+}
+function diagnosticMessage(status) {
+	switch (status) {
+		case "missing-template": return "The linked Global template is unavailable.";
+		case "missing-outlet": return "The linked Global template no longer exposes this outlet.";
+		case "invalid-template": return "The linked Global template is invalid.";
+		case "nested-template": return "Linked Global templates cannot nest.";
+		case "self-reference": return "A Composition cannot use itself as its Global template.";
+		case "incompatible-local-root": return "The local root does not fit the linked Global template outlet.";
+		case "invalid-materialization": return "The linked Global template could not be materialized safely.";
+	}
+}
+function blockedView(consumer, binding, code) {
+	const output = {
+		preview: "blocked",
+		export: "blocked"
+	};
+	const affordances = {
+		retry: true,
+		detach: "remove-broken-binding"
+	};
+	return {
+		status: "blocked",
+		...localView(consumer),
+		output,
+		affordances,
+		diagnostic: {
+			code,
+			message: diagnosticMessage(code),
+			binding: cloneJson(binding),
+			output,
+			affordances
+		}
+	};
+}
+/**
+* Recheck the resolved contract before projection. Normal flows receive this
+* union from the resolver, but this guard keeps manually edited/stale records
+* deterministic instead of recursing through malformed source data.
+*/
+function resolvedProjection(consumer, resolution) {
+	const binding = consumer.document.binding;
+	if (!binding || !sameBinding$1(binding, resolution.binding)) return { message: "The consumer binding no longer matches the resolved result." };
+	if (!isStructurallyValidDocument$1(consumer.document) || !isStructurallyValidDocument$1(resolution.source.document)) return { message: "The source or consumer document is structurally invalid." };
+	if (resolution.source.id !== binding.sourceRecordId || resolution.source.id === consumer.id) return { message: "The resolved source identity is invalid." };
+	if (resolution.source.document.binding) return { message: "A Global template source cannot itself be bound to another template." };
+	const publication = resolution.source.document.publication;
+	if (publication?.kind !== "global-template" || publication.outlet.id !== binding.outletId || publication.outlet.id !== resolution.outlet.id || publication.outlet.label !== resolution.outlet.label || !sameTarget(publication.outlet.target, resolution.outlet.target) || !hasEmptyOutletTarget(resolution.source.document, publication.outlet)) return { message: "The resolved source no longer exposes the requested outlet." };
+	return {
+		localDocument: cloneDocument(consumer.document),
+		sourceDocument: cloneDocument(resolution.source.document),
+		sourceRecordId: resolution.source.id,
+		outlet: cloneOutlet(publication.outlet)
+	};
+}
+function isProjectionFailure(value) {
+	return "message" in value;
+}
+/**
+* Materialize a strict JSON preview/view input from a canonical consumer and a
+* resolver result. A resolved result carries both clone-owned documents and a
+* transient projected tree; every other binding outcome renders local content
+* bare and blocks only linked preview/export.
+*/
+function materializeGlobalTemplateView(consumer, resolution) {
+	if (resolution.status === "unbound") {
+		if (consumer.document.binding) return blockedView(consumer, consumer.document.binding, "invalid-materialization");
+		return {
+			status: "local",
+			...localView(consumer),
+			output: {
+				preview: "available",
+				export: "available"
+			},
+			affordances: {
+				retry: false,
+				detach: "none"
+			}
+		};
+	}
+	if (!consumer.document.binding) return {
+		status: "local",
+		...localView(consumer),
+		output: {
+			preview: "available",
+			export: "available"
+		},
+		affordances: {
+			retry: false,
+			detach: "none"
+		}
+	};
+	if (resolution.status !== "resolved") return blockedView(consumer, consumer.document.binding, sameBinding$1(consumer.document.binding, resolution.binding) ? resolution.status : "invalid-materialization");
+	const projection = resolvedProjection(consumer, resolution);
+	if (isProjectionFailure(projection)) return blockedView(consumer, resolution.binding, "invalid-materialization");
+	const localRuntime = createLocalRuntimeOwner(consumer.id);
+	const sourceRuntime = createGlobalTemplateRuntimeOwner(projection.sourceRecordId);
+	const outletProjection = { count: 0 };
+	const renderRoot = materializeNodes(projection.sourceDocument.root, sourceRuntime, projection.outlet, projection.localDocument.root, localRuntime, outletProjection);
+	if (outletProjection.count !== 1) return blockedView(consumer, resolution.binding, "invalid-materialization");
+	return {
+		status: "resolved",
+		localDocument: projection.localDocument,
+		localRuntime,
+		sourceDocument: projection.sourceDocument,
+		sourceRuntime,
+		outlet: projection.outlet,
+		renderRoot,
+		localRootTarget: {
+			owner: localRuntime,
+			parentId: null,
+			slotId: VIRTUAL_ROOT_SLOT_ID
+		},
+		output: {
+			preview: "available",
+			export: "available"
+		},
+		affordances: {
+			retry: false,
+			detach: "snapshot"
+		}
+	};
+}
+//#endregion
+//#region src/composer/reuse/resolver.ts
+function base(consumer) {
+	return {
+		binding: consumer.document.binding,
+		localRoot: consumer.document.root
+	};
+}
+/**
+* Pure, non-mutating source/outlet validation. The parent provider adapter
+* supplies a saved source record; this layer has no storage or framework I/O.
+*/
+function resolveGlobalTemplate(options) {
+	const { consumer, source, manifest } = options;
+	const binding = consumer.document.binding;
+	if (!binding) return {
+		status: "unbound",
+		binding: void 0,
+		localRoot: consumer.document.root
+	};
+	const preserved = base(consumer);
+	if (binding.sourceRecordId === consumer.id) return {
+		status: "self-reference",
+		...preserved
+	};
+	if (source.id !== binding.sourceRecordId) return {
+		status: "missing-template",
+		reason: "source-id-mismatch",
+		...preserved
+	};
+	if (source.document.binding) return {
+		status: "nested-template",
+		source,
+		...preserved
+	};
+	const publication = source.document.publication;
+	if (publication?.kind !== "global-template") return {
+		status: "invalid-template",
+		source,
+		reason: "not-global-template",
+		...preserved
+	};
+	const outlet = publication.outlet;
+	if (outlet.id !== binding.outletId) return {
+		status: "missing-outlet",
+		source,
+		...preserved
+	};
+	if (!diagnoseDocument(source.document, manifest).canExport) return {
+		status: "invalid-template",
+		source,
+		reason: "invalid-outlet-target",
+		...preserved
+	};
+	const owner = findLocation(source.document, manifest, outlet.target.parentId)?.node;
+	const entry = owner ? manifest.get(owner.componentId) : void 0;
+	const slot = entry?.slots.find((candidate) => candidate.id === outlet.target.slotId);
+	if (!owner || !entry || !slot || (owner.slots[outlet.target.slotId]?.length ?? 0) > 0) return {
+		status: "invalid-template",
+		source,
+		reason: "invalid-outlet-target",
+		...preserved
+	};
+	const rootPolicy = {
+		kind: "resolved",
+		...slot.accepts ? { accepts: [...slot.accepts] } : {},
+		cardinality: slot.cardinality,
+		...slot.min === void 0 ? {} : { min: slot.min },
+		...slot.max === void 0 ? {} : { max: slot.max },
+		origin: {
+			componentId: entry.id,
+			componentTitle: entry.title,
+			slotId: slot.id,
+			slotLabel: slot.label,
+			viaTemplate: {
+				sourceName: source.document.name,
+				outletLabel: outlet.label
+			}
+		}
+	};
+	const localValidation = validateRootForest(consumer.document.root, rootPolicy);
+	if (!localValidation.ok) return {
+		status: "incompatible-local-root",
+		source,
+		outlet,
+		rootPolicy,
+		message: localValidation.error ?? "The local roots do not fit the published outlet.",
+		...preserved
+	};
+	return {
+		status: "resolved",
+		source,
+		outlet,
+		rootPolicy,
+		...preserved
+	};
+}
+/** Map a provider load outcome into the same deterministic, content-preserving resolution union. */
+function resolveGlobalTemplateLoad(consumer, source, manifest) {
+	const binding = consumer.document.binding;
+	if (!binding) return {
+		status: "unbound",
+		binding: void 0,
+		localRoot: consumer.document.root
+	};
+	const preserved = base(consumer);
+	if (binding.sourceRecordId === consumer.id) return {
+		status: "self-reference",
+		...preserved
+	};
+	if (source.status === "not-found") return {
+		status: "missing-template",
+		reason: "not-found",
+		...preserved
+	};
+	if (source.status === "invalid") return {
+		status: "missing-template",
+		reason: "invalid-record",
+		...preserved
+	};
+	if (source.status === "future-schema") return {
+		status: "missing-template",
+		reason: "future-schema",
+		...preserved
+	};
+	return resolveGlobalTemplate({
+		consumer,
+		source: source.record,
+		manifest
+	});
+}
+//#endregion
+//#region src/browser/asset-download.mjs
+/**
+* Self-contained browser handler. JSX export embeds this function's source,
+* so keep every dependency inside the function or on browser globals.
+* @param {MouseEvent} event
+* @param {number} maxBytes
+*/
+async function downloadAsset(event, maxBytes) {
+	if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+	const anchor = event.currentTarget;
+	if (!(anchor instanceof HTMLAnchorElement)) return;
+	event.preventDefault();
+	if (anchor.getAttribute("aria-busy") === "true") return;
+	let status = anchor.querySelector("[data-asset-download-status]");
+	if (!status || status.getAttribute("data-asset-download-status") !== "true") {
+		status = document.createElement("span");
+		status.setAttribute("data-asset-download-status", "true");
+		status.setAttribute("role", "status");
+		anchor.append(status);
+	}
+	status.textContent = " Downloading…";
+	anchor.setAttribute("aria-busy", "true");
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), 3e4);
+	let reader;
+	try {
+		const url = new URL(anchor.href, document.baseURI);
+		if (url.origin !== location.origin || url.protocol !== "blob:" && !/^\/uploaded-assets\/sha256-[a-f0-9]{64}\.[a-z0-9]+$/.test(url.pathname)) throw new Error("Invalid asset URL");
+		const response = await fetch(url.href, {
+			signal: controller.signal,
+			credentials: "same-origin",
+			redirect: "error"
+		});
+		if (!response.ok || !response.body || Number(response.headers.get("content-length")) > maxBytes) throw new Error("Asset unavailable or too large");
+		reader = response.body.getReader();
+		const chunks = [];
+		let size = 0;
+		for (;;) {
+			const { value, done } = await reader.read();
+			if (done || !value) break;
+			size += value.byteLength;
+			if (size > maxBytes) {
+				await reader.cancel();
+				throw new Error("Asset too large");
+			}
+			chunks.push(new Uint8Array(value).buffer);
+		}
+		const blob = new Blob(chunks, { type: response.headers.get("content-type") || "application/octet-stream" });
+		const objectUrl = URL.createObjectURL(blob);
+		const temporary = document.createElement("a");
+		temporary.href = objectUrl;
+		temporary.download = anchor.download;
+		temporary.hidden = true;
+		try {
+			document.body.append(temporary);
+			temporary.click();
+		} finally {
+			temporary.remove();
+			setTimeout(() => URL.revokeObjectURL(objectUrl), 1e3);
+		}
+		status.textContent = " Download started.";
+	} catch {
+		status.textContent = " Download failed. Select the link to retry.";
+	} finally {
+		controller.abort();
+		reader?.releaseLock();
+		clearTimeout(timeout);
+		anchor.removeAttribute("aria-busy");
+	}
+}
+//#endregion
+//#region src/assets/integration/download.ts
+var PREFIX = "<!--zudo-asset-download:";
+function assetDownloadMarkdown(use, resolved) {
+	return `${PREFIX}${encodeURIComponent(JSON.stringify({
+		use,
+		...resolved ? { resolved } : {}
+	}))}-->`;
+}
+function validResolved(value) {
+	if (!value || typeof value !== "object" || Object.keys(value).sort().join(",") !== "byteLength,fileName,mimeType,url") return false;
+	const item = value;
+	return typeof item.url === "string" && ASSET_CHECKSUM_URL_PATTERN.test(item.url) && !!assetKindForMime(item.mimeType) && item.url === assetVersionUrl(item.url.slice(24).split(".")[0], item.mimeType) && isValidAssetFileName(item.fileName) && item.fileName === assetDownloadFileName(item.fileName, item.mimeType) && isValidAssetByteLength(item.byteLength);
+}
+function parseAssetDownloadBlock(source) {
+	if (!source.startsWith(PREFIX) || !source.endsWith("-->")) return void 0;
+	try {
+		const value = JSON.parse(decodeURIComponent(source.slice(24, -3)));
+		if (!value || typeof value !== "object" || !["use", "resolved,use"].includes(Object.keys(value).sort().join(",")) || !isContentAssetUse(value.use) || value.use.kind !== "download") return void 0;
+		if ("resolved" in value && !validResolved(value.resolved)) return void 0;
+		return value;
+	} catch {
+		return;
+	}
+}
+/** Only standalone top-level blocks, never code fences, inline text or raw HTML attributes. */
+function assetDownloadBlocks(source) {
+	const blocks = [];
+	if (!source.includes(PREFIX)) return blocks;
+	commonmarkLanguage.parser.parse(source).iterate({ enter(node) {
+		if (node.name !== "CommentBlock" || node.node.parent?.name !== "Document") return;
+		const raw = source.slice(node.from, node.to).trimEnd();
+		if (raw.startsWith(PREFIX)) blocks.push({
+			from: node.from,
+			to: node.from + raw.length,
+			block: parseAssetDownloadBlock(raw)
+		});
+	} });
+	return blocks;
+}
+function splitAssetDownloadMarkdown(source) {
+	const parts = [];
+	let offset = 0;
+	for (const item of assetDownloadBlocks(source)) {
+		if (!item.block) continue;
+		if (item.from > offset) parts.push({ markdown: source.slice(offset, item.from) });
+		parts.push({ block: item.block });
+		offset = item.to;
+	}
+	if (offset < source.length || !parts.length) parts.push({ markdown: source.slice(offset) });
+	if (parts.some((part) => "block" in part)) {
+		const definitions = [];
+		commonmarkLanguage.parser.parse(source).iterate({ enter(node) {
+			if (node.name === "LinkReference") definitions.push(source.slice(node.from, node.to));
+		} });
+		if (definitions.length) {
+			for (const part of parts) if ("markdown" in part && part.markdown.trim()) part.markdown = `${definitions.join("\n")}\n\n${part.markdown}`;
+		}
+	}
+	return parts;
+}
+function downloadMarkdownProperty(definition, props) {
+	if (definition.slots.length || definition.fields.length !== 1) return void 0;
+	const field = definition.fields[0];
+	return field.schema.type === "string" && field.editor.kind === "text" && field.editor.mode === "markdown-source" && typeof props[field.prop] === "string" ? field.prop : void 0;
+}
+function assetDownloadLabel(block) {
+	return [
+		block.use.label,
+		block.resolved && block.use.showType ? assetTypeLabel(block.resolved.mimeType) : "",
+		block.resolved && block.use.showSize ? assetByteLabel(block.resolved.byteLength) : ""
+	].filter(Boolean).join(" · ");
+}
+//#endregion
+//#region src/composer/source/generate-jsx.ts
+var SIMPLE_STRING = /^[^\\"<>{}&\x00-\x1F\x7F]*$/;
+var VALID_JSX_ATTR_NAME = /^[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z0-9_$]+)*$/;
+function renderScalarAttr(name, value) {
+	if (value === void 0) return null;
+	if (value === null) return `${name}={null}`;
+	switch (typeof value) {
+		case "string": return SIMPLE_STRING.test(value) ? `${name}="${value}"` : `${name}={${JSON.stringify(value)}}`;
+		case "number": return Number.isFinite(value) ? `${name}={${value}}` : null;
+		case "boolean": return `${name}={${value}}`;
+		case "object": return `${name}={${JSON.stringify(value)}}`;
+		default: return null;
+	}
+}
+function indentLines(lines, spaces) {
+	const pad = " ".repeat(spaces);
+	return lines.map((line) => line.length ? pad + line : line);
+}
+function planImports(componentIds, manifest, reserved) {
+	const sorted = [...componentIds].sort((a, b) => {
+		const sa = manifest.get(a).source;
+		const sb = manifest.get(b).source;
+		return sa.module.localeCompare(sb.module) || sa.exportName.localeCompare(sb.exportName) || a.localeCompare(b);
+	});
+	const used = new Set(reserved);
+	const plan = /* @__PURE__ */ new Map();
+	const byExportKey = /* @__PURE__ */ new Map();
+	for (const componentId of sorted) {
+		const src = manifest.get(componentId).source;
+		const exportKey = `${src.exportKind}:${src.module}#${src.exportName}`;
+		const shared = byExportKey.get(exportKey);
+		if (shared) {
+			plan.set(componentId, shared);
+			continue;
+		}
+		let local = src.localName ?? src.exportName;
+		if (used.has(local)) {
+			let i = 2;
+			while (used.has(`${local}_${i}`)) i += 1;
+			local = `${local}_${i}`;
+		}
+		used.add(local);
+		const importPlan = {
+			componentId,
+			module: src.module,
+			exportKind: src.exportKind,
+			exportName: src.exportName,
+			localName: local
+		};
+		byExportKey.set(exportKey, importPlan);
+		plan.set(componentId, importPlan);
+	}
+	return plan;
+}
+function buildImportLines(plans) {
+	const byModule = /* @__PURE__ */ new Map();
+	for (const plan of plans) {
+		const group = byModule.get(plan.module) ?? { named: [] };
+		if (plan.exportKind === "default") group.def = plan;
+		else group.named.push(plan);
+		byModule.set(plan.module, group);
+	}
+	const lines = [];
+	for (const module of [...byModule.keys()].sort()) {
+		const group = byModule.get(module);
+		const parts = [];
+		if (group.def) parts.push(group.def.localName);
+		if (group.named.length) {
+			const specs = [...group.named].sort((a, b) => a.exportName.localeCompare(b.exportName)).map((n) => n.exportName === n.localName ? n.exportName : `${n.exportName} as ${n.localName}`);
+			parts.push(`{ ${specs.join(", ")} }`);
+		}
+		lines.push(`import ${parts.join(", ")} from "${module}";`);
+	}
+	return lines;
+}
+function toIdentifier(name, fallback) {
+	const cleaned = name.replace(/[^A-Za-z0-9]/g, " ").trim();
+	if (!cleaned) return fallback;
+	const pascal = cleaned.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("");
+	return /^[A-Za-z_]/.test(pascal) ? pascal : fallback;
+}
+/**
+* Generate a deterministic Preact JSX module. See the file header for the full
+* determinism/escaping contract.
+*/
+function generateJsx(document, manifest, options = {}) {
+	const diagnostics = diagnoseDocument(document, manifest);
+	if (!diagnostics.canExport) return {
+		ok: false,
+		blocked: true,
+		code: "",
+		diagnostics,
+		imports: [],
+		emittedNodeOrder: []
+	};
+	const inspectDownloads = (nodes) => {
+		for (const node of nodes) {
+			const definition = manifest.get(node.componentId);
+			const props = {
+				...definition?.defaults,
+				...node.props
+			};
+			const property = definition && downloadMarkdownProperty(definition, props);
+			if (definition?.fields.some((field) => field.editor.kind === "text" && field.editor.mode === "markdown-source" && typeof props[field.prop] === "string" && assetDownloadBlocks(String(props[field.prop])).some(({ block }) => property !== field.prop || !block || !block.resolved && !options.allowUnresolvedAssetDownloads))) {
+				const prior = diagnostics.byId.get(node.id);
+				diagnostics.byId.set(node.id, {
+					nodeId: node.id,
+					componentId: node.componentId,
+					opaque: true,
+					reasons: [...prior?.reasons ?? [], {
+						code: "invalid-prop",
+						message: "Resolve Assets downloads to exact versions before exporting this Markdown field."
+					}]
+				});
+				if (!diagnostics.opaqueIds.includes(node.id)) diagnostics.opaqueIds.push(node.id);
+				diagnostics.hasOpaque = true;
+				diagnostics.canExport = false;
+			}
+			Object.values(node.slots).forEach(inspectDownloads);
+		}
+	};
+	inspectDownloads(document.root);
+	const componentName = toIdentifier(options.componentName ?? document.name ?? "Composition", "Composition");
+	const componentExport = options.componentExport ?? "named";
+	const linkedOutlet = options.linkedOutlet;
+	if (!diagnostics.canExport) return {
+		ok: false,
+		blocked: true,
+		code: "",
+		diagnostics,
+		imports: [],
+		emittedNodeOrder: []
+	};
+	const usedComponentIds = /* @__PURE__ */ new Set();
+	const emittedNodeOrder = [];
+	const collect = (children) => {
+		for (const node of children) {
+			usedComponentIds.add(node.componentId);
+			const entry = manifest.get(node.componentId);
+			for (const slotId of orderedSlotIds(node, entry)) collect(node.slots[slotId] ?? []);
+		}
+	};
+	collect(document.root);
+	const reserved = /* @__PURE__ */ new Set([componentName, ...options.reservedIdentifiers ?? []]);
+	if (linkedOutlet) reserved.add("CompositionOutlets");
+	let downloadHandlerName = "__zudoAssetDownload";
+	while (reserved.has(downloadHandlerName)) downloadHandlerName += "_";
+	reserved.add(downloadHandlerName);
+	let hasDownloads = false;
+	const plan = planImports([...usedComponentIds], manifest, reserved);
+	const uniqueImportPlans = [...new Set(plan.values())];
+	const tagOf = (componentId) => plan.get(componentId).localName;
+	const renderNode = (node, chunk = false) => {
+		if (!chunk) emittedNodeOrder.push(node.id);
+		const entry = manifest.get(node.componentId);
+		const tag = tagOf(node.componentId);
+		const markdownProp = downloadMarkdownProperty(entry, {
+			...entry.defaults,
+			...node.props
+		});
+		if (!chunk && markdownProp) {
+			const parts = splitAssetDownloadMarkdown(String(node.props[markdownProp] ?? entry.defaults[markdownProp]));
+			if (parts.some((part) => "block" in part)) return [
+				"<>",
+				...indentLines(parts.flatMap((part) => {
+					if ("markdown" in part) return part.markdown.trim() ? renderNode({
+						...node,
+						props: {
+							...node.props,
+							[markdownProp]: part.markdown
+						}
+					}, true) : [];
+					if (!part.block.resolved) return ["<span role=\"status\">Download unavailable</span>"];
+					hasDownloads = true;
+					return [`<a onClick={(event) => { void ${downloadHandlerName}(event, ${ASSET_MAX_BYTE_LENGTH}); }} ${renderScalarAttr("aria-label", assetDownloadLabel(part.block))} ${renderScalarAttr("href", part.block.resolved.url)} ${renderScalarAttr("download", part.block.resolved.fileName)}>{${JSON.stringify(assetDownloadLabel(part.block))}}</a>`];
+				}), 2),
+				"</>"
+			];
+		}
+		const slotProps = new Set(entry.slots.map((s) => s.prop));
+		const textChildProp = (entry.slots.some((s) => s.prop === "children") ? void 0 : entry.fields.find((f) => f.prop === "children" && f.editor.kind === "text"))?.prop;
+		const emittedProps = /* @__PURE__ */ new Set();
+		const scalarAttrs = [];
+		const pushScalar = (prop) => {
+			if (emittedProps.has(prop)) return;
+			if (prop === textChildProp || slotProps.has(prop)) return;
+			if (!(prop in node.props)) return;
+			if (!VALID_JSX_ATTR_NAME.test(prop)) return;
+			const attr = renderScalarAttr(prop, node.props[prop]);
+			if (attr !== null) scalarAttrs.push(attr);
+			emittedProps.add(prop);
+		};
+		for (const field of entry.fields) pushScalar(field.prop);
+		for (const prop of Object.keys(node.props).sort()) pushScalar(prop);
+		const namedAttrLines = [];
+		const structuralChildBlocks = [];
+		const slotNode = linkedOutlet?.target.parentId === node.id ? {
+			...node,
+			slots: {
+				[linkedOutlet.target.slotId]: [],
+				...node.slots
+			}
+		} : node;
+		for (const slotId of orderedSlotIds(slotNode, entry)) {
+			const slot = entry.slots.find((s) => s.id === slotId);
+			if (!slot) continue;
+			const children = node.slots[slotId] ?? [];
+			const linkedOutletExpression = linkedOutlet !== void 0 && node.id === linkedOutlet.target.parentId && slotId === linkedOutlet.target.slotId ? `outlets[${JSON.stringify(linkedOutlet.id)}]` : void 0;
+			if (slot.prop === "children") {
+				if (linkedOutletExpression !== void 0) {
+					structuralChildBlocks.push([`{${linkedOutletExpression}}`]);
+					continue;
+				}
+				for (const child of children) structuralChildBlocks.push(renderNode(child));
+			} else {
+				if (linkedOutletExpression !== void 0) {
+					namedAttrLines.push([`${slot.prop}={${linkedOutletExpression}}`]);
+					continue;
+				}
+				if (children.length === 0) continue;
+				namedAttrLines.push(renderNamedSlotAttr(slot.prop, children));
+			}
+		}
+		const textChildValue = textChildProp !== void 0 && node.props[textChildProp] != null ? String(node.props[textChildProp]) : null;
+		const textChildSource = textChildValue !== null ? `{${JSON.stringify(textChildValue)}}` : "";
+		const attrBlocks = [...scalarAttrs.map((a) => [a]), ...namedAttrLines];
+		const attrsMultiline = attrBlocks.some((a) => a.length > 1);
+		const hasStructural = structuralChildBlocks.length > 0;
+		if (!attrsMultiline) {
+			const attrStr = attrBlocks.length ? " " + attrBlocks.map((a) => a[0]).join(" ") : "";
+			if (hasStructural) return [
+				`<${tag}${attrStr}>`,
+				...structuralChildBlocks.flatMap((b) => indentLines(b, 2)),
+				`</${tag}>`
+			];
+			if (textChildSource) return [`<${tag}${attrStr}>${textChildSource}</${tag}>`];
+			return [`<${tag}${attrStr} />`];
+		}
+		const open = [`<${tag}`, ...attrBlocks.flatMap((a) => indentLines(a, 2))];
+		if (hasStructural) return [
+			...open,
+			`>`,
+			...structuralChildBlocks.flatMap((b) => indentLines(b, 2)),
+			`</${tag}>`
+		];
+		if (textChildSource) return [...open, `>${textChildSource}</${tag}>`];
+		return [...open, `/>`];
+	};
+	const renderNamedSlotAttr = (prop, children) => {
+		if (children.length === 1) {
+			const childLines = renderNode(children[0]);
+			if (childLines.length === 1) return [`${prop}={${childLines[0]}}`];
+			return [
+				`${prop}={`,
+				...indentLines(childLines, 2),
+				`}`
+			];
+		}
+		const inner = children.flatMap((c) => renderNode(c));
+		return [
+			`${prop}={`,
+			`  <>`,
+			...indentLines(inner, 4),
+			`  </>`,
+			`}`
+		];
+	};
+	const rootBlocks = document.root.map((node) => renderNode(node));
+	const importLines = buildImportLines(uniqueImportPlans);
+	const body = rootBlocks.length === 0 ? ["    <></>"] : [
+		"    <>",
+		...rootBlocks.flatMap((b) => indentLines(b, 6)),
+		"    </>"
+	];
+	const componentParameter = linkedOutlet ? `({ outlets = {} }: { outlets?: CompositionOutlets })` : "()";
+	const exportPrefix = componentExport === "default" ? "export default " : componentExport === "named" ? "export " : "";
+	return {
+		ok: true,
+		blocked: false,
+		code: [
+			...importLines.length ? [...importLines, ""] : [],
+			...hasDownloads ? [`const ${downloadHandlerName}: (event: MouseEvent, maxBytes: number) => Promise<void> = ${downloadAsset.toString()};`, ""] : [],
+			...linkedOutlet ? [
+				"export type CompositionOutlets = {",
+				`  ${JSON.stringify(linkedOutlet.id)}?: import("preact").ComponentChildren;`,
+				"};",
+				""
+			] : [],
+			`${exportPrefix}function ${componentName}${componentParameter} {`,
+			"  return (",
+			...body,
+			"  );",
+			"}",
+			""
+		].join("\n"),
+		diagnostics,
+		imports: uniqueImportPlans,
+		emittedNodeOrder
+	};
+}
+//#endregion
+//#region src/composer/source/plan-linked-jsx.ts
+function sameBinding(a, b) {
+	return a.sourceRecordId === b.sourceRecordId && a.outletId === b.outletId;
+}
+function sameRecordSnapshot(a, b) {
+	const canonicalize = (value) => {
+		if (Array.isArray(value)) return value.map(canonicalize);
+		if (value !== null && typeof value === "object") return Object.fromEntries(Object.entries(value).sort(([aKey], [bKey]) => aKey.localeCompare(bKey)).map(([key, child]) => [key, canonicalize(child)]));
+		return value;
+	};
+	return JSON.stringify(canonicalize(a)) === JSON.stringify(canonicalize(b));
+}
+function dependency(code, message, extras = {}) {
+	return {
+		kind: "dependency",
+		code,
+		message,
+		...extras
+	};
+}
+function blocked(record, kind, diagnostic, moduleSpecifier) {
+	return {
+		status: "blocked",
+		recordId: record.id,
+		...moduleSpecifier === void 0 ? {} : { moduleSpecifier },
+		kind,
+		diagnostic
+	};
+}
+function localComponentBlock(record, kind, generation, moduleSpecifier) {
+	return blocked(record, kind, {
+		kind: "local-components",
+		generation
+	}, moduleSpecifier);
+}
+function linkedResolutionMessage(status) {
+	switch (status) {
+		case "missing-template": return "The linked Global template is unavailable, so its consumer module cannot be generated.";
+		case "missing-outlet": return "The linked Global template no longer exposes the selected outlet.";
+		case "invalid-template": return "The linked Global template is invalid.";
+		case "nested-template": return "Linked Global templates cannot be nested.";
+		case "self-reference": return "A Composition cannot import itself as its Global template.";
+		case "incompatible-local-root": return "The consumer local root does not fit the linked Global template outlet.";
+	}
+}
+function moduleSpecifierFor(record, callback) {
+	try {
+		const value = callback(record.id);
+		if (typeof value !== "string" || value.trim().length === 0) return {
+			ok: false,
+			diagnostic: dependency("invalid-module-specifier", `The module-specifier callback did not return a non-empty specifier for composition "${record.id}".`)
+		};
+		return {
+			ok: true,
+			value
+		};
+	} catch {
+		return {
+			ok: false,
+			diagnostic: dependency("invalid-module-specifier", `The module-specifier callback failed for composition "${record.id}".`)
+		};
+	}
+}
+function standaloneModule(record, manifest, moduleSpecifier, allowUnresolvedAssetDownloads = false) {
+	const generation = generateJsx(record.document, manifest, {
+		componentName: "Composition",
+		componentExport: "default",
+		allowUnresolvedAssetDownloads
+	});
+	if (!generation.ok) return localComponentBlock(record, "standalone", generation, moduleSpecifier);
+	return {
+		status: "generated",
+		recordId: record.id,
+		moduleSpecifier,
+		kind: "standalone",
+		code: generation.code,
+		generation
+	};
+}
+function globalTemplateModule(record, manifest, moduleSpecifier, allowUnresolvedAssetDownloads = false) {
+	const publication = record.document.publication;
+	if (publication?.kind !== "global-template") return standaloneModule(record, manifest, moduleSpecifier, allowUnresolvedAssetDownloads);
+	const generation = generateJsx(record.document, manifest, {
+		componentName: "Composition",
+		componentExport: "default",
+		allowUnresolvedAssetDownloads,
+		linkedOutlet: publication.outlet
+	});
+	if (!generation.ok) return localComponentBlock(record, "global-template", generation, moduleSpecifier);
+	if (generation.diagnostics.hasReuseIssues) return blocked(record, "global-template", dependency("invalid-source-template", "The published Global template no longer has a valid empty outlet target.", { outletId: publication.outlet.id }), moduleSpecifier);
+	return {
+		status: "generated",
+		recordId: record.id,
+		moduleSpecifier,
+		kind: "global-template",
+		code: generation.code,
+		generation
+	};
+}
+function linkedConsumerModule(record, manifest, moduleSpecifier, recordsById, sourcePlans, resolutions, sourceOutcomes, allowUnresolvedAssetDownloads = false) {
+	const binding = record.document.binding;
+	const resolution = resolutions?.get(record.id) ?? (sourceOutcomes ? resolveGlobalTemplateLoad(record, sourceOutcomes.get(binding.sourceRecordId) ?? {
+		status: "not-found",
+		id: binding.sourceRecordId
+	}, manifest) : void 0);
+	const dependencyFields = {
+		sourceRecordId: binding.sourceRecordId,
+		outletId: binding.outletId
+	};
+	if (!resolution) return blocked(record, "linked-consumer", dependency("missing-resolution", "The linked Composition has not been resolved before module planning.", dependencyFields), moduleSpecifier);
+	if (resolution.status === "unbound" || !sameBinding(binding, resolution.binding)) return blocked(record, "linked-consumer", dependency("resolution-mismatch", "The resolved binding does not match the consumer's current binding.", {
+		...dependencyFields,
+		resolutionStatus: resolution.status
+	}), moduleSpecifier);
+	if (resolution.status !== "resolved") return blocked(record, "linked-consumer", dependency("resolution-failed", linkedResolutionMessage(resolution.status), {
+		...dependencyFields,
+		resolutionStatus: resolution.status
+	}), moduleSpecifier);
+	const source = recordsById.get(binding.sourceRecordId);
+	if (!source) return blocked(record, "linked-consumer", dependency("missing-source-record", "The resolved source record was not included in this module-planning batch.", dependencyFields), moduleSpecifier);
+	if (!sameRecordSnapshot(source, resolution.source)) return blocked(record, "linked-consumer", dependency("source-record-mismatch", "The source record changed after its binding was resolved; resolve it again before generating modules.", dependencyFields), moduleSpecifier);
+	const sourcePlan = sourcePlans.get(source.id);
+	if (!sourcePlan || sourcePlan.status !== "generated" || sourcePlan.kind !== "global-template") return blocked(record, "linked-consumer", dependency("source-module-blocked", "The linked source module is blocked, so no misleading local-only consumer module was generated.", dependencyFields), moduleSpecifier);
+	const localGeneration = generateJsx(record.document, manifest, {
+		allowUnresolvedAssetDownloads,
+		componentName: "LocalCompositionContent",
+		componentExport: "none",
+		reservedIdentifiers: [
+			"Composition",
+			"LinkedTemplate",
+			"LocalCompositionContent"
+		]
+	});
+	if (!localGeneration.ok) return localComponentBlock(record, "linked-consumer", localGeneration, moduleSpecifier);
+	const sourceSpecifier = sourcePlan.moduleSpecifier;
+	const code = [
+		`import LinkedTemplate from ${JSON.stringify(sourceSpecifier)};`,
+		"",
+		localGeneration.code.trimEnd(),
+		"",
+		"export default function Composition() {",
+		"  return (",
+		"    <LinkedTemplate",
+		"      outlets={{",
+		`        ${JSON.stringify(resolution.outlet.id)}: <LocalCompositionContent />,`,
+		"      }}",
+		"    />",
+		"  );",
+		"}",
+		""
+	].join("\n");
+	return {
+		status: "generated",
+		recordId: record.id,
+		moduleSpecifier,
+		kind: "linked-consumer",
+		code,
+		generation: localGeneration
+	};
+}
+/**
+* Produce a complete, provider-neutral module plan for an already-loaded
+* closure. No record is loaded, saved, listed, or otherwise read through a
+* provider here; callers own those operations before invoking this function.
+*/
+function planLinkedJsxModules(options) {
+	const recordsById = /* @__PURE__ */ new Map();
+	const duplicateIds = /* @__PURE__ */ new Set();
+	for (const record of options.records) if (recordsById.has(record.id)) duplicateIds.add(record.id);
+	else recordsById.set(record.id, record);
+	const specifiers = /* @__PURE__ */ new Map();
+	const preflight = /* @__PURE__ */ new Map();
+	for (const record of options.records) {
+		if (duplicateIds.has(record.id)) {
+			preflight.set(record.id, blocked(record, record.document.binding ? "linked-consumer" : record.document.publication?.kind === "global-template" ? "global-template" : "standalone", dependency("duplicate-record-id", `Composition "${record.id}" appears more than once in this module-planning batch.`)));
+			continue;
+		}
+		const specifier = moduleSpecifierFor(record, options.moduleSpecifier);
+		if (!specifier.ok) preflight.set(record.id, blocked(record, record.document.binding ? "linked-consumer" : record.document.publication?.kind === "global-template" ? "global-template" : "standalone", specifier.diagnostic));
+		else specifiers.set(record.id, specifier.value);
+	}
+	const sourcePlans = /* @__PURE__ */ new Map();
+	for (const record of options.records) {
+		const existing = preflight.get(record.id);
+		if (existing) {
+			sourcePlans.set(record.id, existing);
+			continue;
+		}
+		if (record.document.binding) continue;
+		sourcePlans.set(record.id, globalTemplateModule(record, options.manifest, specifiers.get(record.id), options.allowUnresolvedAssetDownloads));
+	}
+	const plans = new Map(sourcePlans);
+	for (const record of options.records) {
+		if (!record.document.binding) continue;
+		const existing = preflight.get(record.id);
+		plans.set(record.id, existing ?? linkedConsumerModule(record, options.manifest, specifiers.get(record.id), recordsById, sourcePlans, options.resolutions, options.sourceOutcomes, options.allowUnresolvedAssetDownloads));
+	}
+	return {
+		records: options.records.map((record) => plans.get(record.id)),
+		byRecordId: new Map(plans)
+	};
+}
+//#endregion
+export { validateAssetSnapshot as $, validateContentModelRecord as A, serializeSiteProject as B, diagnoseContentEntryCompleteness as C, isCanonicalContentTimestamp as D, traverseContentValues as E, COMPOSITION_PROVIDERS as F, syncDirectory as G, createTransactionalRecordStore as H, CompositionPersistenceError as I, assetDownloadFileName as J, withMutationLock as K, createComponentCatalog as L, summarizeComposition as M, loadCompositionRecord as N, isValueValidForField as O, validateCompositionRecord as P, validateAssetAssetRef as Q, canonicalStringifyJson as R, compareContentModelsNewestFirst as S, traverseContentSchema as T, COMMIT_UNCERTAIN as U, createFilesystemAssetStore as V, commitDocument as W, isValidAssetChecksum as X, assetPinKey as Y, isValidAssetFileName as Z, validateMappingTransform as _, resolveGlobalTemplate as a, assetAuthoringUrl as at, contentEntryDigest as b, validateSiteProject as c, ASSET_IMMUTABLE_CACHE_CONTROL as ct, validateSitemapRecord as d, ASSET_PROVIDERS as dt, validateAssetVersionPin as et, safeNavigationUrl as f, validateMappingSourceProjection as g, validateMappingRecord as h, downloadMarkdownProperty as i, isPlainObject as it, compareCompositionSummariesNewestFirst as j, validateContentEntryRecord as k, isSiteProjectProviderId as l, assetMimeTypeForExtension as lt, discoverMappingTargets as m, assetDownloadBlocks as n, isSafeRecordId as nt, materializeGlobalTemplateView as o, assetVersionUrl as ot, isSitemapDisplayTitleFieldKind as p, SafeRootFilesystem as q, assetDownloadMarkdown as r, cloneJson as rt, createInMemorySiteProjectAdapters as s, ASSET_CHECKSUM_URL_PATTERN as st, planLinkedJsxModules as t, validateAssetVersionRef as tt, loadSitemapRecord as u, hostedAssetHeaders as ut, MAPPING_PROVIDERS as v, summarizeContentModel as w, buildContentGraphIndex as x, MappingPersistenceError as y, compareUnicodeCodePoints$1 as z };

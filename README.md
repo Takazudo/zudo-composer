@@ -461,6 +461,13 @@ outside this repository use the same package-manager behavior.
 `fixtures/host/` is the in-repo dogfood host: the smallest project that installs
 the package and runs its bin.
 
+## Native draft editing
+
+The installed `zudo-composer edit` CLI supports reviewed, exact native image,
+text and table insertions on explicitly configured workspace-authored hosts.
+See [the protocol, supported scopes and recovery guide](docs/native-editing.md).
+The existing structural editor remains available.
+
 ## Development and validation
 
 Use Node.js 22.13.0+ or 24.0.0+ and pnpm 11.5.2 through Corepack:

@@ -9,5 +9,6 @@ export type {
   ComposerPaths,
   ComposerRuntime,
   ResolvedComposerConfig,
+  NativeEditingConfig,
 } from "./config";
 export type { ComposerSettingDefaults, ComposerSettings } from "./settings";
