@@ -81,10 +81,13 @@ packages, privileged browser provisioning, or WebKit repair was attempted.
   API, live-server exclusion, and real Composer first open and server restart.
 - Final full lint and typecheck passed after regenerated public declarations.
 
-- Corrected aggregate rerun: all 386 unit-test files / 4,800 tests passed
+- Earlier corrected aggregate rerun: all 386 unit-test files / 4,800 tests passed
   (417.97 seconds), followed by production build, preview isolation (three builds,
   five entries), and distribution boundary (34 assets, one WASM, one glue).
-  Later aggregate stages are still running; this is not yet an aggregate pass.
+  Installed editing, documentation and all four styleguides also passed. Its
+  final host-install stage failed because the default Playwright Chromium path
+  was absent. This run was not an aggregate pass; the resumed run below uses
+  the pinned task-local browser directory throughout.
 - `corepack pnpm contract:conformance` and `contract:negative-scan` passed.
   Conformance verified 635 packed files, exact public exports, runtime imports,
   strict Bundler and NodeNext types, and checkout/packed release portability.
@@ -94,9 +97,8 @@ packages, privileged browser provisioning, or WebKit repair was attempted.
   restrictive umask. A fresh task-local store fixed parity without changing
   any digest or assertion. CI also passed these gates on the corrected source.
 
-The remaining aggregate/browser outcomes are recorded when complete. No repository
-release, merge, or deployment was performed; release-API tests used disposable
-local hosts.
+No repository release, merge, or deployment was performed; release-API tests
+used disposable local hosts.
 
 ## Resumed shutdown verification
 
@@ -122,6 +124,28 @@ Failed startup closes the captured server, including later-plugin/listen errors.
   The second server started and both runs shut down without retained host locks.
 - Full lint and typecheck passed. Independent read-only lifecycle review found
   no remaining blocker; the reviewer did not run browser tests.
+- On source revision `0975cf418aa1ef062ee0abae9b2e0fb89e287c5c`, complete
+  `corepack pnpm check`: guarded **PASS**, exit 0, 789 seconds. All 389 unit-test
+  files / 4,812 tests passed (323.98 seconds), followed by production build,
+  preview isolation, distribution boundaries, installed editing/reopen proof,
+  documentation and all four styleguides. The final packed-host lane passed
+  all four disk hosts, the synthesized fixture and freshly generated output,
+  including unchanged write confinement and bidirectional release portability.
+- The same source revision's [CI run 37873017373](https://github.com/Takazudo/zudo-composer/actions/runs/37873017373)
+  passed all 22 jobs. Validation included the same 4,812 unit tests, installed
+  native editing proof, 45 host browser tests, 25 dev browser tests, six
+  SiteProject browser tests and seven demo browser tests. The packed self-host
+  restart and sequential dev-server lifecycle regressions both passed in CI.
+- Full local `pnpm test:browser:host`: all 45 tests passed, guarded **PASS**,
+  697 seconds. `pnpm demo:build-sites` and all six local SiteProject browser
+  tests also passed.
+- Local demo route crawls for webshop and blog failed, and an unchanged retry
+  reproduced Chromium `net::ERR_INSUFFICIENT_RESOURCES` during module loading.
+  Their separate interaction tests and the sample/landing tests passed. The
+  failed traces were preserved; no timeout, assertion or browser gate was
+  weakened. These local failures are not claimed as passes or established
+  baseline failures. The same source revision's complete seven-test demo lane
+  passed in CI, which supplies the successful verification of those crawls.
 
 The replacement environment's pinned Chromium was downloaded unprivileged again
 into the task-local browser directory. Subsequent heavy commands use umask 022,
