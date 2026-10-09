@@ -615,7 +615,9 @@ describe("dev/build registration boundary", () => {
     });
     const server = strictFixture<ViteDevServer>({
       close: vi.fn().mockResolvedValue(undefined),
-      middlewares: strictFixture<ViteDevServer["middlewares"]>({ use: vi.fn().mockImplementation((value: RegisteredMiddleware) => { middlewares.push(value); }) }),
+      ws: strictFixture<ViteDevServer["ws"]>({ close: vi.fn().mockResolvedValue(undefined) }),
+      httpServer: null,
+      middlewares: strictFixture<ViteDevServer["middlewares"]>({ stack: [], use: vi.fn().mockImplementation((value: RegisteredMiddleware) => { middlewares.push(value); }) }),
       ssrLoadModule,
     });
     await hookHandler(instance.configureServer).call(strictFixture({}), server);

@@ -81,5 +81,49 @@ packages, privileged browser provisioning, or WebKit repair was attempted.
   API, live-server exclusion, and real Composer first open and server restart.
 - Final full lint and typecheck passed after regenerated public declarations.
 
-The aggregate rerun remains pending until recorded here. No release, merge, or
-deployment was performed.
+- Corrected aggregate rerun: all 386 unit-test files / 4,800 tests passed
+  (417.97 seconds), followed by production build, preview isolation (three builds,
+  five entries), and distribution boundary (34 assets, one WASM, one glue).
+  Later aggregate stages are still running; this is not yet an aggregate pass.
+- `corepack pnpm contract:conformance` and `contract:negative-scan` passed.
+  Conformance verified 635 packed files, exact public exports, runtime imports,
+  strict Bundler and NodeNext types, and checkout/packed release portability.
+  The local conformance command used `umask 022` and
+  `pnpm_config_store_dir=/tmp/composer-pnpm-store-canonical`: the original shared
+  pnpm content store retained 0600 files from the managed session's initial
+  restrictive umask. A fresh task-local store fixed parity without changing
+  any digest or assertion. CI also passed these gates on the corrected source.
+
+The remaining aggregate/browser outcomes are recorded when complete. No repository
+release, merge, or deployment was performed; release-API tests used disposable
+local hosts.
+
+## Resumed shutdown verification
+
+CI exposed two real lifecycle regressions: a Composer mutation lock retained
+after packed self-host restart, and the dev browser runner force-killing a
+server before its host lease was released. The fix drains all async middleware
+(including preview/release handlers), disconnects pending challenges and body
+streams first, and keeps the module evaluator alive until storage work settles.
+CLI and successful browser/helper shutdowns no longer impose a forced cutoff.
+Failed startup closes the captured server, including later-plugin/listen errors.
+
+- Focused affected suites: six files / 108 tests passed. Coverage includes a
+  close delayed beyond three times the former two-second cutoff, incomplete body
+  streams, pending operator challenges, late async handler completion, and
+  configure/listen failure cleanup. The actual delayed-child helper regression
+  also passed with a 5.2-second lease release, beyond its former cutoff.
+- `pnpm smoke:host-install -- --host self-host`: guarded PASS, 40 seconds.
+  Actual browser authoring and fresh-context server restart, both release
+  portability directions, unchanged write confinement, data survived removal.
+- Two separate `pnpm test:browser:dev` invocations targeting
+  `tests/browser-dev/assets-download.pw.ts` then
+  `tests/browser-dev/assets-editor.pw.ts`: guarded PASS, 47 seconds, 1 + 2 tests.
+  The second server started and both runs shut down without retained host locks.
+- Full lint and typecheck passed. Independent read-only lifecycle review found
+  no remaining blocker; the reviewer did not run browser tests.
+
+The replacement environment's pinned Chromium was downloaded unprivileged again
+into the task-local browser directory. Subsequent heavy commands use umask 022,
+`pnpm_config_store_dir=/tmp/composer-pnpm-store-canonical` and
+`PLAYWRIGHT_BROWSERS_PATH=/tmp/composer-playwright-browsers`.

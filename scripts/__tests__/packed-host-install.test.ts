@@ -357,7 +357,7 @@ async function freePort() {
 }
 
 describe("packed server shutdown", () => {
-  it("waits for a launcher descendant to release its lease before returning", async () => {
+  it("waits beyond five seconds for a launcher descendant to release its lease before returning", async () => {
     const host = await temporary();
     const port = await freePort();
     const before = await tree(host);
@@ -370,7 +370,7 @@ describe("packed server shutdown", () => {
       server.listen(${port}, '127.0.0.1');
       process.on('SIGTERM', () => {
         server.close(async () => {
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise(resolve => setTimeout(resolve, 5_200));
           await unlink('.zudo-authoring.lock');
           process.exit(0);
         });
@@ -390,7 +390,7 @@ describe("packed server shutdown", () => {
     } finally {
       await server.stop();
     }
-  });
+  }, 15_000);
 });
 
 describe("failed server startup cleanup", () => {

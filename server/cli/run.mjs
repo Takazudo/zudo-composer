@@ -12,7 +12,7 @@ import { resolve } from "node:path";
 import { APP_ROOT } from "../../plugins/roots.mjs";
 import { forwardedSignals, spawnSupervised } from "./supervise.mjs";
 
-/** How long a signal handler waits for `server.close()` before exiting anyway. */
+/** Delay before reporting a slow graceful shutdown; never a forced-exit deadline. */
 export const CLOSE_GRACE_MS = 2000;
 
 export const EDIT_ENTRY_PATH = resolve(APP_ROOT, "server/cli/edit-entry.mjs");
@@ -228,16 +228,22 @@ export function superviseDevServer(server, proc = process) {
     proc.on(signal, async () => {
       if (closing) return;
       closing = true;
-      // The grace timer is load-bearing twice over. It bounds a `close()` that
-      // never settles — Vite's does not always, once the dependency optimizer
-      // is mid-flight — and, because it is a live handle, it stops Node from
-      // draining to a silent exit 0 while that unsettled promise is awaited.
-      await Promise.race([
-        server.close().catch((error) => {
-          proc.stderr.write(`[zudo-composer] dev server did not shut down cleanly: ${error instanceof Error ? error.message : String(error)}\n`);
-        }),
-        new Promise((settle) => globalThis.setTimeout(settle, CLOSE_GRACE_MS)),
-      ]);
+      // A pending Promise alone does not keep Node alive. Keep a referenced
+      // handle until close has drained owned requests and released their locks.
+      // A deadline cannot distinguish a stalled optimizer from a safe write.
+      let warned = false;
+      const keepAlive = globalThis.setInterval(() => {
+        if (warned) return;
+        warned = true;
+        proc.stderr.write("[zudo-composer] Waiting for safe dev server shutdown; active writes must finish before exit.\n");
+      }, CLOSE_GRACE_MS);
+      try {
+        await server.close();
+      } catch (error) {
+        proc.stderr.write(`[zudo-composer] dev server did not shut down cleanly: ${error instanceof Error ? error.message : String(error)}\n`);
+      } finally {
+        globalThis.clearInterval(keepAlive);
+      }
       const number = osConstants.signals[/** @type {NodeJS.Signals} */ (signal)];
       proc.exit(number ? 128 + number : 1);
     });

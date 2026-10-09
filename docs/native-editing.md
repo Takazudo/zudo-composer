@@ -123,6 +123,11 @@ It rechecks exact revisions and reconstructs the one permitted semantic effect
 with the original IDs. It never rebases an approved plan. The Composer snapshot
 CAS and final pack/source checks run inside the real writer lock. All ordinary
 Composer reads/writes, including JSX repair, now participate in that lock.
+Graceful shutdown first disconnects operator challenges and active request
+streams, then drains asynchronous provider work before disposing Vite and
+releasing the host lease. A disconnected HTTP response does not mean its storage
+work has finished. CLI and browser test runners await this drain; they do not
+remove locks or force an otherwise healthy server to exit after a deadline.
 
 A long-lived editing process pins the host source epoch when loading its context.
 The editing fingerprint follows and hashes imported dependency files, including

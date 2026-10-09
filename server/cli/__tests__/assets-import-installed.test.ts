@@ -55,8 +55,10 @@ async function devAssetRedirect(workspaceRoot: string, env: NodeJS.ProcessEnv, a
   // Drive the real configured plugin against its real store, without binding a port.
   const server = strictFixture<ViteDevServer>({
     close: vi.fn(async () => {}),
+    ws: strictFixture<ViteDevServer["ws"]>({ close: vi.fn(async () => {}) }),
+    httpServer: null,
     ssrLoadModule: async () => ({ createFilesystemAssetStore }),
-    middlewares: strictFixture<ViteDevServer["middlewares"]>({ use: vi.fn().mockImplementation((middleware: Connect.NextHandleFunction) => { middlewares.push(middleware); }) }),
+    middlewares: strictFixture<ViteDevServer["middlewares"]>({ stack: [], use: vi.fn().mockImplementation((middleware: Connect.NextHandleFunction) => { middlewares.push(middleware); }) }),
   });
   await hookHandler(plugin.configureServer).call(strictFixture({}), server);
   const request = Object.assign(httpRequest(), { method: "GET", url: `/uploaded-assets/asset-${assetId}` });

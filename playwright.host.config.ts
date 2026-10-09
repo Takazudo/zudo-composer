@@ -49,6 +49,8 @@ export default defineConfig({
     },
   ],
   webServer: {
+    // Drain authoring writes and release the owned lease before the next run.
+    gracefulShutdown: { signal: "SIGTERM", timeout: 0 },
     command: `node ${JSON.stringify(resolve(appRoot, "bin/zudo-composer.mjs"))} dev --root ${JSON.stringify(hostRoot)} --host 127.0.0.1 --port 4173 --strict-port`,
     // The shell middleware answers only requests that accept `text/html`, so
     // that a missing asset stays a 404 instead of becoming HTML. Playwright's

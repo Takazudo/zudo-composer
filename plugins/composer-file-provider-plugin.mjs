@@ -1,3 +1,4 @@
+import { installAuthoringShutdown } from "../server/edit/authoring-shutdown.mjs";
 import { acquireAuthoringLease } from "../server/edit/authoring-lease.mjs";
 // @ts-check
 // Dev-only transport for the Composer filesystem store.
@@ -690,55 +691,53 @@ export default function composerFileProviderPlugin(options = {}) {
       if (activeCapability === undefined) return;
       // Also covers host-authored Vite configurations using this public plugin.
       // Acquire before any store initializes or any read-repair can run.
-      {
-          const lease = await acquireAuthoringLease(workspaceRoot, "dev-server");
-          const close = server.close.bind(server);
-          server.close = async () => { await close(); await lease.release(); };
-      }
-      const {
-        createWorkspaceScopedCompositionStore,
-        validateCompositionRecord,
-      } = await server.ssrLoadModule(appModuleId("src/composer/storage/file-provider/dev-server-entry.ts"));
-      const handler = createComposerFileProviderMiddleware({
-        capability: activeCapability,
-        validateRecord: validateCompositionRecord,
-        createStore: ({ workspaceId, provideJsx }) => createWorkspaceScopedCompositionStore(
-          compositionsRoot,
-          workspaceId,
-          { provideJsx },
-        ),
-      });
-      const { createFilesystemAssetStore } = await server.ssrLoadModule(appModuleId("src/assets/storage/file-provider/dev-server-entry.ts"));
-      const assetsStoreRoot = explicitAssetRoot ?? resolve(workspaceRoot, ASSET_FILE_PROVIDER_ROOT);
-      const assetHandler = createAssetUploadMiddleware({
-        capability: activeCapability,
-        createStore: () => createFilesystemAssetStore({ assetsStoreRoot }),
-      });
-      server.middlewares.use(async (req, res, next) => {
-        if (req.url !== ASSET_FILE_PROVIDER_ENDPOINT) return next();
-        await assetHandler(req, res);
-      });
-      server.middlewares.use(async (req, res, next) => {
-        if (req.url !== COMPOSER_FILE_PROVIDER_ENDPOINT) return next();
-        const requestHead = connectRequestHead(req);
-        const headers = requestHead.headers;
-        const headError = validateRequestHead(requestHead, COMPOSER_FILE_PROVIDER_ENDPOINT, activeCapability);
-        if (headError !== undefined) {
-          sendConnectResponse(res, headError);
-          return;
-        }
-        const contentLength = Number(headers["content-length"]);
-        if (Number.isFinite(contentLength) && contentLength > COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES) {
-          sendConnectResponse(res, errorResponse(
-            413,
-            "body-too-large",
-            `Request body exceeds the ${COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES}-byte limit.`,
-          ));
-          return;
-        }
-        let body;
-        try {
-          body = await readBody(req, COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES);
+      const lease = await acquireAuthoringLease(workspaceRoot, "dev-server");
+      installAuthoringShutdown(server, lease);
+      try {
+        const {
+          createWorkspaceScopedCompositionStore,
+          validateCompositionRecord,
+        } = await server.ssrLoadModule(appModuleId("src/composer/storage/file-provider/dev-server-entry.ts"));
+        const handler = createComposerFileProviderMiddleware({
+          capability: activeCapability,
+          validateRecord: validateCompositionRecord,
+          createStore: ({ workspaceId, provideJsx }) => createWorkspaceScopedCompositionStore(
+            compositionsRoot,
+            workspaceId,
+            { provideJsx },
+          ),
+        });
+        const { createFilesystemAssetStore } = await server.ssrLoadModule(appModuleId("src/assets/storage/file-provider/dev-server-entry.ts"));
+        const assetsStoreRoot = explicitAssetRoot ?? resolve(workspaceRoot, ASSET_FILE_PROVIDER_ROOT);
+        const assetHandler = createAssetUploadMiddleware({
+          capability: activeCapability,
+          createStore: () => createFilesystemAssetStore({ assetsStoreRoot }),
+        });
+        server.middlewares.use(async (req, res, next) => {
+          if (req.url !== ASSET_FILE_PROVIDER_ENDPOINT) return next();
+          await assetHandler(req, res);
+        });
+        server.middlewares.use(async (req, res, next) => {
+          if (req.url !== COMPOSER_FILE_PROVIDER_ENDPOINT) return next();
+          const requestHead = connectRequestHead(req);
+          const headers = requestHead.headers;
+          const headError = validateRequestHead(requestHead, COMPOSER_FILE_PROVIDER_ENDPOINT, activeCapability);
+          if (headError !== undefined) {
+            sendConnectResponse(res, headError);
+            return;
+          }
+          const contentLength = Number(headers["content-length"]);
+          if (Number.isFinite(contentLength) && contentLength > COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES) {
+            sendConnectResponse(res, errorResponse(
+              413,
+              "body-too-large",
+              `Request body exceeds the ${COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES}-byte limit.`,
+            ));
+            return;
+          }
+          let body;
+          try {
+            body = await readBody(req, COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES);
         } catch (error) {
           if (error?.code === "BODY_TOO_LARGE") {
             sendConnectResponse(res, errorResponse(
@@ -757,6 +756,10 @@ export default function composerFileProviderPlugin(options = {}) {
       });
       // Vite's public-dir middleware serves only files in its startup-scanned publicFiles Set (updated by chokidar), so a file uploaded during the session otherwise gets the SPA shell until the watcher catches up (#180).
       server.middlewares.use(createAssetFileMiddleware({ workspaceRoot, assetsStoreRoot, createStore: () => createFilesystemAssetStore({ assetsStoreRoot }) }));
+      } catch (error) {
+        await server.close();
+        throw error;
+      }
     },
   };
 }

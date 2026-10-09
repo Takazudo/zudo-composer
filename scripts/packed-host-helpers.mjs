@@ -275,14 +275,17 @@ export async function startHostServer(hostRoot, { port = 4175, env = process.env
   // shutdown. Inherited stdout/stderr keep close pending until that descendant
   // releases its lease; exit alone would let the fallback kill interrupt it.
   const stopped = new Promise((settle) => child.once("close", settle).once("error", settle));
-  async function stop() {
+  async function stop(forceAfterStartupFailure = false) {
     abort.abort();
     if (!child.pid) return;
     // Signal the group even when its leader exited before its children did.
     try { process.kill(-child.pid, "SIGTERM"); } catch { return; }
     const timeout = new AbortController();
     try {
-      await Promise.race([stopped, delay(5_000, undefined, { signal: timeout.signal })]);
+      // Successful authoring servers must finish their owned writes and lease
+      // release. A wall-clock deadline is not evidence that killing is safe.
+      if (forceAfterStartupFailure) await Promise.race([stopped, delay(5_000, undefined, { signal: timeout.signal })]);
+      else await stopped;
     } finally {
       timeout.abort();
       try { process.kill(-child.pid, "SIGKILL"); } catch { /* Group already gone. */ }
@@ -302,7 +305,7 @@ export async function startHostServer(hostRoot, { port = 4175, env = process.env
     await Promise.race([waitForServer(origin, abort.signal), exited]);
     return { output: () => output, stop };
   } catch (error) {
-    await stop();
+    await stop(true);
     throw error;
   } finally {
     abort.abort();

@@ -127,15 +127,23 @@ export async function resolveComposerDevConfig(options = {}) {
  */
 export async function startComposerDevServer(options = {}) {
   const { composerConfig, inlineConfig } = await resolveComposerDevConfig(options);
-  const server = await createServer({
-    ...inlineConfig,
-    server: {
-      ...inlineConfig.server,
-      ...(options.port === undefined ? {} : { port: options.port }),
-      ...(options.host === undefined ? {} : { host: options.host }),
-      ...(options.strictPort === undefined ? {} : { strictPort: options.strictPort }),
-    },
-  });
-  await server.listen();
-  return { server, composerConfig };
+  /** @type {import("vite").ViteDevServer | undefined} */
+  let started;
+  try {
+    const server = await createServer({
+      ...inlineConfig,
+      plugins: [{ name: "zudo-authoring-boot-cleanup", enforce: "pre", configureServer(server) { started = server; } }, ...(inlineConfig.plugins ?? [])],
+      server: {
+        ...inlineConfig.server,
+        ...(options.port === undefined ? {} : { port: options.port }),
+        ...(options.host === undefined ? {} : { host: options.host }),
+        ...(options.strictPort === undefined ? {} : { strictPort: options.strictPort }),
+      },
+    });
+    await server.listen();
+    return { server, composerConfig };
+  } catch (error) {
+    await started?.close();
+    throw error;
+  }
 }
