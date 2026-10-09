@@ -12,9 +12,10 @@ import { resolve } from "node:path";
 import { APP_ROOT } from "../../plugins/roots.mjs";
 import { forwardedSignals, spawnSupervised } from "./supervise.mjs";
 
-/** How long a signal handler waits for `server.close()` before exiting anyway. */
+/** Delay before reporting a slow graceful shutdown; never a forced-exit deadline. */
 export const CLOSE_GRACE_MS = 2000;
 
+export const EDIT_ENTRY_PATH = resolve(APP_ROOT, "server/cli/edit-entry.mjs");
 export const RELEASE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/release-entry.mjs");
 export const BUILD_SITE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/build-site-entry.mjs");
 export const ASSETS_IMPORT_ENTRY_PATH = resolve(APP_ROOT, "server/cli/assets-import-entry.mjs");
@@ -28,6 +29,9 @@ export const USAGE = `Usage: zudo-composer <command> [options]
 Commands:
   init <dir>  Create a populated host in a new directory.
   dev         Start the authoring dev server, rooted at the current project.
+  edit <verb> Run deterministic draft editing with one JSON request on stdin.
+              Verbs: inspect, resolve, plan, review, apply, receipt, discard,
+              supersede, undo. Options: --root <dir>, --stdin, --json.
   release     Run the SiteProject release API (one JSON request on stdin, one
               canonical JSON response on stdout).
   build-site  Build and verify the host's static website in dist-site.
@@ -99,6 +103,7 @@ grammar options:
 export function parseArguments(argv) {
   const [command, ...rest] = argv;
   if (command === undefined || command === "--help" || command === "-h" || command === "help") return { command: "help" };
+  if (command === "edit") return { command: "edit", rest };
   if (command === "release") return { command: "release", rest };
   if (command === "init") return parseInit(rest);
   if (command === "assets") return parseAssetsImport(rest);
@@ -223,16 +228,22 @@ export function superviseDevServer(server, proc = process) {
     proc.on(signal, async () => {
       if (closing) return;
       closing = true;
-      // The grace timer is load-bearing twice over. It bounds a `close()` that
-      // never settles — Vite's does not always, once the dependency optimizer
-      // is mid-flight — and, because it is a live handle, it stops Node from
-      // draining to a silent exit 0 while that unsettled promise is awaited.
-      await Promise.race([
-        server.close().catch((error) => {
-          proc.stderr.write(`[zudo-composer] dev server did not shut down cleanly: ${error instanceof Error ? error.message : String(error)}\n`);
-        }),
-        new Promise((settle) => globalThis.setTimeout(settle, CLOSE_GRACE_MS)),
-      ]);
+      // A pending Promise alone does not keep Node alive. Keep a referenced
+      // handle until close has drained owned requests and released their locks.
+      // A deadline cannot distinguish a stalled optimizer from a safe write.
+      let warned = false;
+      const keepAlive = globalThis.setInterval(() => {
+        if (warned) return;
+        warned = true;
+        proc.stderr.write("[zudo-composer] Waiting for safe dev server shutdown; active writes must finish before exit.\n");
+      }, CLOSE_GRACE_MS);
+      try {
+        await server.close();
+      } catch (error) {
+        proc.stderr.write(`[zudo-composer] dev server did not shut down cleanly: ${error instanceof Error ? error.message : String(error)}\n`);
+      } finally {
+        globalThis.clearInterval(keepAlive);
+      }
       const number = osConstants.signals[/** @type {NodeJS.Signals} */ (signal)];
       proc.exit(number ? 128 + number : 1);
     });
@@ -255,6 +266,11 @@ export async function runComposerCli(argv, deps = {}) {
   }
   if (parsed.command === "help") {
     proc.stdout.write(USAGE);
+    return;
+  }
+  if (parsed.command === "edit") {
+    spawnSupervised({ command: proc.execPath, args: [EDIT_ENTRY_PATH, ...parsed.rest], label: "the deterministic editor", entryPath: EDIT_ENTRY_PATH,
+      ...(deps.spawn ? { spawn: deps.spawn } : {}), ...(deps.exists ? { exists: deps.exists } : {}), proc });
     return;
   }
   if (parsed.command === "release") {

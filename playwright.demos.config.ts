@@ -26,6 +26,8 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
   },
   webServer: {
+    // Drain authoring writes and release the owned lease before the next run.
+    gracefulShutdown: { signal: "SIGTERM", timeout: 0 },
     // Pin the bind address the probe uses: on the Linux CI runner Node resolves
     // `localhost` to `::1`, so a default bind never answers on 127.0.0.1.
     command: `pnpm run dev --host 127.0.0.1 --port ${PORT} --strict-port`,

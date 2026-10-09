@@ -179,6 +179,7 @@ export type CompositionPersistenceErrorCode =
   | "read-failed"
   | "write-failed"
   | "transaction-failed"
+  | "commit-uncertain"
   | "conflict"
   | "unknown";
 

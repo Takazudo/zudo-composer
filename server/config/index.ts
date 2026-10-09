@@ -16,6 +16,7 @@ export {
   type ComposerPaths,
   type ComposerRuntime,
   type ResolvedComposerConfig,
+  type NativeEditingConfig,
 } from "./config";
 export {
   loadComposerConfig,

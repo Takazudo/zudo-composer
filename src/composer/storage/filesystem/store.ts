@@ -22,7 +22,8 @@ import {
   type CompositionUnpublishOutcome,
 } from "../../library";
 import { cloneJson } from "../../../shared/json";
-import { SafeRootFilesystem } from "../../../shared/node-fs";
+import { SafeRootFilesystem, withMutationLock, type DurableExtraErrorCode } from "../../../shared/node-fs";
+import { ReviewedEditJournal, type ReviewedCompositionEdit } from "./reviewed-edit";
 import type {
   FilesystemCompositionStoreOptions,
   FilesystemDerivedOutputPlan,
@@ -49,7 +50,7 @@ function compareNames(a: { name: string }, b: { name: string }): number {
 
 function operationError(
   operation: CompositionPersistenceOperation,
-  code: "blocked" | "validation" | "read-failed" | "write-failed" | "conflict",
+  code: "blocked" | "validation" | "read-failed" | "write-failed" | "conflict" | "commit-uncertain",
   message: string,
   cause?: unknown,
 ): CompositionPersistenceError {
@@ -119,7 +120,7 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
   async mutationToken(): Promise<string> { return (await this.snapshot()).mutationToken; }
 
   private constructor(
-    private readonly filesystem: SafeRootFilesystem<CompositionPersistenceOperation>,
+    private readonly filesystem: SafeRootFilesystem<CompositionPersistenceOperation, DurableExtraErrorCode>,
     private readonly provideJsx: FilesystemCompositionStoreOptions["provideJsx"],
     private readonly now: () => string,
   ) {}
@@ -135,7 +136,7 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
   static async create(
     options: FilesystemCompositionStoreOptions,
   ): Promise<FilesystemCompositionStore> {
-    const filesystem = await SafeRootFilesystem.create({
+    const filesystem = await SafeRootFilesystem.create<CompositionPersistenceOperation, DurableExtraErrorCode>({
       root: options.compositionsRoot,
       operations: options.operations,
       randomToken: options.randomToken,
@@ -722,7 +723,39 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
     operation: CompositionPersistenceOperation,
     task: () => Promise<T>,
   ): Promise<T> {
-    return this.filesystem.run(operation, task);
+    return this.filesystem.run(operation, () => withMutationLock(this.filesystem, operation, { now: this.now }, async () => {
+      await this.reviewedJournal().recover(operation);
+      return task();
+    }));
+  }
+
+  private reviewedJournal(): ReviewedEditJournal {
+    return new ReviewedEditJournal(this.filesystem);
+  }
+
+  async reviewedEditReceipt<T extends object = Record<string, unknown>>(operationId: string): Promise<T | undefined> {
+    return this.run("get", () => this.reviewedJournal().receipt<T>("get", operationId));
+  }
+
+  async commitReviewedEdit<T extends object>(input: ReviewedCompositionEdit<T>, recheck?: (snapshot: { mutationToken: string; records: readonly CompositionRecord[] }) => Promise<void>): Promise<T> {
+    // Detach caller-owned objects before waiting for the writer queue.
+    const edit = cloneJson(input);
+    return this.run("put", async () => {
+      const journal = this.reviewedJournal();
+      const prior = await journal.matchingReceipt<T>("put", edit.operationId, edit.planDigest);
+      if (prior !== undefined) return prior;
+      const closure = await this.readDependencyClosure("put");
+      if (closure.entries.some(({ outcome }) => outcome.status !== "loaded")) throw operationError("put", "validation", "Invalid canonical Composition prevents reviewed editing.");
+      const records = [...closure.records].sort((a, b) => a.id.localeCompare(b.id));
+      const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, canonical(child)])) : value;
+      const mutationToken = createHash("sha256").update(JSON.stringify(canonical(records))).digest("hex");
+      if (mutationToken !== edit.expectedSnapshotToken) throw operationError("put", "conflict", "Composition snapshot changed after review.");
+      const valid = validateCompositionRecord(edit.candidate);
+      if (!valid.ok) throw operationError("put", "validation", valid.issue.message);
+      await this.assertBindingTransition(edit.candidate);
+      await recheck?.({ mutationToken, records: cloneJson(records) });
+      return journal.commit("put", edit);
+    });
   }
 
   private async findDependents(

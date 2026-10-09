@@ -1098,4 +1098,153 @@ declare function canonicalStringifyJson(value: JsonValue): string;
 /** Strictly validates a SiteProject and every cross-domain graph edge. */
 declare function validateSiteProject(value: unknown, context: SiteProjectValidationContext): SiteProjectValidation;
 
-export { ASSET_PROVIDER_ID, COMPOSITION_PROVIDER_ID, CONTENT_PROVIDER_ID, DEFAULT_TIMESTAMP, MAPPING_PROVIDER_ID, SITEMAP_PROVIDER_ID, assetAuthoringUrl, assetMimeTypeForExtension, canonicalStringifyJson, createFilesystemAssetStore, defineSite, entryRef, imageUse, node, slugify, validateSiteProject };
+type WorkspaceProjectMetadata = Omit<SiteProject, "providers"> & {
+    providers: {
+        [K in keyof SiteProject["providers"]]: readonly {
+            id: SiteProject["providers"][K][number]["id"];
+        }[];
+    };
+};
+interface WorkspaceRecord {
+    schemaVersion: 1;
+    id: string;
+    mutationToken: number;
+    status: "seeding" | "ready";
+    metadata: WorkspaceProjectMetadata;
+    baselineRevision: string;
+    /** Fixed at creation; never replaced by a later injected active source. */
+    seed?: SiteProject;
+    /** No provider may reseed while an earlier failed attempt is being removed. */
+    seedCleanupPending?: true;
+    /** A resumed creation cannot bypass its external before-complete guard. */
+    requiresBeforeComplete?: true;
+}
+
+/**
+ * Every setting a host may declare. Path settings are relative to the host
+ * project root; `pack` is a module specifier.
+ *
+ * All fields are required. A resolved config always carries the complete table,
+ * which is what makes the shallow top-level merge in `composer()` safe: a
+ * supplied object replaces the default wholesale rather than leaving holes.
+ */
+interface ComposerSettings {
+    /**
+     * Root for the CMS data domains. Changing it re-bases every domain directory
+     * below that has not been set explicitly, so a host can move all CMS data
+     * with one setting.
+     *
+     * @default "cms"
+     */
+    dataDir: string;
+    /**
+     * Composition JSON, including global templates.
+     *
+     * @default "cms/compositions"
+     */
+    compositionsDir: string;
+    /**
+     * Content-domain JSON.
+     *
+     * @default "cms/content"
+     */
+    contentDir: string;
+    /**
+     * Mapping-domain JSON.
+     *
+     * @default "cms/mappings"
+     */
+    mappingsDir: string;
+    /**
+     * Sitemapper-domain JSON.
+     *
+     * @default "cms/sitemaps"
+     */
+    sitemapsDir: string;
+    /**
+     * Assets content-addressed store: `catalog.json` plus `versions/`.
+     *
+     * @default "cms/assets"
+     */
+    assetsDir: string;
+    /**
+     * Published assets bytes the host commits and serves. Not re-based by
+     * `dataDir` — it lives under the host's public directory, not its CMS data.
+     *
+     * @default "public/uploaded-assets"
+     */
+    publicAssetsDir: string;
+    /**
+     * The host's base CSS entry. It is the sole importer of the component pack's
+     * CSS and the host's Tailwind `@source` declaration point.
+     *
+     * @default "styles/base.css"
+     */
+    styles: string;
+    /**
+     * Component-pack module specifier — a themeset package
+     * (`"@acme/themeset/composer-pack"`) or a host self-reference
+     * (`"my-site/components"`, backed by the host's own `exports` map).
+     *
+     * Required, with no default. zudo-composer never falls back to a bundled
+     * provider pack.
+     */
+    pack: string;
+}
+
+/** Explicit host opt-in. Semantic kinds never derive from component names. */
+interface NativeEditingConfig {
+    source: "workspace";
+    paragraph?: {
+        componentId: string;
+        textProp: string;
+    };
+    list?: {
+        componentId: string;
+        itemsProp: string;
+    };
+    image?: {
+        componentId: string;
+        srcProp: string;
+        altProp: string;
+    };
+    table?: {
+        componentId: string;
+        columnsProp: string;
+        rowsProp: string;
+    };
+}
+
+/** Absolute paths derived from the settings. Node-side only, never serialized. */
+interface ComposerPaths {
+    workspaceRoot: string;
+    data: string;
+    compositions: string;
+    content: string;
+    mappings: string;
+    sitemaps: string;
+    assets: string;
+    publicAssets: string;
+    styles: string;
+}
+interface ResolvedComposerConfig {
+    nativeEditing: NativeEditingConfig | undefined;
+    /** Absolute host project root. Every relative setting resolves against it. */
+    workspaceRoot: string;
+    /** Absolute path of the host config file, whether or not it exists. */
+    configPath: string;
+    /** The complete, host-root-relative settings table. Safe to serialize. */
+    settings: ComposerSettings;
+    /** The same table resolved to absolute paths. */
+    paths: ComposerPaths;
+}
+
+/** Trusted host setup: persist authored data through the same stores as the GUI. */
+declare function initializeAuthoringWorkspace(options: {
+    composerConfig: ResolvedComposerConfig;
+    pack: TrustedComponentPack;
+    project: SiteProject;
+    workspaceId: string;
+}): Promise<WorkspaceRecord>;
+
+export { ASSET_PROVIDER_ID, COMPOSITION_PROVIDER_ID, CONTENT_PROVIDER_ID, DEFAULT_TIMESTAMP, MAPPING_PROVIDER_ID, SITEMAP_PROVIDER_ID, assetAuthoringUrl, assetMimeTypeForExtension, canonicalStringifyJson, createFilesystemAssetStore, defineSite, entryRef, imageUse, initializeAuthoringWorkspace, node, slugify, validateSiteProject };

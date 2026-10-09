@@ -18,3 +18,4 @@ export { assetMimeTypeForExtension } from "../../src/assets/model/asset-kinds.mj
 export { createFilesystemAssetStore } from "../../src/assets/storage/filesystem/store.js";
 export { canonicalStringifyJson } from "../../src/site-project/model/canonical.js";
 export { validateSiteProject } from "../../src/site-project/model/validation.js";
+export { initializeAuthoringWorkspace } from "../edit/initialize-workspace.js";

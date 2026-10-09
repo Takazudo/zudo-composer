@@ -602,6 +602,9 @@ describe("dev/build registration boundary", () => {
     await dispatch();
   }
 
+  const authoringServers: ViteDevServer[] = [];
+  afterEach(async () => { for (const server of authoringServers.splice(0)) await server.close(); });
+
   async function setupServeServer(assetsStoreRoot?: string, workspaceRoot = sandbox) {
     const { instance, source } = setupSource("serve", assetsStoreRoot, workspaceRoot);
     const middlewares: RegisteredMiddleware[] = [];
@@ -610,10 +613,15 @@ describe("dev/build registration boundary", () => {
       createFilesystemAssetStore,
       validateCompositionRecord,
     });
-    await hookHandler(instance.configureServer).call(strictFixture({}), strictFixture<ViteDevServer>({
-      middlewares: strictFixture<ViteDevServer["middlewares"]>({ use: vi.fn().mockImplementation((value: RegisteredMiddleware) => { middlewares.push(value); }) }),
+    const server = strictFixture<ViteDevServer>({
+      close: vi.fn().mockResolvedValue(undefined),
+      ws: strictFixture<ViteDevServer["ws"]>({ close: vi.fn().mockResolvedValue(undefined) }),
+      httpServer: null,
+      middlewares: strictFixture<ViteDevServer["middlewares"]>({ stack: [], use: vi.fn().mockImplementation((value: RegisteredMiddleware) => { middlewares.push(value); }) }),
       ssrLoadModule,
-    }));
+    });
+    await hookHandler(instance.configureServer).call(strictFixture({}), server);
+    authoringServers.push(server);
     expect(middlewares).toHaveLength(3);
     return { instance, source, middlewares, ssrLoadModule };
   }
