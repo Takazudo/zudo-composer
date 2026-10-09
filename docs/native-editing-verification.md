@@ -131,7 +131,7 @@ Failed startup closes the captured server, including later-plugin/listen errors.
   documentation and all four styleguides. The final packed-host lane passed
   all four disk hosts, the synthesized fixture and freshly generated output,
   including unchanged write confinement and bidirectional release portability.
-- The same source revision's [CI run 37873017373](https://github.com/Takazudo/zudo-composer/actions/runs/37873017373)
+- The same source revision's CI run (linked from [PR #893](https://github.com/Takazudo/zudo-composer/pull/893))
   passed all 22 jobs. Validation included the same 4,812 unit tests, installed
   native editing proof, 45 host browser tests, 25 dev browser tests, six
   SiteProject browser tests and seven demo browser tests. The packed self-host
@@ -151,3 +151,31 @@ The replacement environment's pinned Chromium was downloaded unprivileged again
 into the task-local browser directory. Subsequent heavy commands use umask 022,
 `pnpm_config_store_dir=/tmp/composer-pnpm-store-canonical` and
 `PLAYWRIGHT_BROWSERS_PATH=/tmp/composer-playwright-browsers`.
+
+## Direct Vite shutdown follow-up
+
+A final filesystem audit caught a retained root lease even though the direct
+Vite SiteProject browser tests passed. A diagnostic recorded two SIGTERM
+deliveries 30 milliseconds apart: the package-manager launcher forwarded the
+process-group signal after Vite had consumed its once-listener. The second
+signal interrupted lease release after Vite close completed. A separate real
+child probe also demonstrated natural exit during unref'ed close work.
+
+The shared shutdown helper now keeps the event loop alive and retains a scoped
+SIGTERM listener until lease release completes; both are removed in `finally`.
+It preserves all existing signal listeners and retains locks on failed close.
+The SiteProject runner now explicitly fails if its exited server left a lease,
+without deleting that lease.
+
+- All seven shutdown tests passed, including real child processes with single
+  and repeated SIGTERM and listener cleanup on success/failure.
+- Two consecutive full SiteProject browser invocations passed, six tests each,
+  with explicit lease absence checks between and after them: guarded **PASS**,
+  103 seconds. No cleanup occurred between the two runs.
+- Full lint/typecheck and `handoff:boundary` passed. The handoff scanner caught
+  an Actions URL in the earlier evidence update; the URL was moved to PR
+  evidence without changing the scanner.
+- Independent read-only review found no remaining must-fix; the reviewer did
+  not run tests. The [draft PR](https://github.com/Takazudo/zudo-composer/pull/893)
+  records the latest exact-head aggregate and CI results separately from the
+  dated source-revision evidence above.

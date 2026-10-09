@@ -1,4 +1,5 @@
 import { PassThrough } from "node:stream";
+import { spawn } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
 import type { ViteDevServer } from "vite";
 import { installAuthoringShutdown } from "../authoring-shutdown.mjs";
@@ -11,8 +12,42 @@ function fixture() {
 }
 
 describe("authoring shutdown", () => {
+  it.each([false, true])("keeps direct Vite shutdown alive until lease release (forwarded signal: %s)", async (forwardSignal) => {
+    const helper = new URL("../authoring-shutdown.mjs", import.meta.url).href;
+    const child = spawn(process.execPath, ["--input-type=module", "-e", `
+      import { installAuthoringShutdown } from ${JSON.stringify(helper)};
+      const listener = setInterval(() => {}, 1000);
+      const server = {
+        middlewares: { stack: [], use() {} }, ws: { async close() {} },
+        async close() {
+          clearInterval(listener);
+          console.log('closing');
+          await new Promise(resolve => setTimeout(resolve, 100).unref());
+        }
+      };
+      installAuthoringShutdown(server, { async release() { console.log('released'); } });
+      process.once('SIGTERM', async () => { await server.close(); process.exit(0); });
+      console.log('ready');
+    `], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "", stderr = "";
+    let stopping = false, forwarded = false;
+    child.stdout.on("data", chunk => {
+      stdout += String(chunk);
+      if (!stopping && stdout.includes("ready")) { stopping = true; child.kill("SIGTERM"); }
+      if (forwardSignal && !forwarded && stdout.includes("closing")) { forwarded = true; child.kill("SIGTERM"); }
+    });
+    child.stderr.on("data", chunk => { stderr += String(chunk); });
+    const result = await new Promise<{code: number | null; signal: NodeJS.Signals | null}>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (code, signal) => resolve({ code, signal }));
+    });
+    expect(result, stderr).toEqual({ code: 0, signal: null });
+    expect(stdout).toContain("released");
+  });
+
   it("drains existing and later async handlers after client disconnect before closing Vite or releasing the lease", async () => {
     const f = fixture();
+    const signals = process.listenerCount("SIGTERM");
     let finishFirst!: () => void, finishLast!: () => void;
     const first = new Promise<void>(resolve => { finishFirst = resolve; });
     const last = new Promise<void>(resolve => { finishLast = resolve; });
@@ -36,6 +71,7 @@ describe("authoring shutdown", () => {
     await shutdown;
     expect(f.close).toHaveBeenCalledTimes(1);
     expect(f.release).toHaveBeenCalledTimes(1);
+    expect(process.listenerCount("SIGTERM")).toBe(signals);
     expect(f.close.mock.invocationCallOrder[0]).toBeLessThan(f.release.mock.invocationCallOrder[0]!);
   });
 
@@ -86,11 +122,13 @@ describe("authoring shutdown", () => {
 
   it("drains rejected handlers but preserves the lease if Vite close itself fails", async () => {
     const f = fixture();
+    const signals = process.listenerCount("SIGTERM");
     f.close.mockRejectedValue(new Error("close failed"));
     installAuthoringShutdown(f.server, { release: f.release });
     f.middlewares.use(async () => { throw new Error("request failed"); });
     await expect(f.stack[0]!.handle({}, {}, vi.fn())).rejects.toThrow("request failed");
     await expect(f.server.close()).rejects.toThrow("close failed");
     expect(f.release).not.toHaveBeenCalled();
+    expect(process.listenerCount("SIGTERM")).toBe(signals);
   });
 });

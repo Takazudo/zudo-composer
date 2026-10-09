@@ -1,4 +1,5 @@
 // @ts-check
+import { clearInterval, setInterval } from "node:timers";
 
 /**
  * Await async middleware work even after its HTTP client has disconnected.
@@ -67,18 +68,32 @@ export function installAuthoringShutdown(server, lease) {
   server.close = () => {
     shutdown ??= (async () => {
       closing = true;
-      // Disconnect operator challenges before waiting for their handlers. A
-      // reconciliation challenge deliberately waits for this disconnect;
-      // disposing the module evaluator first would interrupt its locked work.
-      await server.ws.close();
-      // Destroy active request streams on HTTP/1 and HTTP/2 alike. This wakes
-      // incomplete body readers without disposing the SSR evaluator.
-      for (const request of requests.keys()) if (typeof request.destroy === "function") request.destroy();
-      // Keep the module evaluator available until handlers have completed their
-      // storage work and native lock release. No new request may enter a store.
-      while (active.size) await Promise.allSettled([...active]);
-      await close();
-      await lease.release();
+      // Direct Vite consumers do not use the installed CLI's supervisor. Once
+      // sockets close, Vite may await unref'ed optimizer work; a pending Promise
+      // alone does not keep Node alive long enough to release this lease.
+      const keepAlive = setInterval(() => {}, 1_000);
+      // Package-manager launchers can forward the process-group signal again.
+      // Vite consumes its once-listener on the first signal; keep a listener
+      // until release so the forwarded signal cannot interrupt locked work.
+      const ignoreRepeatedSignal = () => {};
+      process.on("SIGTERM", ignoreRepeatedSignal);
+      try {
+        // Disconnect operator challenges before waiting for their handlers. A
+        // reconciliation challenge deliberately waits for this disconnect;
+        // disposing the module evaluator first would interrupt its locked work.
+        await server.ws.close();
+        // Destroy active request streams on HTTP/1 and HTTP/2 alike. This wakes
+        // incomplete body readers without disposing the SSR evaluator.
+        for (const request of requests.keys()) if (typeof request.destroy === "function") request.destroy();
+        // Keep the module evaluator available until handlers have completed their
+        // storage work and native lock release. No new request may enter a store.
+        while (active.size) await Promise.allSettled([...active]);
+        await close();
+        await lease.release();
+      } finally {
+        clearInterval(keepAlive);
+        process.off("SIGTERM", ignoreRepeatedSignal);
+      }
     })();
     return shutdown;
   };
