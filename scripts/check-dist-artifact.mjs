@@ -7,7 +7,9 @@
 // `pnpm build` first.
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
 import { basename, extname, join, resolve } from "node:path";
 import { UI_PACK } from "./ui-pack-identity.mjs";
 
@@ -153,6 +155,13 @@ const wasm = assetFiles.filter((path) => extname(path) === ".wasm");
 const glue = assetFiles.filter((path) => /zfb_md_wasm_render_glue.*\.mjs$/.test(basename(path)));
 assert.equal(wasm.length, 1, "exactly one focused render WASM must be emitted");
 assert.match(basename(wasm[0]), /^zfb_md_wasm_render_bg-.*\.wasm$/);
+const packRequire = createRequire(join(root, "packages/ui/package.json"));
+const shipped = JSON.parse(readFileSync(packRequire.resolve("@takazudo/zfb-md-wasm/shipped-artifacts.json"), "utf8"));
+const renderArtifact = shipped.artifacts.find((/** @type {{ entry: string }} */ artifact) => artifact.entry === "./render");
+assert.ok(renderArtifact, "published manifest must identify the focused render WASM");
+const emittedWasm = readFileSync(wasm[0]);
+assert.equal(emittedWasm.length, renderArtifact.bytes, "emitted WASM size must match the published render artifact");
+assert.equal(createHash("sha256").update(emittedWasm).digest("hex"), renderArtifact.sha256, "emitted WASM must match the published render artifact bytes");
 assert.equal(glue.length, 1, "exactly one focused render glue module must be emitted");
 assert.ok(!assetFiles.some((path) => /compiler|full|parse|highlight-only/i.test(basename(path))), "non-focused markdown assets leaked");
 assert.ok(!assetFiles.some((path) => extname(path) === ".map"), "production source maps must not be emitted");

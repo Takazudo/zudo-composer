@@ -307,8 +307,8 @@ importers:
   packages/ui:
     dependencies:
       '@takazudo/zfb-md-wasm':
-        specifier: 2.22.0
-        version: 2.22.0
+        specifier: 4.3.0
+        version: 4.3.0
       dompurify:
         specifier: ^3.4.11
         version: 3.4.14
@@ -1702,6 +1702,10 @@ packages:
 
   '@takazudo/zfb-md-wasm@2.22.0':
     resolution: {integrity: sha512-5FctTQK28lLjZQXPo4IWPS0DkOfPUnjMuuYxrFXeDaFI1vCotOzQasSujKnoh5kngAcXXiRleL0S1LfswVh/fA==}
+    engines: {node: '>=20.0.0', pnpm: '>=10.0.0'}
+
+  '@takazudo/zfb-md-wasm@4.3.0':
+    resolution: {integrity: sha512-V1eNS80gcarjXTQVkTdWU0lpesdbdY9c6hDYDKumRTG9Yt1PixaDbSEAAaHrmXed7xTCvsOig51LAx+DCxOY5w==}
     engines: {node: '>=20.0.0', pnpm: '>=10.0.0'}
 
   '@takazudo/zfb-runtime@2.22.0':
@@ -4536,6 +4540,14 @@ snapshots:
     optional: true
 
   '@takazudo/zfb-md-wasm@2.22.0':
+    dependencies:
+      '@types/mdast': 4.0.4
+      mdast-util-directive: 3.1.0
+      mdast-util-mdx: 3.0.0
+    transitivePeerDependencies:
+      - supports-color
+
+  '@takazudo/zfb-md-wasm@4.3.0':
     dependencies:
       '@types/mdast': 4.0.4
       mdast-util-directive: 3.1.0
