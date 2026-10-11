@@ -1,0 +1,2 @@
+/* The separate Preact build owns its Tailwind stylesheet. */
+:root { color-scheme: light dark; }

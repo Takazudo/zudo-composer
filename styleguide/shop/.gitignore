@@ -10,3 +10,14 @@ src/styleguide/sg-registry.ts
 src/styleguide/token-manifest.ts
 src/generated/
 public/uploaded-assets/
+
+# Isolated host-owned Preact pipeline outputs
+src/styleguide/descriptors.ts
+src/styleguide/sources.ts
+preview/loaders.ts
+public/_shop-preview/
+public/shop-thumbnails/
+public/components/preview/
+.zfb-plugin-bundle-*.mjs
+
+.shop-build/

@@ -201,7 +201,8 @@ export function checkNoDeploy({ root = resolve(import.meta.dirname, ".."), entri
     if (["node", "tsx"].includes(binary)) {
       const inline = words.findIndex((word) => ["-e", "--eval", "-p", "--print"].includes(word));
       if (inline >= 0) return javascript(words[inline + 1] ?? "", join(cwd, `.no-deploy-inline-${++inlineSequence}.mjs`), cwd, origin);
-      const candidate = words.find((word, index) => !word.startsWith("-") && !["--import", "--loader"].includes(words[index - 1]));
+      const valueOptions = binary === "tsx" ? ["--import", "--loader", "--tsconfig"] : ["--import", "--loader"];
+      const candidate = words.find((word, index) => !word.startsWith("-") && !valueOptions.includes(words[index - 1]));
       if (!candidate) fail("unresolved Node entry", origin);
       if (/(?:^|\/)wrangler\/(?:bin|wrangler-dist)\//u.test(candidate)) return invocation(["wrangler", ...words.slice(words.indexOf(candidate) + 1)], cwd, origin, fromSource);
       assertAllowedPath(/** @type {string} */ (candidate), origin);

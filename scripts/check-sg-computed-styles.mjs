@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import { chromium } from "@playwright/test";
 import { readBodyBackgroundProbe } from "./computed-body-background.mjs";
 import { STYLEGUIDE_TARGET_KEYS, TARGETS } from "./hosted-demo/targets.mjs";
@@ -522,7 +523,7 @@ async function verifyTriggerOpensAndRecloses(page, triggerLocator, context) {
 
 /**
  * Read a CSS custom property's computed value from the first same-origin
- * "preview" iframe on the page (`iframe[src^="/components/preview"]`), or
+ * configured preview iframe on the page, or
  * `null` if no such iframe exists or it could not be read. Iframe access is
  * same-origin (the preview graph is isolated but same-origin, per this repo's
  * CLAUDE.md), so `contentDocument` is directly reachable.
@@ -536,7 +537,7 @@ async function readPreviewIframeCustomProperty(page, cssVar) {
     const frame = document.querySelector(selector);
     if (!(frame instanceof HTMLIFrameElement) || !frame.contentDocument) return null;
     return getComputedStyle(frame.contentDocument.documentElement).getPropertyValue(propertyName).trim();
-  }, { selector: 'iframe[src^="/components/preview"]', propertyName: cssVar });
+  }, { selector: previewFrameSelector, propertyName: cssVar });
   /* eslint-enable no-undef */
 }
 
@@ -574,7 +575,7 @@ async function findEditableTokenRow(page, context) {
 async function verifyTokenEditChangesPreview(page, context) {
   const { locator, varName } = await findEditableTokenRow(page, context);
   const before = await readPreviewIframeCustomProperty(page, varName);
-  assert.ok(before !== null, `${context}: no same-origin preview iframe ("iframe[src^=\\"/components/preview\\"]") found to read "${varName}" from.`);
+  assert.ok(before !== null, `${context}: no same-origin preview iframe (${previewFrameSelector}) found to read "${varName}" from.`);
 
   await locator.fill(TOKEN_EDIT_TEST_COLOR);
   await locator.press("Enter");
@@ -638,13 +639,12 @@ async function verifyPreviewTokenPanel(browser, baseUrl, routes, targetKey) {
   const tokensRoute = routes.find((route) => route === "/tokens/");
   assert.ok(tokensRoute, `${targetKey}: no "/tokens/" route in the build — cannot verify the page-level Preview tokens trigger (#866/#869).`);
 
-  // "/components/preview/" is the iframe content route itself, not a detail
-  // page, and "/components/" is the catalog index — neither renders a
-  // workbench or header trigger.
-  const componentDetailRoute = routes.find((route) => route.startsWith("/components/") && route !== "/components/" && route !== "/components/preview/");
+  // The configured preview document and catalog index are not detail pages.
+  // File-based artifact routes include a trailing slash; config URLs do not.
+  const componentDetailRoute = routes.find((route) => route.startsWith("/components/") && route !== "/components/" && route.replace(/\/$/u, "") !== previewUrl);
   assert.ok(
     componentDetailRoute,
-    `${targetKey}: no real component detail route ("/components/<slug>/", other than the index or "/components/preview/") found in the build — checked routes: ${routes.join(", ") || "(none)"} (#866/#869).`,
+    `${targetKey}: no real component detail route ("/components/<slug>/", other than the index or "${previewUrl}") found in the build — checked routes: ${routes.join(", ") || "(none)"} (#866/#869).`,
   );
 
   await withFreshPage(browser, async (page) => {
@@ -692,6 +692,19 @@ async function verifyPreviewTokenPanel(browser, baseUrl, routes, targetKey) {
 const targetKey = process.argv[2] ?? "sample-sg";
 assert.ok(STYLEGUIDE_TARGET_KEYS.some((key) => key === targetKey), `Usage: check-sg-computed-styles.mjs [${STYLEGUIDE_TARGET_KEYS.join("|")}]`);
 const target = TARGETS[targetKey];
+const previewConfigUrl = pathToFileURL(join(target.hostDirectory, "src/config/preview.mjs"));
+const { externalPreview } = await import(previewConfigUrl.href);
+assert.ok(externalPreview && typeof externalPreview.url === "string", `${targetKey}: externalPreview.url is required in ${previewConfigUrl.pathname}`);
+const previewUrl = /** @type {string} */ (externalPreview.url);
+const parsedPreviewUrl = new URL(previewUrl, "https://styleguide.invalid");
+assert.ok(
+  previewUrl.startsWith("/") && parsedPreviewUrl.origin === "https://styleguide.invalid"
+    && parsedPreviewUrl.pathname === previewUrl && !parsedPreviewUrl.search && !parsedPreviewUrl.hash
+    && !previewUrl.endsWith("/") && externalPreview.trailingSlash === "never",
+  `${targetKey}: preview URL must be a canonical same-origin path without a query, hash or trailing slash`,
+);
+// A query delimiter prevents a similarly prefixed route from matching a frame.
+const previewFrameSelector = `iframe[src^=${JSON.stringify(`${previewUrl}?`)}]`;
 const distDirectory = target.artifactDirectory;
 const buildCommand = targetKey === "sample-sg" ? "pnpm sg:build-site" : `pnpm sg:build-styleguide ${targetKey}`;
 
@@ -711,7 +724,9 @@ if (routes.length === 0) {
 // already listening still closes the server instead of leaking it.
 const server = await startHostedDemoStaticServer({ directory: distDirectory, port: 0 });
 try {
-  const browser = await chromium.launch();
+  const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH;
+  if (executablePath) console.warn(`${targetKey}: using explicit PLAYWRIGHT_EXECUTABLE_PATH=${executablePath}; the default pinned browser is overridden for this local run.`);
+  const browser = await chromium.launch(executablePath ? { executablePath } : {});
   try {
     const page = await browser.newPage();
     const flowSelector = ".zd-content > * + *";
