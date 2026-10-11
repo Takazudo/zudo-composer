@@ -40,6 +40,13 @@ and re-adding the optional-peer parents also refreshed their supported CodeMirro
 Inquirer, Lezer, PostCSS and utility ranges. No parent version changed. These
 are actual lock deltas, not a blanket reduction or unchanged-output claim.
 
+Final `dedupe --check` passes for all four SGs. Root returns a nonzero
+dedupe finding: refreshed workspace Vitest resolves Vite 8.3.4/Rolldown 1.2.13,
+while the application retains Vite 8.2.2/Rolldown 1.2.6. Applying dedupe would
+upgrade the application bundler and also coalesce esbuild/platform records.
+Decision: KEEP this supported duplication in A to avoid an unrelated application
+bundler migration. This is not reported as a passing root dedupe check.
+
 Disposable session evidence is under `/workspace/dependency-evidence`:
 `manifests-baseline.json`, `census.md`, five `*-baseline-{audit.json,dedupe.log}`
 sets, `root-after-audit.json` and `root-lock-delta.json`. Baseline SG tarballs
@@ -131,9 +138,12 @@ UI package handoff is now `776fb59a46bb53ceb0fa1ff823e83fae764597ac` on
 Remote package bytes were read back and show md-wasm 4.3.1 and
 DOMPurify `^3.4.16`. The contract pin remains
 `c0b452da075b66757c60bd0d721a47062d4354d0`. Sample's exact Git dependency
-and handoff records are updated together. Exact external-install and final
-handoff/tree checks remain completion gates. CMS regeneration processed all
+and handoff records are updated together. Exact external-install and
+handoff/tree checks passed against this exact package commit. CMS regeneration processed all
 four discovered hosts, with generated records retained in the same change.
+The container default umask 0077 was detected by the packed portability gate;
+generated contract files were normalized to 0644 and regeneration rerun with
+umask 0022. Identity records were produced by the canonical generator only.
 
 ## Verification status and holds
 
