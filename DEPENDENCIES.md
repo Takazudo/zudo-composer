@@ -267,9 +267,31 @@ across 45 names, compared with A's 158/45 and baseline 164/46.
 | Landing | 207 to 244 | 48 / 11 | 208 to 244 | 76 / 40 |
 | Blog | 207 to 244 | 48 / 11 | 208 to 244 | 76 / 40 |
 
-All four final full-graph audits report zero advisories, including development
-dependencies. Their frozen installs and `dedupe --check` pass. Root retains A's
+All five final full-graph audits report zero advisories, including development
+dependencies. The four SG frozen installs and `dedupe --check` pass. Root retains A's
 reviewed lock and deliberate dedupe finding. Final aggregate and browser evidence
 will be recorded on the exact delivery B PR head; in-progress checks are not
 represented as passed. Both deliveries remain unmerged until the authorized
 production-deployment control and ordered integration gates are satisfied.
+
+
+The former Sample stylesheet unit assertion required UI/Tailwind and doc chrome
+in one global stylesheet. That assumption is intentionally retired by the
+separate-preview architecture: its replacement verifies current published shell
+CSS exports, absence of pack/Tailwind imports from the shell, and actual UI CSS
+plus story/preview scan roots in the independent preview. Existing computed-style,
+mobile drawer and token-edit behavior assertions remain intact. The focused
+stylesheet suite passes all 12 tests.
+
+Final local host builds, artifact checks and Wind error audits pass. All 339
+actual variants pass browser rendering and catalog interaction checks, including
+real Shop cart/checkout, Landing pricing/signup, and Blog comment/newsletter
+state changes. Sample's watched story/metadata/CSS/thumbnail edit and restoration
+pass. The first refreshed Sample build had inconsistent server/client identities;
+its inputs overlapped a README edit. With inputs frozen, a clean public rebuild
+produced matching identities and passed the complete browser/dev proof. This
+observation is not labeled a demonstrated upstream defect. The first B CI run
+found a prohibited run URL in these records and a test locator selecting a
+hidden sidebar link. Portable run IDs and a unique actual catalog-card locator
+correct those defects without bypassing the handoff gate or browser assertions.
+Final exact-head CI and any later corrections are recorded on PR #899.
