@@ -226,7 +226,7 @@ The owner can delete the retired scripts explicitly (or use the Cloudflare
 dashboard when a custom-domain binding needs separate cleanup):
 
 ```sh
-# Wrangler 4.130.0 has no --yes flag; a non-interactive run accepts the
+# Wrangler 4.149.0 has no --yes flag; a non-interactive run accepts the
 # confirmation prompt. Set CLOUDFLARE_ACCOUNT_ID when the login has several accounts.
 corepack pnpm exec wrangler delete zudo-composer < /dev/null
 corepack pnpm exec wrangler delete zudo-composer-doc < /dev/null

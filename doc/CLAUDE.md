@@ -2,7 +2,7 @@
 
 The `doc/` directory is the English developer documentation site for
 `zudo-composer`, built with [zudo-doc](https://github.com/zudolab/zudo-doc)
-5.28.0 on zfb 2.22.0. The Drift theme, layout, chrome, routes, and interactive islands
+6.0.0 on the aligned zfb 4.3.1 family, using zudo-react and Wind. The Drift theme, layout, chrome, routes, and interactive islands
 come from the package; this workspace owns the config and MDX content.
 
 ## Structure
@@ -10,7 +10,7 @@ come from the package; this workspace owns the config and MDX content.
 - `zfb.config.ts` — the site configuration and its intentional overrides
 - `src/content/docs/<category>/<page>.mdx` — English documentation pages; the
   filesystem defines the sidebar
-- `src/styles/global.css` — the package CSS and Tailwind layer setup
+- `src/styles/global.css` — the public package CSS and Wind layer setup
 - `pages/index.tsx` — the package home route re-export
 - `pages/docs/[[...slug]].tsx` — the host-owned documentation route seam
 - `public/` — static site assets
@@ -39,6 +39,19 @@ script in the `doc` package.
 The root `check` chain runs `doc:check` and `doc:build-site` before the packed
 host-install proof; those checks must stay behind the no-deploy audit.
 
+The package base tsconfig owns the zudo-react JSX settings. Keep project aliases,
+but do not restore React-to-Preact aliases or override the base declaration files.
+The docs route retains public route-context/chrome factories and binds
+`DocHistoryBoundary` from `@takazudo/zudo-doc/doc-history-area` so the server
+boundary owns history hydration and keeps fallback markup out of Island props.
+
+`zudoDoc()` registers the public Wind manifest automatically. The CSS entry uses
+`zw-reset`/`zd-flow`, public package CSS imports and ordinary `:root` token
+overrides. Do not restore Tailwind directives or the removed `safelist.css` and
+`theme-no-reset.css` imports. Check utility coverage with
+`pnpm -C doc exec zfb wind audit --project-root . --fail-on error`, then verify
+emitted CSS and browser behavior as well as the real production artifact.
+
 ## Build output shape
 
 `pnpm doc:build` writes the root-mounted static site to `doc/dist/`:
@@ -54,7 +67,7 @@ Because `base` is `/`, emitted links and asset URLs are root-relative. Build
 output and zfb working directories are ignored; a build must not leave
 untracked `doc/dist/`, `doc/.zfb/`, or `doc/.zfb-build/` files.
 
-The documentation site is the `doc` target in the ten-target trusted-run
+The documentation site is the `doc` target in the thirteen-target trusted-run
 pipeline, served at [zudo-composer.zudolab.dev](https://zudo-composer.zudolab.dev/).
 The target registry and Wrangler contracts are:
 
@@ -62,6 +75,9 @@ The target registry and Wrangler contracts are:
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `doc` | `doc-site` | `zudo-composer` | `wrangler.doc.jsonc` | `zudo-composer.zudolab.dev` | `doc/dist` | `doc-site-manifest.json` | `doc-site-<sha>` |
 | `sample-sg` | `doc-site` | `zc-sg-sample` | `wrangler.sample-sg.jsonc` | `zc-sg-sample.zudolab.dev` | `styleguide/sample/dist` | `doc-site-manifest.json` | `sample-sg-site-<sha>` |
+| `shop-sg` | `doc-site` | `zc-sg-shop` | `wrangler.shop-sg.jsonc` | `zc-sg-shop.zudolab.dev` | `styleguide/shop/dist` | `doc-site-manifest.json` | `shop-sg-site-<sha>` |
+| `landing-sg` | `doc-site` | `zc-sg-landing` | `wrangler.landing-sg.jsonc` | `zc-sg-landing.zudolab.dev` | `styleguide/landing/dist` | `doc-site-manifest.json` | `landing-sg-site-<sha>` |
+| `blog-sg` | `doc-site` | `zc-sg-blog` | `wrangler.blog-sg.jsonc` | `zc-sg-blog.zudolab.dev` | `styleguide/blog/dist` | `doc-site-manifest.json` | `blog-sg-site-<sha>` |
 | `sample` | `site-static` | `zc-demo-sample` | `wrangler.demo-sample.jsonc` | `zc-demo-sample.zudolab.dev` | `packages/demo-sample/dist-site` | `site-manifest.json` | `demo-site-sample-<sha>` |
 | `shop` | `site-static` | `zc-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` | `packages/demo-webshop/dist-site` | `site-manifest.json` | `demo-site-shop-<sha>` |
 | `landing` | `site-static` | `zc-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` | `packages/demo-landing/dist-site` | `site-manifest.json` | `demo-site-landing-<sha>` |
@@ -73,10 +89,12 @@ The target registry and Wrangler contracts are:
 
 The `doc-site-build` job uploads `doc-site-<sha>` from `doc/dist`; the
 `sample-sg-site-build` job uploads `sample-sg-site-<sha>` from
-`styleguide/sample/dist`. Both doc-site targets use `doc-site-manifest.json`;
+`styleguide/sample/dist`. The Shop, Landing and Blog styleguide build jobs upload their corresponding
+`<host>-sg-site-<sha>` artifacts from `styleguide/<host>/dist`. All five
+doc-site targets use `doc-site-manifest.json`;
 static targets use `site-manifest.json` and editor targets use
 `demo-editor-manifest.json`. Keep this table aligned with
-`scripts/hosted-demo/targets.mjs` and the ten checked-in Wrangler files.
+`scripts/hosted-demo/targets.mjs` and the thirteen checked-in Wrangler files.
 
 Before the first rollout, an owner must delete the retired Workers
 `zudo-composer`, `zudo-composer-doc`, `zudo-composer-demo-shop`,
