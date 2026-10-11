@@ -11,7 +11,7 @@ import { startComposerDevServer } from "../dev-server.mjs";
 function fixture() {
   const close = vi.fn(async () => {}), release = vi.fn(async () => {});
   const server = {
-    close, listen: vi.fn(async () => {}), ws: { close: vi.fn(async () => {}) }, httpServer: null,
+    close, listen: vi.fn(async () => {}), waitForRequestsIdle: vi.fn(async () => {}), ws: { close: vi.fn(async () => {}) }, httpServer: null,
     middlewares: { stack: [], use: vi.fn() },
   } as unknown as ViteDevServer;
   installAuthoringShutdown(server, { release });

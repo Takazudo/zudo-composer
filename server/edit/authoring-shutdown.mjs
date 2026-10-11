@@ -88,6 +88,10 @@ export function installAuthoringShutdown(server, lease) {
         // Keep the module evaluator available until handlers have completed their
         // storage work and native lock release. No new request may enter a store.
         while (active.size) await Promise.allSettled([...active]);
+        // The new UI pack can leave Vite's initial client warmup in flight when
+        // the first page request ends. Let those transforms settle before Vite
+        // closes its plugin container, or close waits on orphaned requests.
+        await server.waitForRequestsIdle();
         await close();
         await lease.release();
       } finally {

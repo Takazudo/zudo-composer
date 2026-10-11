@@ -8,7 +8,7 @@ function fixture() {
   const stack: { handle: (...args: unknown[]) => unknown }[] = [];
   const middlewares = { stack, use(...args: unknown[]) { stack.push({ handle: args.at(-1) as typeof stack[number]["handle"] }); return this; } };
   const close = vi.fn(async () => {}), release = vi.fn(async () => {});
-  return { stack, middlewares, close, release, server: { middlewares, close, ws: { close: vi.fn(async () => {}) }, httpServer: null } as unknown as ViteDevServer };
+  return { stack, middlewares, close, release, server: { middlewares, close, waitForRequestsIdle: vi.fn(async () => {}), ws: { close: vi.fn(async () => {}) }, httpServer: null } as unknown as ViteDevServer };
 }
 
 describe("authoring shutdown", () => {
@@ -18,7 +18,7 @@ describe("authoring shutdown", () => {
       import { installAuthoringShutdown } from ${JSON.stringify(helper)};
       const listener = setInterval(() => {}, 1000);
       const server = {
-        middlewares: { stack: [], use() {} }, ws: { async close() {} },
+        middlewares: { stack: [], use() {} }, ws: { async close() {} }, waitForRequestsIdle: async () => {},
         async close() {
           clearInterval(listener);
           console.log('closing');
@@ -73,6 +73,21 @@ describe("authoring shutdown", () => {
     expect(f.release).toHaveBeenCalledTimes(1);
     expect(process.listenerCount("SIGTERM")).toBe(signals);
     expect(f.close.mock.invocationCallOrder[0]).toBeLessThan(f.release.mock.invocationCallOrder[0]!);
+  });
+
+  it("settles Vite client transforms before closing the plugin container", async () => {
+    const f = fixture();
+    let idle!: () => void;
+    f.server.waitForRequestsIdle = vi.fn(() => new Promise<void>(resolve => { idle = resolve; }));
+    installAuthoringShutdown(f.server, { release: f.release });
+    const shutdown = f.server.close();
+    await vi.waitFor(() => expect(f.server.waitForRequestsIdle).toHaveBeenCalledOnce());
+    expect(f.close).not.toHaveBeenCalled();
+    expect(f.release).not.toHaveBeenCalled();
+    idle();
+    await shutdown;
+    expect(f.close).toHaveBeenCalledOnce();
+    expect(f.release).toHaveBeenCalledOnce();
   });
 
   it("disconnects a pending operator challenge before draining and keeps the evaluator alive until settlement", async () => {

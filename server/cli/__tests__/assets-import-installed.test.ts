@@ -55,6 +55,7 @@ async function devAssetRedirect(workspaceRoot: string, env: NodeJS.ProcessEnv, a
   // Drive the real configured plugin against its real store, without binding a port.
   const server = strictFixture<ViteDevServer>({
     close: vi.fn(async () => {}),
+    waitForRequestsIdle: vi.fn(async () => {}),
     ws: strictFixture<ViteDevServer["ws"]>({ close: vi.fn(async () => {}) }),
     httpServer: null,
     ssrLoadModule: async () => ({ createFilesystemAssetStore }),

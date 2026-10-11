@@ -343,7 +343,7 @@ async function verifyInstalledSiteRoutes(routes) {
     /** @type {string[]} */
     const failures = [];
     page.on("pageerror", (error) => failures.push(error.message));
-    page.on("console", (message) => { if (message.type() === "error") failures.push(message.text()); });
+    page.on("console", (message) => { if (message.type() === "error") failures.push(`${message.location().url || "unknown resource"}: ${message.text()}`); });
     page.on("requestfailed", (request) => { if (request.failure()?.errorText !== "net::ERR_ABORTED") failures.push(`${request.url()}: ${request.failure()?.errorText}`); });
     for (const route of routes) {
       assert.equal((await page.goto(`${ORIGIN}${route}`))?.status(), 200, `${route} direct navigation failed`);
