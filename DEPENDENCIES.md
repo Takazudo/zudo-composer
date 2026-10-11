@@ -142,7 +142,8 @@ and handoff records are updated together. Exact external-install and
 handoff/tree checks passed against this exact package commit. CMS regeneration processed all
 four discovered hosts, with generated records retained in the same change.
 The container default umask 0077 was detected by the packed portability gate;
-generated contract files were normalized to 0644 and regeneration rerun with
+generated contract files were normalized to 0644 and directories to 0755, including
+the dist root and tracked source ancestors, and regeneration rerun with
 umask 0022. Identity records were produced by the canonical generator only.
 
 ## Verification status and holds
