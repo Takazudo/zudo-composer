@@ -179,3 +179,83 @@ without deleting that lease.
   not run tests. The [draft PR](https://github.com/Takazudo/zudo-composer/pull/893)
   records the latest exact-head aggregate and CI results separately from the
   dated source-revision evidence above.
+
+## Current-main reconciliation (2026-10-11)
+
+This section records a new local integration; all evidence above remains
+historical. The fetched base was `main` at
+`cd373870b56102e5eec59ddb3883bfc1926bd56b` (including PR #894), and the
+existing draft branch began at `0d6ee0e6eaaae350a5fdc1873353f5564162cdde`.
+An additive merge committed as `79dd410f49125afeadfc1e3a1523f8c30ea2f09f`.
+The verified implementation and generated-host follow-up committed as
+`24ecaf3451ad1f3e3f0a56f59accc006c2b95cf4`.
+
+The merge conflicted only in four generated `demo-sample` CMS current pointers.
+The authoritative sources were preserved, followed by `cms:regenerate` and
+`cms:check`. This managed checkout initially used umask 0077 and 0600/0700
+tracked modes; restoring Git's 0644/0755 modes and regenerating produced the
+four pointer tokens in the follow-up commit. No identity hashing was weakened.
+Current main's UI pack handoff identity
+`ed372ac37a24485ed469554822db38c8ec1a334e`, Markdown WASM 4.3.0,
+isolation rules, lockfiles and parser coverage are retained. The root frozen
+install used Node 24.19.0 and Corepack pnpm 11.5.2.
+
+The upgrade exposed a real Vite shutdown race: closing its plugin container
+while initial client transforms remained active could leave a SIGINT shutdown
+waiting indefinitely. The authoring shutdown helper now awaits Vite's client
+request idle barrier after draining middleware and before closing Vite. A new
+ordering test and the real dev-server SIGINT suite pass; the server-lifetime
+authoring lease and CLI exclusion remain in force.
+
+### Executed checks on the integrated tree
+
+- Focused native editing, storage, lease, shutdown, Markdown and package
+  isolation suites: 10 files / 93 tests passed. The affected shutdown and
+  parity suites then passed 5 files / 28 tests; plugin and installed-asset
+  fixtures passed 2 files / 58 tests.
+- `corepack pnpm check` ran serially through the heavy guard. All 390 unit-test
+  files / 4,816 tests passed. Lint, typecheck, package-handoff and CMS checks,
+  production build, preview isolation, distribution boundary, docs build and
+  all four styleguides passed. The aggregate's `edit:installed` stage passed:
+  installed CLI and public API, exact Japanese multiline text, supplied table
+  values and managed image, real Composer open/render and restart, receipts,
+  retries and guarded undo. Its packed-host stage passed the synthesized
+  fixture and failed during the `demo-blog` route crawl as described below.
+  Thus the **aggregate did not pass overall**.
+- Separate `contract:conformance`, `contract:negative-scan`,
+  `contract:external-install -- --exact`, `ui:external-install -- --exact`,
+  `public:installed`, `demo:build-sites`, `demo:build-editors`,
+  `sg:build-styleguides`, `cms:regenerate` and `cms:check` passed. The contract
+  conformance pack contained 636 files and verified strict Bundler/NodeNext
+  imports and both release-portability directions. The external checks kept
+  contract identity `c0b452da075b66757c60bd0d721a47062d4354d0` and the
+  current-main UI pack identity above.
+- `test:browser:dev -- tests/browser-dev/assets-download.pw.ts` passed its
+  single test. Full `test:browser:dev`, `test:browser:site-project`,
+  `test:browser:demos` and `test:browser:demo-editor` ran but failed route or
+  page-console checks on the browser resource error below. `test:browser:host`
+  was stopped after repeated instances of the same error; it is not a pass.
+
+### Browser environment limitation and baseline
+
+The pinned Playwright Chromium download endpoints returned HTTP 403 in this
+environment. Local runs therefore used installed Chromium 154.0.8037.57 via
+`/usr/bin/chromium` (with task-local Playwright paths for browser suites).
+This browser requests `/favicon.ico` and reports its HTTP 404 as a console
+error; the repository's existing strict page-console checks fail. The
+installed-host diagnostic now prints the failing resource URL, without
+relaxing any check. The same `smoke:host-install -- --host demo-blog` command
+was reproduced in an isolated current-main worktree at baseline
+`cd373870b56102e5eec59ddb3883bfc1926bd56b`: its installed 18-route,
+14-file artifact reached the route crawl and failed with the same
+`Failed to load resource ... 404 (Not Found)` signature. These local browser
+lanes are **failed under the available browser**, not verified passes. No CI
+result for the new integrated commit has been inspected or claimed.
+
+The native editing foundation still supports strict text, managed image and
+table insertion through owner-qualified, page-only plans with exact review
+binding, writer revision checks, durable receipts, idempotent retries and
+guarded undo. It refuses unsupported host shapes and keeps planning and apply
+blocked while the authoring server runs. Next work remains (1) browser-safe
+save/revision coordination, (2) page-first review UI, and (3) one restricted
+local agent runner with distinct proposal, approval and receipt state.
