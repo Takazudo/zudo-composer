@@ -76,7 +76,7 @@ No deployment or release was performed to validate this change.
 | Decision | Dependencies / scope | Evidence and consequence |
 | --- | --- | --- |
 | REMOVE | doc's direct `preact` and `preact-render-to-string` | zudo-doc 6 removes its core Preact peer; the published scaffold and local route now use zudo-react. Migrated doc type/content check and real build pass. Application and preview Preact remain. |
-| DECIDE — pending | KaTeX in all four SGs | No source/config/generated MathBlock or enabled math feature was found. Published defaults disable math, but zudo-doc 5 and 6 still expose optional peer `^0.16.0`, incompatible with patched >=0.18.2. Manifest removal alone retained stale optional-peer resolution. A disposable proof removed both doc/SG parents with supported `--lockfile-only` commands and re-added their exact original specs; the same sequence now passes in all four hosts without lock deletion, manual edits or overrides. All four frozen installs and audits pass with no resolved KaTeX; final builds/browser/output parity remain pending. |
+| REMOVE | KaTeX in all four SGs | No source/config/generated MathBlock or enabled math feature was found. Published defaults disable math, but zudo-doc 5 and 6 still expose optional peer `^0.16.0`, incompatible with patched >=0.18.2. Manifest removal alone retained stale optional-peer resolution. A disposable proof removed both doc/SG parents with supported `--lockfile-only` commands and re-added their exact original specs; the same sequence now passes in all four hosts without lock deletion, manual edits or overrides. All four frozen installs, audits, builds and current-head CI computed-style checks pass with no resolved KaTeX. Final cleanup comparison preserves every route, visible text, link and all 128 CSS assets (32 per host). |
 | KEEP | SG `diff` for this delivery | Although history is disabled, baseline common islands contain dormant history implementation and a diff chunk. Removing the dependency requires separate lost-chunk and behavior review; lexical non-use is insufficient. |
 | KEEP | doc `diff` and history server | `docHistory:true`, dev scripts and history comparisons consume these optional peers. |
 | KEEP | CodeMirror family and `@lezer/highlight` | Direct editor/formatting and markdown integration imports; active native-editing work uses this graph. |
@@ -131,7 +131,7 @@ imports, meaningful HTML/CJK/GFM/highlighting, frontmatter diagnostics and
 recovery through both owners. It no longer demands unequal module paths or
 compares a module to itself. Existing built-artifact checks verify the emitted
 render WASM size/digest against the published manifest, one glue module, and
-absence of compiler/parse/highlight-only payloads; these gates still must run.
+absence of compiler/parse/highlight-only payloads; the final distribution gate passes with 34 assets, one render WASM and one glue module.
 
 UI package handoff is now `776fb59a46bb53ceb0fa1ff823e83fae764597ac` on
 `package/ui-v1`, following `ed372ac37a24485ed469554822db38c8ec1a334e`.
@@ -156,12 +156,41 @@ one informational dynamic-construction observation (`docs;`), no errors.
 History generation remains the existing local default unless
 `GEN_DOC_HISTORY=1` is set; a local build is not proof of historical data.
 
-Pending at this record: aggregate root check/build and all package/public/
-consumer/provider/headless/distribution/external-install checks; final root frozen install after exclusion pruning and five-scope dedupe; old Sample
-compatibility with the new Git-installed UI; all serial browser/computed-style
-lanes and prepared artifacts; CMS check; current-head CI and independent review.
-The disposable Sample migration spike is preliminary B evidence, not four-host
-completion or transitional A acceptance.
+Final local build, distribution boundary, preview style isolation, doc check and
+all four SG builds pass. The cleanup comparator preserves route JSON, all 125
+HTML pages (normalizing only the islands-entry filename hash), visible text,
+links and all 128 CSS assets (32 per host) byte-for-byte. Sample's intended render WASM update
+is verified separately. Five final audits contain zero advisories; four SG
+frozen installs and dedupe checks pass. Root duplication is retained as above.
+
+Exact Git UI/contract external installs, public installed-package verification,
+conformance/negative boundaries, consumer/creator/provider/headless boundaries,
+CMS checks and package handoff checks have passing evidence. Independent review
+of commit `6ec82ab08b18a6b49cee8036009b4328ed986374` found no remaining source
+finding. Current-head CI run 38159573434 has 21 successful jobs; the final
+validation job has passed full unit tests and build and is still running browser
+lanes. Pending CI is not reported as passed.
+
+Supplementary doc browser checks pass for English content/navigation, wide home,
+search and repeated SPA navigation, computed theme, sidebar/TOC visibility,
+history dialog/error handling and mobile escape/focus. The default local build omits history artifacts. A separate scratch run
+generated all 28 histories from real, nonshallow Git; three configuration
+revisions match exact git content. The published 6.0.0 loopback history server
+returns the same payload, and browser revision selection, real added/removed
+diff lines, same-version Compare disabling, reopen and Escape/focus all pass. Local pinned Chromium download returned HTTP 403, so this
+supplementary probe explicitly used system Chromium; CI uses pinned Playwright.
+
+Local aggregate checks exposed two environment defects: umask 0077 and cached
+0600 package metadata broke permission-sensitive identities, and stale private
+workspace hoists exposed an undeclared image-editor package to Vitest. Canonical
+0022 generation plus a fresh pnpm store passes unchanged public verification;
+focused unchanged digest tests pass. A clean frozen scratch installation proves
+the hoist assertion passes without changing configuration or tests. A clean root frozen reinstall under pnpm 11.5.2 now passes; both unchanged
+focused files pass all seven tests. Earlier aggregate failures are
+not represented as a passing aggregate invocation.
+
+Delivery B's disposable Sample migration remains a separate parity experiment.
+It does not constitute a completed four-host migration.
 
 Conditional merge authority does not authorize the production deployment
 triggered after successful main CI. Before any merge, an already-authorized
