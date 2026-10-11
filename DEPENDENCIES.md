@@ -168,7 +168,7 @@ conformance/negative boundaries, consumer/creator/provider/headless boundaries,
 CMS checks and package handoff checks have passing evidence. Independent review
 of final delivery A commit `08facd508648c5bfb2e2b02ed127b8858ae99e46` found no
 remaining source finding. All 22 jobs in final-head CI run
-[38160898345](https://github.com/Takazudo/zudo-composer/actions/runs/38160898345)
+38160898345 (linked from PR #898)
 passed, including the full unit, build, packed-host and browser lanes.
 
 Supplementary doc browser checks pass for English content/navigation, wide home,

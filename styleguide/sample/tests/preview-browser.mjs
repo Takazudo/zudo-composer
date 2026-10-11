@@ -42,7 +42,12 @@ const interactiveFrameSelector = `${previewFrameSelector}[src*="variant=Interact
 try {
   await page.goto(url + "/");
   await page.getByRole("link", { name: "Components", exact: true }).click();
-  await page.getByRole("link", { name: "Card", exact: true }).first().click();
+  const card = page.locator("[data-sg-card]").filter({
+    has: page.getByRole("heading", { name: "Card", exact: true }),
+  });
+  await expect(card).toHaveCount(1);
+  await card.click();
+  await expect(page).toHaveURL(url + "/components/card");
   const title = page.getByLabel("Title", { exact: true });
   await title.fill("Preview protocol proof");
   const frame = page.frameLocator(interactiveFrameSelector);
@@ -189,7 +194,9 @@ try {
   await page.getByRole("button", { name: "Close panel", exact: true }).click();
   await page.getByRole("link", { name: "Components", exact: true }).click();
   await expect(page).toHaveURL(/\/components\/?$/);
-  await page.getByRole("link", { name: "Card", exact: true }).first().click();
+  await expect(card).toHaveCount(1);
+  await card.click();
+  await expect(page).toHaveURL(url + "/components/card");
   await page
     .getByRole("button", { name: "Preview tokens", exact: true })
     .click();
