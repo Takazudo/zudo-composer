@@ -8,7 +8,7 @@ minimumReleaseAgeExclude:
   - '@takazudo/zfb-darwin-x64@2.22.0'
   - '@takazudo/zfb-linux-arm64-gnu@2.22.0'
   - '@takazudo/zfb-linux-x64-gnu@2.22.0'
-  - '@takazudo/zfb-md-wasm@2.22.0'
+  - '@takazudo/zfb-md-wasm@2.22.0 || 4.3.0'
   - '@takazudo/zfb-runtime@2.22.0'
   - '@takazudo/zfb-win32-x64-msvc@2.22.0'
   - '@takazudo/zfb@2.22.0'
