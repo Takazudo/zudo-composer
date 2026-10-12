@@ -18,6 +18,7 @@ export default tseslint.config(
       'server/generated/**',
       'server/authoring.mjs',
       'server/authoring.d.mts',
+      'server/editing.d.mts',
       'server/site-build.mjs',
       'server/site-build.d.mts',
       'server/site-project.d.mts',

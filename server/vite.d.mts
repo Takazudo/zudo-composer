@@ -787,6 +787,29 @@ interface ComposerSettings {
     pack: string;
 }
 
+/** Explicit host opt-in. Semantic kinds never derive from component names. */
+interface NativeEditingConfig {
+    source: "workspace";
+    paragraph?: {
+        componentId: string;
+        textProp: string;
+    };
+    list?: {
+        componentId: string;
+        itemsProp: string;
+    };
+    image?: {
+        componentId: string;
+        srcProp: string;
+        altProp: string;
+    };
+    table?: {
+        componentId: string;
+        columnsProp: string;
+        rowsProp: string;
+    };
+}
+
 /** Absolute paths derived from the settings. Node-side only, never serialized. */
 interface ComposerPaths {
     workspaceRoot: string;
@@ -800,6 +823,7 @@ interface ComposerPaths {
     styles: string;
 }
 interface ResolvedComposerConfig {
+    nativeEditing: NativeEditingConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */
     workspaceRoot: string;
     /** Absolute path of the host config file, whether or not it exists. */

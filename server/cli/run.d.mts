@@ -3,6 +3,7 @@ import type { ViteDevServer } from "vite";
 import type { ComposerProcess } from "./supervise.d.mts";
 import type { BuildSiteOptions } from "../site-build/run.mjs";
 
+export const EDIT_ENTRY_PATH: string;
 export const RELEASE_ENTRY_PATH: string;
 export const BUILD_SITE_ENTRY_PATH: string;
 export const ASSETS_IMPORT_ENTRY_PATH: string;
@@ -44,6 +45,7 @@ export type ParsedComposerCommand =
   | { command: "init"; options: import("../creator/init.mjs").InitOptions }
   | { command: "dev"; options: Record<string, unknown> }
   | { command: "release"; rest: string[] }
+  | { command: "edit"; rest: string[] }
   | { command: "build-site"; options: BuildSiteOptions }
   | { command: "assets-import"; options: { workspaceRoot?: string; manifest?: string } }
   | { command: "generate"; options: GenerateOptions }

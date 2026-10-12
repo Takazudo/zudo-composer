@@ -172,6 +172,9 @@ describe("runComposerCli", () => {
 Commands:
   init <dir>  Create a populated host in a new directory.
   dev         Start the authoring dev server, rooted at the current project.
+  edit <verb> Run deterministic draft editing with one JSON request on stdin.
+              Verbs: inspect, resolve, plan, review, apply, receipt, discard,
+              supersede, undo. Options: --root <dir>, --stdin, --json.
   release     Run the SiteProject release API (one JSON request on stdin, one
               canonical JSON response on stdout).
   build-site  Build and verify the host's static website in dist-site.
@@ -437,14 +440,40 @@ describe("superviseDevServer", () => {
     expect(proc.err.join("")).toContain("close failed");
   });
 
-  it("exits anyway when close never settles, so a stalled shutdown cannot hold the port", async () => {
+  it("waits beyond the warning interval for owned writes to drain before exiting", async () => {
     vi.useFakeTimers();
     try {
       const proc = fakeProcess();
-      superviseDevServer({ close: () => new Promise<void>(() => {}) }, proc);
+      let finish!: () => void;
+      const server = { close: vi.fn(() => new Promise<void>(resolve => { finish = resolve; })) };
+      superviseDevServer(server, proc);
       proc.emitter.emit("SIGINT");
-      await vi.advanceTimersByTimeAsync(CLOSE_GRACE_MS);
+      await vi.advanceTimersByTimeAsync(CLOSE_GRACE_MS * 3);
+      expect(proc.exits).toEqual([]);
+      expect(proc.err).toEqual(["[zudo-composer] Waiting for safe dev server shutdown; active writes must finish before exit.\n"]);
+      expect(vi.getTimerCount()).toBe(1);
+      proc.emitter.emit("SIGTERM");
+      expect(server.close).toHaveBeenCalledTimes(1);
+      expect(proc.exits).toEqual([]);
+      finish();
+      await vi.advanceTimersByTimeAsync(0);
       expect(proc.exits).toEqual([128 + 2]);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears the keepalive when close throws synchronously", async () => {
+    vi.useFakeTimers();
+    try {
+      const proc = fakeProcess();
+      superviseDevServer({ close: () => { throw new Error("synchronous close failure"); } }, proc);
+      proc.emitter.emit("SIGTERM");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(proc.exits).toEqual([128 + 15]);
+      expect(proc.err.join("")).toContain("synchronous close failure");
+      expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();
     }

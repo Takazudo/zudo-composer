@@ -36,6 +36,8 @@ export default defineConfig({
     },
   ],
   webServer: {
+    // Drain authoring writes and release the owned lease before the next run.
+    gracefulShutdown: { signal: "SIGTERM", timeout: 0 },
     command: "corepack pnpm dev",
     url: "http://localhost:5173",
     reuseExistingServer: false,

@@ -154,6 +154,7 @@ const expectedRootExports = {
   './site-project': { types: './server/site-project.d.mts' },
   './styles': './src/style.css',
   './package.json': './package.json',
+  './editing': { types: './server/editing.d.mts', default: './server/editing.mjs' },
 };
 assert(JSON.stringify(rootPackageJson.exports) === JSON.stringify(expectedRootExports), 'the root package exports map changed');
 

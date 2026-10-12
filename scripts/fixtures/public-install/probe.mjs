@@ -3,10 +3,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TextEncoder } from "node:util";
 import * as authoring from "zudo-composer/authoring";
+import * as editing from "zudo-composer/editing";
 import * as siteBuild from "zudo-composer/site-build";
 import { loadHostContext } from "zudo-composer/vite";
 
-assert.deepEqual(Object.keys(authoring).sort(), ["ASSET_PROVIDER_ID", "COMPOSITION_PROVIDER_ID", "CONTENT_PROVIDER_ID", "DEFAULT_TIMESTAMP", "MAPPING_PROVIDER_ID", "SITEMAP_PROVIDER_ID", "assetAuthoringUrl", "assetMimeTypeForExtension", "canonicalStringifyJson", "createFilesystemAssetStore", "defineSite", "entryRef", "imageUse", "node", "slugify", "validateSiteProject"]);
+assert.deepEqual(Object.keys(authoring).sort(), ["ASSET_PROVIDER_ID", "COMPOSITION_PROVIDER_ID", "CONTENT_PROVIDER_ID", "DEFAULT_TIMESTAMP", "MAPPING_PROVIDER_ID", "SITEMAP_PROVIDER_ID", "assetAuthoringUrl", "assetMimeTypeForExtension", "canonicalStringifyJson", "createFilesystemAssetStore", "defineSite", "entryRef", "imageUse", "initializeAuthoringWorkspace", "node", "slugify", "validateSiteProject"]);
+assert.deepEqual(Object.keys(editing), ["createEditingService"]);
+assert.equal(typeof editing.createEditingService, "function");
+assert.equal(typeof authoring.initializeAuthoringWorkspace, "function");
 assert.deepEqual(Object.keys(siteBuild).sort(), ["SITE_HEADERS", "SITE_MANIFEST", "compileStaticSite", "createSiteManifest", "siteHeaders", "verifySiteStaticArtifact"]);
 assert.equal(authoring.assetAuthoringUrl("proof"), "/uploaded-assets/asset-proof");
 assert.equal(authoring.assetMimeTypeForExtension("PDF"), "application/pdf");

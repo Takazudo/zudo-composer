@@ -21,6 +21,8 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
   },
   webServer: {
+    // Drain authoring writes and release the owned lease before the next run.
+    gracefulShutdown: { signal: "SIGTERM", timeout: 0 },
     command: "pnpm exec vite --host 127.0.0.1 --port 4174 --strictPort",
     url: "http://127.0.0.1:4174",
     reuseExistingServer: false,

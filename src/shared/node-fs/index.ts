@@ -38,3 +38,5 @@ export {
   type RecordTransactionSnapshot,
   type TransactionalRecordStoreOptions,
 } from "./record-transaction";
+
+export { withMutationBarrier, MutationBarrierError } from "./mutation-barrier";

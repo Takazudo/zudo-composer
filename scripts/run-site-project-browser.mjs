@@ -1,6 +1,7 @@
 // @ts-check
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { cp, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { authoringSiteRoutes, readVerifiedHostManifest } from "./host-site-routes.mjs";
@@ -59,6 +60,9 @@ try {
     stdio: "inherit",
   });
   if (result.status !== 0) process.exitCode = result.status ?? 1;
+  if (existsSync(join(root, ".zudo-authoring.lock"))) {
+    throw new Error("SiteProject browser server exited before releasing its authoring lease; preserve the lock for investigation.");
+  }
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });
 }

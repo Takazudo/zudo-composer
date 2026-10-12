@@ -15,10 +15,13 @@ export interface PackSourceGraph {
   readonly files: readonly string[];
   /** Sorted by name (code point), deduped. */
   readonly dependencies: readonly PackSourceDependency[];
+  /** Editing-only full executed graph, including installed dependency bytes. */
+  readonly attestedFiles?: readonly string[];
 }
 
 export interface CollectPackSourceGraphOptions {
   readonly hostRoot: string;
+  readonly attestExternalFiles?: boolean;
   /** Absolute path of the pack entry module. */
   readonly entryPath: string;
   /** Every component `source.module` specifier, resolved from the host root. */
@@ -79,6 +82,7 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
   const resolveCss: Resolver = (specifier, importer) => cssResolver(environment, specifier, importer);
 
   const files = new Set<string>();
+  const attestedFiles = new Set<string>();
   const dependencies = new Map<string, PackSourceDependency>();
   const followed = new Set<string>();
   const queue: string[] = [];
@@ -90,13 +94,18 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
     const modulesIndex = segments.lastIndexOf("node_modules");
     if (modulesIndex !== -1) {
       await admitDependency(segments, modulesIndex, from);
-      return;
+      if (!options.attestExternalFiles) return;
     }
     let real: string;
     try {
       real = await realpath(path);
     } catch (error) {
       fail(`"${from}" resolved to "${path}", which cannot be read: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (options.attestExternalFiles) {
+      attestedFiles.add(real);
+      if (follow && !followed.has(real)) { followed.add(real); queue.push(real); }
+      return;
     }
     const inHost = relative(hostRoot, real);
     if (inHost === "" || inHost.startsWith(`..${sep}`) || inHost === ".." || isAbsolute(inHost)) {
@@ -140,7 +149,7 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
   }
 
   async function admitRoot(path: string, from: string): Promise<void> {
-    if (path.split(sep).includes("node_modules")) fail(`${from} (${path}) is an installed package, not host-owned source.`);
+    if (!options.attestExternalFiles && path.split(sep).includes("node_modules")) fail(`${from} (${path}) is an installed package, not host-owned source.`);
     await admit(path, from, true);
   }
 
@@ -173,6 +182,7 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
 
   return {
     files: [...files].sort(byCodePoint),
+    ...(options.attestExternalFiles ? { attestedFiles: [...attestedFiles].sort(byCodePoint) } : {}),
     dependencies: [...dependencies.values()].sort((a, b) => byCodePoint(a.name, b.name) || byCodePoint(a.version, b.version)),
   };
 }

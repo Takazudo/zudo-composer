@@ -94,6 +94,7 @@ function normalizeErrorCode(value: string): CompositionPersistenceErrorCode {
     case "read-failed":
     case "write-failed":
     case "transaction-failed":
+    case "commit-uncertain":
     case "conflict":
       return value;
     default:
