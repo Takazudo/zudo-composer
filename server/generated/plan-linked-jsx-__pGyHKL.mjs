@@ -5,7 +5,7 @@ import * as nodeFs from "node:fs/promises";
 import { link } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ContractValidationError, RESERVED_PERSISTED_KEYS, componentPackManifestSchema, validateFieldValue } from "@zudo-composer/component-contract";
-import { commonmarkLanguage } from "@codemirror/lang-markdown";
+import { parser } from "@lezer/markdown";
 //#region src/assets/library/types.ts
 var ASSET_PROVIDERS = { files: {
 	id: "asset-files",
@@ -4549,7 +4549,7 @@ function parseAssetDownloadBlock(source) {
 function assetDownloadBlocks(source) {
 	const blocks = [];
 	if (!source.includes(PREFIX)) return blocks;
-	commonmarkLanguage.parser.parse(source).iterate({ enter(node) {
+	parser.parse(source).iterate({ enter(node) {
 		if (node.name !== "CommentBlock" || node.node.parent?.name !== "Document") return;
 		const raw = source.slice(node.from, node.to).trimEnd();
 		if (raw.startsWith(PREFIX)) blocks.push({
@@ -4572,7 +4572,7 @@ function splitAssetDownloadMarkdown(source) {
 	if (offset < source.length || !parts.length) parts.push({ markdown: source.slice(offset) });
 	if (parts.some((part) => "block" in part)) {
 		const definitions = [];
-		commonmarkLanguage.parser.parse(source).iterate({ enter(node) {
+		parser.parse(source).iterate({ enter(node) {
 			if (node.name === "LinkReference") definitions.push(source.slice(node.from, node.to));
 		} });
 		if (definitions.length) {
