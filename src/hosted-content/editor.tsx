@@ -2,24 +2,18 @@ import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { Select } from "../components/ui/form-controls";
 import { HostedContentSession } from "./session";
-import { HostedFieldControl, fieldEditable, fieldClearable, entryLabel, hostedControlLabels } from "./field-control";
-import type { HostedControlLabels } from "./field-control";
+import { HostedFieldControl, fieldEditable, fieldClearable, entryLabel } from "./field-control";
+import { hostedEditorLabels } from "./labels";
+import type { HostedEditorLabels } from "./labels";
 import type { HostedEditorSessionState, HostedSessionOptions } from "./session";
-import type { ContentEntryRef, HostedFieldPermission, HostedPolicy, HostedState, JsonValue } from "./types";
+import type { ContentEntryRef, HostedErrorCode, HostedFieldPermission, HostedPolicy, HostedState, JsonValue } from "./types";
 
 export * from "./preview-browser";
 export type { HostedEditorSessionState, HostedRecoveryCheckpoint, HostedPreviewAdapter, HostedSessionOptions } from "./session";
 export type { HostedControlLabels } from "./field-control";
+export { hostedEditorLabels, hostedEditorLabelsJa, hostedErrorMessages, hostedErrorMessagesJa } from "./labels";
+export type { HostedEditorLabels } from "./labels";
 export interface HostedEditorSelection { entry: ContentEntryRef; fieldId: string }
-export interface HostedEditorLabels extends HostedControlLabels {
-  save: string; preview: string; submit: string; loading: string;
-  clean: string; dirty: string; saving: string; saved: string; recovering: string; conflict: string; failed: string;
-  content: string; edit: string; create: string; addExisting: string; cancel: string;
-  review: string; reapply: string; discard: string; localValue: string; serverValue: string;
-  reload: string; refreshStatus: string; statusUnavailable: string; cannotClear: string;
-  lastKnownStatus: string; previewCurrent: string; previewRequired: string; submissionIncomplete: string;
-  submitted: string; building: string; verified: string; integrated: string; deployed: string; unavailable: string;
-}
 export interface HostedContentEditorOptions extends HostedSessionOptions {
   policy: HostedPolicy;
   selection: HostedEditorSelection;
@@ -27,7 +21,9 @@ export interface HostedContentEditorOptions extends HostedSessionOptions {
   presentation?: "record" | "field";
   routeId?: string;
   labels?: Partial<HostedEditorLabels>;
-  /** Map typed diagnostics and transport failures to host-facing messages. */
+  /** Routine messages for typed errors, e.g. `hostedErrorMessagesJa`; other errors show their own message. */
+  errorMessages?: Partial<Record<HostedErrorCode, string>>;
+  /** Map typed diagnostics and transport failures to host-facing messages. Overrides `errorMessages`. */
   formatError?(error: unknown): string;
   onNavigate?(selection: HostedEditorSelection): void | Promise<void>;
 }
@@ -43,17 +39,6 @@ export interface HostedContentEditorHandle {
   refreshPublication(): ReturnType<HostedContentSession["refreshPublication"]>;
   dispose(): void;
 }
-const defaults: HostedEditorLabels = {
-  ...hostedControlLabels,
-  save: "Save", preview: "Preview", submit: "Submit", loading: "Loading content…",
-  clean: "Saved", dirty: "Unsaved changes", saving: "Saving…", saved: "Saved", recovering: "Recovering save…",
-  conflict: "Content changed. Review your retained changes.", failed: "Save failed. Your changes are retained.",
-  content: "Content", edit: "Edit", create: "Create item", addExisting: "Add existing item", cancel: "Cancel",
-  review: "Review current content", reapply: "Reapply my changes", discard: "Discard my changes", localValue: "Your value", serverValue: "Current saved value",
-  reload: "Reload saved content", refreshStatus: "Refresh submission status", statusUnavailable: "Submission status is unavailable. The saved draft is retained.", cannotClear: "This field cannot be cleared.",
-  lastKnownStatus: "Last confirmed status", previewCurrent: "Current saved content previewed", previewRequired: "Preview the current saved content before submitting.", submissionIncomplete: "Required content is incomplete.",
-  submitted: "Submitted", building: "Building", verified: "Verified", integrated: "Integrated", deployed: "Deployed", unavailable: "Unavailable",
-};
 const sameRef = (a: ContentEntryRef, b: ContentEntryRef) => a.providerId === b.providerId && a.modelId === b.modelId && a.recordId === b.recordId;
 const refKey = (ref: ContentEntryRef) => JSON.stringify([ref.providerId, ref.modelId, ref.recordId]);
 function permission(options: HostedContentEditorOptions, selection: HostedEditorSelection): HostedFieldPermission | undefined {
@@ -84,7 +69,7 @@ const displayValue = (value: JsonValue | undefined, none: string): string => val
 export function mountHostedContentEditor(container: HTMLElement, options: HostedContentEditorOptions): HostedContentEditorHandle {
   if (!permitted(options, options.selection)) throw new Error("Selection is not permitted");
   const session = new HostedContentSession(options);
-  const labels = { ...defaults, ...options.labels };
+  const labels = { ...hostedEditorLabels, ...options.labels };
   let selection = options.selection;
   let disposed = false;
   const draw = (state = session.state) => { if (!disposed) render(<Editor state={state} />, container); };
@@ -125,7 +110,8 @@ export function mountHostedContentEditor(container: HTMLElement, options: Hosted
     const rejected = !!state.pending?.rejected;
     const collections = options.policy.collections.filter((collection) => sameRef(collection.owner, selection.entry));
     const error = actionError ?? state.error;
-    const message = error ? options.formatError?.(error) ?? (error instanceof Error ? error.message : String(error)) : null;
+    const code = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code as HostedErrorCode : null;
+    const message = error ? options.formatError?.(error) ?? (code && options.errorMessages?.[code]) ?? (error instanceof Error ? error.message : String(error)) : null;
     return <section class="hosted-content-editor" aria-busy={busy}>
       {records.length > 1 && options.presentation !== "field" ? <div class="hosted-content-editor__field"><span>{labels.content}</span><Select aria-label={labels.content} value={refKey(selection.entry)} onChange={(event) => { const next = records.find((record) => refKey(record.selection.entry) === event.currentTarget.value); if (next) run(() => navigate(next.selection)); }}>{records.map((record) => <option key={refKey(record.selection.entry)} value={refKey(record.selection.entry)}>{record.label}</option>)}</Select></div> : null}
       <div class="hosted-content-editor__fields">{fields.map((field) => {

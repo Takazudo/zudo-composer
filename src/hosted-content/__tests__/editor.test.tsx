@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createContentEntryRecord, createContentModelRecord } from "../../content";
-import { mountHostedContentEditor } from "../editor";
+import { hostedEditorLabelsJa, hostedErrorMessagesJa, mountHostedContentEditor } from "../editor";
+import { editorFixture, page } from "./editor-fixture";
 import type { HostedContentEditorHandle } from "../editor";
 import type { HostedCommand, HostedPolicy, HostedResult, HostedState, HostedTransport } from "../types";
 const entry = { providerId: "content", modelId: "lesson", recordId: "lesson-entry" };
@@ -58,5 +59,27 @@ describe("thin hosted content mount", () => {
     await expect(handle.navigate(selection)).rejects.toThrow("network uncertain"); expect(navigate).not.toHaveBeenCalled();
     const pending = handle.state.pending!.request; handle.dispose();
     expect(screen.queryByRole("textbox")).toBeNull(); expect(handle.state.content!.providers[0]!.entries[0]!.values.title).toBe("残す値"); expect(handle.state.pending!.request).toEqual(pending);
+  });
+  it("shows a distinct Japanese blocked state that keeps values until the host adopts the new definition", async () => {
+    const backend = editorFixture(); const container = document.createElement("div"); document.body.append(container); let key = 0;
+    const handle = mountHostedContentEditor(container, { transport: backend.transport, policy: backend.policy, selection: { entry: page, fieldId: "title" }, createOperationKey: () => `blocked-${++key}`, labels: hostedEditorLabelsJa, errorMessages: hostedErrorMessagesJa });
+    handles.push(handle); await handle.ready;
+    const stored = backend.database(); const previous = { baseline: stored.state.baseline, definition: "d-next" };
+    backend.replace({ ...stored, state: { ...stored.state, definition: "d-next" } });
+    fireEvent.input(await screen.findByRole("textbox", { name: "講座名" }), { target: { value: "保持する講座" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(handle.state.phase).toBe("blocked"));
+    expect(screen.getByRole("status", { name: "" }).textContent).toBe(hostedEditorLabelsJa.blocked);
+    expect(screen.getByRole("alert").textContent).toBe(hostedErrorMessagesJa["configuration-required"]);
+    expect(screen.getByRole("textbox", { name: "講座名" })).toHaveValue("保持する講座");
+    expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
+    await backend.service.adoptCanonicalBaseline({ expected: previous, baseline: { gitSha: "g1", contentDigest: "c1" }, providers: stored.baselineProviders, draft: "rebase", apply: true });
+    fireEvent.click(screen.getByRole("button", { name: "現在の内容を確認" }));
+    fireEvent.click(await screen.findByRole("button", { name: "自分の変更を再適用" }));
+    await waitFor(() => expect(handle.state.phase).toBe("dirty"));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(handle.state.phase).toBe("saved"));
+    expect(backend.database().state.providers[0]!.entries[0]!.values.title).toBe("保持する講座");
+    expect(backend.database().state.baseline).toEqual({ gitSha: "g1", contentDigest: "c1" });
   });
 });

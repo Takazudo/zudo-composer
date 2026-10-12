@@ -867,6 +867,8 @@ var conflicts = /* @__PURE__ */ new Set([
 	"baseline-conflict",
 	"definition-conflict"
 ]);
+var blocking = /* @__PURE__ */ new Set(["configuration-required"]);
+var rejectedPhase = (code) => conflicts.has(code ?? "") ? "conflict" : blocking.has(code ?? "") ? "blocked" : "failed";
 var rejectionCodes = /* @__PURE__ */ new Set([
 	"invalid-request",
 	"invalid-value",
@@ -992,7 +994,7 @@ var HostedContentSession = class {
 	async initialize() {
 		try {
 			if (!this.acknowledged) this.acknowledged = copy(await this.options.transport.readState());
-			this.phase = this.pending ? this.pending.rejected ? conflicts.has(this.pending.rejectedCode ?? "") ? "conflict" : "failed" : "recovering" : this.edits.length || this.creationDraft ? "dirty" : "clean";
+			this.phase = this.pending ? this.pending.rejected ? rejectedPhase(this.pending.rejectedCode) : "recovering" : this.edits.length || this.creationDraft ? "dirty" : "clean";
 			await this.persist();
 			if (this.publication) await this.refreshPublication().catch(() => void 0);
 			this.emit();
@@ -1063,7 +1065,7 @@ var HostedContentSession = class {
 			rejected: true,
 			rejectedCode: definite
 		});
-		this.phase = definite && conflicts.has(definite) ? "conflict" : this.pending && !definite ? "recovering" : "failed";
+		this.phase = definite ? rejectedPhase(definite) : this.pending ? "recovering" : "failed";
 		if (expired) this.options.onAuthenticationExpired?.(error);
 		this.emit();
 		this.persist().catch(() => void 0);
@@ -2046,8 +2048,8 @@ function HostedFieldControl(props) {
 	});
 }
 //#endregion
-//#region src/hosted-content/editor.tsx
-var defaults = {
+//#region src/hosted-content/labels.ts
+var hostedEditorLabels = {
 	...hostedControlLabels,
 	save: "Save",
 	preview: "Preview",
@@ -2059,6 +2061,7 @@ var defaults = {
 	saved: "Saved",
 	recovering: "Recovering save…",
 	conflict: "Content changed. Review your retained changes.",
+	blocked: "Editing is paused while the site settings are updated. Your changes are retained.",
 	failed: "Save failed. Your changes are retained.",
 	content: "Content",
 	edit: "Edit",
@@ -2085,6 +2088,96 @@ var defaults = {
 	deployed: "Deployed",
 	unavailable: "Unavailable"
 };
+var hostedEditorLabelsJa = {
+	clear: "クリア",
+	addItem: "項目を追加",
+	removeItem: "項目を削除",
+	moveUp: "上へ移動",
+	moveDown: "下へ移動",
+	choose: "選択してください",
+	none: "なし",
+	unavailable: "利用できません",
+	asset: "承認済みの素材",
+	item: "項目",
+	bold: "太字",
+	italic: "斜体",
+	link: "リンク",
+	heading: "見出し",
+	alt: "代替テキスト",
+	caption: "キャプション",
+	decorative: "装飾目的の画像",
+	label: "ラベル",
+	title: "タイトル",
+	description: "説明",
+	showSize: "ファイルサイズを表示",
+	showType: "ファイル形式を表示",
+	save: "保存",
+	preview: "プレビュー",
+	submit: "公開を申請",
+	loading: "コンテンツを読み込んでいます…",
+	clean: "保存済み",
+	dirty: "未保存の変更があります",
+	saving: "保存しています…",
+	saved: "保存しました",
+	recovering: "保存結果を確認しています…",
+	conflict: "内容が更新されました。保持している変更を確認してください。",
+	blocked: "サイトの設定を更新中のため、編集を一時停止しています。変更内容は保持されています。",
+	failed: "保存できませんでした。変更内容は保持されています。",
+	content: "コンテンツ",
+	edit: "編集",
+	create: "項目を作成",
+	addExisting: "既存の項目を追加",
+	cancel: "キャンセル",
+	review: "現在の内容を確認",
+	reapply: "自分の変更を再適用",
+	discard: "自分の変更を破棄",
+	localValue: "あなたの値",
+	serverValue: "現在保存されている値",
+	reload: "保存済みの内容を再読み込み",
+	refreshStatus: "申請状況を更新",
+	statusUnavailable: "申請状況を取得できません。保存済みの下書きは保持されています。",
+	cannotClear: "この項目は空にできません。",
+	lastKnownStatus: "最後に確認できた状況",
+	previewCurrent: "現在の保存内容をプレビュー済み",
+	previewRequired: "申請する前に、現在の保存内容をプレビューしてください。",
+	submissionIncomplete: "必須の内容が入力されていません。",
+	submitted: "申請済み",
+	building: "ビルド中",
+	verified: "検証済み",
+	integrated: "反映済み",
+	deployed: "公開済み"
+};
+/** Routine messages by error code; the error object keeps its technical message and diagnostics for host support. */
+var hostedErrorMessages = {
+	"invalid-request": "The request could not be processed. Reload and try again.",
+	"invalid-value": "A value is not valid for its field.",
+	forbidden: "This change is not permitted.",
+	"not-found": "This content is no longer available.",
+	"revision-conflict": "Someone else saved first. Review your retained changes.",
+	"baseline-conflict": "The published site changed. Review your retained changes.",
+	"definition-conflict": "The site settings changed. Review your retained changes.",
+	"operation-key-reuse": "This save was already used for different content. Reload and try again.",
+	"publication-busy": "A submission is already in progress.",
+	incomplete: "Complete the required content before submitting.",
+	"configuration-required": "The site settings changed. Your changes are retained until the site is updated.",
+	unavailable: "The service is busy. Your changes are retained; try again."
+};
+var hostedErrorMessagesJa = {
+	"invalid-request": "リクエストを処理できませんでした。再読み込みしてからもう一度お試しください。",
+	"invalid-value": "入力できない値が含まれています。",
+	forbidden: "この変更は許可されていません。",
+	"not-found": "このコンテンツは利用できなくなりました。",
+	"revision-conflict": "ほかの人が先に保存しました。保持している変更を確認してください。",
+	"baseline-conflict": "公開中のサイトが更新されました。保持している変更を確認してください。",
+	"definition-conflict": "サイトの設定が更新されました。保持している変更を確認してください。",
+	"operation-key-reuse": "この保存操作は別の内容で使用済みです。再読み込みしてからもう一度お試しください。",
+	"publication-busy": "すでに公開申請が進行中です。",
+	incomplete: "申請する前に必須の内容を入力してください。",
+	"configuration-required": "サイトの設定が更新されました。サイトの更新が終わるまで変更内容は保持されます。",
+	unavailable: "混み合っています。変更内容は保持されています。もう一度お試しください。"
+};
+//#endregion
+//#region src/hosted-content/editor.tsx
 var sameRef = (a, b) => a.providerId === b.providerId && a.modelId === b.modelId && a.recordId === b.recordId;
 var refKey = (ref) => JSON.stringify([
 	ref.providerId,
@@ -2122,7 +2215,7 @@ function mountHostedContentEditor(container, options) {
 	if (!permitted(options, options.selection)) throw new Error("Selection is not permitted");
 	const session = new HostedContentSession(options);
 	const labels = {
-		...defaults,
+		...hostedEditorLabels,
 		...options.labels
 	};
 	let selection = options.selection;
@@ -2200,7 +2293,8 @@ function mountHostedContentEditor(container, options) {
 		const rejected = !!state.pending?.rejected;
 		const collections = options.policy.collections.filter((collection) => sameRef(collection.owner, selection.entry));
 		const error = actionError ?? state.error;
-		const message = error ? options.formatError?.(error) ?? (error instanceof Error ? error.message : String(error)) : null;
+		const code = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : null;
+		const message = error ? options.formatError?.(error) ?? (code && options.errorMessages?.[code]) ?? (error instanceof Error ? error.message : String(error)) : null;
 		return /* @__PURE__ */ jsxs("section", {
 			class: "hosted-content-editor",
 			"aria-busy": busy,
@@ -2572,4 +2666,4 @@ function mountHostedContentEditor(container, options) {
 	};
 }
 //#endregion
-export { HostedContentSession, HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost, mountHostedContentEditor };
+export { HostedContentSession, HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost, hostedEditorLabels, hostedEditorLabelsJa, hostedErrorMessages, hostedErrorMessagesJa, mountHostedContentEditor };

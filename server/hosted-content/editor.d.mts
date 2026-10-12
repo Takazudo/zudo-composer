@@ -269,7 +269,8 @@ interface HostedTransport {
     getPublication(publicationId: string): Promise<HostedPublication>;
 }
 
-type HostedSavePhase = "loading" | "clean" | "dirty" | "saving" | "saved" | "recovering" | "conflict" | "failed";
+/** `blocked`: the host must reconcile its definition or configuration; local values are retained until then. */
+type HostedSavePhase = "loading" | "clean" | "dirty" | "saving" | "saved" | "recovering" | "conflict" | "blocked" | "failed";
 interface HostedLocalEdit {
     entry: ContentEntryRef;
     fieldId: string;
@@ -425,6 +426,50 @@ interface HostedControlLabels {
     showSize: string;
     showType: string;
 }
+
+interface HostedEditorLabels extends HostedControlLabels {
+    save: string;
+    preview: string;
+    submit: string;
+    loading: string;
+    clean: string;
+    dirty: string;
+    saving: string;
+    saved: string;
+    recovering: string;
+    conflict: string;
+    blocked: string;
+    failed: string;
+    content: string;
+    edit: string;
+    create: string;
+    addExisting: string;
+    cancel: string;
+    review: string;
+    reapply: string;
+    discard: string;
+    localValue: string;
+    serverValue: string;
+    reload: string;
+    refreshStatus: string;
+    statusUnavailable: string;
+    cannotClear: string;
+    lastKnownStatus: string;
+    previewCurrent: string;
+    previewRequired: string;
+    submissionIncomplete: string;
+    submitted: string;
+    building: string;
+    verified: string;
+    integrated: string;
+    deployed: string;
+    unavailable: string;
+}
+declare const hostedEditorLabels: HostedEditorLabels;
+declare const hostedEditorLabelsJa: HostedEditorLabels;
+/** Routine messages by error code; the error object keeps its technical message and diagnostics for host support. */
+declare const hostedErrorMessages: Record<HostedErrorCode, string>;
+declare const hostedErrorMessagesJa: Record<HostedErrorCode, string>;
 
 interface PreviewPackIdentity {
     readonly packId: string;
@@ -621,43 +666,6 @@ interface HostedEditorSelection {
     entry: ContentEntryRef;
     fieldId: string;
 }
-interface HostedEditorLabels extends HostedControlLabels {
-    save: string;
-    preview: string;
-    submit: string;
-    loading: string;
-    clean: string;
-    dirty: string;
-    saving: string;
-    saved: string;
-    recovering: string;
-    conflict: string;
-    failed: string;
-    content: string;
-    edit: string;
-    create: string;
-    addExisting: string;
-    cancel: string;
-    review: string;
-    reapply: string;
-    discard: string;
-    localValue: string;
-    serverValue: string;
-    reload: string;
-    refreshStatus: string;
-    statusUnavailable: string;
-    cannotClear: string;
-    lastKnownStatus: string;
-    previewCurrent: string;
-    previewRequired: string;
-    submissionIncomplete: string;
-    submitted: string;
-    building: string;
-    verified: string;
-    integrated: string;
-    deployed: string;
-    unavailable: string;
-}
 interface HostedContentEditorOptions extends HostedSessionOptions {
     policy: HostedPolicy;
     selection: HostedEditorSelection;
@@ -665,7 +673,9 @@ interface HostedContentEditorOptions extends HostedSessionOptions {
     presentation?: "record" | "field";
     routeId?: string;
     labels?: Partial<HostedEditorLabels>;
-    /** Map typed diagnostics and transport failures to host-facing messages. */
+    /** Routine messages for typed errors, e.g. `hostedErrorMessagesJa`; other errors show their own message. */
+    errorMessages?: Partial<Record<HostedErrorCode, string>>;
+    /** Map typed diagnostics and transport failures to host-facing messages. Overrides `errorMessages`. */
     formatError?(error: unknown): string;
     onNavigate?(selection: HostedEditorSelection): void | Promise<void>;
 }
@@ -684,5 +694,5 @@ interface HostedContentEditorHandle {
 /** Mount only the policy projection. Location paths/queries never select local authoring tools. */
 declare function mountHostedContentEditor(container: HTMLElement, options: HostedContentEditorOptions): HostedContentEditorHandle;
 
-export { HostedContentSession, HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost, mountHostedContentEditor };
+export { HostedContentSession, HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost, hostedEditorLabels, hostedEditorLabelsJa, hostedErrorMessages, hostedErrorMessagesJa, mountHostedContentEditor };
 export type { HostedContentEditorHandle, HostedContentEditorOptions, HostedControlLabels, HostedEditorLabels, HostedEditorSelection, HostedEditorSessionState, HostedPreviewAdapter, HostedPreviewController, HostedPreviewControllerOptions, HostedPreviewHostOptions, HostedPreviewLocation, HostedPreviewRenderContext, HostedPreviewState, HostedRecoveryCheckpoint, HostedSessionOptions };

@@ -1,6 +1,7 @@
 import type { ContentEntryRef, HostedCommand, HostedIdentities, HostedPublication, HostedResult, HostedSnapshot, HostedState, HostedTransport, HostedErrorCode, JsonValue } from "./types";
 
-export type HostedSavePhase = "loading" | "clean" | "dirty" | "saving" | "saved" | "recovering" | "conflict" | "failed";
+/** `blocked`: the host must reconcile its definition or configuration; local values are retained until then. */
+export type HostedSavePhase = "loading" | "clean" | "dirty" | "saving" | "saved" | "recovering" | "conflict" | "blocked" | "failed";
 export interface HostedLocalEdit { entry: ContentEntryRef; fieldId: string; value?: JsonValue; revision: number }
 export interface HostedPendingOperation { request: HostedCommand; localRevision: number; rejected: boolean; rejectedCode?: HostedErrorCode }
 /** The host persists this detached object. Session memory alone is not reload durability. */
@@ -39,6 +40,8 @@ const immutable = <T>(value: T): T => freeze(copy(value));
 const sameEntry = (a: ContentEntryRef, b: ContentEntryRef) => a.providerId === b.providerId && a.modelId === b.modelId && a.recordId === b.recordId;
 const identities = (state: HostedState): HostedIdentities => ({ draftRevision: state.draftRevision, baseline: copy(state.baseline), definition: state.definition });
 const conflicts = new Set(["revision-conflict", "baseline-conflict", "definition-conflict"]);
+const blocking = new Set(["configuration-required"]);
+const rejectedPhase = (code: string | undefined): HostedSavePhase => conflicts.has(code ?? "") ? "conflict" : blocking.has(code ?? "") ? "blocked" : "failed";
 const rejectionCodes = new Set<HostedErrorCode>(["invalid-request", "invalid-value", "forbidden", "not-found", "revision-conflict", "baseline-conflict", "definition-conflict", "operation-key-reuse", "publication-busy", "incomplete", "configuration-required"]);
 function rejectionCode(error: unknown): HostedErrorCode | null {
   const code = error && typeof error === "object" && "code" in error ? error.code : null;
@@ -114,7 +117,7 @@ export class HostedContentSession {
   async initialize(): Promise<void> {
     try {
       if (!this.acknowledged) this.acknowledged = copy(await this.options.transport.readState());
-      this.phase = this.pending ? (this.pending.rejected ? (conflicts.has(this.pending.rejectedCode ?? "") ? "conflict" : "failed") : "recovering") : this.edits.length || this.creationDraft ? "dirty" : "clean";
+      this.phase = this.pending ? (this.pending.rejected ? rejectedPhase(this.pending.rejectedCode) : "recovering") : this.edits.length || this.creationDraft ? "dirty" : "clean";
       await this.persist();
       if (this.publication) await this.refreshPublication().catch(() => undefined);
       this.emit();
@@ -159,7 +162,7 @@ export class HostedContentSession {
     // whether the original operation committed before its response was lost.
     const definite = requestRejected && !expired ? rejectionCode(error) : null;
     if (this.pending && definite) this.pending = immutable({ ...this.pending, rejected: true, rejectedCode: definite });
-    this.phase = definite && conflicts.has(definite) ? "conflict" : this.pending && !definite ? "recovering" : "failed";
+    this.phase = definite ? rejectedPhase(definite) : this.pending ? "recovering" : "failed";
     if (expired) this.options.onAuthenticationExpired?.(error);
     this.emit(); void this.persist().catch(() => undefined);
   }
