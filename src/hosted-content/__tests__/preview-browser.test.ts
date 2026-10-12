@@ -134,12 +134,27 @@ describe("exact hosted preview lifecycle", () => {
   it("bounds handshake/render waits; late success cannot revive timeout", async () => {
     vi.useFakeTimers(); const h = harness({ timeoutMs: 50 });
     const a = h.controller.render(snapshot(), "course"); const rejected = expect(a).rejects.toMatchObject({ code: "timeout" });
+    h.ready(); const request = h.posted[0];
     vi.advanceTimersByTime(50); await rejected;
     expect(h.controller.state.status).toBe("error");
-    h.ready(); const request = h.posted[0];
-    vi.advanceTimersByTime(50); h.ack(request);
+    h.ack(request);
     expect(h.controller.state).toMatchObject({ status: "error", error: { code: "timeout" } });
     expect(vi.getTimerCount()).toBe(0);
+  });
+  it("does not resend or publish a timed-out attempt on a later boot", async () => {
+    vi.useFakeTimers(); const h = harness({ timeoutMs: 50 });
+    const a = h.controller.render(snapshot(), "course"); const rejected = expect(a).rejects.toMatchObject({ code: "timeout" });
+    vi.advanceTimersByTime(50); await rejected;
+    h.ready(); expect(h.posted).toHaveLength(0);
+    expect(h.controller.state).toMatchObject({ status: "error", error: { code: "timeout" } }); expect(vi.getTimerCount()).toBe(0);
+    const b = h.controller.render(snapshot("B"), "course"); h.ack(); await expect(b).resolves.toMatchObject({ snapshotId: "B" });
+  });
+  it("returns a rejected promise for render data that cannot cross the wire", async () => {
+    const h = harness(); h.ready();
+    const invalid = { ...snapshot(), renderData: { run: () => undefined } } as unknown as HostedSnapshot;
+    let result: Promise<unknown> | undefined;
+    expect(() => { result = h.controller.render(invalid, "course"); }).not.toThrow();
+    await expect(result).rejects.toThrow();
   });
   it("surfaces typed renderer failure and clears timers", async () => {
     vi.useFakeTimers(); const h = harness(); h.ready(); const a = h.controller.render(snapshot(), "course");

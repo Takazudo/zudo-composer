@@ -93,8 +93,8 @@ export function createHostedPreviewController(options: HostedPreviewControllerOp
   };
   const fail = (error: HostedPreviewError) => {
     rejectPending(error);
-    // A late result cannot revive a timed-out/failed attempt.
-    if (retained) retained.request = null;
+    // A late result or later boot cannot revive a timed-out/failed attempt.
+    retained = null;
     publish({ status: "error", error });
   };
   const arm = () => {
@@ -171,11 +171,14 @@ export function createHostedPreviewController(options: HostedPreviewControllerOp
       if (disposed || terminal) return Promise.reject(new HostedPreviewError(disposed ? "disposed" : "identity-mismatch", "Preview connection is unavailable"));
       // Parse and detach before invalidating the old valid request. Only neutral
       // projection/identity crosses the wire, never model records or functions.
-      const detached = hostedRenderMessage(options.pack, options.renderer, {
-        frameSession: session ?? "awaiting-host", frameGeneration: generation, requestId: sequence + 1,
-        snapshotId: snapshot.id, snapshotDigest: snapshot.digest, draftRevision: snapshot.draftRevision,
-        baseline: snapshot.baseline, definition: snapshot.definition, routeId,
-      }, snapshot.renderData);
+      let detached: HostedDocumentRender;
+      try {
+        detached = hostedRenderMessage(options.pack, options.renderer, {
+          frameSession: session ?? "awaiting-host", frameGeneration: generation, requestId: sequence + 1,
+          snapshotId: snapshot.id, snapshotDigest: snapshot.digest, draftRevision: snapshot.draftRevision,
+          baseline: snapshot.baseline, definition: snapshot.definition, routeId,
+        }, snapshot.renderData);
+      } catch (error) { return Promise.reject(error); }
       rejectPending(new HostedPreviewError("superseded", "A newer preview request replaced this request"));
       return new Promise((resolve, reject) => {
         retained = { snapshot: { id: detached.snapshotId, digest: detached.snapshotDigest, draftRevision: detached.draftRevision,
