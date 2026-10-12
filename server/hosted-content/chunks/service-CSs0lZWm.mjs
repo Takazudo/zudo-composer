@@ -1,3 +1,4 @@
+import { parser } from "@lezer/markdown";
 import { z } from "zod";
 //#region src/hosted-content/types.ts
 var HostedContentError = class extends Error {
@@ -721,14 +722,34 @@ function invalid(path, message) {
 function assertSafeUrl(value) {
 	if (value.length === 0 || value.charCodeAt(0) <= 32 || Array.from(value).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127 || character === "\\") || value.startsWith("//") || !/^(?:https?:\/\/|mailto:|tel:|\/(?!\/)|#)/i.test(value)) throw new HostedContentError("invalid-value", "URL must use an approved non-executable scheme or a site-relative path.");
 }
-function assertSafeMarkdown(value) {
-	let decoded = value.replace(/&#(?:x([\da-f]+)|(\d+));?/gi, (_, hex, decimal) => String.fromCodePoint(Math.min(1114111, Number.parseInt(hex || decimal, hex ? 16 : 10))));
+function decodeDestination(raw) {
+	let decoded = raw.startsWith("<") && raw.endsWith(">") ? raw.slice(1, -1) : raw;
+	decoded = decoded.replace(/&#(?:x([\da-f]+)|(\d+));?/gi, (_, hex, decimal) => String.fromCodePoint(Math.min(1114111, Number.parseInt(hex || decimal, hex ? 16 : 10))));
 	decoded = decoded.replace(/&colon;/gi, ":").replace(/&(?:tab|newline);/gi, "").replace(/\\([\s\S])/g, "$1");
 	try {
 		decoded = decodeURIComponent(decoded);
 	} catch {}
-	for (const link of decoded.matchAll(/(?:\]\(\s*|^\s*\[[^\]]+\]:\s*)([^\s)]+)/gm)) assertSafeUrl(link[1]);
-	if (/<\/?[a-z!]|<>|<\/>|[{}]|^\s*(?:import|export)\s|!\[/im.test(decoded) || /(?:javascript|vbscript|data)\s*:/i.test(Array.from(decoded).filter((character) => character.charCodeAt(0) > 32).join(""))) throw new HostedContentError("invalid-value", "Markdown contains source, HTML, an image or an unsafe URL; use approved asset fields.");
+	return decoded;
+}
+var markupNodes = /* @__PURE__ */ new Set([
+	"HTMLBlock",
+	"HTMLTag",
+	"CommentBlock",
+	"Comment",
+	"ProcessingInstructionBlock",
+	"ProcessingInstruction",
+	"Image"
+]);
+var unsafeMarkdown = () => {
+	throw new HostedContentError("invalid-value", "Markdown contains source, HTML, an image or an unsafe URL; use approved asset fields.");
+};
+/** Hosted Markdown is CommonMark prose, never MDX: hosts must render it as Markdown text, so braces stay literal. */
+function assertSafeMarkdown(value) {
+	parser.parse(value).iterate({ enter(node) {
+		if (markupNodes.has(node.name)) unsafeMarkdown();
+		if (node.name === "URL") assertSafeUrl(decodeDestination(value.slice(node.from, node.to)));
+		if (node.name === "Paragraph" && node.node.parent?.name === "Document" && /^(?:import|export)\s+(?:[\w$*{},\s]+\s+from\s+["']|["']|(?:const|let|var|function|class|default)\b)/.test(value.slice(node.from, node.to))) unsafeMarkdown();
+	} });
 }
 /** Compare actual stored values, including protected descendants, before applying replacement. */
 function assertFieldChange(schema, permission, previous, next, policy, path, validateMarkdown) {

@@ -14,7 +14,7 @@ const temporary = await mkdtemp(join(tmpdir(), "composer-hosted-build-"));
 const output = join(temporary, "output");
 const declarations = join(temporary, "types");
 const entries = { index: "src/hosted-content/index.ts", editor: "src/hosted-content/browser.ts", preview: "src/hosted-content/preview-browser.ts", testing: "src/hosted-content/testing.ts" };
-const allowed = new Set(["zod", "preact", "preact/hooks", "preact/jsx-runtime", "@zudo-composer/component-contract"]);
+const allowed = new Set(["zod", "@lezer/markdown", "preact", "preact/hooks", "preact/jsx-runtime", "@zudo-composer/component-contract"]);
 const packageData = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 for (const name of Object.keys(packageData.dependencies)) if (name.startsWith("@codemirror/") || name === "@lezer/highlight") allowed.add(name);
 

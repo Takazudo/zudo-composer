@@ -4,7 +4,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import ts from "typescript";
 
 const root = resolve(import.meta.dirname, "..");
-const allowed = new Set(["zod", "@zudo-composer/component-contract"]);
+const allowed = new Set(["zod", "@lezer/markdown", "@zudo-composer/component-contract"]);
 /** @param {string} path @param {boolean} browser @param {Set<string>} seen */
 async function visit(path, browser, seen, editor = browser) {
   if (seen.has(path)) return;

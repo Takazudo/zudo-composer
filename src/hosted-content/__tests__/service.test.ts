@@ -187,11 +187,19 @@ describe("hosted Content trusted boundary", () => {
     const image = { kind: "image", asset: { providerId: "assets", assetId: "second" }, alt: "日本語", decorative: false, caption: "Caption" };
     await f.service.execute(actor, f.set("asset", { image }));
     await rejectsWithoutWrite(f, f.set("bad", { image: { ...image, asset: { providerId: "assets", assetId: "outside" } } }), "forbidden");
-    for (const body of ["<script>alert(1)</script>", "import x from 'x'", "<Thing />", "{run()}", "{\nrun()\n}", "[x](file:///secrets)", "[x](javascript:alert(1))", "[x](java&#x73;cript:alert(1))", "![x](https://outside/image.png)"]) await rejectsWithoutWrite(f, f.set("bad", { body }), "invalid-value");
+    for (const body of ["<script>alert(1)</script>", "import x from 'x'", "export const x = 1", "<Thing />", "> <!-- hidden -->", "- <?php echo 1 ?>", "[x](file:///secrets)", "[x](javascript:alert(1))", "[x](java&#x73;cript:alert(1))", "[x](<vbscript:msgbox>)", "<data:text/html,x>", "[r]: //outside/x\n\n[r]", "![x](https://outside/image.png)"]) await rejectsWithoutWrite(f, f.set("bad", { body }), "invalid-value");
     for (const url of ["javascript:alert(1)", "//outside/x", "data:text/html,x", "/\\outside/x"]) await rejectsWithoutWrite(f, f.set("bad", { url }), "invalid-value");
     await f.service.execute(actor, f.set("prose", { body: "# 日本語\n\n**太字** [page](/about)", url: "https://example.com/about" }));
     const { snapshot } = await f.service.execute(actor, f.capture("snapshot"));
     expect(snapshot!.assets[1]).toMatchObject({ assetId: "second", checksum: "sha-second", versionId: "v1" });
+  });
+
+  it("preserves approved prose that only resembles source, schemes or MDX", async () => {
+    const f = fixture();
+    for (const [index, body] of ["Our metadata: refreshed weekly", "Big data: trends", "Use {name} here", "{run()}", "Import duties apply.\n\nExport the report from the menu.", "`<b>` and `import x from 'x'` are code", "1 < 2 and 3 > 2", "<https://example.com/a> and <mailto:hi@example.com>", "[ref]\n\n[ref]: /about#faq \"Title\""].entries()) {
+      const saved = await f.service.execute(actor, f.set(`prose-${index}`, { body }));
+      expect(saved.state.providers[0]!.entries.find(entry => entry.id === "home")!.values.body).toBe(body);
+    }
   });
 
   it("creates membership atomically, recovers created IDs, then enforces exact reorder membership", async () => {
