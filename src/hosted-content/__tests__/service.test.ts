@@ -97,6 +97,21 @@ describe("hosted Content trusted boundary", () => {
     expect(f.db().snapshots.find(item => item.id === snapshot.id)).toEqual(stored);
   });
 
+  it("recovers the exact scoped receipt across a new definition and changed collection policy", async () => {
+    const f = fixture(), command = f.capture("old-definition-snapshot");
+    const committed = await f.service.execute(actor, command), receipt = await f.service.readReceipt(actor, command.operationKey);
+    const newPolicy = structuredClone(f.options.policy);
+    newPolicy.models = [];
+    newPolicy.collections = [{ ...newPolicy.collections[0]!, owner: { ...page, recordId: "new-owner" } }];
+    const reopened = createHostedContentService({ ...f.options, definition: "new-definition", policy: newPolicy });
+    expect(await reopened.execute(actor, command)).toEqual(committed);
+    expect(await reopened.readReceipt(actor, command.operationKey)).toEqual(receipt);
+    expect(JSON.stringify(await reopened.readReceipt(actor, command.operationKey))).not.toContain("Never listed");
+    await expect(reopened.execute(actor, f.set("fresh-after-definition-change", { title: "New" }))).rejects.toMatchObject({ code: "definition-conflict" });
+    const changedRequest = { ...command, expected: { ...command.expected, definition: "new-definition" } };
+    await expect(reopened.execute(actor, changedRequest)).rejects.toMatchObject({ code: "operation-key-reuse" });
+  });
+
   it.each([false, true])("saves an empty URL with required=%s and defers completeness to submission", async required => {
     const f = fixture(), configured = f.db();
     for (const providers of [configured.state.providers, configured.baselineProviders]) providers[0]!.models[0]!.document.fields.find(item => item.id === "url")!.required = required;

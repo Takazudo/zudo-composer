@@ -11,6 +11,9 @@ for (const [lane, html] of [["ZFB visitor", visitor], ["SG story", story]]) {
   assert(html.includes(data.title), `${lane} title differs`);
   assert(html.includes(`${data.price}円`), `${lane} price differs`);
   assert(html.includes(`src="${data.image.url}"`), `${lane} approved image differs`);
+  assert(html.includes(`data-asset-version="${data.image.versionId}"`) && html.includes(`data-asset-checksum="${data.image.checksum}"`), `${lane} image pin differs`);
+  const renderedIds = [...html.matchAll(/data-faq-id="([^"]+)"/g)].map(match => match[1]);
+  assert.deepEqual(renderedIds, data.questions.map(item => item.id), `${lane} must contain the exact complete Content-owned membership/order`);
   let position = -1;
   for (const faq of data.questions) {
     const next = html.indexOf(`data-faq-id="${faq.id}"`);

@@ -69,9 +69,6 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
     const diagnostics = providers.flatMap(provider => provider.entries.flatMap(entry => diagnoseContentEntryCompleteness(provider.models.find(model => model.id === entry.modelId)!, entry)));
     return copy({ ...snapshot, providers, diagnostics });
   }
-  function publicResult(result: HostedResult): HostedResult {
-    return copy({ ...result, state: publicState(result.state), ...(result.snapshot ? { snapshot: publicSnapshot(result.snapshot) } : {}) });
-  }
   function checkExpected(state: HostedState, expected: HostedIdentities): void {
     if (state.definition !== options.definition || expected.definition !== state.definition) fail("definition-conflict", "Hosted definition changed; explicit reconciliation is required.");
     if (!sameValue(expected.baseline, state.baseline)) fail("baseline-conflict", "Canonical baseline changed; reload and review the retained draft.");
@@ -171,7 +168,9 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
     const existing = database.receipts.find(item => item.actorId === actorId && item.operationKey === command.operationKey);
     if (!existing) return;
     if (existing.fingerprint !== fingerprint) fail("operation-key-reuse", "Operation key is already bound to another immutable request.");
-    return publicResult(existing.result);
+    // Results were scoped before their atomic receipt commit. Recovery must preserve those exact
+    // acknowledged bytes even when a later definition or policy cannot validate a fresh mutation.
+    return copy(existing.result);
   }
   const service: HostedService = {
     async readState(actor) { await authorize(actor); return publicState((await options.storage.read()).state); },
@@ -179,7 +178,7 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
       const trusted = copy(actor);
       await authorize(trusted);
       const stored = (await options.storage.read()).receipts.find(item => item.actorId === trusted.id && item.operationKey === operationKey);
-      return stored ? copy({ ...stored, result: publicResult(stored.result) }) : null;
+      return stored ? copy(stored) : null;
     },
     async readSnapshot(actor, snapshotId) {
       await authorize(actor);

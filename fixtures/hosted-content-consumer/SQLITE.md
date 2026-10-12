@@ -70,3 +70,37 @@ independent browser context against the same SQLite file.
 
 The storage module, HTTP server and process runner are fixture code. They
 must never enter the tool's portable, browser/editor or testing runtime graph.
+
+## Local publication provider
+
+```sh
+node publication-proof.mjs --directory work/publication-state --artifacts work/publication-artifacts
+```
+
+`publication-proof.mjs` implements a host-owned provider and a separate local
+export sink. The sink has one fixed destination. Its independently persisted
+`remote.json` baseline, definition, immutable candidate and operation facts are
+serialized with a filesystem lock and written with atomic rename and fsync.
+These are synthetic remote facts and commit identities, never live Git/API
+operations or evidence of deployment. Submission fields cannot supply a
+destination or path.
+
+The provider reads complete immutable snapshots directly from its trusted
+SQLite adapter, rather than reusing a scoped browser DTO. Integration checks
+the sink's own exact baseline and definition. The proof persists remote
+integration A, discards and reopens database and sink handles before database
+reconciliation, then confirms that newer draft B survives and a second
+publication delivers B. Both an existing Entry and a newly created Entry run
+the full trace. Exact retries and late A facts cannot overwrite B2.
+
+Failure, unavailable lookup, stale polling, recovered authoritative status,
+disabled configuration, forbidden destination input, and an external remote
+baseline update have explicit retained-draft assertions. Availability changes
+advance a local status sequence while the remote sequence rejects older
+observations. No provider result is labeled deployed.
+
+The optional artifact directory contains raw `existing-entry-A/B.snapshot.json`
+and `new-entry-A/B.snapshot.json` delivery candidates plus
+`publication-evidence.json`. The renderer can consume those exact candidates
+without recapturing newer draft data. Retained local state is placed beneath a
+fresh scenario directory; a run never overwrites an earlier database.

@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2023", "lib": ["ES2023"], "types": [],
+    "target": "ES2023", "lib": ["ES2023"], "types": ["@cloudflare/workers-types"],
     "module": "NodeNext", "moduleResolution": "NodeNext",
     "strict": true, "skipLibCheck": false, "noEmit": true
   },

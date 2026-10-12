@@ -40,3 +40,13 @@ installed; this fixture never downloads a browser or uses a live publication
 provider. The static check executes actual emitted HTML assertions; the browser
 check additionally disables JavaScript on the visitor and verifies decoded image
 pixels, real SG story parity and the exact rendered iframe acknowledgement.
+
+The independent consumer also runs `node publication-render-proof.mjs ARTIFACTS`
+from its package root through the heavy guard. This exercises two successive
+publications for both an existing field and a newly created FAQ Entry through a
+persisted local synthetic export sink. It renders the original immutable A and
+B candidates separately with real ZFB and the registered SG story, verifies the
+complete FAQ order and asset pin, and retains each static directory plus its
+snapshot and preview dependency graph. The report distinguishes static/browser
+bundle evidence from browser execution. It never calls a live publisher or
+claims a deployment.

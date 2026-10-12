@@ -5,6 +5,11 @@ It leaves the installed local Composer application and its filesystem providers
 intact. The host owns authentication, storage, policy, renderer, Git integration,
 builds and deployment. Composer does not provision or call production providers.
 
+The current editor mount is the initial permitted existing text control. Broad
+field/Markdown extraction, asset/collection controls and their browser acceptance
+remain pending the required durable-browser checkpoint. The domain operations and
+storage/provider proofs already exercise those finite mutations independently.
+
 ## Supported imports
 
 ```ts
@@ -128,6 +133,11 @@ original operation's exact commit/content evidence; do not blindly resubmit.
 
 `pnpm build:hosted` emits committed JavaScript, declarations, chunks and CSS.
 `pnpm hosted:check` checks emitted drift, focused scenarios and graph boundaries.
+`pnpm hosted:durable` runs the SQLite and persisted local publication-provider
+proofs. `pnpm hosted:installed <full-sha> <directory>` creates an independent
+consumer, verifies the Worker/Node/durable/shared-renderer boundaries, performs a
+fresh frozen reinstall, and runs the real browser checkpoint. `--no-browser`
+records that the browser checkpoint remains unverified; it is not a full pass.
 The independent fixture lives at `fixtures/hosted-content-consumer` outside the
 root workspace. Its installation runner takes a reachable full package Git SHA,
 installs the contract separately at the recorded exact root SHA, and retains its

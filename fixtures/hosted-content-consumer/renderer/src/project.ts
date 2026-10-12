@@ -20,7 +20,7 @@ export interface OfferProjection {
 }
 function record(value: JsonValue | undefined): Record<string, JsonValue> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Expected structured Content value");
-  return value;
+  return value as Record<string, JsonValue>;
 }
 function string(value: JsonValue | undefined): string {
   // An incomplete type-valid draft remains previewable; completeness belongs to submission.

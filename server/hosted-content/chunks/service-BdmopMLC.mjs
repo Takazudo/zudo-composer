@@ -873,18 +873,11 @@ function createHostedContentService(supplied) {
 	* host's approved renderData is shared unchanged with preview and delivery. */
 	function publicSnapshot(snapshot) {
 		const providers = publicProviders(snapshot.providers);
-		const diagnostics = snapshot.diagnostics.filter((diagnostic) => providers.some((provider) => provider.entries.some((entry) => entry.modelId === diagnostic.modelId && entry.id === diagnostic.entryId)));
+		const diagnostics = providers.flatMap((provider) => provider.entries.flatMap((entry) => diagnoseContentEntryCompleteness(provider.models.find((model) => model.id === entry.modelId), entry)));
 		return copy({
 			...snapshot,
 			providers,
 			diagnostics
-		});
-	}
-	function publicResult(result) {
-		return copy({
-			...result,
-			state: publicState(result.state),
-			...result.snapshot ? { snapshot: publicSnapshot(result.snapshot) } : {}
 		});
 	}
 	function checkExpected(state, expected) {
@@ -1001,7 +994,7 @@ function createHostedContentService(supplied) {
 		const existing = database.receipts.find((item) => item.actorId === actorId && item.operationKey === command.operationKey);
 		if (!existing) return;
 		if (existing.fingerprint !== fingerprint) fail("operation-key-reuse", "Operation key is already bound to another immutable request.");
-		return publicResult(existing.result);
+		return copy(existing.result);
 	}
 	return {
 		async readState(actor) {
@@ -1012,10 +1005,7 @@ function createHostedContentService(supplied) {
 			const trusted = copy(actor);
 			await authorize(trusted);
 			const stored = (await options.storage.read()).receipts.find((item) => item.actorId === trusted.id && item.operationKey === operationKey);
-			return stored ? copy({
-				...stored,
-				result: publicResult(stored.result)
-			}) : null;
+			return stored ? copy(stored) : null;
 		},
 		async readSnapshot(actor, snapshotId) {
 			await authorize(actor);

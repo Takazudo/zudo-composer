@@ -34,6 +34,7 @@ jobs:
       - run: pnpm no-deploy:check
       - run: pnpm public:check
       - run: pnpm hosted:check
+      - run: pnpm hosted:durable
       - run: pnpm sample:check
       - run: pnpm cms:check
       - run: pnpm consumer:boundary
@@ -80,6 +81,37 @@ jobs:
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+  hosted-content-consumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm public:check
+      - run: pnpm hosted:installed "${{ github.sha }}" .artifacts/hosted-consumer
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hosted-consumer-evidence-${{ github.sha }}
+          path: |
+            .artifacts/hosted-consumer/package.json
+            .artifacts/hosted-consumer/pnpm-lock.yaml
+            .artifacts/hosted-consumer/pnpm-workspace.yaml
+            .artifacts/hosted-consumer/renderer/package.json
+            .artifacts/hosted-consumer/renderer/pnpm-lock.yaml
+            .artifacts/hosted-consumer/renderer/pnpm-workspace.yaml
+            .artifacts/hosted-consumer/verification.json
+            .artifacts/hosted-consumer/worker-metafile.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   packed-host-matrix:
     runs-on: ubuntu-latest
