@@ -201,7 +201,7 @@ const handle = mountContentEditor(document.querySelector("#editor")!, {
   policy,                        // presentation copy of the trusted HostContentPolicy
   storage,                       // ContentEditorStorage over the host's transport
   assets,                        // optional committed manifest: { providerId, assets: [{ assetId, fileName, mimeType, byteLength, url }] }
-  preview,                       // optional: { url, origin, pack, route } of the host's private preview document
+  preview,                       // optional: { url, origin, pack, route, title?, sandbox? } of the host's private preview document
   export: { adapter, packageIdentity }, // optional submission adapter
   labels: CONTENT_EDITOR_LABELS_JA,     // or Partial<ContentEditorLabels> overrides
 });
@@ -263,6 +263,12 @@ acknowledgement and turns stale on a newer edit or save. With `export`,
 **Submit** is enabled only for the snapshot the preview acknowledged, at the
 adopted revision and baseline, with nothing unsaved or unresolved
 (`canSubmitPreviewedSnapshot`).
+
+`preview.sandbox` is copied to the iframe's `sandbox` attribute when the
+frame is created, so the protocol shell's first load is already sandboxed (a
+host that adds the attribute later must reload the frame for it to apply).
+The bridge checks `event.source` and the configured `origin`, so a sandbox
+without `allow-same-origin` (an opaque `"null"` origin) is not supported.
 
 ### Building the editor in a host
 

@@ -883,6 +883,8 @@ interface ContentEditorPreviewOptions {
     /** The approved route rendered for the open draft. */
     readonly route: string;
     readonly title?: string;
+    /** `sandbox` tokens for the preview iframe, present before its first navigation (e.g. `"allow-same-origin allow-scripts"`). */
+    readonly sandbox?: string;
 }
 interface ContentEditorExportOptions {
     readonly adapter: ContentExportAdapter;

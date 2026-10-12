@@ -118,6 +118,8 @@ export interface ContentEditorPreviewOptions {
   /** The approved route rendered for the open draft. */
   readonly route: string;
   readonly title?: string;
+  /** `sandbox` tokens for the preview iframe, present before its first navigation (e.g. `"allow-same-origin allow-scripts"`). */
+  readonly sandbox?: string;
 }
 
 export interface ContentEditorExportOptions {
@@ -302,7 +304,7 @@ function EditorRoot({ options, labels, session, view, publish, controllerRef }: 
           <Button size="sm" disabled={!controller || display.status === "conflict" || display.status === "recovering"} onClick={runPreview}>{labels.preview}</Button>
           <span class="sg-hosted-content-editor__preview-state" role="status" data-preview={stale ? "stale" : preview.status}>{previewText}</span>
         </div>
-        <iframe ref={attachFrame} class="sg-hosted-content-editor__frame" src={options.preview.url} title={options.preview.title ?? labels.preview} />
+        <iframe ref={attachFrame} class="sg-hosted-content-editor__frame" sandbox={options.preview.sandbox} src={options.preview.url} title={options.preview.title ?? labels.preview} />
       </> : <p class="sg-hosted-content-editor__note">{labels.previewUnavailable}</p>}
     </section>
   );

@@ -159,6 +159,50 @@ describe("mountContentEditor (restricted)", () => {
     expect(screen.queryByRole("tree", { name: "Content" })).toBeNull();
   });
 
+  it("creates the preview frame already sandboxed when the host asks for it", async () => {
+    const insertBefore = Node.prototype.insertBefore;
+    const sandboxAtInsert: (string | null)[] = [];
+    Node.prototype.insertBefore = function <T extends Node>(this: Node, node: T, child: Node | null): T {
+      if (node instanceof HTMLIFrameElement) sandboxAtInsert.push(node.getAttribute("sandbox"));
+      return insertBefore.call(this, node, child) as T;
+    };
+    try {
+      const adapter = await createMemoryContentDraftStorage(createContentStorageConformanceBaseline());
+      handle = mountContentEditor(host, {
+        project: { id: policy.projectId },
+        policy,
+        storage: createContentEditorStorage(adapter, { policy, actor }),
+        preview: { url: "/preview/", origin: window.location.origin, pack: { packId: "pack", packVersion: "1.0.0" }, route: "/", sandbox: "allow-same-origin allow-scripts" },
+      });
+      const frame = await waitFor(() => {
+        const found = host.querySelector("iframe.sg-hosted-content-editor__frame");
+        if (!found) throw new Error("no preview frame yet");
+        return found;
+      });
+      expect(frame).toHaveAttribute("sandbox", "allow-same-origin allow-scripts");
+      expect(sandboxAtInsert.length).toBeGreaterThan(0);
+      expect(sandboxAtInsert).not.toContain(null);
+    } finally {
+      Node.prototype.insertBefore = insertBefore;
+    }
+  });
+
+  it("leaves the preview frame unsandboxed by default", async () => {
+    const adapter = await createMemoryContentDraftStorage(createContentStorageConformanceBaseline());
+    handle = mountContentEditor(host, {
+      project: { id: policy.projectId },
+      policy,
+      storage: createContentEditorStorage(adapter, { policy, actor }),
+      preview: { url: "/preview/", origin: window.location.origin, pack: { packId: "pack", packVersion: "1.0.0" }, route: "/" },
+    });
+    const frame = await waitFor(() => {
+      const found = host.querySelector("iframe.sg-hosted-content-editor__frame");
+      if (!found) throw new Error("no preview frame yet");
+      return found;
+    });
+    expect(frame.hasAttribute("sandbox")).toBe(false);
+  });
+
   it("refuses to mount for another project", () => {
     expect(() => mountContentEditor(host, { project: { id: "other" }, policy, storage: {} as ContentEditorStorage })).toThrow(/does not match/);
   });
