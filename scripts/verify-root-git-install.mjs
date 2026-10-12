@@ -104,7 +104,9 @@ export const componentPack = defineComponentPack({ packId: "public-entry-host", 
   const installed = join(host, "node_modules/zudo-composer");
   const installedPackage = JSON.parse(await readFile(join(installed, "package.json"), "utf8"));
   assert.equal(installedPackage.name, "zudo-composer");
-  const subpaths = Object.keys(installedPackage.exports).filter((key) => key !== "./styles" && key !== "./package.json" && installedPackage.exports[key].default !== undefined);
+  // `./content-editor` is browser source (TSX + CSS) a host bundles; the
+  // hosted-content-host fixture below builds it instead of importing it in Node.
+  const subpaths = Object.keys(installedPackage.exports).filter((key) => key !== "./styles" && key !== "./package.json" && key !== "./content-editor" && installedPackage.exports[key].default !== undefined);
   for (const name of Object.keys(PUBLIC_ENTRIES.portableEntries)) {
     assert.ok(subpaths.includes(`./${name}`), `installed package must export ./${name}`);
     // The Git install ships the committed public output byte for byte.

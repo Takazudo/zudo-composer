@@ -20,7 +20,8 @@ import * as editing from "zudo-composer/editing";
 import * as exportPublic from "zudo-composer/export";
 import type { ContentExportAdapter, ContentExportStatus, ContentExportSubmission } from "zudo-composer/export";
 import * as hostStorage from "zudo-composer/host-storage";
-import type { ContentBaseline, ContentDraftApplied, ContentDraftMutationResult, ContentDraftStorageAdapter, ContentSnapshotRecord } from "zudo-composer/host-storage";
+import type { ContentBaseline, ContentDraftApplied, ContentDraftMutationResult, ContentDraftStorageAdapter, ContentEditorStorage, ContentSnapshotRecord, HostContentApplyResult } from "zudo-composer/host-storage";
+import type * as contentEditor from "zudo-composer/content-editor";
 import * as previewProtocol from "zudo-composer/preview-protocol";
 import type { HostPreviewBridge, HostPreviewRequest, PreviewToHostMessage } from "zudo-composer/preview-protocol";
 import type { EditRequest, EditPlan, EditReceipt } from "zudo-composer/editing";
@@ -46,7 +47,8 @@ export type ContentExports = Assert<Equal<keyof typeof content,
 export type HostStorageExports = Assert<Equal<keyof typeof hostStorage,
   "CONTENT_STORAGE_CONFORMANCE_CASES" | "CONTENT_STORAGE_CONFORMANCE_POLICY" | "contentDraftRequestDigest" | "contentSnapshotId" |
   "createContentStorageConformanceBaseline" | "createMemoryContentDraftStorage" | "projectWithContentSnapshot" |
-  "runContentStorageConformance" | "sha256Hex"
+  "runContentStorageConformance" | "sha256Hex" | "applyHostContentRequest" | "createContentEditorStorage" |
+  "hostContentRequestDigest" | "isHostContentOperationId" | "readHostContentReceipt"
 >>;
 export type PreviewProtocolExports = Assert<Equal<keyof typeof previewProtocol,
   "HOST_PREVIEW_CHANNEL" | "HOST_PREVIEW_PROTOCOL_VERSION" | "createHostPreviewBridge" | "hostRenderMessage" |
@@ -67,6 +69,14 @@ export type RefusalCodes = Assert<Equal<Extract<ContentMutationAuthorization, { 
 export type MemoryStorageIsAdapter = Assert<Equal<Awaited<ReturnType<typeof hostStorage.createMemoryContentDraftStorage>>, ContentDraftStorageAdapter>>;
 export type ApplyResult = Assert<Equal<Awaited<ReturnType<ContentDraftStorageAdapter["apply"]>>, ContentDraftMutationResult<ContentDraftApplied>>>;
 export type SnapshotResult = Assert<Equal<Awaited<ReturnType<ContentDraftStorageAdapter["snapshot"]>>, ContentDraftMutationResult<ContentSnapshotRecord>>>;
+export type ServiceApplyResult = Assert<Equal<Awaited<ReturnType<typeof hostStorage.applyHostContentRequest>>, HostContentApplyResult>>;
+export type EditorStorageApply = Assert<Equal<Awaited<ReturnType<ContentEditorStorage["apply"]>>, HostContentApplyResult>>;
+export type EditorStorageAccepted = Assert<Equal<ContentEditorStorage extends contentEditor.MountContentEditorOptions["storage"] ? true : false, true>>;
+export type EditorMountHandle = Assert<Equal<ReturnType<typeof contentEditor.mountContentEditor>, contentEditor.ContentEditorHandle>>;
+export type ContentEditorExports = Assert<Equal<keyof typeof contentEditor,
+  "CONTENT_EDITOR_LABELS" | "CONTENT_EDITOR_LABELS_JA" | "HostedContentForbiddenError" | "canSubmitPreviewedSnapshot" |
+  "changedEntryValues" | "contentEditorDisplayStatus" | "createContentEditorSession" | "mountContentEditor"
+>>;
 export type ConformanceFactory = Assert<Equal<Parameters<typeof hostStorage.runContentStorageConformance>[0], (baseline: ContentBaseline) => Promise<ContentDraftStorageAdapter>>>;
 export type FakeExportIsAdapter = Assert<Equal<ReturnType<typeof exportPublic.createFakeContentExportAdapter> extends ContentExportAdapter ? true : false, true>>;
 export type ExportStates = Assert<Equal<ContentExportStatus["state"], "submitted" | "building" | "verified" | "integrated" | "deployed" | "failed" | "conflict">>;
@@ -86,7 +96,7 @@ export type ViteExports = Assert<Equal<keyof typeof vitePublic,
   "appModuleId" | "assertPackSourcesResolvable" | "componentPackPlugin" |
   "composerAppHtmlPlugin" | "composerFileProviderPlugin" | "fsModuleId" |
   "hostStylesPlugin" | "loadHostContext" | "resolveComponentPack" |
-  "resolveWorkspaceRoot" | "siteProjectSourcePlugin"
+  "resolveWorkspaceRoot" | "siteProjectSourcePlugin" | "contentEditorPlugins"
 >>;
 
 export type ConfigParameter = Assert<Equal<Parameters<typeof configPublic.defineComposerConfig>[0], ComposerConfig>>;
