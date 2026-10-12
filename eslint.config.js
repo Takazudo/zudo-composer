@@ -50,6 +50,15 @@ export default tseslint.config(
   eslint.configs.recommended,
   tseslint.configs.recommended,
   {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/hosted-content/**'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [{ name: 'preact/hooks', importNames: ['useId'], message: 'Use useDomId from src/components/use-dom-id; Preact useId ids collide across this app.' }],
+      }],
+    },
+  },
+  {
     files: ['fixtures/hosted-content-consumer/**/*.mjs'],
     languageOptions: { globals: { URL: 'readonly', console: 'readonly', process: 'readonly', Buffer: 'readonly', fetch: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly', structuredClone: 'readonly' } },
   },

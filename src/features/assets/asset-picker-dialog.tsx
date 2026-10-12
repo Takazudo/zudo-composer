@@ -1,5 +1,5 @@
 import type { JSX } from "preact";
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { ASSET_ACCEPT, ASSET_MAX_BYTE_LENGTH, ASSET_TYPES, ASSET_UPLOAD_HINT, assetFolderPath, assetKindForMime, summarizeAsset, type AssetFolder, type AssetProvider, type AssetSummary } from "../../assets";
 import type { AssetUse } from "../../assets/integration/content";
 import type { ContentAssetRef } from "../../content";
@@ -13,6 +13,7 @@ import { ASSET_SORTS, ASSET_TYPE_FACET } from "./assets-library";
 import { AssetThumb } from "./assets-thumb";
 import { versionedAssetStore } from "./controller";
 import { normalizedFilesFromTransfer } from "./upload-input";
+import { useDomId } from "../../components/use-dom-id";
 
 export interface AssetPickerDialogProps {
   provider?: AssetProvider;
@@ -70,7 +71,7 @@ export function AssetPickerDialog({ provider, kind, current, intent, onSelect, o
   const libraryRequest = useRef(0);
   const dimensions = useAssetDimensions();
   const panes = useAssetPickerPanes();
-  const id = useId();
+  const id = useDomId();
   const sideId = `sg-assets-picker-library-${id}`;
   const detailId = `sg-assets-picker-details-${id}`;
   const title = kind === "image" ? "Choose an image" : "Choose an asset";

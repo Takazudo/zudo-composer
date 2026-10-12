@@ -3,7 +3,9 @@
 import "../../../test-support/cleanup";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/preact";
+import { act, fireEvent, render, screen, within } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
+import { useState } from "preact/hooks";
 import type { ComponentManifest, FieldDefinition } from "@zudo-composer/component-contract";
 import type { CompositionDocument, JsonObject } from "../../../../../composer/browser";
 import { createComponentCatalog } from "../../../../../composer/browser";
@@ -192,5 +194,41 @@ describe("recursive contract-v2 inspector fields", () => {
     expect(tag).toHaveValue("one");
     fireEvent.input(tag, { target: { value: "two" } });
     expect(onUpdatePropsDebounced).toHaveBeenCalledWith("hero", { tags: ["two"] }, [["tags", 0]]);
+  });
+
+  it("keeps control ids unique after an ancestor re-renders around pass-through children", () => {
+    // The app Shell re-renders itself (rail counts) around the route's host
+    // element; controls mounted afterwards must not reuse an existing id.
+    let rerenderShell = (): void => undefined;
+    function Shell({ children }: { children: ComponentChildren }) {
+      const [generation, setGeneration] = useState(0);
+      rerenderShell = () => setGeneration((value) => value + 1);
+      return <main data-generation={generation}>{children}</main>;
+    }
+    render(
+      <Shell>
+        <div>
+          <InspectorPanel
+            document={documentWith({ actions: [{ label: "Get started", href: "#", variant: "primary" }], settings: { enabled: true }, layout: ["row", 2] })}
+            manifest={manifest}
+            selectedId="hero"
+            mode="edit"
+            onUpdateProps={() => undefined}
+            onRemove={() => undefined}
+          />
+        </div>
+      </Shell>,
+    );
+    act(() => rerenderShell());
+    fireEvent.click(screen.getByRole("button", { name: "Get started" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add item" }));
+    const second = document.querySelector('[data-sg-inspector-list="actions"] [data-sg-inspector-list-item="1"]') as HTMLElement;
+    fireEvent.click(within(second).getByRole("button", { name: "Add Variant" }));
+
+    const ids = [...document.querySelectorAll("[id]")].map((element) => element.id);
+    expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);
+    expect(within(second).getByRole("combobox", { name: "Variant" })).toHaveValue("primary");
+    expect(screen.getByRole("combobox", { name: "Direction" })).toHaveValue("row");
+    expect(screen.getByRole("spinbutton", { name: "Columns" })).toHaveValue(2);
   });
 });

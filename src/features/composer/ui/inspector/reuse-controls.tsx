@@ -10,7 +10,7 @@
 // unavailable is attached to the disabled control instead.
 
 import type { JSX } from "preact";
-import { useId, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
 import type {
   ComponentCatalog,
   CompositionDocument,
@@ -25,6 +25,7 @@ import { Banner, Button, Field, Input, PaneSection } from "../../../../component
 import type { ComposerMode } from "../../chrome/controller-model";
 import type { SelectedSlot } from "../tree/structure-pane";
 import type { ReuseAuthoringActionResult } from "../shared/reuse-authoring-contract";
+import { useDomId } from "../../../../components/use-dom-id";
 
 export interface ReuseControlsProps {
   document: CompositionDocument;
@@ -208,8 +209,8 @@ export function ReuseControls({
   const readOnly = mode === "preview";
   const diagnostics = diagnoseDocument(document, manifest);
   const publication = document.publication;
-  const patternReasonId = useId();
-  const outletReasonId = useId();
+  const patternReasonId = useDomId();
+  const outletReasonId = useDomId();
 
   const [confirmingClear, setConfirmingClear] = useState<ClearablePublication | null>(null);
   const [busy, setBusy] = useState(false);

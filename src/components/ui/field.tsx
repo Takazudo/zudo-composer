@@ -1,8 +1,8 @@
 import type { ComponentChildren } from "preact";
-import { useId } from "preact/hooks";
 import { ErrorIcon } from "../icons";
 import { cx } from "./class-names";
 import { FieldContext } from "./field-context";
+import { useDomId } from "../use-dom-id";
 
 export interface FieldProps {
   label: ComponentChildren;
@@ -19,7 +19,7 @@ export interface FieldProps {
 }
 
 export function Field({ label, required = false, kind, help, error, controlId, class: className, children }: FieldProps) {
-  const generatedId = useId();
+  const generatedId = useDomId();
   const id = controlId ?? generatedId;
   const helpId = `${id}-help`;
   const errorId = `${id}-error`;

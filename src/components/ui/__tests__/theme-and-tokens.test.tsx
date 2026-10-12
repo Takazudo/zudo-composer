@@ -109,14 +109,16 @@ describe("both themes", () => {
   it("renders the same markup under light and dark, so colour comes only from tokens", () => {
     document.documentElement.setAttribute("data-theme", "light");
     const light = render(<Gallery />);
-    const lightMarkup = light.container.innerHTML;
+    // Generated control ids are document-unique, so each render receives new ones.
+    const markup = (container: Element) => container.innerHTML.replace(/cms-id-\d+/g, "cms-id");
+    const lightMarkup = markup(light.container);
     expect(screen.getByRole("region", { name: "Gallery" })).toBeInTheDocument();
     light.unmount();
 
     document.documentElement.setAttribute("data-theme", "dark");
     const dark = render(<Gallery />);
     expect(screen.getByRole("region", { name: "Gallery" })).toBeInTheDocument();
-    expect(dark.container.innerHTML).toBe(lightMarkup);
+    expect(markup(dark.container)).toBe(lightMarkup);
   });
 
   it("declares every themed token in both theme blocks", () => {

@@ -1,6 +1,7 @@
 import type { ComponentChildren, JSX } from "preact";
-import { useId, useLayoutEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef } from "preact/hooks";
 import { XMarkIcon } from "../icons";
+import { useDomId } from "../use-dom-id";
 
 // The CMS modal (issue #159). Native `<dialog>` + `showModal()` so the browser
 // puts it in the real top layer and makes the rest of the page inert.
@@ -60,7 +61,7 @@ export function Dialog({
 }: DialogProps): JSX.Element {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
-  const titleId = `cms-dialog-title-${useId()}`;
+  const titleId = `cms-dialog-title-${useDomId()}`;
 
   // Only a real unmount runs this cleanup; an `open` change keeps the
   // close-while-mounted path below responsible for restoring focus.

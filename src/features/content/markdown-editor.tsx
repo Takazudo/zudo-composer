@@ -1,5 +1,5 @@
 import type { JSX } from "preact";
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
   BoldIcon,
   HeadingIcon,
@@ -18,6 +18,7 @@ import { createMarkdownEditor, type MarkdownEditorController } from "./markdown-
 export { createMarkdownEditor } from "./markdown-source";
 export type { CreateMarkdownEditorOptions, MarkdownEditorController } from "./markdown-source";
 import { MarkdownPreview } from "./markdown-preview";
+import { useDomId } from "../../components/use-dom-id";
 
 export type MarkdownEditorMode = "edit" | "preview" | "split";
 
@@ -63,7 +64,7 @@ export function MarkdownEditor({
 }: MarkdownEditorProps): JSX.Element {
   const observedTheme = useResolvedTheme();
   const theme = suppliedTheme ?? observedTheme;
-  const uid = useId();
+  const uid = useDomId();
   // Just the label, the way every `Field` in this form names its control: the
   // kind hint beside it is a visual aid, not part of the control's name.
   const labelId = `sg-content-markdown-label-${uid}`;
