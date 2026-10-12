@@ -5,7 +5,9 @@
 // temporary directory outside the repository, resolves both packages from
 // GitHub into a fresh lockfile, installs under --frozen-lockfile, imports
 // every public subpath and runs the same public-entry probe the packed-install
-// proof uses.
+// proof uses. It then runs fixtures/hosted-content-host inside that host: the
+// Worker-style service over the portable entries, its WebWorker-only type
+// check, and the restricted editor built through `zudo-composer/vite`.
 //
 // Usage: node scripts/verify-root-git-install.mjs [--sha <40-hex>]
 // The commit defaults to HEAD and must already be reachable on the public
@@ -13,7 +15,7 @@
 // not install.
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { cp, copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
@@ -114,7 +116,12 @@ export const componentPack = defineComponentPack({ packId: "public-entry-host", 
   console.log(probe.stdout.trim());
   await pnpm(["exec", "tsc", "--ignoreConfig", "--noEmit", "--strict", "--verbatimModuleSyntax", "--module", "ESNext", "--moduleResolution", "Bundler", "--target", "ES2023", "types.mts", "site-project.ts"], host);
   await pnpm(["exec", "tsc", "--ignoreConfig", "--noEmit", "--strict", "--verbatimModuleSyntax", "--types", "node", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2023", "types.mts", "site-project.ts"], host);
-  console.log(`Root Git install passed: zudo-composer@${toolSpec} with ${contractHandoff.packageName}@${contractHandoff.rootGitSpec}; frozen reinstall, public imports, probe and strict consumer type checks succeeded outside the repository.`);
+  // The consumer fixture resolves every package from this host's install.
+  const hostedContent = join(host, "hosted-content-host");
+  await cp(join(root, "fixtures/hosted-content-host"), hostedContent, { recursive: true, filter: (path) => !/(?:^|[\\/])(?:node_modules|dist)(?:[\\/]|$)/.test(relative(join(root, "fixtures/hosted-content-host"), path)) });
+  const hosted = await execFile(process.execPath, ["verify.mjs"], { cwd: hostedContent, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+  console.log(hosted.stdout.trim());
+  console.log(`Root Git install passed: zudo-composer@${toolSpec} with ${contractHandoff.packageName}@${contractHandoff.rootGitSpec}; frozen reinstall, public imports, probe, strict consumer type checks and the hosted content host (Worker service, Worker type check, editor build) succeeded outside the repository.`);
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

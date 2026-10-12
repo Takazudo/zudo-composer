@@ -314,6 +314,9 @@ export async function startHostServer(hostRoot, { port = 4175, env = process.env
   }
 }
 
+/** Lanes the runner owns besides disk-discovered packages. */
+export const PACKED_HOST_LANES = ["generated", "self-host", "hosted-content-host"];
+
 /** @param {string[]} args @param {string[]} discovered */
 export function selectPackedHosts(args, discovered) {
   const requested = [];
@@ -325,14 +328,14 @@ export function selectPackedHosts(args, discovered) {
     else if (option === "--negative" && ["missing-runtime", "hoisted-dependency"].includes(value) && !negative) negative = value;
     else throw new Error(`Usage: smoke-host-install.mjs [--host <name>]... [--negative missing-runtime|hoisted-dependency]; invalid option ${option}`);
   }
-  if (discovered.some((host) => ["generated", "self-host"].includes(basename(host)))) throw new Error("Packed package host name collides with generated/self-host lanes");
-  const hosts = requested.length ? [...new Set(requested.filter((name) => !["generated", "self-host"].includes(name)).map((name) => {
+  if (discovered.some((host) => PACKED_HOST_LANES.includes(basename(host)))) throw new Error(`Packed package host name collides with the ${PACKED_HOST_LANES.join("/")} lanes`);
+  const hosts = requested.length ? [...new Set(requested.filter((name) => !PACKED_HOST_LANES.includes(name)).map((name) => {
     const matches = discovered.filter((host) => basename(host) === name || host === resolve(name));
     if (matches.length !== 1) throw new Error(`Unknown or ambiguous packed host: ${name}`);
     return matches[0];
   }))] : discovered;
   if (negative && (requested.length !== 1 || hosts.length !== 1)) throw new Error("A negative proof requires exactly one --host naming a disk host");
-  return { hosts, negative, fixture: requested.length === 0 || requested.includes("self-host"), generated: requested.length === 0 || requested.includes("generated") };
+  return { hosts, negative, fixture: requested.length === 0 || requested.includes("self-host"), generated: requested.length === 0 || requested.includes("generated"), hostedContent: requested.length === 0 || requested.includes("hosted-content-host") };
 }
 
 /** Same discovery and selection contract as the runner; CI never samples hosts.
@@ -340,7 +343,7 @@ export function selectPackedHosts(args, discovered) {
 export function packedHostMatrix(root) {
   const discovered = discoverPackedHosts(root);
   selectPackedHosts([], discovered);
-  const host = [...discovered.map((path) => basename(path)), "generated", "self-host"];
+  const host = [...discovered.map((path) => basename(path)), ...PACKED_HOST_LANES];
   if (host.some((name) => !/^[a-z0-9][a-z0-9_-]*$/u.test(name))) throw new Error("Packed host names must be safe matrix identifiers");
   return { host };
 }
