@@ -1,4 +1,4 @@
-import type { Story, StoryMeta } from "@takazudo/zudo-sg/stories";
+import type { Story, StoryMeta } from "../../../preview/story-types";
 import { Callout, ProseP, type CalloutProps } from "@zudo-composer/ui";
 import {
   calloutComposer,

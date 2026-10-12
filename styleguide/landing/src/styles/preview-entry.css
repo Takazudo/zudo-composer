@@ -10,3 +10,6 @@
   color: var(--color-land-fg);
   color-scheme: light;
 }
+
+/* Host frame spacing is authored independently of the shell Wind graph. */
+.sg-preview-root { padding: 1rem; }

@@ -3,7 +3,7 @@ import { zudoDoc } from "@takazudo/zudo-doc/config";
 import { withZudoSg } from "@takazudo/zudo-sg/config";
 import zudoSgConfig from "./zudo-sg.config.mjs";
 
-export default defineConfig(withZudoSg(zudoDoc({
+const preset = zudoDoc({
   siteName: "Blog Styleguide",
   base: "/",
   port: 4400,
@@ -19,4 +19,26 @@ export default defineConfig(withZudoSg(zudoDoc({
   // route (/components/*, /tokens), not just this host's host-owned
   // `/`. See pages/lib/_chrome-bindings.tsx.
   chromeBindingsModule: "./pages/lib/_chrome-bindings.tsx",
-}), zudoSgConfig));
+});
+// Normalize the public preset's optional false Wind switch for SG composition.
+const { wind, ...basePreset } = preset;
+export default defineConfig(
+  withZudoSg(
+    {
+      ...basePreset,
+      ...(wind ? { wind: {
+        ...wind,
+        sources: {
+          ...wind.sources,
+          // Product stories and CSS are compiled only by the Preact pipeline.
+          exclude: [...(wind.sources?.exclude ?? []), "preview/**", "stories/**", "src/generated/**", "src/styles/preview-entry.css"],
+        },
+      } } : {}),
+      plugins: [
+        ...(basePreset.plugins ?? []),
+        { name: "./scripts/preview-server.ts" },
+      ],
+    },
+    zudoSgConfig,
+  ),
+);

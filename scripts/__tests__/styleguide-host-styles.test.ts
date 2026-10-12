@@ -19,27 +19,39 @@ describe("sample styleguide host styles", () => {
     expect(page).toContain('class="sg-home__link"');
   });
 
-  it("loads the public component, docs, and catalog stylesheets", () => {
+  it("keeps published Wind shell styles separate from actual Preact pack CSS", () => {
     const css = readFileSync(
       resolve(repositoryRoot, "styleguide/sample/src/styles/global.css"),
       "utf8",
     );
 
-    expect(css).toContain('@import "@zudo-composer/ui/styles/composer.css"');
-    expect(css).toContain('@import "@takazudo/zudo-doc/theme-no-reset.css"');
-    expect(css).not.toContain('@import "@takazudo/zudo-doc/theme.css"');
-    expect(
-      css.indexOf('@import "@zudo-composer/ui/styles/composer.css"'),
-    ).toBeLessThan(
-      css.indexOf('@import "@takazudo/zudo-doc/theme-no-reset.css"'),
+    const previewCss = readFileSync(
+      resolve(repositoryRoot, "styleguide/sample/src/styles/preview-entry.css"),
+      "utf8",
     );
+
+    // SG 0.5/doc 6 use Wind in the shell; the actual Git-installed UI's
+    // Tailwind stylesheet is compiled separately for the Preact iframe.
+    for (const stylesheet of [
+      "@takazudo/zudo-doc/theme.css",
+      "@takazudo/zudo-doc/content.css",
+      "@takazudo/zudo-doc/features.css",
+      "@takazudo/zudo-doc/page-loading.css",
+      "@takazudo/zdtp/dashboard/styles.css",
+      "@takazudo/zudo-sg/styles.css",
+    ]) {
+      expect(css).toContain(`@import "${stylesheet}"`);
+    }
+    expect(css).toContain("@layer zw-reset, zd-flow;");
+    expect(css).not.toMatch(/@import ["'](?:@zudo-composer\/ui\/|tailwindcss)/);
+    expect(css).not.toContain("theme-no-reset.css");
+    expect(css).not.toContain("safelist.css");
     expect(css).not.toMatch(/--color-(?:border|surface-2)\s*:/);
-    expect(css).toContain('@import "@takazudo/zudo-doc/safelist.css"');
-    expect(css).toContain('@import "@takazudo/zudo-sg/styles.css"');
-    expect(css).toContain('@import "@takazudo/zudo-sg/safelist.css"');
-    expect(css.lastIndexOf('@import "tailwindcss/utilities"')).toBeGreaterThan(
-      css.indexOf('@import "@takazudo/zudo-sg/safelist.css"'),
-    );
+    expect(previewCss).toContain('@import "@zudo-composer/ui/styles/composer.css"');
+    expect(previewCss).toContain('@source "../../stories"');
+    expect(previewCss).toContain('@source "../../preview"');
+    expect(previewCss).toContain('@source "../../node_modules/@zudo-composer/ui/src"');
+    expect(previewCss).not.toMatch(/@takazudo\/(?:zudo-doc|zudo-sg)/);
     expect(css).toContain(".sg-home__main");
     expect(css).toContain(".sg-home__link:focus-visible");
     // zudo-doc hides the inactive SidebarToggle icon

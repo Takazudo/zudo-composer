@@ -69,6 +69,14 @@ describe("reachable validation commands cannot deploy", () => {
     expect(() => audit(hook)).toThrow(/hosted-demo:deploy/u);
   });
 
+  it.each(["--tsconfig tsconfig.preview.json", "--tsconfig=tsconfig.preview.json"])("audits the actual tsx entry after %s", async (options) => {
+    const root = await fixture(`tsx ${options} scripts/verify.mjs`);
+    await put(root, "tsconfig.preview.json", JSON.stringify({ compilerOptions: { jsxImportSource: "preact" } }));
+    expect(() => audit(root)).not.toThrow();
+    await put(root, "scripts/verify.mjs", "import { execFileSync } from 'node:child_process'; execFileSync('wrangler', ['deploy']);");
+    expect(() => audit(root)).toThrow(/No-deploy assertion/u);
+  });
+
   it("follows executable shell wrappers, preserving adjacent quoted words and command boundaries", async () => {
     const root = await fixture("./scripts/validate.sh");
     await put(root, "scripts/validate.sh", "#!/bin/sh\nnode scripts/verify.mjs\ncorepack pnpm 'hosted-demo:'\"deploy\"\n");

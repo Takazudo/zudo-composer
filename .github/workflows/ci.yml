@@ -334,9 +334,12 @@ jobs:
             styleguide/sample/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: corepack pnpm sg:pins
-      - run: corepack pnpm sg:build-site
+      # Thumbnail capture renders the real Preact preview during the build.
       - run: pnpm exec playwright install --with-deps chromium
+      - run: corepack pnpm sg:build-site
+      - run: pnpm -C styleguide/sample exec zfb wind audit --plan build --fail-on error
       - run: corepack pnpm sg:computed-styles
+      - run: pnpm -C styleguide/sample verify:browser
       - run: pnpm -C styleguide/sample check
       - run: pnpm hosted-demo:verify styleguide/sample/dist "${{ github.sha }}"
         env:
@@ -368,9 +371,12 @@ jobs:
       - run: pnpm -C styleguide/shop install --frozen-lockfile
       - run: corepack pnpm sg:pins
       - run: pnpm -C styleguide/shop check
-      - run: corepack pnpm sg:build-styleguide shop-sg --skip-install
+      # Thumbnail capture renders the real Preact preview during the build.
       - run: pnpm exec playwright install --with-deps chromium
+      - run: corepack pnpm sg:build-styleguide shop-sg --skip-install
+      - run: pnpm -C styleguide/shop exec zfb wind audit --plan build --fail-on error
       - run: corepack pnpm sg:computed-styles shop-sg
+      - run: pnpm -C styleguide/shop verify:browser
       - run: pnpm hosted-demo:verify styleguide/shop/dist "${{ github.sha }}"
         env:
           HOSTED_DEMO_TARGET: shop-sg
@@ -401,9 +407,12 @@ jobs:
       - run: pnpm -C styleguide/landing install --frozen-lockfile
       - run: corepack pnpm sg:pins
       - run: pnpm -C styleguide/landing check
-      - run: corepack pnpm sg:build-styleguide landing-sg --skip-install
+      # Thumbnail capture renders the real Preact preview during the build.
       - run: pnpm exec playwright install --with-deps chromium
+      - run: corepack pnpm sg:build-styleguide landing-sg --skip-install
+      - run: pnpm -C styleguide/landing exec zfb wind audit --plan build --fail-on error
       - run: corepack pnpm sg:computed-styles landing-sg
+      - run: pnpm -C styleguide/landing verify:browser
       - run: pnpm hosted-demo:verify styleguide/landing/dist "${{ github.sha }}"
         env:
           HOSTED_DEMO_TARGET: landing-sg
@@ -434,9 +443,12 @@ jobs:
       - run: pnpm -C styleguide/blog install --frozen-lockfile
       - run: corepack pnpm sg:pins
       - run: pnpm -C styleguide/blog check
-      - run: corepack pnpm sg:build-styleguide blog-sg --skip-install
+      # Thumbnail capture renders the real Preact preview during the build.
       - run: pnpm exec playwright install --with-deps chromium
+      - run: corepack pnpm sg:build-styleguide blog-sg --skip-install
+      - run: pnpm -C styleguide/blog exec zfb wind audit --plan build --fail-on error
       - run: corepack pnpm sg:computed-styles blog-sg
+      - run: pnpm -C styleguide/blog verify:browser
       - run: pnpm hosted-demo:verify styleguide/blog/dist "${{ github.sha }}"
         env:
           HOSTED_DEMO_TARGET: blog-sg

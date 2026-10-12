@@ -1,5 +1,6 @@
-/* Compiled separately by the engine and scoped to preview documents. */
+/* Compiled by the host's independent Preact/Tailwind pipeline. */
 @import "@zudo-composer/ui/styles/composer.css";
 
 @source "../../stories";
+@source "../../preview";
 @source "../../node_modules/@zudo-composer/ui/src";

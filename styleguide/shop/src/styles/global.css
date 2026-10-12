@@ -1,22 +1,10 @@
-@layer zd-preflight, zd-flow;
-@import "tailwindcss/preflight" layer(zd-preflight);
-@import "tailwindcss/utilities";
-
+@layer zw-reset, zd-flow;
 @import "@takazudo/zudo-doc/theme.css";
-@import "@takazudo/zudo-doc/safelist.css";
 @import "@takazudo/zudo-doc/content.css";
 @import "@takazudo/zudo-doc/features.css";
 @import "@takazudo/zudo-doc/page-loading.css";
 @import "@takazudo/zdtp/dashboard/styles.css";
-
-/* zudo-sg ships its chrome rules and generated utility safelist separately. */
 @import "@takazudo/zudo-sg/styles.css";
-@import "@takazudo/zudo-sg/safelist.css";
-
-
-@source "../../pages/**/*.{tsx,ts,jsx,js}";
-@source "../../stories/**/*.{tsx,ts,jsx,js,mdx,md}";
-@source "../../src/content/**/*.{mdx,md}";
 
 /* The host-owned index does not render through zudo-doc's route layout, so it
  * cannot depend on the route-scoped token variables injected by that layout. */

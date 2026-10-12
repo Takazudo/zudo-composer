@@ -166,10 +166,10 @@ frozen installs and dedupe checks pass. Root duplication is retained as above.
 Exact Git UI/contract external installs, public installed-package verification,
 conformance/negative boundaries, consumer/creator/provider/headless boundaries,
 CMS checks and package handoff checks have passing evidence. Independent review
-of commit `6ec82ab08b18a6b49cee8036009b4328ed986374` found no remaining source
-finding. Current-head CI run 38159573434 has 21 successful jobs; the final
-validation job has passed full unit tests and build and is still running browser
-lanes. Pending CI is not reported as passed.
+of final delivery A commit `08facd508648c5bfb2e2b02ed127b8858ae99e46` found no
+remaining source finding. All 22 jobs in final-head CI run
+38160898345 (linked from PR #898)
+passed, including the full unit, build, packed-host and browser lanes.
 
 Supplementary doc browser checks pass for English content/navigation, wide home,
 search and repeated SPA navigation, computed theme, sidebar/TOC visibility,
@@ -189,8 +189,8 @@ the hoist assertion passes without changing configuration or tests. A clean root
 focused files pass all seven tests. Earlier aggregate failures are
 not represented as a passing aggregate invocation.
 
-Delivery B's disposable Sample migration remains a separate parity experiment.
-It does not constitute a completed four-host migration.
+Delivery B is recorded separately below; delivery A's transitional compatibility
+proof remains against the four original hosts.
 
 Conditional merge authority does not authorize the production deployment
 triggered after successful main CI. Before any merge, an already-authorized
@@ -198,3 +198,100 @@ control must be verified; otherwise retain the reviewable PR and hold merge.
 No workflow disabling, secret/trigger alteration or deployment permission is
 inferred. Issues close only after their recorded scope integrates; B and its
 parent/tracker are not complete merely because A is prepared.
+
+
+## Delivery B: published catalog shells and owned Preact previews
+
+Delivery B starts from reviewed A commit
+`08facd508648c5bfb2e2b02ed127b8858ae99e46`. The disposable Sample experiment
+proved the public API route and actual preview before the other three migrations.
+All four independent hosts now declare zudo-sg `^0.5.0`, zudo-doc `6.0.0`,
+ZFB/runtime/md-wasm `4.3.1` and zdtp `0.8.6`. Original declaration operators
+and the five install scopes remain intact. Sample retains the exact UI Git
+commit documented above; the three demos do not acquire that dependency.
+Scaffold and release provenance is in [ZUDO_DEPS_PINS.md](ZUDO_DEPS_PINS.md).
+
+The shell uses published zudo-react/Wind exports. A host-owned detail route
+composes public `StyleguideLayout`, `CodePanel`, `DetailWorkbench`, registry and
+doc chrome/context factories. It preserves source/copy, live CSS, controls,
+resizing and token entry points without importing private engine routes.
+A single actual story corpus generates serialized descriptors and preview-loader
+identities; render functions and VNodes remain in the separate Preact bundle.
+Actual pack CSS uses its own Tailwind build before ZFB. Real settled browser
+captures supply thumbnails. The preserved census is 101 stories and 339 variants:
+Sample 12/71, Shop 35/105, Landing 30/90, Blog 24/73. File and variant counts
+are deliberately distinguished; Shop's `cart-page` file retains slug `cart-lines`.
+
+The same-origin `/components/preview` receiver validates origin, source,
+protocol version and identity, replays readiness, handles props/resolved theme,
+reports border-box height and cleans up navigation. Token overrides use the
+public token receiver. Controls wait for activation and preview readiness;
+reset remains props-only. Shell and preview TypeScript projects preserve their
+respective JSX runtimes. All shells extend the published doc base configuration.
+Generated corpus, preview and thumbnail outputs are ignored and rebuilt; dev
+watching serializes regeneration before restarting the public ZFB CLI.
+
+### B terminal dependency decisions
+
+- **KEEP** direct Playwright 1.62.1, Vite 7.3.7, Tailwind's Vite adapter and tsx
+  in each host: they own the actual preview compiler and settled browser
+  thumbnail pipeline. Browser installation precedes host builds in CI.
+- **UPDATE** Vite 7.3.5 to supported same-major 7.3.7. Full audits exposed
+  GHSA-g7r4-m6w7-qqqr through esbuild 0.27.7; the patch permits esbuild 0.28.2,
+  now resolved in all four locks. No override or advisory suppression was used.
+- **REMOVE direct declaration** of preact-render-to-string from Sample, Shop
+  and Landing after checking source, configuration, dev/build and thumbnail
+  consumption. Preact's optional renderer peer still retains it transitively;
+  this is not a claim that the package disappeared from the resolved graph.
+- **KEEP** Blog's renderer: its active route fixture check imports it directly.
+- **KEEP** diff for the public doc common-engine path. **KEEP REMOVED** KaTeX:
+  B starts from A's verified unused-math removal, not the disposable spike lock.
+- **PRUNE** only obsolete exact release-age entries (4.3.0/2.22.x); preserve
+  precise current exceptions and root `autoInstallPeers: false`.
+
+No utility replacement was required. No forced removal quota, lockfile deletion,
+manual lock editing, broad override, forced install or hoisting change was used.
+The separate host compiler/browser graphs and root Vite/Vitest duplication are
+intentional; no reduction claim is made for the new architecture.
+
+### B lockfile and census delta
+
+Counts include every package/platform key. Root remains 678 records, unchanged
+from A (baseline 657). All 18 tracked manifests remain; declarations total 171
+across 45 names, compared with A's 158/45 and baseline 164/46.
+
+| Scope | A to B records | Added / removed vs A | Baseline to B records | Added / removed vs baseline |
+| --- | --- | --- | --- | --- |
+| Sample | 212 to 248 | 47 / 11 | 212 to 248 | 88 / 52 |
+| Shop | 207 to 244 | 48 / 11 | 208 to 244 | 76 / 40 |
+| Landing | 207 to 244 | 48 / 11 | 208 to 244 | 76 / 40 |
+| Blog | 207 to 244 | 48 / 11 | 208 to 244 | 76 / 40 |
+
+All five final full-graph audits report zero advisories, including development
+dependencies. The four SG frozen installs and `dedupe --check` pass. Root retains A's
+reviewed lock and deliberate dedupe finding. Final aggregate and browser evidence
+will be recorded on the exact delivery B PR head; in-progress checks are not
+represented as passed. Both deliveries remain unmerged until the authorized
+production-deployment control and ordered integration gates are satisfied.
+
+
+The former Sample stylesheet unit assertion required UI/Tailwind and doc chrome
+in one global stylesheet. That assumption is intentionally retired by the
+separate-preview architecture: its replacement verifies current published shell
+CSS exports, absence of pack/Tailwind imports from the shell, and actual UI CSS
+plus story/preview scan roots in the independent preview. Existing computed-style,
+mobile drawer and token-edit behavior assertions remain intact. The focused
+stylesheet suite passes all 12 tests.
+
+Final local host builds, artifact checks and Wind error audits pass. All 339
+actual variants pass browser rendering and catalog interaction checks, including
+real Shop cart/checkout, Landing pricing/signup, and Blog comment/newsletter
+state changes. Sample's watched story/metadata/CSS/thumbnail edit and restoration
+pass. The first refreshed Sample build had inconsistent server/client identities;
+its inputs overlapped a README edit. With inputs frozen, a clean public rebuild
+produced matching identities and passed the complete browser/dev proof. This
+observation is not labeled a demonstrated upstream defect. The first B CI run
+found a prohibited run URL in these records and a test locator selecting a
+hidden sidebar link. Portable run IDs and a unique actual catalog-card locator
+correct those defects without bypassing the handoff gate or browser assertions.
+Final exact-head CI and any later corrections are recorded on PR #899.
