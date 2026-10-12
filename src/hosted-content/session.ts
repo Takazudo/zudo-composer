@@ -249,9 +249,11 @@ export class HostedContentSession {
   /** A clean refresh may adopt a confirmed integration; dirty edits need explicit review. */
   async refresh(): Promise<void> {
     if (this.flight || this.pending || this.edits.length || this.creationDraft || this.invalidInputs.size) throw new Error("Review retained changes before loading current content");
+    let authoritative: HostedState;
+    try { authoritative = await this.options.transport.readState(); } catch (error) { this.fail(error); throw error; }
+    // A local edit racing the read is ordinary dirty state, not a session failure.
+    if (this.flight || this.pending || this.edits.length || this.creationDraft || this.invalidInputs.size) throw new Error("Content was edited while loading current content");
     try {
-      const authoritative = await this.options.transport.readState();
-      if (this.flight || this.pending || this.edits.length || this.creationDraft || this.invalidInputs.size) throw new Error("Content was edited while loading current content");
       this.acknowledged = copy(authoritative); this.invalidInputs.clear(); this.presentationRevision++; this.revision++; this.reviewed = null; this.options.preview?.invalidate?.();
       this.error = null; this.phase = "clean"; await this.persist(); this.emit();
     } catch (error) { this.fail(error); throw error; }

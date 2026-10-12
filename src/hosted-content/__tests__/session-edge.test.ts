@@ -36,5 +36,15 @@ describe("hosted form intent races", () => {
     read.resolve({ ...original, draftRevision: "new-authoritative-revision" }); await expect(refreshing).rejects.toThrow("edited while loading");
     expect(session.state.content!.draftRevision).toBe(original.draftRevision); expect(session.state.invalidInputs).toEqual(["price"]); expect(session.state.dirty).toBe(true);
     await expect(session.refresh()).rejects.toThrow("Review retained"); expect(reads).toBe(1);
+    expect(session.state.phase).toBe("dirty"); expect(session.state.error).toBeNull();
+  });
+  it("keeps dirty edits made during an authoritative read without failing the session", async () => {
+    const fixture = editorFixture(); const session = new HostedContentSession({ transport: fixture.transport, createOperationKey: () => "unused" }); await session.initialize();
+    const original = session.state.content!; const read = gate<HostedState>();
+    fixture.transport.readState = () => read.promise;
+    const refreshing = session.refresh(); session.edit(page, "title", "編集中");
+    read.resolve({ ...original, draftRevision: "new-authoritative-revision" }); await expect(refreshing).rejects.toThrow("edited while loading");
+    expect(session.state.phase).toBe("dirty"); expect(session.state.error).toBeNull();
+    expect(session.state.content!.providers[0]!.entries.find((entry) => entry.id === page.recordId)!.values.title).toBe("編集中");
   });
 });
