@@ -27,10 +27,7 @@ export function ContentScalarControl({ schema, value, label, required, maxLength
   if (schema.kind === "boolean") return <Switch label={label ?? "Boolean"} aria-label={label} checked={value === true} disabled={disabled} onCheckedChange={onChange} />;
   if (schema.kind === "long-text") return <Textarea {...common} rows={5} maxLength={maxLength} value={text(value)} onInput={(event) => onChange(event.currentTarget.value)} />;
   if (schema.kind === "number" && retainIncompleteNumber) return <RetainedNumberControl value={value} label={label} required={required} disabled={disabled} allowEmpty={allowEmptyNumber} onIncomplete={onIncompleteNumber} onChange={onChange} />;
-  if (schema.kind === "number") return <Input {...common} type="number" value={text(value)} onInput={(event) => {
-    const next = event.currentTarget.valueAsNumber;
-    onChange(event.currentTarget.value === "" || !Number.isFinite(next) ? undefined : next);
-  }} />;
+  if (schema.kind === "number") return <Input {...common} type="number" value={text(value)} onInput={(event) => onChange(event.currentTarget.value === "" ? undefined : event.currentTarget.valueAsNumber)} />;
   return <Input {...common} maxLength={maxLength} type={schema.kind === "date" ? "date" : schema.kind === "color" ? "color" : schema.kind === "url" ? "url" : "text"} value={text(value)} onInput={(event) => onChange(event.currentTarget.value)} />;
 }
 
