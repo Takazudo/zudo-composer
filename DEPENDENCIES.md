@@ -316,5 +316,7 @@ adopt, and raises CodeMirror/Lezer floors. All four hosts already resolve one
 `@lezer/common` 1.5.3 identity that meets those floors, so no dedupe was needed.
 
 Release-age exclusions stay exact and list only versions present in each lock.
-Sample keeps md-wasm `4.3.1 || 4.3.3` because its exact Git UI handoff still
-declares 4.3.1 until the next `package/ui-v1` commit.
+The UI package handoff advanced to `5af34a703ea840db22261a0acf8ee09f69c0ae8e`
+on `package/ui-v1`, a fast-forward from `776fb59a` whose root tree equals
+`packages/ui` with md-wasm 4.3.3. Sample's exact Git pin and lock follow it, so
+its release-age exclusion now lists only md-wasm 4.3.3.
