@@ -20,7 +20,7 @@ import { createContentAuthoringController, type ContentAuthoringController, type
 import { contentEntryLabel, contentEntryTitleField } from "./presentation";
 import type { ContentPreviewSource } from "./preview-source";
 import type { ContentAssetPickerRenderer } from "./structured-field-editor";
-import { useContentRestriction } from "./restriction";
+import { restrictionAllowsField, useContentRestriction } from "./restriction";
 
 export interface ContentRouteContentProps {
   provider: ContentProvider;
@@ -268,7 +268,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
           value={schemaMode ? (state.model?.document.name ?? "") : typeof entryTitle === "string" ? entryTitle : ""}
           label={schemaMode ? "Model name" : "Entry title"}
           placeholder={schemaMode ? "Model name" : "Untitled Entry"}
-          disabled={schemaMode ? state.model === null : state.entry === null || titleField === null}
+          disabled={schemaMode ? state.model === null : state.entry === null || titleField === null || !restrictionAllowsField(restriction, state.entry.modelId, titleField.id)}
           onCommit={(next) => run(() => {
             if (schemaMode) controller.renameModel(next);
             else if (titleField) controller.updateEntryValue(titleField.id, next);

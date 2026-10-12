@@ -164,6 +164,38 @@ describe("mountContentEditor (restricted)", () => {
   });
 });
 
+describe("approved asset selection", () => {
+  it("picks only approved committed assets, without upload or library links", async () => {
+    const baseline = createContentStorageConformanceBaseline();
+    const content = baseline.project.providers.content[0]!;
+    content.models[0]!.document.fields.push({ id: "image", key: "image", label: "Image", required: false, kind: "asset-use", use: "image" });
+    const adapter = await createMemoryContentDraftStorage(baseline);
+    const assetPolicy: HostContentPolicy = { ...policy, models: { notes: { fields: ["title", "body", "image"], operations: ["put-entry-values"] } }, assets: { providerId: "assets-filesystem", assetIds: ["hero"] } };
+    handle = mountContentEditor(host, {
+      project: { id: policy.projectId },
+      policy: assetPolicy,
+      storage: createContentEditorStorage(adapter, { policy: assetPolicy, actor }),
+      assets: { providerId: "assets-filesystem", assets: [
+        { assetId: "hero", fileName: "hero.png", mimeType: "image/png", byteLength: 10, url: "/approved/hero.png", label: "Hero" },
+        { assetId: "secret", fileName: "secret.png", mimeType: "image/png", byteLength: 10, url: "/approved/secret.png", label: "Not approved" },
+      ] },
+    });
+    const tree = await screen.findByRole("tree", { name: "Content" });
+    fireEvent.click(within(tree).getByRole("treeitem", { name: /^Notes/ }));
+    fireEvent.click(await within(tree).findByRole("treeitem", { name: /^First/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Choose from Assets" }));
+    expect(screen.queryByRole("button", { name: /Upload/ })).toBeNull();
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByText("Not approved")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Choose: Hero" }));
+    await waitFor(() => expect(handle!.state.status).toBe("saved"));
+    const draft = await adapter.readDraft();
+    expect(draft.status === "ok" && draft.value.snapshot.entries.find((entry) => entry.id === "first")!.values.image).toMatchObject({ kind: "image", asset: { providerId: "assets-filesystem", assetId: "hero" } });
+    expect(screen.queryByRole("link", { name: /Open in Assets/ })).toBeNull();
+    expect(screen.queryByText("Authoring URL")).toBeNull();
+  });
+});
+
 describe("restricted Content view provider", () => {
   it("rejects every structural write", async () => {
     const baseline = createContentStorageConformanceBaseline();

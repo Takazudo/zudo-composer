@@ -1,10 +1,9 @@
 # Hosted content authoring
 
-The portable half of hosted content authoring (Takazudo/zudo-composer#903):
-the public entries a host such as Pinsel uses to validate, project, authorize,
-store, preview and export Content edits from a browser or a Worker, without
-the Node filesystem tool. The restricted editor mount is milestone 2 and will
-be documented here when it lands.
+Hosted content authoring (Takazudo/zudo-composer#903): the public entries a
+host such as Pinsel uses to validate, project, authorize, store, preview and
+export Content edits from a browser or a Worker, without the Node filesystem
+tool, and the restricted content-only editor a client role edits through.
 
 Nothing in this document changes the locally installed tool. Hosted
 persistence, authentication, the actual D1 schema, the Git/PR workflow and
@@ -19,8 +18,9 @@ proves them with a memory reference implementation and a conformance suite.
 | `zudo-composer/host-storage` | browser, Worker, Node | `ContentDraftStorageAdapter` contract, the memory reference adapter, the conformance suite and its fixture baseline |
 | `zudo-composer/preview-protocol` | browser (parent and iframe) | strict preview envelope/guards, message constructors, `createHostPreviewBridge` |
 | `zudo-composer/export` | browser, Worker, Node | `ContentExportAdapter` contract, submission validation, deterministic fake |
+| `zudo-composer/content-editor` | browser | `mountContentEditor`, the save session, labels; shipped as source and bundled by the host with `contentEditorPlugins()` from `zudo-composer/vite` |
 
-All four are built by `pnpm build:public` with the platform-neutral profile:
+The four portable entries are built by `pnpm build:public` with the platform-neutral profile:
 no Node target, no Node externals, and declarations emitted against
 `ES2023 + WebWorker` only (`tsconfig.public-portable.json`). The committed
 output is proven by `pnpm portable:scan`, which reads the emitted
@@ -82,7 +82,7 @@ Request kinds:
 
 | Kind | Effect |
 | --- | --- |
-| `put-entry-values` | merges permitted field values into an existing entry |
+| `put-entry-values` | merges permitted field values into an existing entry; `null` clears a permitted field |
 | `create-entry` | creates a draft entry under a caller-supplied safe id |
 | `delete-entry` | deletes an entry nothing else references |
 | `reorder` | rewrites one permitted top-level `number` field across every entry of the model, in the listed order |
@@ -160,6 +160,143 @@ batch). The suite is dependency-free; without a harness it runs sequentially
 and throws the first failure. `createContentStorageConformanceBaseline()` is
 the fixture project each factory seeds from.
 
+## Expected-revision save path
+
+`applyHostContentRequest(adapter, { operationId, request, expectedBaselineRevision }, { policy, actor, now })`
+(`zudo-composer/host-storage`) is the one trusted service call behind an
+editor save. The browser sends untrusted JSON; the host verifies the actor
+first and keeps the policy server-side. In order:
+
+1. The operation id must be a short opaque token. An id that already has a
+   receipt is recovered **before** any fresh check: the same actor, request
+   and expected baseline (compared through `hostContentRequestDigest`)
+   returns the original receipt with `replayed: true` and the current draft,
+   even after later saves moved it; anything else under that id is an
+   `operation-id` conflict. Nothing is applied twice.
+2. A fresh request against another baseline is a `baseline-revision`
+   conflict. It is then authorized against the current draft with
+   `authorizeContentMutation`; a stale `expectedRevision` becomes a
+   `draft-revision` conflict carrying the current identities, and any other
+   refusal is `{ status: "refused", refusal }` with nothing written.
+3. The derived mutation is applied through `adapter.apply` with
+   `requestDigest` set to that digest, so the adapter's own same-transaction
+   replay check matches retries of the caller's request rather than the
+   derived mutation (whose timestamps differ per attempt). An adapter that
+   persists receipts must store the supplied `requestDigest`.
+
+`readHostContentReceipt(adapter, operationId, actor)` returns a receipt only to
+the actor that wrote it. `ContentEditorStorage` (`read`, `apply`,
+`readReceipt`, `snapshot`) is the shape the browser editor consumes; a host
+implements it over its own transport, and `createContentEditorStorage(adapter,
+{ policy, actor })` binds it in-process (tests, the fixture Worker).
+
+## Restricted editor mount
+
+```ts
+import { CONTENT_EDITOR_LABELS_JA, mountContentEditor } from "zudo-composer/content-editor";
+
+const handle = mountContentEditor(document.querySelector("#editor")!, {
+  project: { id: "pinsel", label: "Pinsel" },
+  revision: baselineCommit,      // the baseline the host's definitions were built for
+  policy,                        // presentation copy of the trusted HostContentPolicy
+  storage,                       // ContentEditorStorage over the host's transport
+  assets,                        // optional committed manifest: { providerId, assets: [{ assetId, fileName, mimeType, byteLength, url }] }
+  preview,                       // optional: { url, origin, pack, route } of the host's private preview document
+  export: { adapter, packageIdentity }, // optional submission adapter
+  labels: CONTENT_EDITOR_LABELS_JA,     // or Partial<ContentEditorLabels> overrides
+});
+await handle.flush();  // before host navigation; rejects and keeps the form when a save fails
+handle.dispose();      // presentation only; an in-flight save still resolves on the server
+```
+
+It renders the real Content route in restricted mode inside a minimal shell:
+
+- Only the policy's models are listed. There is no Entry / Schema /
+  Relationships mode switch, no Raw or Used-by tab, no model/Entry creation,
+  duplication, deletion, unpublish or start-fresh action, and no back link.
+- Fields outside `policy.models[model].fields` render read-only (a disabled
+  fieldset; Markdown as a read-only source). A protected slug never derives
+  from the title.
+- The mount has no router. It never reads or writes the page URL, so
+  `/composer`, `/mapping`, `/sitemapper`, `/assets` or a schema view cannot be
+  reached by navigating. The Content provider it renders over is a read-only
+  view of the adopted durable draft whose every structural write
+  (`putModel`, `deleteModel`, `putEntry`, `deleteEntry`, `removeField`,
+  `transact`, `seed`, `clear`, start fresh) rejects with
+  `HostedContentForbiddenError`. The host's service is still authoritative:
+  `applyHostContentRequest` refuses anything the presentation hides.
+- Asset fields pick from the committed manifest only, filtered to
+  `policy.assets.assetIds`, through a read-only `renderAssetPicker`;
+  `assetPickerCapabilities.upload` is `false` and neither "Open in Assets" nor
+  authoring URLs are shown.
+- Markdown fields use the CodeMirror source editor without the pack-rendered
+  Split/Preview views, so the editor graph never imports the component pack.
+
+### Save states
+
+Edits autosave through the Content save queue. Each write is one
+`put-entry-values` request of the changed values, the adopted
+`draftRevision` as `expectedRevision`, and a freshly minted operation id. The
+session keeps that exact request until its outcome is known:
+
+| Status | Meaning |
+| --- | --- |
+| `loading` / `load-failed` | no authoritative draft yet; no editable fallback is shown |
+| `blocked` | the stored draft tracks another baseline than `revision`; a developer must reconcile |
+| `clean` / `unsaved` / `saving` | no change, local edits not yet sent, one frozen request in flight |
+| `saved` | a durable receipt proved the request; the revision shown is the receipt's |
+| `recovering` | the write may have landed (lost acknowledgement or transport failure). Retry first reads the receipt, then resends the **identical** request under the same id; no newer edit is sent until it resolves |
+| `conflict` | the draft or baseline moved. Nothing was written; the latest records are reread and the banner offers **Use latest** (discard local values) or **Reapply my draft** (a new request against the new revision). Local values are never discarded without that choice |
+| `failed` | a definitive refusal (`code` from the policy or store) or an unavailable store (retry resends the same operation) |
+
+A newer local edit is shown as `unsaved` even while an older save is
+acknowledged; an acknowledgement for A never marks B saved. Unsaved local text
+lives only in the page until a receipt confirms it.
+
+### Preview and submit
+
+With `preview`, the inspector holds one iframe of the host's private preview
+document. **Preview saved draft** flushes, captures a snapshot at exactly the
+adopted revision through `storage.snapshot`, and sends its identity over the
+preview protocol; the state is `rendered` only on the matching
+acknowledgement and turns stale on a newer edit or save. With `export`,
+**Submit** is enabled only for the snapshot the preview acknowledged, at the
+adopted revision and baseline, with nothing unsaved or unresolved
+(`canSubmitPreviewedSnapshot`).
+
+### Building the editor in a host
+
+The entry ships as TypeScript/TSX source with CSS imports. Build it with the
+tool's plugins, which add the tool-root Tailwind resolver for the editor
+chrome and the Preact JSX transform:
+
+```js
+// vite.config.mjs
+import { defineConfig } from "vite";
+import { contentEditorPlugins } from "zudo-composer/vite";
+
+export default defineConfig({ plugins: contentEditorPlugins() });
+```
+
+The host declares `zudo-composer`, `@zudo-composer/component-contract`,
+`preact` and `vite`. The editor graph has no virtual modules, component pack,
+host stylesheet or Node builtin; its CSS is the tool chrome only and belongs
+in the private admin document, never the visitor document.
+
+### Consumer fixture
+
+`fixtures/hosted-content-host` is an independent host that imports only
+public bare specifiers: a Worker-style `fetch` module over
+`zudo-composer/content` and `zudo-composer/host-storage` (type-checked
+against `ES2023 + WebWorker` only, refusing authoring routes and structural
+writes), and the editor built with `contentEditorPlugins()`. Its `verify.mjs`
+proves the service semantics, the Worker type check, the build and a scan of
+the emitted bundle (no Node stubs, virtual modules, private source paths or
+`process.env`). `smoke:host-install -- --host hosted-content-host` installs it
+from packed tarballs and also edits a field through the built editor in a
+browser; `verify-root-git-install` runs `verify.mjs` inside the exact root Git
+install.
+
 ## Preview protocol
 
 `zudo-composer/preview-protocol` carries identities only. The parent posts
@@ -215,6 +352,7 @@ corepack pnpm portable:scan         # emitted portable graph is Worker/browser-s
 corepack pnpm typecheck:public      # public type and value surfaces are pinned
 corepack pnpm test                  # policy, protocol, storage conformance, export, projection parity
 corepack pnpm public:installed      # packed install outside the repository runs the extended probe
+corepack pnpm smoke:host-install -- --host hosted-content-host   # packed consumer fixture + browser edit
 corepack pnpm verify-root-git-install [-- --sha <40-hex>]
 ```
 
@@ -226,5 +364,6 @@ together with the component contract's package-root commit from
 full commits and no `file:`/`link:`/`workspace:`/`path:` entry, installs with
 `--frozen-lockfile`, imports every public subpath, checks the installed
 portable output byte for byte against the checkout, and runs the same probe
-and strict consumer type checks as `public:installed`. The commit must already
+and strict consumer type checks as `public:installed`, then runs the
+hosted-content-host fixture inside that install. The commit must already
 be reachable on GitHub; the proof reports the exact spec it installed.

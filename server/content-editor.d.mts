@@ -923,7 +923,7 @@ interface ContentEditorHandle {
     /** Removes the presentation and its listeners. An in-flight save still resolves on the server. */
     dispose(): void;
 }
-/** The status the shell shows, combining the session's durable state with the form's local edits. */
+/** The slice of the Content form state the shell status reads. */
 interface ContentEditorFormStatus {
     readonly saveStatus: "pristine" | "saved" | "dirty" | "saving" | "error";
     readonly conflictRecovery: {
@@ -931,6 +931,7 @@ interface ContentEditorFormStatus {
     } | null;
     readonly message: string;
 }
+/** The status the shell shows, combining the session's durable state with the form's local edits. */
 declare function contentEditorDisplayStatus(save: ContentEditorSaveState, form: ContentEditorFormStatus | null): {
     status: ContentEditorDisplayStatus;
     message: string;

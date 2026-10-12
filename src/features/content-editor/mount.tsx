@@ -161,13 +161,14 @@ export interface ContentEditorHandle {
   dispose(): void;
 }
 
-/** The status the shell shows, combining the session's durable state with the form's local edits. */
+/** The slice of the Content form state the shell status reads. */
 export interface ContentEditorFormStatus {
   readonly saveStatus: "pristine" | "saved" | "dirty" | "saving" | "error";
   readonly conflictRecovery: { readonly message: string } | null;
   readonly message: string;
 }
 
+/** The status the shell shows, combining the session's durable state with the form's local edits. */
 export function contentEditorDisplayStatus(save: ContentEditorSaveState, form: ContentEditorFormStatus | null): { status: ContentEditorDisplayStatus; message: string } {
   if (save.status === "loading" || save.status === "load-failed" || save.status === "blocked") return { status: save.status, message: save.status === "loading" ? "" : save.message };
   if (form?.conflictRecovery || save.status === "conflict") return { status: "conflict", message: form?.conflictRecovery?.message ?? (save.status === "conflict" ? save.message : "") };
