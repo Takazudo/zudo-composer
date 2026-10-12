@@ -8,6 +8,7 @@ export default defineConfig({
   root: dirname(fileURLToPath(import.meta.url)),
   base: "/",
   publicDir: false,
-  build: { outDir: "dist", emptyOutDir: true },
+  // `/assets` is an authoring route the service refuses; emitted files live elsewhere.
+  build: { outDir: "dist", assetsDir: "static", emptyOutDir: true },
   plugins: contentEditorPlugins(),
 });
