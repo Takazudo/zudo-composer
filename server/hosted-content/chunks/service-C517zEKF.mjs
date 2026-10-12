@@ -1082,7 +1082,7 @@ function createHostedContentService(supplied) {
 				const owned = options.policy.collections.some((collection) => contentEntryRefKey(collection.owner) === contentEntryRefKey(ref) && collection.fieldId === fieldId);
 				if (!field) drop("field-removed", [fieldId]);
 				else if (base ? !sameValue(target.values[fieldId], base.values[fieldId]) : !created && !sameValue(target.values[fieldId], next)) drop("canonical-changed", [fieldId]);
-				else if (!owned && !options.policy.models.some((model) => model.providerId === ref.providerId && model.modelId === ref.modelId && model.fields.some((permission) => permission.fieldId === fieldId))) drop("forbidden", [fieldId]);
+				else if (!owned && !options.policy.models.some((allowed) => allowed.providerId === ref.providerId && allowed.modelId === ref.modelId && allowed.fields.some((permission) => permission.fieldId === fieldId))) drop("forbidden", [fieldId]);
 				else if (next !== void 0 && !isValueValidForField(field, next)) drop("invalid-value", [fieldId]);
 				else {
 					if (next === void 0) delete target.values[fieldId];

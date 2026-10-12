@@ -205,7 +205,7 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
         if (!field) drop("field-removed", [fieldId]);
         // Never overwrite a value canonical Git changed too; an Entry canonical already holds keeps its value.
         else if (base ? !sameValue(target.values[fieldId], base.values[fieldId]) : !created && !sameValue(target.values[fieldId], next)) drop("canonical-changed", [fieldId]);
-        else if (!owned && !options.policy.models.some(model => model.providerId === ref.providerId && model.modelId === ref.modelId && model.fields.some(permission => permission.fieldId === fieldId))) drop("forbidden", [fieldId]);
+        else if (!owned && !options.policy.models.some(allowed => allowed.providerId === ref.providerId && allowed.modelId === ref.modelId && allowed.fields.some(permission => permission.fieldId === fieldId))) drop("forbidden", [fieldId]);
         else if (next !== undefined && !isValueValidForField(field, next)) drop("invalid-value", [fieldId]);
         else {
           if (next === undefined) delete target.values[fieldId]; else target.values[fieldId] = copy(next);
