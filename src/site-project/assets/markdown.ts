@@ -1,7 +1,7 @@
-import { commonmarkLanguage } from "@codemirror/lang-markdown";
+import { parser as commonmarkParser } from "@lezer/markdown";
 
 export interface MarkdownAssetDestination { from: number; to: number; useFrom: number; useTo: number; value: string; kind: "link" | "image" }
-type Node = ReturnType<typeof commonmarkLanguage.parser.parse>["topNode"];
+type Node = ReturnType<typeof commonmarkParser.parse>["topNode"];
 const label = (value: string) => value.replace(/\s+/g, " ").trim().toUpperCase();
 function decodeDestination(value: string): string {
   return value.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\]\\^_`{|}~])/g, "$1").replace(/&(?:#(\d+)|#x([a-f\d]+)|(amp|lt|gt|quot|apos|sol|colon|lowbar|period));/gi, (source, decimal: string, hex: string, named: string) => {
@@ -13,7 +13,7 @@ function decodeDestination(value: string): string {
 /** Only AST link/image destinations are eligible for rewriting. Titles, code,
  * raw HTML, surrounding prose, and unused reference definitions are untouched. */
 export function markdownAssetDestinations(source: string): MarkdownAssetDestination[] {
-  const tree = commonmarkLanguage.parser.parse(source), definitions = new Map<string, Node>();
+  const tree = commonmarkParser.parse(source), definitions = new Map<string, Node>();
   const uses: Node[] = [];
   tree.iterate({ enter(node) {
     if (node.name === "LinkReference") {

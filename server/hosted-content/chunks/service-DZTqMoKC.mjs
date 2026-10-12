@@ -67,6 +67,14 @@ function isPlainObject(value) {
 	const proto = Object.getPrototypeOf(value);
 	return proto === Object.prototype || proto === null;
 }
+/**
+* Structural deep clone of a JSON-safe value. Rejects anything that would not
+* round-trip exactly, then uses JSON to produce a fresh, unshared tree.
+*/
+function cloneJson(value) {
+	if (!isJsonSafe(value)) throw new TypeError("Cannot clone a value that does not round-trip through JSON exactly.");
+	return JSON.parse(JSON.stringify(value));
+}
 //#endregion
 //#region src/shared/id-factory.ts
 /** Lower-cases a hint into an id-safe fragment (letters, digits, dashes). */
@@ -1351,4 +1359,4 @@ function createHostedContentService(supplied) {
 	};
 }
 //#endregion
-export { canonicalSerialize as n, HostedContentError as r, createHostedContentService as t };
+export { isValueValidForField as a, isSafeRecordId as c, isPlainObject as d, HostedContentError as f, isContentAssetUse as i, cloneJson as l, canonicalSerialize as n, validateContentEntryRecord as o, buildContentGraphIndex as r, validateContentModelRecord as s, createHostedContentService as t, isJsonSafe as u };

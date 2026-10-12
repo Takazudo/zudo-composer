@@ -53,6 +53,10 @@ try {
     getCanonicalFileName: (path) => path, getCurrentDirectory: () => root, getNewLine: () => "\n",
   }));
   assert.ok(!program.emit().emitSkipped, "Hosted declaration emission failed");
+  // TypeScript does not copy hand-written declarations of JavaScript modules; the bundler resolves them.
+  for (const path of await files(join(root, "src"))) if (path.endsWith(".d.mts")) {
+    const target = join(declarations, relative(root, path)); await mkdir(dirname(target), { recursive: true }); await writeFile(target, await readFile(path));
+  }
   for (const [name, source] of Object.entries(entries)) {
     const bundle = await rollup({ input: join(declarations, source.replace(/\.tsx?$/, ".d.ts")),
       external: (id) => !id.startsWith(".") && !isAbsolute(id), plugins: [dts()], onwarn(warning) { throw new Error(warning.message); } });

@@ -1,4 +1,4 @@
-import { JsonValue } from '@zudo-composer/component-contract';
+import { JsonValue, ComponentPackManifest } from '@zudo-composer/component-contract';
 export { JsonValue } from '@zudo-composer/component-contract';
 import { z } from 'zod';
 
@@ -695,5 +695,534 @@ declare function hostedDocumentErrorMessage(request: HostedDocumentRender, code:
 /** Result binding equality deliberately covers every identity, never only request ID. */
 declare function matchesHostedPreviewBinding(a: HostedPreviewBinding, b: HostedPreviewBinding): boolean;
 
-export { COMPOSER_PREVIEW_CHANNEL, COMPOSER_PREVIEW_PROTOCOL_VERSION, HostedContentError, canonicalSerialize, createHostedContentService, hostedDocumentErrorMessage, hostedDocumentErrorSchema, hostedPreviewBindingSchema, hostedPreviewResponseSchema, hostedReadyMessage, hostedReadySchema, hostedRenderMessage, hostedRenderSchema, hostedRenderedMessage, hostedRenderedSchema, matchesHostedPreviewBinding, readHostedPreviewRequest, readHostedPreviewResponse };
-export type { ContentEntryRecord, ContentEntryRef, ContentModelRecord, HostedActor, HostedAdoptionResult, HostedAsset, HostedCanonicalAdoption, HostedCollectionPermission, HostedCommand, HostedCommit, HostedDatabase, HostedDocumentError, HostedDocumentRender, HostedDocumentRendered, HostedErrorCode, HostedFieldPermission, HostedHead, HostedIdentities, HostedModelPermission, HostedPolicy, HostedPreviewBinding, HostedPreviewGuardFailure, HostedPreviewResponse, HostedProvider, HostedPublication, HostedPublicationStage, HostedRebaseChange, HostedRebaseDropReason, HostedReceipt, HostedRendererIdentity, HostedResult, HostedService, HostedServiceOptions, HostedSnapshot, HostedState, HostedStorage, HostedTransport, MessageEventLike, MessagePoster, MessageTarget, PreviewPackIdentity };
+declare const ASSET_TYPES: readonly ["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/zip", "text/plain", "text/csv", "application/json"];
+
+type AssetType = (typeof ASSET_TYPES)[number];
+/** Stable provider-qualified identity used by authoring references. */
+interface AssetAssetRef {
+    providerId: string;
+    assetId: string;
+}
+/** Exact immutable version identity used by release/pin operations. */
+interface AssetVersionRef extends AssetAssetRef {
+    versionId: string;
+}
+interface AssetVersionPin extends AssetVersionRef {
+    checksum: string;
+    byteLength: number;
+    mimeType: AssetType;
+    url: string;
+}
+
+interface LockedAssetPin extends AssetVersionPin {
+    fileName?: string;
+    metadataRevision: number;
+    headVersionId: string;
+}
+interface AssetReferenceLock {
+    schemaVersion: 1;
+    providerId: string;
+    mutationToken: string;
+    pins: LockedAssetPin[];
+}
+
+/** A JSON object — the shape of a node's `props`. */
+type JsonObject = {
+    [key: string]: JsonValue;
+};
+/** The only Composition document schema version this build understands. */
+declare const COMPOSITION_SCHEMA_VERSION: 2;
+type CompositionSchemaVersion = typeof COMPOSITION_SCHEMA_VERSION;
+/** A single persisted node in a Composition tree. */
+interface CompositionNode {
+    /** Stable, unique node id (persisted document key). */
+    id: string;
+    /** Stable component id — looked up in the manifest. */
+    componentId: string;
+    /** Component schema version this node was authored against. */
+    componentVersion: number;
+    /** JSON-safe scalar props. */
+    props: JsonObject;
+    /** Stable slot id → ordered child nodes. */
+    slots: Record<string, CompositionNode[]>;
+}
+/** The real component slot a Global template exposes to its consumers. */
+interface GlobalTemplateOutletTarget {
+    /** Id of the component node that owns the exposed slot. Never the virtual root. */
+    parentId: string;
+    /** Stable manifest slot id on `parentId`. */
+    slotId: string;
+}
+/**
+ * The single named projection point a Global template exposes in schema v2.
+ * `id` is machine-stable; changing the human label or target never reissues it.
+ */
+interface GlobalTemplateOutlet {
+    id: string;
+    label: string;
+    target: GlobalTemplateOutletTarget;
+}
+/** Publish this Composition as a live, one-outlet Global template. */
+interface GlobalTemplatePublication {
+    kind: "global-template";
+    outlet: GlobalTemplateOutlet;
+}
+/** Publish this Composition as a detached-clone Pattern. */
+interface PatternPublication {
+    kind: "pattern";
+}
+/**
+ * Reuse role persisted on a Composition. Absence means an ordinary local-only
+ * Composition. The union deliberately contains no generic reference node.
+ */
+type CompositionPublication = GlobalTemplatePublication | PatternPublication;
+/**
+ * A consumer's stable link to one source outlet. Provider identity is omitted:
+ * the containing record's active provider supplies that at resolution time.
+ */
+interface CompositionBinding {
+    sourceRecordId: RecordId;
+    outletId: string;
+}
+/** The full persisted Composition document in the current schema. */
+interface CompositionDocument {
+    schemaVersion: CompositionSchemaVersion;
+    id: string;
+    name: string;
+    /**
+     * The virtual root's children. `root` is an insertion slot only — the array
+     * itself is NOT a node and has no id/props/component.
+     */
+    root: CompositionNode[];
+    /** Optional reusable-source role. Mutually exclusive with `binding` semantically. */
+    publication?: CompositionPublication;
+    /** Optional live source binding. The local `root` remains canonical. */
+    binding?: CompositionBinding;
+}
+
+/** A persisted composition and its storage metadata. */
+interface CompositionRecord {
+    id: RecordId;
+    createdAt: string;
+    updatedAt: string;
+    document: CompositionDocument;
+}
+declare const COMPOSITION_PROVIDER_IDS: {
+    readonly files: "files";
+};
+type CompositionProviderId = (typeof COMPOSITION_PROVIDER_IDS)[keyof typeof COMPOSITION_PROVIDER_IDS];
+/** A provider-qualified identity. Record ids are unique only inside a provider. */
+interface CompositionRecordRef {
+    providerId: CompositionProviderId;
+    recordId: RecordId;
+}
+
+type LinkedJsxModuleKind = "standalone" | "global-template" | "linked-consumer";
+
+interface ContentModelRef {
+    providerId: string;
+    recordId: string;
+}
+
+declare const MAPPING_SCHEMA_VERSION: 2;
+type MappingMode = {
+    kind: "single";
+} | {
+    kind: "collection";
+    query: MappingCollectionQuery;
+};
+type MappingCollectionConditionOperator = "equals" | "not-equals" | "contains" | "exists";
+interface MappingCollectionCondition {
+    fieldId: RecordId;
+    operator: MappingCollectionConditionOperator;
+    value?: JsonValue;
+}
+interface MappingCollectionSort {
+    fieldId: RecordId;
+    direction: "asc" | "desc";
+}
+interface MappingCollectionPin {
+    providerId: string;
+    modelId: RecordId;
+    recordId: RecordId;
+}
+interface MappingCollectionQuery {
+    publication: "published-only" | "include-drafts";
+    conditions: MappingCollectionCondition[];
+    sort: MappingCollectionSort[];
+    pins: MappingCollectionPin[];
+    limit: number;
+}
+interface MappingTarget {
+    nodeId: string;
+    prop: string;
+}
+type MappingSourceProjection = {
+    kind: "value";
+} | {
+    kind: "object-field";
+    fieldIds: readonly RecordId[];
+} | {
+    kind: "asset-url";
+} | {
+    kind: "asset-download";
+} | {
+    kind: "asset-text";
+    field: "alt" | "caption" | "label" | "title" | "description";
+} | {
+    kind: "reference-id";
+} | {
+    kind: "route-link";
+};
+type MappingTransform = 
+/** Preserve the scalar value exactly when the source and target domains agree. */
+{
+    kind: "identity";
+}
+/** Format a canonical Content date string as a medium, UTC-stable display date. */
+ | {
+    kind: "date-medium";
+}
+/** Keep 160 Unicode code points from longer Content, then append an ellipsis. */
+ | {
+    kind: "truncate-160";
+}
+/** Add a configured label/decorator before string-producing Content. */
+ | {
+    kind: "prefix";
+    prefix: string;
+};
+interface MappingBinding {
+    id: RecordId;
+    sourceFieldId: RecordId;
+    projection: MappingSourceProjection;
+    target: MappingTarget;
+    transform: MappingTransform;
+}
+interface MappingDocument {
+    schemaVersion: typeof MAPPING_SCHEMA_VERSION;
+    id: RecordId;
+    name: string;
+    contentModel: ContentModelRef;
+    composition: CompositionRecordRef;
+    mode: MappingMode;
+    bindings: MappingBinding[];
+}
+interface MappingRecord {
+    id: RecordId;
+    createdAt: string;
+    updatedAt: string;
+    document: MappingDocument;
+}
+
+/** The only Sitemap document schema version understood by this build. */
+declare const SITEMAP_SCHEMA_VERSION: 3;
+type SitemapSchemaVersion = typeof SITEMAP_SCHEMA_VERSION;
+/** A stable reference to a saved Composer composition. */
+interface CompositionRef {
+    providerId: string;
+    recordId: RecordId;
+}
+/** A stable reference to a saved Mapping. */
+interface MappingRef {
+    providerId: string;
+    recordId: RecordId;
+}
+type MappingRoute = {
+    kind: "single";
+} | {
+    kind: "selected-entry";
+    entry: SitemapEntryRef;
+} | {
+    kind: "entry-field";
+    fieldId: RecordId;
+    titleFieldId?: RecordId;
+};
+interface SitemapEntryRef {
+    providerId: string;
+    modelId: string;
+    recordId: RecordId;
+}
+interface SitemapAncestorSelection {
+    nodeId: string;
+    entry: SitemapEntryRef;
+}
+type SitemapNavigationDestination = {
+    kind: "route";
+    nodeId: string;
+    entry?: SitemapEntryRef;
+    ancestors?: SitemapAncestorSelection[];
+} | {
+    kind: "external";
+    url: string;
+};
+interface SitemapNavigationItem {
+    id: string;
+    label: string;
+    visible: boolean;
+    destination: SitemapNavigationDestination;
+}
+interface SitemapNavigation {
+    primary: SitemapNavigationItem[];
+    footer: SitemapNavigationItem[];
+}
+/** Every authored page has one explicit, persisted source. */
+type SitemapPageSource = {
+    kind: "unassigned";
+} | {
+    kind: "composition";
+    ref: CompositionRef;
+} | {
+    kind: "mapping";
+    ref: MappingRef;
+    route: MappingRoute;
+};
+/** One authored page in the sitemap tree. Mapping Entries are never persisted here. */
+interface SitemapNode {
+    id: string;
+    title: string;
+    slug?: string;
+    source: SitemapPageSource;
+    notes?: string;
+    children: SitemapNode[];
+}
+/** The complete persisted Sitemap document. */
+interface SitemapDocument {
+    schemaVersion: SitemapSchemaVersion;
+    id: string;
+    name: string;
+    navigation: SitemapNavigation;
+    /** Virtual insertion slot. The array itself is never a page node. */
+    root: SitemapNode[];
+}
+
+/** A persisted sitemap and its storage metadata. */
+interface SitemapRecord {
+    id: RecordId;
+    createdAt: string;
+    updatedAt: string;
+    document: SitemapDocument;
+}
+
+/**
+ * Stable SiteProject provider ids and their current browser-provider ids.
+ *
+ * Authoring persists to the host project's files, so every domain names its
+ * filesystem provider. Keeping the mapping explicit prevents adapters from
+ * accepting arbitrary provider strings and leaves the portable contract
+ * independent of browser provider construction; the two identities happen to
+ * match again today.
+ */
+declare const SITE_PROJECT_PROVIDER_REGISTRY: Readonly<{
+    readonly compositions: Readonly<{
+        files: Readonly<{
+            logicalId: "files";
+            browserProviderId: "files";
+        }>;
+    }>;
+    readonly content: Readonly<{
+        "content-filesystem": Readonly<{
+            logicalId: "content-filesystem";
+            browserProviderId: "content-filesystem";
+        }>;
+    }>;
+    readonly mappings: Readonly<{
+        "mapping-filesystem": Readonly<{
+            logicalId: "mapping-filesystem";
+            browserProviderId: "mapping-filesystem";
+        }>;
+    }>;
+    readonly sitemaps: Readonly<{
+        "sitemap-filesystem": Readonly<{
+            logicalId: "sitemap-filesystem";
+            browserProviderId: "sitemap-filesystem";
+        }>;
+    }>;
+}>;
+type SiteProjectDomain = keyof typeof SITE_PROJECT_PROVIDER_REGISTRY;
+type SiteProjectProviderId<TDomain extends SiteProjectDomain> = keyof (typeof SITE_PROJECT_PROVIDER_REGISTRY)[TDomain] & string;
+
+declare const SITE_PROJECT_SCHEMA_VERSION: 2;
+interface SiteProjectCollectionAttachment {
+    id: RecordId;
+    /** Deterministic authored ordering across distinct target slots. */
+    order: number;
+    composition: SiteProjectRecordRef<SiteProjectProviderId<"compositions">>;
+    target: {
+        nodeId: string;
+        slotId: string;
+    };
+    mapping: SiteProjectRecordRef<SiteProjectProviderId<"mappings">>;
+}
+interface SiteProjectComponentPackRequirement {
+    contractVersion: ComponentPackManifest["contractVersion"];
+    packId: string;
+    packVersion: string;
+}
+interface SiteProjectRecordRef<TProviderId extends string = string> {
+    providerId: TProviderId;
+    recordId: RecordId;
+}
+interface SiteProjectCompositionProvider {
+    id: SiteProjectProviderId<"compositions">;
+    records: CompositionRecord[];
+}
+interface SiteProjectContentProvider {
+    id: SiteProjectProviderId<"content">;
+    models: ContentModelRecord[];
+    entries: ContentEntryRecord[];
+}
+interface SiteProjectMappingProvider {
+    id: SiteProjectProviderId<"mappings">;
+    records: MappingRecord[];
+}
+interface SiteProjectSitemapProvider {
+    id: SiteProjectProviderId<"sitemaps">;
+    records: SitemapRecord[];
+}
+interface SiteProjectProviders {
+    compositions: SiteProjectCompositionProvider[];
+    content: SiteProjectContentProvider[];
+    mappings: SiteProjectMappingProvider[];
+    sitemaps: SiteProjectSitemapProvider[];
+}
+/** The portable, JSON-safe whole-site aggregate. */
+interface SiteProject {
+    schemaVersion: typeof SITE_PROJECT_SCHEMA_VERSION;
+    id: RecordId;
+    name: string;
+    componentPack: SiteProjectComponentPackRequirement;
+    providers: SiteProjectProviders;
+    activeSitemap: SiteProjectRecordRef<SiteProjectProviderId<"sitemaps">>;
+    collectionAttachments: SiteProjectCollectionAttachment[];
+}
+
+interface SitemapRouteAncestor {
+    nodeId: string;
+    pathname: string;
+    displayTitle: string;
+    selectedEntry?: SitemapEntryRef;
+}
+
+interface ResolvedSitemapNavigationItem {
+    id: string;
+    label: string;
+    href: string;
+    external: boolean;
+    nodeId?: string;
+}
+interface SitemapNavigationDiagnostic {
+    code: "navigation-stale" | "navigation-ambiguous" | "navigation-unsafe";
+    menu: "primary" | "footer";
+    itemId: string;
+    message: string;
+}
+interface ResolvedSitemapNavigation {
+    primary: ResolvedSitemapNavigationItem[];
+    footer: ResolvedSitemapNavigationItem[];
+    diagnostics: SitemapNavigationDiagnostic[];
+}
+
+interface SiteCompiledModule {
+    recordId: string;
+    moduleSpecifier: string;
+    kind: LinkedJsxModuleKind;
+    code: string;
+}
+interface SiteCompiledRouteSource {
+    kind: "composition" | "mapping";
+    ref: SiteProjectRecordRef;
+}
+interface SiteCompiledRouteComposition {
+    /** Stable provider-qualified identity of the canonical local Composition. */
+    local: SiteProjectRecordRef;
+    /** Deterministic route-variant identity used only for source planning. */
+    routeRecordId: string;
+    /** Evaluated local document. Its canonical source id is deliberately retained. */
+    document: CompositionDocument;
+    linkedSource?: {
+        ref: SiteProjectRecordRef;
+        outlet: {
+            id: string;
+            label: string;
+            target: {
+                parentId: string;
+                slotId: string;
+            };
+        };
+        document: CompositionDocument;
+    };
+}
+interface SiteCompiledRoute {
+    materializationSources?: readonly {
+        renderedNodeId: string;
+        providerId: string;
+        recordId: string;
+        nodeId: string;
+        attachmentId: string;
+        entries: readonly {
+            providerId: string;
+            modelId: string;
+            recordId: string;
+        }[];
+    }[];
+    pathname: string;
+    /** Plain per-route title resolved during compilation; delivery never infers it from rendered content. */
+    displayTitle: string;
+    sitemapNode: {
+        id: string;
+        path: string;
+    };
+    source: SiteCompiledRouteSource;
+    selectedEntry?: SitemapEntryRef;
+    ancestors: readonly SitemapRouteAncestor[];
+    composition: SiteCompiledRouteComposition;
+    modules: readonly SiteCompiledModule[];
+}
+interface SiteBuildPlan {
+    navigation: ResolvedSitemapNavigation;
+    projectId: string;
+    activeSitemap: SiteProjectRecordRef;
+    routes: readonly SiteCompiledRoute[];
+    /** Route targets plus code-identical, deduplicated dependency modules. */
+    modules: readonly SiteCompiledModule[];
+}
+
+/** Fixed host structure prepared at build time: templates, outlets, mappings, sitemap and attachments. */
+interface HostedSitePlan {
+    project: SiteProject;
+    /** Manifest-only pack data; runtime component functions never enter the projection. */
+    componentPack: ComponentPackManifest;
+    /** Exact-version Assets lock captured with the static build, required when Content uses managed Assets. */
+    assetLock?: AssetReferenceLock;
+}
+/** A compiled route without generated JSX source: the neutral composition every renderer consumes. */
+type HostedProjectedRoute = Omit<SiteCompiledRoute, "modules">;
+interface HostedProjectionDiagnostic {
+    code: string;
+    message: string;
+    path: string;
+    pathname?: string;
+}
+type HostedSiteProjection = {
+    status: "ready";
+    projectId: string;
+    navigation: SiteBuildPlan["navigation"];
+    routes: HostedProjectedRoute[];
+}
+/** A type-valid incomplete draft may not compile; this is preview data, never an exception. */
+ | {
+    status: "blocked";
+    diagnostics: HostedProjectionDiagnostic[];
+};
+/**
+ * Worker-safe route projection over one Content snapshot, using the same pure compiler as
+ * `compileStaticSite`. Release policy applies, so only published Entries participate; hosted
+ * delivery candidates already mark every permitted Entry published.
+ */
+declare function projectHostedSite(plan: HostedSitePlan, providers: HostedProvider[]): Promise<HostedSiteProjection>;
+/** A `project` service callback whose render data is the JSON projection of the whole site. */
+declare function createHostedSiteProjector(plan: HostedSitePlan): HostedServiceOptions["project"];
+
+export { COMPOSER_PREVIEW_CHANNEL, COMPOSER_PREVIEW_PROTOCOL_VERSION, HostedContentError, canonicalSerialize, createHostedContentService, createHostedSiteProjector, hostedDocumentErrorMessage, hostedDocumentErrorSchema, hostedPreviewBindingSchema, hostedPreviewResponseSchema, hostedReadyMessage, hostedReadySchema, hostedRenderMessage, hostedRenderSchema, hostedRenderedMessage, hostedRenderedSchema, matchesHostedPreviewBinding, projectHostedSite, readHostedPreviewRequest, readHostedPreviewResponse };
+export type { ContentEntryRecord, ContentEntryRef, ContentModelRecord, HostedActor, HostedAdoptionResult, HostedAsset, HostedCanonicalAdoption, HostedCollectionPermission, HostedCommand, HostedCommit, HostedDatabase, HostedDocumentError, HostedDocumentRender, HostedDocumentRendered, HostedErrorCode, HostedFieldPermission, HostedHead, HostedIdentities, HostedModelPermission, HostedPolicy, HostedPreviewBinding, HostedPreviewGuardFailure, HostedPreviewResponse, HostedProjectedRoute, HostedProjectionDiagnostic, HostedProvider, HostedPublication, HostedPublicationStage, HostedRebaseChange, HostedRebaseDropReason, HostedReceipt, HostedRendererIdentity, HostedResult, HostedService, HostedServiceOptions, HostedSitePlan, HostedSiteProjection, HostedSnapshot, HostedState, HostedStorage, HostedTransport, MessageEventLike, MessagePoster, MessageTarget, PreviewPackIdentity };

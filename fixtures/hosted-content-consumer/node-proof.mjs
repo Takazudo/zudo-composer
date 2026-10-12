@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
 import { defineSite, node } from "zudo-composer/authoring";
 import { compileStaticSite } from "zudo-composer/site-build";
+import { projectHostedSite } from "zudo-composer/hosted-content";
 import { fixedHostDefinition } from "./renderer/src/project.ts";
 import { createFixtureSeed } from "./fixture-data.mjs";
 
@@ -12,7 +13,7 @@ import { createFixtureSeed } from "./fixture-data.mjs";
 // Node compilation consumes neutral records; these runtime functions are never used as renderers.
 function ApprovedLayout() { return null; }
 function OfferPage() { return null; }
-const componentPack = defineComponentPack({ packId: "host-offer", packVersion: "1.0.0", components: [
+export const componentPack = defineComponentPack({ packId: "host-offer", packVersion: "1.0.0", components: [
   defineComponent()(ApprovedLayout, { id: "host:ApprovedLayout", schemaVersion: 1, title: "Approved layout", category: "Host", description: "Fixed host layout",
     source: { module: "independent-host/components", exportKind: "named", exportName: "ApprovedLayout" },
     slots: [{ id: "main", prop: "children", label: "Main", cardinality: "many" }] }),
@@ -20,6 +21,9 @@ const componentPack = defineComponentPack({ packId: "host-offer", packVersion: "
     source: { module: "independent-host/components", exportKind: "named", exportName: "OfferPage" }, defaults: { title: "Fixed fallback" },
     fields: [{ prop: "title", label: "Title", schema: { type: "string" }, editor: { kind: "text" } }] }),
 ] });
+export const hostedSitePlan = compilation => ({ project: compilation.project, componentPack: componentPack.manifest });
+export const hostedProviders = compilation => compilation.project.providers.content.map(provider => ({ providerId: provider.id, models: provider.models, entries: provider.entries }));
+export const neutralRoutes = compilation => compilation.build.routes.map(route => { const { modules, ...neutral } = route; void modules; return neutral; });
 export async function proveNodeCompilation() {
   const directory = await mkdtemp(join(tmpdir(), "hosted-node-proof-"));
   try {
@@ -47,8 +51,12 @@ export async function proveNodeCompilation() {
     assert.equal(route.composition.document.root[0].componentId, fixedHostDefinition.composition.componentId);
     assert.equal(route.composition.document.root[0].props.title, mappedTitle);
     assert(route.modules.every(module => !module.code.includes("../../src/")));
+    // The Worker-safe projection over the same Content yields byte-identical neutral routes.
+    const projection = await projectHostedSite(hostedSitePlan(compilation), hostedProviders(compilation));
+    assert.equal(projection.status, "ready");
+    assert.equal(JSON.stringify(projection.routes), JSON.stringify(neutralRoutes(compilation)));
     console.log(JSON.stringify({ proof: "public-node-compilation", route: route.pathname, linkedTemplate: route.composition.linkedSource.ref.recordId,
-      outlet: route.composition.linkedSource.outlet.target.slotId, mappedTitle: route.composition.document.root[0].props.title }));
+      outlet: route.composition.linkedSource.outlet.target.slotId, mappedTitle: route.composition.document.root[0].props.title, projectionParity: "byte-identical" }));
     return compilation;
   } finally { await rm(directory, { recursive: true, force: true }); }
 }

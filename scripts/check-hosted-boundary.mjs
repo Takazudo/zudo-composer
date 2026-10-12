@@ -15,8 +15,12 @@ async function visit(path, browser, seen, editor = browser) {
   const checker = program.getTypeChecker();
   /** @type {string[]} */
   const imports = [];
-  /** @param {import('typescript').Node} node */
-  const inspect = (node) => {
+  /** @param {import('typescript').Node} node @param {boolean} [serialized] */
+  const inspect = (node, serialized = false) => {
+    // Generated visitor JSX embeds this handler's source text; the portable graph may only stringify it.
+    if (!browser && ts.isFunctionDeclaration(node) && node.name?.text === "downloadAsset") serialized = true;
+    if (ts.isIdentifier(node) && node.text === "downloadAsset" && !serialized && !ts.isFunctionDeclaration(node.parent))
+      assert.ok(ts.isPropertyAccessExpression(node.parent) && node.parent.name.text === "toString" && ts.isCallExpression(node.parent.parent), `${path}: downloadAsset may only be serialized`);
     if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) imports.push(node.moduleSpecifier.text);
     if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       assert.ok(node.arguments[0] && ts.isStringLiteral(node.arguments[0]), `${path}: dynamic import cannot be audited`);
@@ -28,10 +32,10 @@ async function visit(path, browser, seen, editor = browser) {
       const locallyDeclared = checker.getSymbolAtLocation(node)?.declarations?.some(declaration => declaration.getSourceFile().fileName === path);
       if (!locallyDeclared) {
         assert.ok(!["process", "Buffer", "require"].includes(node.text), `${path}: Node global ${node.text}`);
-        if (!browser) assert.ok(!["window", "document", "HTMLElement", "MutationObserver"].includes(node.text), `${path}: DOM global ${node.text}`);
+        if (!browser && !serialized) assert.ok(!["window", "document", "HTMLElement", "MutationObserver"].includes(node.text), `${path}: DOM global ${node.text}`);
       }
     }
-    ts.forEachChild(node, inspect);
+    ts.forEachChild(node, (child) => inspect(child, serialized));
   };
   inspect(tree);
   for (const id of imports) {

@@ -1,4 +1,4 @@
-import { t as createHostedContentService } from "./chunks/service-DckaZ7Xs.mjs";
+import { t as createHostedContentService } from "./chunks/service-DZTqMoKC.mjs";
 //#region src/hosted-content/testing.ts
 var receiptKey = (actorId, operationKey) => JSON.stringify([actorId, operationKey]);
 function load(seed) {
