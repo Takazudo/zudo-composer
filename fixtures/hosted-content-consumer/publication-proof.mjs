@@ -359,6 +359,16 @@ export async function runFixturePublicationProof({ directory, artifactDirectory 
       check(await context.service.readState(fixtureActor), saved.state, "External canonical conflict retains draft and original known baseline");
       check(await context.handle.storage.readSnapshot(snapshot.id), snapshot, "External canonical conflict retains exact reviewed candidate");
       check((await sink.readRemote()).baseline, external, "Remote CAS never overwrites outside canonical update");
+      // The host adopts the outside commit; the explicitly rebased draft then publishes on the new baseline.
+      const adopted = await context.service.adoptCanonicalBaseline({ expected: { baseline: saved.state.baseline, definition: saved.state.definition },
+        baseline: external, providers: (await context.handle.dump()).baselineProviders, draft: "rebase", apply: true });
+      check(adopted.carried, [{ entry: fixtureEntry, fieldId: "title" }], "Adoption reports the carried retained draft");
+      check([adopted.state.baseline, adopted.dropped], [external, []], "Adoption records the outside canonical baseline");
+      const { publication: rebased } = await captureBegin(context, adopted.state, "external-rebased");
+      await context.provider.submit(rebased.id, "remote-external-rebased"); await context.provider.verify(rebased.id);
+      await sink.confirmIntegration(rebased.id);
+      check((await context.provider.synchronize(rebased.id)).status, "integrated", "Rebased draft integrates on the adopted baseline");
+      check((await context.service.readState(fixtureActor)).baseline, (await sink.readRemote()).baseline, "Database and remote baselines agree after reconciliation");
     });
 
     if (artifactDirectory) {

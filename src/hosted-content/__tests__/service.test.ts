@@ -330,6 +330,44 @@ describe("hosted Content trusted boundary", () => {
     expect(f.db()).toEqual(captured);
   });
 
+  it("adopts external canonical content with an explicit validated rebase of the retained draft", async () => {
+    const f = fixture(), initial = f.db();
+    const created = await f.service.execute(actor, { kind: "create-entry", operationKey: "create", expected: f.expected(), collectionId: "faqs", values: { question: "Draft Q", answer: "Draft A" }, before: null });
+    await f.service.execute(actor, f.set("edit", { title: "Draft title", price: 20 }));
+    await f.service.execute(actor, f.set("faq-edit", { answer: "Draft answer" }, faq));
+    const canonical = structuredClone(initial.baselineProviders);
+    canonical[0]!.entries.find(entry => entry.id === "home")!.values.price = 99;
+    canonical[0]!.entries.splice(canonical[0]!.entries.findIndex(entry => entry.id === "one"), 1);
+    canonical[0]!.entries.find(entry => entry.id === "home")!.values.faqs = [];
+    const evidence = { expected: { baseline: initial.state.baseline, definition: initial.state.definition }, baseline: { gitSha: "g9", contentDigest: "c9" }, providers: canonical, draft: "rebase" as const, apply: true };
+    const before = f.db();
+    const removal = await f.service.adoptCanonicalBaseline({ ...evidence, apply: false });
+    expect(removal.dropped).toEqual([
+      { entry: page, fieldId: "price", reason: "canonical-changed" },
+      { entry: page, fieldId: "faqs", reason: "canonical-changed" },
+      { entry: faq, fieldId: "answer", reason: "entry-removed" },
+    ]);
+    expect(removal.state.providers[0]!.entries.map(entry => entry.id)).not.toContain("one");
+    expect(f.db()).toEqual(before);
+    canonical[0]!.entries.find(entry => entry.id === "home")!.values.faqs = [json(faq)];
+    canonical[0]!.entries.push(structuredClone(initial.baselineProviders[0]!.entries.find(entry => entry.id === "one")!));
+    canonical[0]!.entries.find(entry => entry.id === "one")!.values.answer = "Canonical answer";
+    const adopted = await f.service.adoptCanonicalBaseline(evidence);
+    const values = (id: string) => adopted.state.providers[0]!.entries.find(entry => entry.id === id)?.values;
+    expect(values("home")).toMatchObject({ title: "Draft title", price: 99, faqs: [faq, created.createdEntry] });
+    expect(values(created.createdEntry!.recordId)).toEqual({ question: "Draft Q", answer: "Draft A" });
+    expect(values("one")!.answer).toBe("Canonical answer");
+    expect(adopted.dropped).toEqual([
+      { entry: page, fieldId: "price", reason: "canonical-changed" },
+      { entry: faq, fieldId: "answer", reason: "canonical-changed" },
+    ]);
+    expect(f.db().baselineProviders).toEqual(canonical);
+    const invalid = structuredClone(canonical);
+    invalid[0]!.entries.find(entry => entry.id === "home")!.values.image = { kind: "image", asset: { providerId: "assets", assetId: "unapproved" }, alt: "", decorative: true, caption: "" };
+    await expect(f.service.adoptCanonicalBaseline({ ...evidence, expected: { baseline: { gitSha: "g9", contentDigest: "c9" }, definition: "definition" }, providers: invalid })).rejects.toMatchObject({ code: "configuration-required" });
+    await expect(f.service.adoptCanonicalBaseline({ ...evidence, draft: "merge" } as never)).rejects.toMatchObject({ code: "invalid-request" });
+  });
+
   it("retains content on failed exports and rejects forged integration, external baseline/definition changes", async () => {
     const f = fixture(), { snapshot } = await f.service.execute(actor, f.capture("snapshot"));
     const { publication } = await f.service.execute(actor, f.begin("publish", snapshot!.id));

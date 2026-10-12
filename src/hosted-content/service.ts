@@ -2,12 +2,13 @@ import { buildContentGraphIndex, contentEntryRefKey } from "../content/library/g
 import { createContentEntryRecord, diagnoseContentEntryCompleteness } from "../content/library/helpers";
 import type { ContentCompletenessDiagnostic } from "../content/model/types";
 import { canonicalSerialize } from "./canonical";
+import { isValueValidForField } from "../content/model/validate";
 import { assertFieldChange, assertSafeUrl, parseHostedCommand, sameValue } from "./validation";
 import { HostedContentError } from "./types";
 import type {
-  ContentEntryRecord, ContentEntryRef, HostedActor, HostedCollectionPermission, HostedCommand,
+  ContentEntryRecord, ContentEntryRef, HostedActor, HostedAdoptionResult, HostedCollectionPermission, HostedCommand,
   HostedCommit, HostedHead, HostedIdentities, HostedModelPermission, HostedProvider, HostedPublication,
-  HostedPublicationStage, HostedReceipt, HostedResult, HostedService, HostedServiceOptions, HostedSnapshot, HostedState, JsonValue,
+  HostedPublicationStage, HostedRebaseChange, HostedRebaseDropReason, HostedReceipt, HostedResult, HostedService, HostedServiceOptions, HostedSnapshot, HostedState, JsonValue,
 } from "./types";
 
 const copy = <T>(value: T): T => structuredClone(value);
@@ -174,6 +175,50 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
     // acknowledged bytes even when a later definition or policy cannot validate a fresh mutation.
     return copy(existing.result);
   }
+  /** Working fields that differ from the stored canonical baseline, i.e. the retained draft. */
+  function authoredChanges(head: HostedHead) {
+    return head.state.providers.flatMap(working => working.entries.flatMap(entry => {
+      const ref = { providerId: working.providerId, modelId: entry.modelId, recordId: entry.id };
+      const base = head.baselineProviders.find(provider => provider.providerId === ref.providerId)?.entries.find(item => item.id === entry.id && item.modelId === entry.modelId);
+      const fieldIds = [...new Set([...Object.keys(entry.values), ...Object.keys(base?.values ?? {})])].filter(fieldId => !sameValue(entry.values[fieldId], base?.values[fieldId]));
+      return fieldIds.length ? [{ ref, entry, base, fieldIds }] : [];
+    }));
+  }
+  /** Carry each retained change onto new canonical content only where it still validates; report every drop. */
+  function rebaseDraft(head: HostedHead, canonical: HostedProvider[]): { providers: HostedProvider[]; carried: HostedRebaseChange[]; dropped: HostedAdoptionResult["dropped"] } {
+    const providers = copy(canonical), carried: HostedRebaseChange[] = [], dropped: HostedAdoptionResult["dropped"] = [];
+    for (const { ref, entry, base, fieldIds } of authoredChanges(head)) {
+      const drop = (reason: HostedRebaseDropReason, ids = fieldIds) => { for (const fieldId of ids) dropped.push({ entry: ref, fieldId, reason }); };
+      const provider = providers.find(item => item.providerId === ref.providerId);
+      const model = provider?.models.find(item => item.id === ref.modelId);
+      let target = provider?.entries.find(item => item.id === entry.id && item.modelId === entry.modelId);
+      if (!provider || !model) { drop("model-removed"); continue; }
+      if (base && !target) { drop("entry-removed"); continue; }
+      // A draft-created Entry can only be carried into a still-permitted collection target.
+      if (!base && !target && !options.policy.collections.some(collection => collection.target.providerId === ref.providerId && collection.target.modelId === ref.modelId)) { drop("forbidden"); continue; }
+      const created = !target;
+      target ??= { ...copy(entry), values: {} };
+      let applied = false;
+      for (const fieldId of fieldIds) {
+        const field = model.document.fields.find(item => item.id === fieldId), next = entry.values[fieldId];
+        const owned = options.policy.collections.some(collection => contentEntryRefKey(collection.owner) === contentEntryRefKey(ref) && collection.fieldId === fieldId);
+        if (!field) drop("field-removed", [fieldId]);
+        // Never overwrite a value canonical Git changed too; an Entry canonical already holds keeps its value.
+        else if (base ? !sameValue(target.values[fieldId], base.values[fieldId]) : !created && !sameValue(target.values[fieldId], next)) drop("canonical-changed", [fieldId]);
+        else if (!owned && !options.policy.models.some(model => model.providerId === ref.providerId && model.modelId === ref.modelId && model.fields.some(permission => permission.fieldId === fieldId))) drop("forbidden", [fieldId]);
+        else if (next !== undefined && !isValueValidForField(field, next)) drop("invalid-value", [fieldId]);
+        else {
+          if (next === undefined) delete target.values[fieldId]; else target.values[fieldId] = copy(next);
+          carried.push({ entry: ref, fieldId }); applied = true;
+        }
+      }
+      if (!applied) continue;
+      if (created) provider.entries.push(target);
+      target.generation = Math.max(target.generation, entry.generation) + 1;
+      target.updatedAt = options.now();
+    }
+    return { providers, carried, dropped };
+  }
   /** Prepare from detached reads, then commit conditionally; a refused commit is retried from fresh reads. */
   async function mutate<T>(work: (head: HostedHead) => Promise<{ value: T; write?: Omit<HostedCommit, "expectedVersion"> }>): Promise<T> {
     for (let attempt = 0; attempt < commitAttempts; attempt++) {
@@ -300,6 +345,27 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
         publication.lastProvenStatus = "integrated";
         publication.statusVersion += 1;
         return { value: publicState(head.state), write: { head, publication } };
+      });
+    },
+    async adoptCanonicalBaseline(evidence) {
+      const input = copy(evidence);
+      if (!input || !Array.isArray(input.providers) || !input.baseline?.gitSha || !input.baseline.contentDigest || !input.expected?.baseline || typeof input.expected.definition !== "string" || !["rebase", "discard"].includes(input.draft) || typeof input.apply !== "boolean") fail("invalid-request", "Malformed canonical adoption evidence.");
+      return mutate(async head => {
+        if (!sameValue(head.state.baseline, input.expected.baseline) || head.state.definition !== input.expected.definition) fail("baseline-conflict", "The stored canonical identity changed; read it again before adopting.");
+        const active = head.activePublicationId ? await options.storage.readPublication(head.activePublicationId) : null;
+        // A remote integration may have produced this very commit; record its outcome first.
+        if (active && !terminal(active)) fail("publication-busy", "Record the active publication's outcome before adopting another canonical baseline.");
+        try { checkGraph(input.providers); }
+        catch (error) { fail("configuration-required", `Canonical content does not satisfy the hosted definition. ${error instanceof Error ? error.message : ""}`.trim()); }
+        const rebased = input.draft === "rebase" ? rebaseDraft(head, input.providers)
+          : { providers: copy(input.providers), carried: [], dropped: authoredChanges(head).flatMap(({ ref, fieldIds }) => fieldIds.map(fieldId => ({ entry: ref, fieldId, reason: "discarded" as const }))) };
+        checkGraph(rebased.providers);
+        const state: HostedState = { draftRevision: options.createId(), baseline: copy(input.baseline), definition: options.definition, integrationFence: head.state.integrationFence + 1, providers: rebased.providers };
+        const value: HostedAdoptionResult = { applied: input.apply, state: publicState(state), carried: rebased.carried, dropped: rebased.dropped };
+        if (!input.apply) return { value };
+        head.state = state;
+        head.baselineProviders = copy(input.providers);
+        return { value, write: { head } };
       });
     },
   };

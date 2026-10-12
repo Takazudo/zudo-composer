@@ -253,6 +253,7 @@ interface HostedResult {
     snapshot?: HostedSnapshot;
     publication?: HostedPublication;
 }
+/** One row per operation, sized like the scoped state. Keys never expire in this version, so none is ever recycled. */
 interface HostedReceipt {
     actorId: string;
     operationKey: string;

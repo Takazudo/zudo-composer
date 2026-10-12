@@ -8,7 +8,7 @@ describe("public hosted Content conformance runner", () => {
       "independent-cas", "duplicate-create-and-key-reuse", "competing-reorder",
       "rollback-before-commit", "rollback-receipt-persistence", "conditional-commit-atomicity", "commit-retry-after-bookkeeping", "lost-create-ack-restart",
       "coherent-immutable-capture", "two-integrations-existing-entry", "two-integrations-new-entry",
-      "external-baseline-and-definition-conflict", "external-integration-conflict",
+      "external-baseline-adoption", "definition-change-adoption", "external-integration-conflict",
     ]);
     expect(result.assertions).toBeGreaterThan(70);
   });

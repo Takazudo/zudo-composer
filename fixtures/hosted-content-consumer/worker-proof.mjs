@@ -28,7 +28,7 @@ try {
   const response = await worker.dispatchFetch("http://worker.test/");
   assert.equal(response.status, 200);
   const data = await response.json();
-  assert.equal(data.report.scenarios.length, 13);
+  assert.equal(data.report.scenarios.length, 14);
   assert.match(data.digest, /^[a-f0-9]{64}$/);
   assert.equal(data.canonical, '{"bool":false,"text":"日本語","zero":0}');
   console.log(JSON.stringify({ runtime: "local workerd", ...data }));

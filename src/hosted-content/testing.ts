@@ -195,9 +195,9 @@ export async function hostedConformanceDigest(value: string): Promise<string> {
   return `fixture-${(hash >>> 0).toString(16).padStart(8, "0")}-${value.length}`;
 }
 
-export function createHostedConformanceService(storage: HostedStorage, handleId: string): HostedService {
+export function createHostedConformanceService(storage: HostedStorage, handleId: string, definition = "definition-v1"): HostedService {
   let nextId = 0;
-  return createHostedContentService({ siteId: "conformance", definition: "definition-v1",
+  return createHostedContentService({ siteId: "conformance", definition,
     policy: createHostedContentConformancePolicy(), storage,
     authorize(who) { if (who.id !== actor.id) throw new Error("Unauthorized fixture actor"); },
     digest: hostedConformanceDigest, createId: () => `${handleId}-${++nextId}`, now: () => timestamp,
@@ -245,12 +245,6 @@ export async function runHostedContentConformance(factory: HostedConformanceFact
         createHostedConformanceService(b.storage, `${name}-b`));
       report.scenarios.push(name);
     } finally { await backend.close(); }
-  };
-
-  /** A direct storage write from outside the service, e.g. a canonical change the host has not adopted yet. */
-  const writeHead = async (handle: HostedConformanceHandle, change: (head: HostedHead) => void): Promise<void> => {
-    const head = await handle.storage.readHead(); const next = clone(head); change(next); next.version = `${head.version}+external`;
-    assert(await handle.storage.commit({ expectedVersion: head.version, head: next }), "external head write commits");
   };
 
   await scenario("independent-cas", async (_backend, a, _b, one, two) => {
@@ -463,32 +457,75 @@ export async function runHostedContentConformance(factory: HostedConformanceFact
     });
   }
 
-  await scenario("external-baseline-and-definition-conflict", async (_backend, a, _b, one, two) => {
+  await scenario("external-baseline-adoption", async (_backend, a, _b, one, two) => {
     const initial = await one.readState(actor);
     const saved = await one.execute(actor, edit(initial, "external-save", "retained"));
     const captured = await one.execute(actor, { kind: "capture-snapshot", operationKey: "external-capture", expected: identities(saved.state) });
-    await writeHead(a, (head) => { head.state.baseline = { gitSha: "e".repeat(40), contentDigest: "external" }; });
+    // Canonical Git changed elsewhere: a new price and FAQ answer, but not the title retained in the draft.
+    const canonical = clone((await a.dump()).baselineProviders);
+    canonical[0]!.entries.find((entry) => entry.id === lesson.recordId)!.values.price = 200;
+    canonical[0]!.entries.find((entry) => entry.id === faq.recordId)!.values.answer = "外部の回答";
+    const external = { gitSha: "e".repeat(40), contentDigest: "external" };
+    const adoption = { expected: { baseline: initial.baseline, definition: initial.definition }, baseline: external, providers: canonical, draft: "rebase" as const };
+    const before = await a.dump();
+    const report = await one.adoptCanonicalBaseline({ ...adoption, apply: false });
+    equal([report.applied, report.carried, report.dropped], [false, [{ entry: lesson, fieldId: "title" }], []], "dry run reports the carried draft");
+    equal(await a.dump(), before, "dry run writes nothing");
+    const adopted = await one.adoptCanonicalBaseline({ ...adoption, apply: true });
+    equal(adopted.state, await two.readState(actor), "adoption returns the stored state");
+    equal([value(adopted.state, lesson, "title"), value(adopted.state, lesson, "price"), value(adopted.state, faq, "answer")],
+      ["retained", 200, "外部の回答"], "retained draft is rebased onto new canonical content");
+    equal(adopted.state.baseline, external, "baseline adopted");
+    await errorCode(() => one.adoptCanonicalBaseline({ ...adoption, apply: true }), "baseline-conflict");
     await errorCode(() => two.execute(actor, { kind: "begin-publication", operationKey: "external-submit",
       expected: identities(saved.state), snapshotId: captured.snapshot!.id }), "baseline-conflict");
-    equal(value(await one.readState(actor), lesson, "title"), "retained", "external baseline conflict retains draft");
-    equal(await one.readSnapshot(actor, captured.snapshot!.id), captured.snapshot, "external baseline conflict retains reviewed snapshot");
-    const newBaseline = await one.readState(actor);
-    await writeHead(a, (head) => { head.state.definition = "definition-v2"; });
-    await errorCode(() => two.execute(actor, edit(newBaseline, "definition-edit", "blocked")), "configuration-required");
-    equal(value((await a.dump()).state, lesson, "title"), "retained", "definition change never destroys draft");
+    equal(await one.readSnapshot(actor, captured.snapshot!.id), captured.snapshot, "old reviewed snapshot is retained but cannot be submitted");
+    const fresh = (await two.execute(actor, { kind: "capture-snapshot", operationKey: "external-recapture", expected: identities(adopted.state) })).snapshot!;
+    equal(fresh.baseline, external, "a fresh preview binds the adopted baseline");
+    assert((await two.execute(actor, { kind: "begin-publication", operationKey: "external-resubmit", expected: identities(adopted.state), snapshotId: fresh.id })).publication, "rebased draft can be submitted again");
+  });
+
+  await scenario("definition-change-adoption", async (_backend, a, _b, one) => {
+    const initial = await one.readState(actor);
+    const saved = await one.execute(actor, { kind: "set-fields", operationKey: "definition-save", expected: identities(initial),
+      entry: lesson, values: { title: "保持", price: 300 }, clear: [] });
+    const upgraded = createHostedConformanceService(a.storage, "definition-v2", "definition-v2");
+    await errorCode(() => upgraded.execute(actor, edit(saved.state, "definition-edit", "blocked")), "configuration-required");
+    equal(value((await a.dump()).state, lesson, "title"), "保持", "definition change never destroys draft");
+    // The new definition removes the price field.
+    const canonical = clone((await a.dump()).baselineProviders);
+    for (const model of canonical[0]!.models) if (model.id === "lesson") model.document.fields = model.document.fields.filter((field) => field.id !== "price");
+    for (const entry of canonical[0]!.entries) delete entry.values.price;
+    const adoption = { expected: { baseline: initial.baseline, definition: initial.definition }, baseline: { gitSha: "d".repeat(40), contentDigest: "definition-v2" }, providers: canonical, draft: "rebase" as const };
+    const report = await upgraded.adoptCanonicalBaseline({ ...adoption, apply: false });
+    equal([report.carried, report.dropped], [[{ entry: lesson, fieldId: "title" }], [{ entry: lesson, fieldId: "price", reason: "field-removed" }]], "dry run reports carried and dropped changes");
+    const adopted = await upgraded.adoptCanonicalBaseline({ ...adoption, apply: true });
+    equal([adopted.state.definition, value(adopted.state, lesson, "title"), value(adopted.state, lesson, "price")], ["definition-v2", "保持", undefined], "definition adopted with the still-valid draft");
+    await errorCode(() => one.execute(actor, edit(adopted.state, "old-definition-edit", "stale")), "configuration-required");
+    const resumed = await upgraded.execute(actor, edit(adopted.state, "definition-resume", "再開"));
+    equal(value(resumed.state, lesson, "title"), "再開", "editing resumes under the adopted definition");
   });
 
   await scenario("external-integration-conflict", async (_backend, a, _b, one, two) => {
-    const saved = await one.execute(actor, edit(await one.readState(actor), "external-integration-save", "retained"));
+    const initial = await one.readState(actor);
+    const saved = await one.execute(actor, edit(initial, "external-integration-save", "retained"));
     const snapshot = (await one.execute(actor, { kind: "capture-snapshot", operationKey: "external-integration-capture",
       expected: identities(saved.state) })).snapshot!;
     const publication = (await one.execute(actor, { kind: "begin-publication", operationKey: "external-integration-submit",
       expected: identities(saved.state), snapshotId: snapshot.id })).publication!;
-    await writeHead(a, (head) => { head.state.baseline = { gitSha: "f".repeat(40), contentDigest: "external-integrated-content" }; });
+    const adoption = { expected: { baseline: initial.baseline, definition: initial.definition }, baseline: { gitSha: "f".repeat(40), contentDigest: "external-integrated-content" },
+      providers: clone((await a.dump()).baselineProviders), draft: "discard" as const, apply: true };
+    const active = await a.dump();
+    await errorCode(() => two.adoptCanonicalBaseline(adoption), "publication-busy");
+    equal(await a.dump(), active, "an active publication blocks adoption without writes");
+    await two.recordStatus({ publicationId: publication.id, snapshotId: snapshot.id, statusVersion: 2, status: "conflict", message: "Remote base moved" });
+    const discarded = await two.adoptCanonicalBaseline(adoption);
+    equal(discarded.dropped, [{ entry: lesson, fieldId: "title", reason: "discarded" }], "discard is explicit and reported");
     const before = await a.dump();
     await errorCode(() => two.recordConfirmedIntegration({ publicationId: publication.id, snapshotId: snapshot.id,
       expectedBaseline: publication.expectedBaseline, gitSha: "1".repeat(40), contentDigest: snapshot.digest }), "baseline-conflict");
-    equal(await a.dump(), before, "external integration conflict retains exact operation, draft and snapshot");
+    equal(await a.dump(), before, "late integration evidence for the conflicted publication changes nothing");
+    equal(await one.readSnapshot(actor, snapshot.id), snapshot, "conflicted publication keeps its exact snapshot");
   });
 
   return report;

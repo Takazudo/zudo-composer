@@ -254,6 +254,7 @@ interface HostedResult {
     snapshot?: HostedSnapshot;
     publication?: HostedPublication;
 }
+/** One row per operation, sized like the scoped state. Keys never expire in this version, so none is ever recycled. */
 interface HostedReceipt {
     actorId: string;
     operationKey: string;
@@ -319,6 +320,35 @@ interface HostedServiceOptions {
     validateSubmission(snapshot: HostedSnapshot): void | Promise<void>;
     validateMarkdown?(value: string): void;
 }
+/** Privileged host evidence that canonical Git content changed outside a publication. */
+interface HostedCanonicalAdoption {
+    /** The stored baseline and definition being replaced; a stale adoption is refused. */
+    expected: {
+        baseline: HostedIdentities["baseline"];
+        definition: string;
+    };
+    baseline: HostedIdentities["baseline"];
+    /** Complete canonical providers at that commit, valid under the service's current definition. */
+    providers: HostedProvider[];
+    /** `rebase` carries retained draft changes that still validate; `discard` resets the draft to canonical content. */
+    draft: "rebase" | "discard";
+    /** False reports what would be carried or dropped and writes nothing. */
+    apply: boolean;
+}
+type HostedRebaseDropReason = "entry-removed" | "model-removed" | "field-removed" | "canonical-changed" | "invalid-value" | "forbidden" | "discarded";
+interface HostedRebaseChange {
+    entry: ContentEntryRef;
+    fieldId: string;
+}
+interface HostedAdoptionResult {
+    applied: boolean;
+    /** The adopted state, or the state it would produce when not applied. */
+    state: HostedState;
+    carried: HostedRebaseChange[];
+    dropped: (HostedRebaseChange & {
+        reason: HostedRebaseDropReason;
+    })[];
+}
 interface HostedService {
     readState(actor: HostedActor): Promise<HostedState>;
     execute(actor: HostedActor, request: unknown): Promise<HostedResult>;
@@ -340,6 +370,8 @@ interface HostedService {
         gitSha: string;
         contentDigest: string;
     }): Promise<HostedState>;
+    /** Adopt an external canonical baseline and/or definition, rebasing or discarding the retained draft explicitly. */
+    adoptCanonicalBaseline(evidence: HostedCanonicalAdoption): Promise<HostedAdoptionResult>;
 }
 /** `unavailable` means storage kept refusing a commit; nothing was written and the exact request may be retried. */
 type HostedErrorCode = "invalid-request" | "invalid-value" | "forbidden" | "not-found" | "revision-conflict" | "baseline-conflict" | "definition-conflict" | "operation-key-reuse" | "publication-busy" | "incomplete" | "configuration-required" | "unavailable";
@@ -664,4 +696,4 @@ declare function hostedDocumentErrorMessage(request: HostedDocumentRender, code:
 declare function matchesHostedPreviewBinding(a: HostedPreviewBinding, b: HostedPreviewBinding): boolean;
 
 export { COMPOSER_PREVIEW_CHANNEL, COMPOSER_PREVIEW_PROTOCOL_VERSION, HostedContentError, canonicalSerialize, createHostedContentService, hostedDocumentErrorMessage, hostedDocumentErrorSchema, hostedPreviewBindingSchema, hostedPreviewResponseSchema, hostedReadyMessage, hostedReadySchema, hostedRenderMessage, hostedRenderSchema, hostedRenderedMessage, hostedRenderedSchema, matchesHostedPreviewBinding, readHostedPreviewRequest, readHostedPreviewResponse };
-export type { ContentEntryRecord, ContentEntryRef, ContentModelRecord, HostedActor, HostedAsset, HostedCollectionPermission, HostedCommand, HostedCommit, HostedDatabase, HostedDocumentError, HostedDocumentRender, HostedDocumentRendered, HostedErrorCode, HostedFieldPermission, HostedHead, HostedIdentities, HostedModelPermission, HostedPolicy, HostedPreviewBinding, HostedPreviewGuardFailure, HostedPreviewResponse, HostedProvider, HostedPublication, HostedPublicationStage, HostedReceipt, HostedRendererIdentity, HostedResult, HostedService, HostedServiceOptions, HostedSnapshot, HostedState, HostedStorage, HostedTransport, MessageEventLike, MessagePoster, MessageTarget, PreviewPackIdentity };
+export type { ContentEntryRecord, ContentEntryRef, ContentModelRecord, HostedActor, HostedAdoptionResult, HostedAsset, HostedCanonicalAdoption, HostedCollectionPermission, HostedCommand, HostedCommit, HostedDatabase, HostedDocumentError, HostedDocumentRender, HostedDocumentRendered, HostedErrorCode, HostedFieldPermission, HostedHead, HostedIdentities, HostedModelPermission, HostedPolicy, HostedPreviewBinding, HostedPreviewGuardFailure, HostedPreviewResponse, HostedProvider, HostedPublication, HostedPublicationStage, HostedRebaseChange, HostedRebaseDropReason, HostedReceipt, HostedRendererIdentity, HostedResult, HostedService, HostedServiceOptions, HostedSnapshot, HostedState, HostedStorage, HostedTransport, MessageEventLike, MessagePoster, MessageTarget, PreviewPackIdentity };

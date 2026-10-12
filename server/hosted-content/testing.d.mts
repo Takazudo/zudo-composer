@@ -223,6 +223,7 @@ interface HostedResult {
     snapshot?: HostedSnapshot;
     publication?: HostedPublication;
 }
+/** One row per operation, sized like the scoped state. Keys never expire in this version, so none is ever recycled. */
 interface HostedReceipt {
     actorId: string;
     operationKey: string;
@@ -274,6 +275,35 @@ interface HostedStorage {
 interface HostedActor {
     id: string;
 }
+/** Privileged host evidence that canonical Git content changed outside a publication. */
+interface HostedCanonicalAdoption {
+    /** The stored baseline and definition being replaced; a stale adoption is refused. */
+    expected: {
+        baseline: HostedIdentities["baseline"];
+        definition: string;
+    };
+    baseline: HostedIdentities["baseline"];
+    /** Complete canonical providers at that commit, valid under the service's current definition. */
+    providers: HostedProvider[];
+    /** `rebase` carries retained draft changes that still validate; `discard` resets the draft to canonical content. */
+    draft: "rebase" | "discard";
+    /** False reports what would be carried or dropped and writes nothing. */
+    apply: boolean;
+}
+type HostedRebaseDropReason = "entry-removed" | "model-removed" | "field-removed" | "canonical-changed" | "invalid-value" | "forbidden" | "discarded";
+interface HostedRebaseChange {
+    entry: ContentEntryRef;
+    fieldId: string;
+}
+interface HostedAdoptionResult {
+    applied: boolean;
+    /** The adopted state, or the state it would produce when not applied. */
+    state: HostedState;
+    carried: HostedRebaseChange[];
+    dropped: (HostedRebaseChange & {
+        reason: HostedRebaseDropReason;
+    })[];
+}
 interface HostedService {
     readState(actor: HostedActor): Promise<HostedState>;
     execute(actor: HostedActor, request: unknown): Promise<HostedResult>;
@@ -295,6 +325,8 @@ interface HostedService {
         gitSha: string;
         contentDigest: string;
     }): Promise<HostedState>;
+    /** Adopt an external canonical baseline and/or definition, rebasing or discarding the retained draft explicitly. */
+    adoptCanonicalBaseline(evidence: HostedCanonicalAdoption): Promise<HostedAdoptionResult>;
 }
 
 /** These faults occur at the storage boundary, never by forging a service receipt. */
@@ -344,7 +376,7 @@ declare function createHostedContentConformanceSeed(): HostedDatabase;
 declare function createHostedContentConformancePolicy(): HostedPolicy;
 /** A deterministic test digest; production hosts must supply a cryptographic digest. */
 declare function hostedConformanceDigest(value: string): Promise<string>;
-declare function createHostedConformanceService(storage: HostedStorage, handleId: string): HostedService;
+declare function createHostedConformanceService(storage: HostedStorage, handleId: string, definition?: string): HostedService;
 /**
  * Portable, framework-independent service conformance. It imports no Node/DOM APIs.
  * Run it against a deterministic fault backend and the actual downstream adapter.
