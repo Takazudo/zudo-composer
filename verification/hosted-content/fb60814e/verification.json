@@ -1,0 +1,256 @@
+{
+  "installedToolSha": "fb60814eff2bb118c6fb2d29c0a897e31388f3b6",
+  "node": "v24.19.0",
+  "packageManager": "pnpm@11.5.2",
+  "contractSha": "c0b452da075b66757c60bd0d721a47062d4354d0",
+  "contractProtocol": 2,
+  "peerPreact": "10.29.8",
+  "commands": [
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "/workspace/zudo-composer/scripts/install-hosted-consumer.mjs",
+        "fb60814eff2bb118c6fb2d29c0a897e31388f3b6",
+        "/workspace/work/hosted-consumer-final-fb60814e"
+      ],
+      "cwd": "/workspace/zudo-composer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/workspace/work/hosted-consumer-final-fb60814e/work/install-browser-bundle"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/workspace/work/hosted-consumer-final-fb60814e/work/install-browser-transport.sqlite",
+        "/workspace/work/hosted-consumer-final-fb60814e/work/install-browser-transport"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/workspace/work/hosted-consumer-final-fb60814e/work/install-render.sqlite"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/workspace/work/hosted-consumer-final-fb60814e/work/install-publication-render"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e/renderer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/workspace/work/hosted-consumer-final-fb60814e/work/frozen-browser-bundle"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/workspace/work/hosted-consumer-final-fb60814e/work/frozen-browser-transport.sqlite",
+        "/workspace/work/hosted-consumer-final-fb60814e/work/frozen-browser-transport"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/workspace/work/hosted-consumer-final-fb60814e/work/frozen-render.sqlite"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/workspace/work/hosted-consumer-final-fb60814e/work/frozen-publication-render"
+      ],
+      "cwd": "/workspace/work/hosted-consumer-final-fb60814e",
+      "outcome": "passed"
+    }
+  ],
+  "payloadSha256": "564366c4d0ea4837be5f14d9654efdbbbb04ac445a8571718c33c363476ddac8",
+  "lockDigests": {
+    "package.json": "6106ab23cf1def26a063278536faea5ba034587e9b46ca8f9df4b92f4805d6eb",
+    "pnpm-lock.yaml": "48f244b63099f55b85166bead86aeede604d630d8731cdb735b1a7c455c82440",
+    "renderer/package.json": "01065dbe1a510b33b3b799d472e44557be56a867ad68e8cabc3384ff22fb8c3e",
+    "renderer/pnpm-lock.yaml": "1073c331715448b00bff903559d04d2321b2b0714e39be76d068bbd5e67e930b"
+  },
+  "independentInstall": "passed",
+  "frozenReinstall": "passed",
+  "worker": "passed",
+  "browserBundle": "passed",
+  "nodeBoundary": "passed",
+  "sqlite": "passed",
+  "httpTransport": "passed",
+  "staticRenderer": "passed",
+  "browser": "not run (--no-browser); real browser acceptance remains unverified"
+}

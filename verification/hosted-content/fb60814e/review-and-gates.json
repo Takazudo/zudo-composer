@@ -1,0 +1,27 @@
+{
+  "packageOutputSha": "fb60814eff2bb118c6fb2d29c0a897e31388f3b6",
+  "review": "independent final review closed; all findings resolved; final nested-clear regression independently passed",
+  "localBrowser": "not executed as explicitly requested; Chromium revision1234 remains unavailable",
+  "merge": "held: outstanding browser/CI checks plus existing hosted-demo-deploy main-push automation lacks separate deployment authorization",
+  "productionActions": "none",
+  "checks": {
+    "lint": "passed",
+    "typecheck": "passed including strict hosted scripts and public declarations",
+    "publicOutputs": "Node9 and hosted11 current",
+    "cms": "4 owned hosts regenerated/check passed",
+    "contract": "conformance+negative scan+exact external pin passed",
+    "ui": "exact external pin passed",
+    "boundaries": "consumer/provider/site-project/handoff/headless/dist/style isolation/class names passed",
+    "builds": "production, four demo static/editor artifacts, doc31 pages passed; four SG types/catalog/Wind passed",
+    "independentConsumer": "fresh exact Git install and frozen reinstall passed Worker, DOM-only declarations, actual editor/CSS/CodeMirror graphs, NodeCLI/compiler, SQLite crash/restart/races, HTTP and four synthetic publication A/B actual static/SG renders",
+    "fullRegressionAtPackageOutputA": "PASS: 399 test files, 4933 tests, heavy-guard verdict PASS; exact source/payload commit fb60814eff2bb118c6fb2d29c0a897e31388f3b6",
+    "hostedFocused": "PASS: 9 files, 114 tests, emitted portable/browser/neutral-preview graphs"
+  },
+  "deferred": [
+    "real hosted thin and broad browser acceptance",
+    "existing installed edit browser reopen, host/dev/site-project/demo browser lanes",
+    "SG thumbnail builds and browser/computed-style lanes",
+    "aggregate check and smoke-host-install include these browser-dependent steps; no full pass claimed",
+    "actual D1 production adapter remains downstream-owned"
+  ]
+}
