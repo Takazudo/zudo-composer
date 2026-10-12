@@ -20,7 +20,6 @@ import { Button, SegmentedControl } from "../../components/ui";
 import type { ResolvedTheme } from "../../theme/theme";
 import { useResolvedTheme } from "../../theme/use-resolved-theme";
 import { applyMarkdownFormat, type MarkdownFormat } from "./markdown-formatting";
-import { MarkdownPreview } from "./markdown-preview";
 
 const externalValue = Annotation.define<boolean>();
 
@@ -71,6 +70,7 @@ export interface CreateMarkdownEditorOptions {
   /** Space-separated ids naming the editor — its label, and its kind hint. */
   labelledBy: string;
   required?: boolean;
+  readOnly?: boolean;
   theme: ResolvedTheme;
   onChange(value: string): void;
 }
@@ -85,6 +85,8 @@ export function createMarkdownEditor(options: CreateMarkdownEditorOptions): Mark
       markdown(),
       syntaxHighlighting(semanticHighlightStyle),
       EditorView.lineWrapping,
+      EditorState.readOnly.of(options.readOnly === true),
+      EditorView.editable.of(options.readOnly !== true),
       editorTheme,
       themeCompartment.of(EditorView.darkTheme.of(options.theme === "dark")),
       EditorView.contentAttributes.of({
@@ -141,6 +143,17 @@ export interface MarkdownEditorProps {
   onChange(value: string): void;
   initialMode?: MarkdownEditorMode;
   theme?: ResolvedTheme;
+  /** Readonly source: the toolbar is withheld and the text cannot change. */
+  readOnly?: boolean;
+}
+
+export interface MarkdownSourceEditorProps extends MarkdownEditorProps {
+  /**
+   * Formatted preview of the current source. Without one there is no Split or
+   * Preview view: the editor is the source alone, and no component pack is
+   * reached for a renderer.
+   */
+  renderPreview?: (markdown: string) => JSX.Element;
 }
 
 const actions: readonly {
@@ -163,7 +176,8 @@ const MODE_OPTIONS = [
   { value: "preview" as const, label: "Preview" },
 ];
 
-export function MarkdownEditor({
+/** The CodeMirror source editor and toolbar; the local tool composes it with its pack-rendered preview. */
+export function MarkdownSourceEditor({
   identity,
   value,
   label,
@@ -171,7 +185,9 @@ export function MarkdownEditor({
   onChange,
   initialMode = "split",
   theme: suppliedTheme,
-}: MarkdownEditorProps): JSX.Element {
+  readOnly = false,
+  renderPreview,
+}: MarkdownSourceEditorProps): JSX.Element {
   const observedTheme = useResolvedTheme();
   const theme = suppliedTheme ?? observedTheme;
   const uid = useId();
@@ -181,7 +197,8 @@ export function MarkdownEditor({
   const mountRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<MarkdownEditorController | null>(null);
   const callbackRef = useRef(onChange);
-  const [mode, setMode] = useState<MarkdownEditorMode>(initialMode);
+  const [selectedMode, setMode] = useState<MarkdownEditorMode>(initialMode);
+  const mode: MarkdownEditorMode = renderPreview ? selectedMode : "edit";
   callbackRef.current = onChange;
 
   useEffect(() => {
@@ -192,6 +209,7 @@ export function MarkdownEditor({
       value,
       labelledBy: labelId,
       required,
+      readOnly,
       theme,
       onChange: (next) => callbackRef.current(next),
     });
@@ -204,7 +222,7 @@ export function MarkdownEditor({
     // value, callback, and theme updates flow through the refs/effects below.
     // `required` joins them because it is a static content attribute — and it
     // can only change in Schema mode, which closes the Entry this editor is on.
-  }, [identity, labelId, required]);
+  }, [identity, labelId, readOnly, required]);
 
   useEffect(() => controllerRef.current?.setValue(value), [identity, value]);
   useEffect(() => controllerRef.current?.setTheme(theme), [identity, theme]);
@@ -227,7 +245,7 @@ export function MarkdownEditor({
         </span>
       </div>
       <div class="sg-content-markdown-editor__frame">
-        <div class="sg-content-markdown-editor__toolbar" role="toolbar" aria-label="Format Markdown">
+        {readOnly ? null : <div class="sg-content-markdown-editor__toolbar" role="toolbar" aria-label="Format Markdown">
           {actions.map(({ format, label: actionLabel, icon: Icon }) => (
             <Button
               key={format}
@@ -246,23 +264,27 @@ export function MarkdownEditor({
             </Button>
           ))}
           <span class="sg-content-markdown-editor__toolbar-gap" />
-          <SegmentedControl<MarkdownEditorMode>
-            label="Markdown view"
-            mode="pressed"
-            size="sm"
-            value={mode}
-            options={MODE_OPTIONS}
-            onChange={setMode}
-          />
-        </div>
+          {renderPreview ? (
+            <SegmentedControl<MarkdownEditorMode>
+              label="Markdown view"
+              mode="pressed"
+              size="sm"
+              value={mode}
+              options={MODE_OPTIONS}
+              onChange={setMode}
+            />
+          ) : null}
+        </div>}
         <div class="sg-content-markdown-editor__workspace">
           <div class="sg-content-markdown-editor__source" hidden={mode === "preview"}>
             <div class="sg-content-markdown-editor__mount" ref={mountRef} />
           </div>
-          <div class="sg-content-markdown-editor__preview" hidden={mode === "edit"} aria-label={`${label} formatted preview`}>
-            <div class="sg-content-markdown-editor__preview-label">Formatted text</div>
-            <MarkdownPreview markdown={value} />
-          </div>
+          {renderPreview ? (
+            <div class="sg-content-markdown-editor__preview" hidden={mode === "edit"} aria-label={`${label} formatted preview`}>
+              <div class="sg-content-markdown-editor__preview-label">Formatted text</div>
+              {renderPreview(value)}
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

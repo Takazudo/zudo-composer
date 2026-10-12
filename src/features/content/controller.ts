@@ -34,6 +34,22 @@ type ContentAssetSummary = Pick<AssetSummary, "id" | "fileName" | "mimeType" | "
 export type ContentAssetCatalogItem = Omit<ContentAssetSummary, "id"> & { providerId: string; assetId: string; label: string };
 export interface ContentAssetCatalogSource { descriptor: { id: string; label: string }; store: { list(): Promise<readonly ContentAssetSummary[]> } }
 
+/**
+ * Thrown by an injected Entry writer when the authoritative draft moved under
+ * the write. The controller preserves the local Entry and opens explicit
+ * conflict recovery (use latest / reapply my draft) over the already
+ * refreshed provider records, instead of retrying "whatever is newest".
+ */
+export class ContentEntryWriteConflict extends Error {
+  constructor(message: string, readonly base: ContentEntryRecord | null) {
+    super(message);
+    this.name = "ContentEntryWriteConflict";
+  }
+}
+
+/** Replaces `provider.store.putEntry` for Entry edits, e.g. a hosted expected-revision save. */
+export type ContentEntryWriter = (record: ContentEntryRecord) => Promise<void>;
+
 export interface ContentAuthoringState {
   viewId: string | null;
   phase: "idle" | "loading" | "ready" | "recovery" | "error";
@@ -86,6 +102,7 @@ export class ContentAuthoringController {
   private readonly providers: readonly ContentProvider[];
   private readonly assetProvider?: ContentAssetCatalogSource;
   private readonly loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]>;
+  private readonly writeEntry?: ContentEntryWriter;
   private baselineEntry: ContentEntryRecord | null = null;
   private baselineAvailable = false;
   private modelQueue: SaveQueue<ContentModelRecord> | null = null;
@@ -103,12 +120,13 @@ export class ContentAuthoringController {
   /** Invalidates an in-flight completeness sweep when the library reloads under it. */
   private scanGeneration = 0;
 
-  constructor(readonly provider: ContentProvider, options: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; assetProvider?: ContentAssetCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> } = {}) {
+  constructor(readonly provider: ContentProvider, options: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; assetProvider?: ContentAssetCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]>; writeEntry?: ContentEntryWriter } = {}) {
     this.idFactory = options.idFactory ?? createUuidIdFactory();
     this.now = options.now ?? (() => new Date().toISOString());
     this.providers = [...new Map([provider, ...(options.providers ?? [])].map((candidate) => [candidate.store.provider.id, candidate])).values()];
     this.assetProvider = options.assetProvider;
     this.loadActivatedBaseline = options.loadActivatedBaseline;
+    this.writeEntry = options.writeEntry;
     this.current = { ...initialState, providerId: provider.descriptor.id, providerLabel: provider.descriptor.label };
   }
 
@@ -625,7 +643,7 @@ export class ContentAuthoringController {
   }
   private installEntryQueue(record: ContentEntryRecord): void {
     this.entryQueue = createSaveQueue({ ref: { providerId: this.provider.descriptor.id, recordId: record.id }, initialRecord: record,
-      write: ({ record: draft }) => this.provider.store.putEntry(draft) });
+      write: ({ record: draft }) => (this.writeEntry ?? ((next) => this.provider.store.putEntry(next)))(draft) });
     this.unsubscribeEntry = this.subscribeQueue(this.entryQueue, "entry");
   }
   private ensureCurrentQueues(): void {
@@ -656,6 +674,10 @@ export class ContentAuthoringController {
         initial = false;
         this.resetQueueState(slot);
         this.set({ ...this.current, saveStatus: this.aggregateSaveStatus() });
+        return;
+      }
+      if (slot === "entry" && state.status === "error" && state.error instanceof ContentEntryWriteConflict && queue === this.entryQueue) {
+        void this.enterEntryWriteConflict(state.draft as ContentEntryRecord, state.error.base);
         return;
       }
       this.queueStates[slot] = { active: true, status: queueStatus(state), error: state.status === "error" ? state.error : null };
@@ -767,6 +789,19 @@ export class ContentAuthoringController {
       await this.reloadConflictAuthoritative();
       throw new Error(`Content deletion was not committed: ${errorMessage(cause)} Your draft was preserved for explicit conflict resolution.`, { cause });
     }
+  }
+  /**
+   * The rejected queue is detached rather than closed: closing drains the
+   * retained draft, which would only be refused again. Use latest installs a
+   * fresh queue from the authoritative Entry; reapply edits a fresh one.
+   */
+  private async enterEntryWriteConflict(local: ContentEntryRecord, base: ContentEntryRecord | null): Promise<void> {
+    if (this.conflictDraft) return;
+    this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
+    this.entryQueue = null;
+    this.resetQueueState("entry");
+    this.conflictDraft = { baseModel: null, baseEntry: base, localModel: null, localEntry: local, authoritativeModel: null, authoritativeEntry: null, unreconcilablePaths: [] };
+    await this.reloadConflictAuthoritative();
   }
   private async markCommittedStale(action: string, cause: unknown): Promise<void> {
     await this.closeQueues().catch(() => undefined);
@@ -895,7 +930,7 @@ function shiftCount(counts: Readonly<Record<string, number>>, modelId: string, d
   return { ...counts, [modelId]: Math.max(0, (counts[modelId] ?? 0) + delta) };
 }
 
-export function createContentAuthoringController(provider: ContentProvider, options?: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; assetProvider?: ContentAssetCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> }): ContentAuthoringController {
+export function createContentAuthoringController(provider: ContentProvider, options?: ConstructorParameters<typeof ContentAuthoringController>[1]): ContentAuthoringController {
   return new ContentAuthoringController(provider, options);
 }
 

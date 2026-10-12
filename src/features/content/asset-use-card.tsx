@@ -7,6 +7,7 @@ import { CopyIcon, ExternalLinkIcon, FileIcon, LibraryIcon, RefreshIcon, TrashIc
 import { Button, Chip, Field, Input, Select, Switch, Textarea } from "../../components/ui";
 import type { ContentAssetUse } from "../../content";
 import type { ContentAssetCatalogItem, ContentAuthoringController } from "./controller";
+import { useContentRestriction } from "./restriction";
 import type { ContentAssetPickerRenderer } from "./structured-field-editor";
 
 interface AssetUseCardProps {
@@ -22,7 +23,7 @@ function ImagePlaceholder(): JSX.Element {
   return <svg class="sg-content-asset-card__image-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="12" height="12" rx="1" /><circle cx="5.5" cy="5.5" r="1" /><path d="m2 11 3-3 3 3 3-5 3 5" /></svg>;
 }
 
-function makeUse(kind: ContentAssetUse["kind"], item: ContentAssetCatalogItem): ContentAssetUse {
+export function makeContentAssetUse(kind: ContentAssetUse["kind"], item: ContentAssetCatalogItem): ContentAssetUse {
   const asset = { providerId: item.providerId, assetId: item.assetId };
   switch (kind) {
     case "image": return { kind, asset, alt: "", decorative: false, caption: "" };
@@ -68,7 +69,10 @@ export function AssetUseCard({ kind, value, controller, renderAssetPicker, asset
   const extension = asset?.fileName.includes(".") ? asset.fileName.split(".").pop()!.toUpperCase() || typeLabel : typeLabel;
   const image = asset?.mimeType.startsWith("image/");
   const knownPixels = image && pixels?.url === asset?.url && failedPreview !== asset?.url ? pixels : null;
-  const canUpload = assetPickerCapabilities?.upload === true;
+  // A restricted role picks from the approved catalog only: no upload, and no
+  // developer link into the Assets library or its authoring URLs.
+  const restricted = useContentRestriction() !== null;
+  const canUpload = !restricted && assetPickerCapabilities?.upload === true;
   const select = (next: ContentAssetUse) => {
     commit((use ? { ...use, asset: next.asset } : next) as unknown as JsonValue);
     setFailedPreview(null);
@@ -88,7 +92,7 @@ export function AssetUseCard({ kind, value, controller, renderAssetPicker, asset
   const fallback = <Select aria-label="Asset" value={selectedActive ? asset.assetId : unavailableOption} onChange={(event) => {
     if (event.currentTarget.value === "") { remove(); return; }
     const next = activeAssets.find((item) => item.assetId === event.currentTarget.value);
-    if (next) select(makeUse(kind, next));
+    if (next) select(makeContentAssetUse(kind, next));
   }}>
     <option value="">No asset selected</option>
     {activeAssets.map((item) => <option key={item.assetId} value={item.assetId}>{item.label}</option>)}
@@ -121,10 +125,10 @@ export function AssetUseCard({ kind, value, controller, renderAssetPicker, asset
         {asset?.state === "trash" ? <p class="sg-content-asset-card__warning"><WarningIcon size="xs" /><span>This asset was moved to Trash in Assets. Choose another {kind === "image" ? "image" : "asset"} or restore it in Assets.</span></p> : null}
         <div class="sg-content-asset-card__actions">
           <Button size="sm" onClick={() => choose()}><RefreshIcon size="xs" />Replace…</Button>
-          {asset ? <a class="cms-btn cms-btn--sm" href={formatIntent({ route: "assets", providerId: asset.providerId, assetId: asset.assetId })}><ExternalLinkIcon size="xs" />Open in Assets</a> : null}
+          {asset && !restricted ? <a class="cms-btn cms-btn--sm" href={formatIntent({ route: "assets", providerId: asset.providerId, assetId: asset.assetId })}><ExternalLinkIcon size="xs" />Open in Assets</a> : null}
           <Button variant="danger" size="sm" class="cms-btn--ghost sg-content-asset-card__remove" onClick={remove}><TrashIcon size="xs" />Remove</Button>
         </div>
-        {asset ? <div class="sg-content-asset-card__url"><span>Authoring URL</span><code title={asset.authoringUrl}>{asset.authoringUrl}</code><Button variant="ghost" size="xs" iconOnly aria-label="Copy authoring URL" onClick={() => void copy()}><CopyIcon size="xs" /></Button></div> : null}
+        {asset && !restricted ? <div class="sg-content-asset-card__url"><span>Authoring URL</span><code title={asset.authoringUrl}>{asset.authoringUrl}</code><Button variant="ghost" size="xs" iconOnly aria-label="Copy authoring URL" onClick={() => void copy()}><CopyIcon size="xs" /></Button></div> : null}
         {!renderAssetPicker && fallbackOpen ? fallback : null}
       </div>
     </div> : <div class="sg-content-asset-card sg-content-asset-card--empty">

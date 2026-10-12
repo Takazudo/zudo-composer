@@ -1,5 +1,5 @@
 import type { JSX } from "preact";
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import { useContext, useEffect, useId, useRef, useState } from "preact/hooks";
 import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, ErrorIcon, InfoIcon, PlusIcon, TrashIcon } from "../../components/icons";
 import { formatLibraryTimestampFull } from "../../components/library-page";
 import { Menu, MenuItem, MenuSeparator, useMenu } from "../../components/overlay";
@@ -7,7 +7,9 @@ import { Button, Chip, DataTable, Field, Input, Select, Switch, Textarea, type D
 import { createContentValueSchema, isContentFieldKey, type ContentEntryRecord, type ContentFieldDefinition, type ContentFieldKind } from "../../content";
 import type { ContentAuthoringController, ContentAuthoringState } from "./controller";
 import { FieldKindPicker, contentFieldKindPresentation } from "./field-kind-picker";
-import { MarkdownEditor } from "./markdown-editor";
+import { ContentMarkdownPreviewContext } from "./markdown-preview-context";
+import { MarkdownSourceEditor } from "./markdown-source-editor";
+import { restrictionAllowsField, useContentRestriction } from "./restriction";
 import { deriveSlug } from "./slug";
 import { StructuredValueEditor, type ContentAssetPickerRenderer } from "./structured-field-editor";
 
@@ -294,6 +296,11 @@ export function ContentEntryAuthor({ state, controller, run, renderAssetPicker, 
   // The auto-slug source is the field the spec names, not whatever happens to
   // be first: a `text` field keyed `title`.
   const titleField = allFields.find((field) => field.kind === "text" && field.key === "title") ?? null;
+  const restriction = useContentRestriction();
+  const renderPreview = useContext(ContentMarkdownPreviewContext);
+  // A protected field renders read-only and never derives: a slug the role
+  // cannot edit keeps its route even when the title changes.
+  const editable = (fieldId: string) => restrictionAllowsField(restriction, entry.modelId, fieldId);
 
   // The host rebuilds `run` every render; the effect below reaches it through a
   // ref so its dependency list stays a statement about the Entry, not the host.
@@ -307,7 +314,7 @@ export function ContentEntryAuthor({ state, controller, run, renderAssetPicker, 
     // Auto-derivation starts on for a slug this Entry has not filled in — which
     // is every slug of a new Entry, and none of an Entry that already has one.
     setAutoSlug(Object.fromEntries(
-      fields.filter((field) => field.kind === "slug").map((field) => [field.id, titleField !== null && asText(entry.values[field.id]) === ""]),
+      fields.filter((field) => field.kind === "slug").map((field) => [field.id, titleField !== null && editable(field.id) && asText(entry.values[field.id]) === ""]),
     ));
   }
 
@@ -316,7 +323,7 @@ export function ContentEntryAuthor({ state, controller, run, renderAssetPicker, 
     if (titleField === null) return;
     const derived = deriveSlug(titleText);
     for (const field of fields) {
-      if (field.kind !== "slug" || !autoSlug[field.id]) continue;
+      if (field.kind !== "slug" || !autoSlug[field.id] || !editable(field.id)) continue;
       // The only write here that no keystroke asked for, so it goes through the
       // route's reporter rather than throwing out of an effect.
       if (derived !== asText(entry.values[field.id])) runRef.current(() => controller.updateEntryValue(field.id, derived));
@@ -325,112 +332,122 @@ export function ContentEntryAuthor({ state, controller, run, renderAssetPicker, 
     // dependency list — is what stops this from looping.
   }, [autoSlug, controller, entry.id, titleField, titleText]);
 
+  const renderField = (field: ContentFieldDefinition): JSX.Element => {
+    const controlId = `content-entry-${field.id}`;
+    const value = entry.values[field.id];
+    const { label: kindLabel, icon: KindIcon } = contentFieldKindPresentation(field.kind);
+    // `Field` renders the kind hint inside the `<label>`, where it would
+    // otherwise join the accessible name with no separator between the two
+    // spans — "TitleShort text". It is a visual aid for a distinction the
+    // control already carries (a number announces as a spinbutton, a date as
+    // a date), so it is marked decorative and the name stays the label.
+    const kind = <span aria-hidden="true"><KindIcon size="xs" />{kindLabel}</span>;
+    const commit = (next: ContentEntryRecord["values"][string] | undefined) => { if (editable(field.id)) run(() => controller.updateEntryValue(field.id, next)); };
+
+    if (["choice", "reference", "reference-list", "object", "list", "asset-use"].includes(field.kind)) {
+      return <div class="sg-content-rich-field" data-content-field-id={field.id} data-content-value-path="/" key={field.id}><Field controlId={controlId} label={field.label} required={field.required} kind={kind}><StructuredValueEditor schema={field} field={field} value={value} path={[]} controller={controller} run={run} renderAssetPicker={renderAssetPicker} assetPickerCapabilities={assetPickerCapabilities} commit={(next) => { if (editable(field.id)) controller.updateEntryValue(field.id, next); }} /></Field></div>;
+    }
+
+    if (field.kind === "markdown") {
+      return (
+        <MarkdownSourceEditor
+          key={field.id}
+          identity={`${entry.id}/${field.id}`}
+          value={asText(value)}
+          label={field.label}
+          required={field.required}
+          readOnly={!editable(field.id)}
+          renderPreview={renderPreview}
+          onChange={commit}
+        />
+      );
+    }
+
+    if (field.kind === "boolean") {
+      return (
+        <Switch
+          key={field.id}
+          id={controlId}
+          class="sg-content-toggle"
+          label={<>{field.label}{field.required ? <span class="sg-content-req" aria-hidden="true"> *</span> : null}</>}
+          checked={value === true}
+          onCheckedChange={(checked) => commit(checked)}
+        />
+      );
+    }
+
+    if (field.kind === "long-text") {
+      return (
+        <Field key={field.id} controlId={controlId} label={field.label} required={field.required} kind={kind}>
+          <Textarea rows={6} value={asText(value)} onInput={(event) => commit(event.currentTarget.value)} />
+        </Field>
+      );
+    }
+
+    if (field.kind === "slug") {
+      const auto = autoSlug[field.id] ?? false;
+      return (
+        <Field key={field.id} controlId={controlId} label={field.label} required={field.required} kind={kind}>
+          <div class="sg-content-slug">
+            <Input
+              class="sg-content-mono"
+              value={asText(value)}
+              onInput={(event) => {
+                // Typing the slug by hand is what retires the derivation.
+                // Both happen in this one handler, so the effect above sees
+                // the switch already off and leaves the typed value alone.
+                if (auto) setAutoSlug({ ...autoSlug, [field.id]: false });
+                commit(event.currentTarget.value);
+              }}
+            />
+            {titleField === null ? null : (
+              <Switch
+                id={`${controlId}-auto`}
+                label="Auto from title"
+                checked={auto}
+                onCheckedChange={(checked) => setAutoSlug({ ...autoSlug, [field.id]: checked })}
+              />
+            )}
+          </div>
+        </Field>
+      );
+    }
+
+    if (field.kind === "number") {
+      return (
+        <Field key={field.id} controlId={controlId} label={field.label} required={field.required} kind={kind}>
+          <Input
+            type="number"
+            value={asText(value)}
+            onInput={(event) => {
+              const numeric = event.currentTarget.valueAsNumber;
+              commit(event.currentTarget.value === "" || !Number.isFinite(numeric) ? undefined : numeric);
+            }}
+          />
+        </Field>
+      );
+    }
+
+    return (
+      <Field key={field.id} controlId={controlId} label={field.label} required={field.required} kind={kind}>
+        <Input
+          type={field.kind === "date" ? "date" : field.kind === "color" ? "color" : field.kind === "url" ? "url" : "text"}
+          class={field.kind === "url" ? "sg-content-mono" : undefined}
+          value={asText(value)}
+          onInput={(event) => commit(event.currentTarget.value)}
+        />
+      </Field>
+    );
+  };
+
   return (
     <div class="sg-content-form">
       {fields.map((field) => {
-        const controlId = `content-entry-${field.id}`;
-        const value = entry.values[field.id];
-        const { label: kindLabel, icon: KindIcon } = contentFieldKindPresentation(field.kind);
-        // `Field` renders the kind hint inside the `<label>`, where it would
-        // otherwise join the accessible name with no separator between the two
-        // spans — "TitleShort text". It is a visual aid for a distinction the
-        // control already carries (a number announces as a spinbutton, a date as
-        // a date), so it is marked decorative and the name stays the label.
-        const kind = <span aria-hidden="true"><KindIcon size="xs" />{kindLabel}</span>;
-        const commit = (next: ContentEntryRecord["values"][string] | undefined) => run(() => controller.updateEntryValue(field.id, next));
-
-        if (["choice", "reference", "reference-list", "object", "list", "asset-use"].includes(field.kind)) {
-          return <div class="sg-content-rich-field" data-content-field-id={field.id} data-content-value-path="/" key={field.id}><Field controlId={controlId} label={field.label} required={field.required} kind={kind}><StructuredValueEditor schema={field} field={field} value={value} path={[]} controller={controller} run={run} renderAssetPicker={renderAssetPicker} assetPickerCapabilities={assetPickerCapabilities} commit={(next) => controller.updateEntryValue(field.id, next)} /></Field></div>;
-        }
-
-        if (field.kind === "markdown") {
-          return (
-            <MarkdownEditor
-              key={field.id}
-              identity={`${entry.id}/${field.id}`}
-              value={asText(value)}
-              label={field.label}
-              required={field.required}
-              onChange={commit}
-            />
-          );
-        }
-
-        if (field.kind === "boolean") {
-          return (
-            <Switch
-              key={field.id}
-              id={controlId}
-              class="sg-content-toggle"
-              label={<>{field.label}{field.required ? <span class="sg-content-req" aria-hidden="true"> *</span> : null}</>}
-              checked={value === true}
-              onCheckedChange={(checked) => commit(checked)}
-            />
-          );
-        }
-
-        if (field.kind === "long-text") {
-          return (
-            <Field key={field.id} controlId={controlId} label={field.label} required={field.required} kind={kind}>
-              <Textarea rows={6} value={asText(value)} onInput={(event) => commit(event.currentTarget.value)} />
-            </Field>
-          );
-        }
-
-        if (field.kind === "slug") {
-          const auto = autoSlug[field.id] ?? false;
-          return (
-            <Field key={field.id} controlId={controlId} label={field.label} required={field.required} kind={kind}>
-              <div class="sg-content-slug">
-                <Input
-                  class="sg-content-mono"
-                  value={asText(value)}
-                  onInput={(event) => {
-                    // Typing the slug by hand is what retires the derivation.
-                    // Both happen in this one handler, so the effect above sees
-                    // the switch already off and leaves the typed value alone.
-                    if (auto) setAutoSlug({ ...autoSlug, [field.id]: false });
-                    commit(event.currentTarget.value);
-                  }}
-                />
-                {titleField === null ? null : (
-                  <Switch
-                    id={`${controlId}-auto`}
-                    label="Auto from title"
-                    checked={auto}
-                    onCheckedChange={(checked) => setAutoSlug({ ...autoSlug, [field.id]: checked })}
-                  />
-                )}
-              </div>
-            </Field>
-          );
-        }
-
-        if (field.kind === "number") {
-          return (
-            <Field key={field.id} controlId={controlId} label={field.label} required={field.required} kind={kind}>
-              <Input
-                type="number"
-                value={asText(value)}
-                onInput={(event) => {
-                  const numeric = event.currentTarget.valueAsNumber;
-                  commit(event.currentTarget.value === "" || !Number.isFinite(numeric) ? undefined : numeric);
-                }}
-              />
-            </Field>
-          );
-        }
-
-        return (
-          <Field key={field.id} controlId={controlId} label={field.label} required={field.required} kind={kind}>
-            <Input
-              type={field.kind === "date" ? "date" : field.kind === "color" ? "color" : field.kind === "url" ? "url" : "text"}
-              class={field.kind === "url" ? "sg-content-mono" : undefined}
-              value={asText(value)}
-              onInput={(event) => commit(event.currentTarget.value)}
-            />
-          </Field>
-        );
+        const control = renderField(field);
+        if (editable(field.id)) return control;
+        // A native disabled fieldset withholds every nested control at once,
+        // including structured and list actions.
+        return <fieldset key={field.id} class="sg-content-protected" disabled data-content-protected={field.id}>{control}</fieldset>;
       })}
 
       <section class="sg-content-group">
