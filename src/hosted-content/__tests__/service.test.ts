@@ -51,7 +51,7 @@ function fixture() {
     assets: ["first", "second"].map(assetId => ({ assetId, providerId: "assets", versionId: "v1", checksum: `sha-${assetId}`, url: `/assets/${assetId}.png`, label: assetId })),
   };
   let id = 0;
-  const options: HostedServiceOptions = { siteId: "site", definition: "definition", policy, storage, authorize: () => undefined, digest: async value => createHash("sha256").update(value).digest("hex"), createId: () => `id-${++id}`, now: () => timestamp, project: providers => json(providers.map(provider => provider.entries.map(entry => ({ id: entry.id, values: entry.values, lifecycle: entry.lifecycle })))), validateSubmission: () => undefined };
+  const options: HostedServiceOptions = { siteId: "site", definition: "definition", policy, storage, authorize: () => undefined, digest: async value => createHash("sha256").update(value).digest("hex"), createId: () => `id-${++id}`, now: () => timestamp, project: providers => json(providers.map(provider => provider.entries.filter(entry => entry.id !== "private").map(entry => ({ id: entry.id, values: entry.values, lifecycle: entry.lifecycle })))), validateSubmission: () => undefined };
   const service = createHostedContentService(options);
   const expected = () => identities(database.state);
   const set = (operationKey: string, values: Record<string, JsonValue>, entry = page): HostedCommand => ({ kind: "set-fields", operationKey, expected: expected(), entry, values, clear: [] });
@@ -78,6 +78,41 @@ describe("hosted Content trusted boundary", () => {
     expect(result.snapshot!.diagnostics).toContainEqual(expect.objectContaining({ fieldId: "title", code: "required-value-missing" }));
     await rejectsWithoutWrite(f, f.begin("submit", result.snapshot!.id), "incomplete");
     expect((await f.service.readState(actor)).providers[0]!.entries.map(entry => entry.id)).not.toContain("private");
+  });
+
+  it("scopes every public snapshot and receipt while keeping the full internal delivery candidate", async () => {
+    const f = fixture(), command = f.capture("capture-private");
+    const result = await f.service.execute(actor, command), snapshot = result.snapshot!;
+    const stored = f.db().snapshots.find(item => item.id === snapshot.id)!;
+    expect(stored.providers[0]!.entries.find(entry => entry.id === "private")?.values.answer).toBe("Never listed");
+    expect(stored.digest).toBe(await f.options.digest(canonicalSerialize({ providers: stored.providers, assets: stored.assets, renderData: stored.renderData })));
+    expect(snapshot.digest).toBe(stored.digest);
+    const publicResults = [result, await f.service.readSnapshot(actor, snapshot.id), await f.service.readReceipt(actor, command.operationKey), await f.service.execute(actor, command)];
+    const submit = f.begin("submit-private", snapshot.id);
+    publicResults.push(await f.service.execute(actor, submit), await f.service.readReceipt(actor, submit.operationKey), await f.service.execute(actor, submit));
+    for (const value of publicResults) {
+      expect(JSON.stringify(value)).not.toContain("Never listed");
+      expect(JSON.stringify(value)).not.toContain('"id":"private"');
+    }
+    expect(f.db().snapshots.find(item => item.id === snapshot.id)).toEqual(stored);
+  });
+
+  it.each([false, true])("saves an empty URL with required=%s and defers completeness to submission", async required => {
+    const f = fixture(), configured = f.db();
+    for (const providers of [configured.state.providers, configured.baselineProviders]) providers[0]!.models[0]!.document.fields.find(item => item.id === "url")!.required = required;
+    f.replace(configured);
+    const saved = await f.service.execute(actor, f.set("empty-url", { url: "" }));
+    expect(saved.state.providers[0]!.entries.find(entry => entry.id === "home")!.values.url).toBe("");
+    const { snapshot } = await f.service.execute(actor, f.capture("empty-url-snapshot"));
+    if (required) {
+      expect(snapshot!.diagnostics).toContainEqual(expect.objectContaining({ fieldId: "url", code: "required-value-missing" }));
+      await rejectsWithoutWrite(f, f.begin("empty-url-submit", snapshot!.id), "incomplete");
+    } else {
+      expect(snapshot!.diagnostics).toHaveLength(0);
+      expect((await f.service.execute(actor, f.begin("empty-url-submit", snapshot!.id))).publication!.status).toBe("submitted");
+    }
+    const policy = structuredClone(f.options.policy); policy.assets[0]!.url = "";
+    expect(() => createHostedContentService({ ...f.options, policy })).toThrow(expect.objectContaining({ code: "invalid-value" }));
   });
 
   it.each(["actor", "policy", "project", "generation", "lifecycle", "timestamp", "source", "file", "raw"])("rejects forged %s metadata atomically", async key => {

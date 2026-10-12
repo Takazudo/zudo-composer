@@ -776,7 +776,7 @@ function assertFieldChange(schema, permission, previous, next, policy, path, val
 		return;
 	}
 	if (!permission.replace) forbidden(path);
-	if (schema.kind === "url") assertSafeUrl(next);
+	if (schema.kind === "url" && next !== "") assertSafeUrl(next);
 	if (schema.kind === "markdown") {
 		assertSafeMarkdown(next);
 		validateMarkdown?.(next);
@@ -851,19 +851,40 @@ function createHostedContentService(supplied) {
 	function visible(providers, ref) {
 		return permitted(providers, ref) || options.policy.collections.some((collection) => contentEntryRefKey(collection.owner) === contentEntryRefKey(ref));
 	}
-	function publicState(state) {
-		const providers = state.providers.map((provider) => ({
+	function publicProviders(providers) {
+		return copy(providers.map((provider) => ({
 			...provider,
 			models: provider.models.filter((model) => options.policy.models.some((permission) => permission.providerId === provider.providerId && permission.modelId === model.id) || options.policy.collections.some((collection) => collection.owner.providerId === provider.providerId && collection.owner.modelId === model.id)),
-			entries: provider.entries.filter((entry) => visible(state.providers, {
+			entries: provider.entries.filter((entry) => visible(providers, {
 				providerId: provider.providerId,
 				modelId: entry.modelId,
 				recordId: entry.id
 			}))
-		})).filter((provider) => provider.models.length || provider.entries.length);
+		})).filter((provider) => provider.models.length || provider.entries.length));
+	}
+	function publicState(state) {
 		return copy({
 			...state,
-			providers
+			providers: publicProviders(state.providers)
+		});
+	}
+	/** Browser read projection only. The digest still binds the complete immutable stored candidate,
+	* including protected baseline records; it is not a hash of these scoped providers. The trusted
+	* host's approved renderData is shared unchanged with preview and delivery. */
+	function publicSnapshot(snapshot) {
+		const providers = publicProviders(snapshot.providers);
+		const diagnostics = snapshot.diagnostics.filter((diagnostic) => providers.some((provider) => provider.entries.some((entry) => entry.modelId === diagnostic.modelId && entry.id === diagnostic.entryId)));
+		return copy({
+			...snapshot,
+			providers,
+			diagnostics
+		});
+	}
+	function publicResult(result) {
+		return copy({
+			...result,
+			state: publicState(result.state),
+			...result.snapshot ? { snapshot: publicSnapshot(result.snapshot) } : {}
 		});
 	}
 	function checkExpected(state, expected) {
@@ -980,7 +1001,7 @@ function createHostedContentService(supplied) {
 		const existing = database.receipts.find((item) => item.actorId === actorId && item.operationKey === command.operationKey);
 		if (!existing) return;
 		if (existing.fingerprint !== fingerprint) fail("operation-key-reuse", "Operation key is already bound to another immutable request.");
-		return copy(existing.result);
+		return publicResult(existing.result);
 	}
 	return {
 		async readState(actor) {
@@ -990,11 +1011,15 @@ function createHostedContentService(supplied) {
 		async readReceipt(actor, operationKey) {
 			const trusted = copy(actor);
 			await authorize(trusted);
-			return copy((await options.storage.read()).receipts.find((item) => item.actorId === trusted.id && item.operationKey === operationKey) ?? null);
+			const stored = (await options.storage.read()).receipts.find((item) => item.actorId === trusted.id && item.operationKey === operationKey);
+			return stored ? copy({
+				...stored,
+				result: publicResult(stored.result)
+			}) : null;
 		},
 		async readSnapshot(actor, snapshotId) {
 			await authorize(actor);
-			return copy((await options.storage.read()).snapshots.find((snapshot) => snapshot.id === snapshotId) ?? fail("not-found", "Snapshot is unavailable."));
+			return publicSnapshot((await options.storage.read()).snapshots.find((snapshot) => snapshot.id === snapshotId) ?? fail("not-found", "Snapshot is unavailable."));
 		},
 		async getPublication(actor, publicationId) {
 			await authorize(actor);
@@ -1052,7 +1077,7 @@ function createHostedContentService(supplied) {
 						snapshot = database.snapshots.find((item) => item.id === command.snapshotId) ?? fail("not-found", "Snapshot is unavailable.");
 						checkExpected(database.state, snapshot);
 						if (database.publications.some((item) => !terminal(item))) fail("publication-busy", "A publication is already active; recover its authoritative status.");
-						if (snapshot.diagnostics.length) throw new HostedContentError("incomplete", "Complete required and accessible values before submission.", copy(snapshot.diagnostics));
+						if (snapshot.diagnostics.length) throw new HostedContentError("incomplete", "Complete required and accessible values before submission.", publicSnapshot(snapshot).diagnostics);
 						await options.validateSubmission(copy(snapshot));
 						publication = {
 							id: options.createId(),
@@ -1072,7 +1097,7 @@ function createHostedContentService(supplied) {
 				const result = {
 					state: publicState(database.state),
 					...createdEntry ? { createdEntry } : {},
-					...snapshot ? { snapshot: copy(snapshot) } : {},
+					...snapshot ? { snapshot: publicSnapshot(snapshot) } : {},
 					...publication ? { publication: copy(publication) } : {}
 				};
 				database.receipts.push({

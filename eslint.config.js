@@ -49,6 +49,14 @@ export default tseslint.config(
   eslint.configs.recommended,
   tseslint.configs.recommended,
   {
+    files: ['fixtures/hosted-content-consumer/**/*.mjs'],
+    languageOptions: { globals: { URL: 'readonly', console: 'readonly', process: 'readonly', Buffer: 'readonly', fetch: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly', structuredClone: 'readonly' } },
+  },
+  {
+    files: ['fixtures/hosted-content-consumer/browser-proof.mjs'],
+    languageOptions: { globals: { window: 'readonly', localStorage: 'readonly' } },
+  },
+  {
     // These are the only files that import the two virtual modules declared in
     // `src/features/composer/pack-config.d.ts`; each carries an explicit
     // triple-slash reference so every `tsc -b` program that reaches it also

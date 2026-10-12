@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve, join, extname, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -22,7 +22,7 @@ export async function startBrowserFixture(filename) {
       const url = new URL(request.url, "http://localhost");
       if (url.pathname.startsWith("/api/")) {
         if (url.pathname === "/api/restart" && request.method === "POST") {
-          for await (const _ of request) { /* consume */ }
+          for await (const chunk of request) { void chunk; }
           await upstream.close();
           upstream = await startHostedFixtureServer({ filename, fixture });
           response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ reopened: true }));
@@ -80,6 +80,8 @@ export async function proveBrowserCheckpoint(filename) {
     const receipts = evidence.recovery;
     assert(receipts, "The editor must persist its recovery checkpoint");
     await page.evaluate(() => window.hostedCheckpoint.restartBackend());
+    const recoveredReceipt = await fetch(`${running.url}/api/receipt?key=${encodeURIComponent(command.operationKey)}`).then(response => response.json());
+    assert.deepEqual(recoveredReceipt, receipt, "Backend restart must recover the identical committed save receipt");
     await context.close();
     const secondContext = await browser.newContext();
     const reopened = await secondContext.newPage();

@@ -15,12 +15,15 @@ const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const title = (session: HostedContentSession) => session.state.content!.providers[0]!.entries[0]!.values.title;
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: unknown) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 export function backend() {
-  const content = state(); let counter = 0; const receipts = new Map<string, HostedResult>(); const requests: HostedCommand[] = [];
+  const content = state(); let counter = 0; const receipts = new Map<string, HostedResult>(); const fingerprints = new Map<string, string>(); const requests: HostedCommand[] = [];
   const transport: HostedTransport = {
     readState: async () => clone(content), readReceipt: async (key) => { const result = receipts.get(key); return result ? { actorId: "author", operationKey: key, fingerprint: key, result: clone(result) } : null; },
     execute: async (request) => {
       requests.push(request);
-      if (receipts.has(request.operationKey)) return clone(receipts.get(request.operationKey)!);
+      if (receipts.has(request.operationKey)) {
+        if (fingerprints.get(request.operationKey) !== JSON.stringify(request)) throw new HostedContentError("operation-key-reuse", "Key reused for different request");
+        return clone(receipts.get(request.operationKey)!);
+      }
       if (request.expected.draftRevision !== content.draftRevision) throw new HostedContentError("revision-conflict", "Another author saved");
       const result: HostedResult = { state: clone(content) };
       if (request.kind === "set-fields") {
@@ -32,7 +35,7 @@ export function backend() {
       } else if (request.kind === "begin-publication") {
         result.publication = { id: "p1", snapshotId: request.snapshotId, expectedBaseline: content.baseline, status: "submitted", statusVersion: 1 };
       }
-      receipts.set(request.operationKey, clone(result)); return result;
+      receipts.set(request.operationKey, clone(result)); fingerprints.set(request.operationKey, JSON.stringify(request)); return result;
     },
     getPublication: async () => { throw new Error("not used"); },
   };
@@ -63,8 +66,8 @@ describe("hosted immutable save session", () => {
     base.transport.execute = execute;
     const reopened = new HostedContentSession({ transport: base.transport, createOperationKey: () => "keyB", recovery: saved });
     await reopened.initialize(); expect(reopened.state.phase).toBe("recovering"); await reopened.flush();
-    expect(base.requests[0]).toEqual(original); expect(base.requests).toHaveLength(2); expect(title(reopened)).toBe("B");
-    expect(base.requests[1]!.expected.draftRevision).toBe("r1");
+    expect(base.requests[0]).toEqual(original); expect(base.requests[1]).toEqual(original); expect(base.requests).toHaveLength(3); expect(title(reopened)).toBe("B");
+    expect(base.requests[2]!.expected.draftRevision).toBe("r1"); expect(base.content().draftRevision).toBe("r2");
   });
   it("retries identical A when no receipt is visible, before later B", async () => {
     const base = backend(); const execute = base.transport.execute; let fail = true;
@@ -105,6 +108,17 @@ describe("hosted immutable save session", () => {
     const snapshot = await value.captureAndPreview("/course"); expect(snapshot.providers[0]!.entries[0]!.values.title).toBe("B");
     const publication = await value.submit(); expect(publication.snapshotId).toBe(snapshot.id);
   });
+  it("flush waits for a capture command and then drains edits made during that command", async () => {
+    const base = backend(); const execute = base.transport.execute; const gate = deferred<void>();
+    base.transport.execute = async (request) => { const result = await execute(request); if (request.kind === "capture-snapshot") await gate.promise; return result; };
+    const { value } = session(base, { preview: { render: async () => undefined } }); await value.initialize();
+    const capture = value.captureAndPreview("home").catch((error: unknown) => error);
+    await vi.waitFor(() => expect(base.requests[0]!.kind).toBe("capture-snapshot"));
+    value.edit(entry, "title", "B"); const flush = value.flush(); gate.resolve();
+    await flush; await capture;
+    expect(value.state.dirty).toBe(false); expect(base.content().providers[0]!.entries[0]!.values.title).toBe("B");
+    expect(base.requests[1]!.kind).toBe("set-fields");
+  });
   it("blocks Submit after preview reload until the exact document is rendered again", async () => {
     let previewState: NonNullable<HostedPreviewAdapter["state"]> = { status: "idle" };
     let changed = () => {};
@@ -124,14 +138,12 @@ describe("hosted immutable save session", () => {
     previewState = rendered; changed(); expect(value.state.reviewedSnapshot).not.toBeNull();
     expect((await value.submit()).snapshotId).toBe(value.state.reviewedSnapshot!.id);
   });
-  it("retains uncertainty when receipt lookup is denied, even if the error has a hosted code", async () => {
-    const base = backend(); const execute = base.transport.execute;
-    base.transport.execute = async (request) => { await execute(request); throw new Error("lost response"); };
-    const { value } = session(base); await value.initialize(); value.edit(entry, "title", "A"); await expect(value.flush()).rejects.toThrow();
-    base.transport.readReceipt = async () => { throw new HostedContentError("forbidden", "Session expired before receipt access"); };
-    await expect(value.flush()).rejects.toThrow("Session expired");
-    expect(value.state.pending!.rejected).toBe(false); expect(value.state.phase).toBe("recovering");
-    await expect(value.reapply(base.content())).rejects.toThrow("Recover the original");
+  it("never accepts a receipt for the same key with another payload", async () => {
+    const base = backend(); const { value } = session(base, { createOperationKey: () => "same-key" });
+    await value.initialize(); value.edit(entry, "title", "A"); await value.flush();
+    value.edit(entry, "title", "B"); await expect(value.flush()).rejects.toThrow("Key reused");
+    expect(value.state.pending!.rejected).toBe(true); expect(value.state.dirty).toBe(true);
+    expect(title(value)).toBe("B"); expect(base.content().providers[0]!.entries[0]!.values.title).toBe("A");
   });
   it("keeps unrelated entry edits while acknowledging one entry", async () => {
     const base = backend(); const initial = state(); initial.providers[0]!.entries.push(createContentEntryRecord(entry.modelId, { title: "Other" }, { id: "other", timestamp: stamp }));

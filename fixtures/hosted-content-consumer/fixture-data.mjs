@@ -9,7 +9,7 @@ const field = (id, kind, required = true, options = {}) => ({ id, key: id, label
 const model = (id, kind, fields) => ({ id, createdAt: timestamp, updatedAt: timestamp,
   document: { schemaVersion: 1, id, name: id, description: "", kind, fields } });
 const entry = (id, modelId, values) => ({ schemaVersion: 1, id, modelId, createdAt: timestamp, updatedAt: timestamp, generation: 1, lifecycle: "published", values });
-export const fixtureAsset = { providerId: "assets-filesystem", assetId: "approved", versionId: "v1", checksum: "fixture-approved-svg-v1", url: "/approved.svg", label: "Approved course image" };
+export const fixtureAsset = { providerId: "assets-filesystem", assetId: "approved", versionId: "v1", checksum: "98341f749915a496670a188d1f6ae9d75a6401bf9ecfbb9a203e84519c4af692", url: "/approved.svg", label: "Approved course image" };
 export function createFixtureSeed() {
   const providers = [{ providerId: fixtureEntry.providerId, models: [
     model("page", "single", [field("title", "text"), field("price", "number"), field("image", "asset-use", true, { use: "image" }),

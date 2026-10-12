@@ -34,7 +34,8 @@ function readDatabase(connection) {
 }
 
 function encodeAggregate(database) {
-  const { receipts: _receipts, ...aggregate } = database;
+  const aggregate = { ...database };
+  delete aggregate.receipts;
   return JSON.stringify(aggregate);
 }
 
@@ -173,8 +174,10 @@ export function openSqliteHandle(filename, { busyDeadlineMilliseconds = 8_000 } 
 export function createSqliteConformanceFactory({ directory, keepFiles = false } = {}) {
   return {
     async create(seed, scenario) {
-      const root = directory ?? await mkdtemp(join(tmpdir(), "composer-hosted-sqlite-"));
-      const filename = join(root, `${scenario}.sqlite`);
+      const parent = directory ?? tmpdir();
+      await mkdir(parent, { recursive: true });
+      const root = await mkdtemp(join(parent, `composer-hosted-${scenario}-`));
+      const filename = join(root, "database.sqlite");
       await initializeSqliteDatabase(filename, seed);
       const handles = new Set();
       let disposed = false;
@@ -188,11 +191,7 @@ export function createSqliteConformanceFactory({ directory, keepFiles = false } 
         async restart() { closeHandles(); },
         async close() {
           closeHandles(); disposed = true;
-          if (!keepFiles) {
-            if (directory) await Promise.all([filename, `${filename}-wal`, `${filename}-shm`]
-              .map(file => rm(file, { force: true })));
-            else await rm(root, { recursive: true, force: true });
-          }
+          if (!keepFiles) await rm(root, { recursive: true, force: true });
         },
       };
     },

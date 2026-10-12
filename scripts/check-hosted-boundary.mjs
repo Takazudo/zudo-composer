@@ -1,16 +1,14 @@
 // @ts-check
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import ts from "typescript";
 
 const root = resolve(import.meta.dirname, "..");
 const allowed = new Set(["zod", "@zudo-composer/component-contract"]);
 /** @param {string} path @param {boolean} browser @param {Set<string>} seen */
-async function visit(path, browser, seen) {
+async function visit(path, browser, seen, editor = browser) {
   if (seen.has(path)) return;
   seen.add(path);
-  const source = await readFile(path, "utf8");
   const program = ts.createProgram([path], { allowJs: true, noLib: true, noResolve: true, types: [] });
   const tree = program.getSourceFile(path);
   assert.ok(tree, `Missing emitted source ${path}`);
@@ -37,10 +35,10 @@ async function visit(path, browser, seen) {
   };
   inspect(tree);
   for (const id of imports) {
-    if (id.startsWith(".")) await visit(resolve(dirname(path), id), browser, seen);
+    if (id.startsWith(".")) await visit(resolve(dirname(path), id), browser, seen, editor);
     else {
       assert.ok(!isAbsolute(id) && !id.startsWith("node:") && !id.startsWith("virtual:"), `${path}: forbidden import ${id}`);
-      assert.ok(allowed.has(id) || browser && (id === "preact" || id.startsWith("preact/") || id.startsWith("@codemirror/") || id === "@lezer/highlight"), `${path}: unexpected dependency ${id}`);
+      assert.ok(allowed.has(id) || editor && (id === "preact" || id.startsWith("preact/") || id.startsWith("@codemirror/") || id === "@lezer/highlight"), `${path}: unexpected dependency ${id}`);
     }
   }
 }
@@ -49,4 +47,6 @@ await visit(resolve(root, "server/hosted-content/index.mjs"), false, portable);
 await visit(resolve(root, "server/hosted-content/testing.mjs"), false, portable);
 const browser = new Set();
 await visit(resolve(root, "server/hosted-content/editor.mjs"), true, browser);
+const preview = new Set();
+await visit(resolve(root, "server/hosted-content/preview.mjs"), true, preview, false);
 console.log(`Hosted emitted boundaries verified: ${portable.size} portable modules; ${browser.size} browser modules.`);

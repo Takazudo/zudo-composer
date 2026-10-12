@@ -51,12 +51,26 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
   function visible(providers: HostedProvider[], ref: ContentEntryRef): boolean {
     return permitted(providers, ref) || options.policy.collections.some(collection => contentEntryRefKey(collection.owner) === contentEntryRefKey(ref));
   }
-  function publicState(state: HostedState): HostedState {
-    const providers = state.providers.map(provider => ({ ...provider,
+  function publicProviders(providers: HostedProvider[]): HostedProvider[] {
+    return copy(providers.map(provider => ({ ...provider,
       models: provider.models.filter(model => options.policy.models.some(permission => permission.providerId === provider.providerId && permission.modelId === model.id) || options.policy.collections.some(collection => collection.owner.providerId === provider.providerId && collection.owner.modelId === model.id)),
-      entries: provider.entries.filter(entry => visible(state.providers, { providerId: provider.providerId, modelId: entry.modelId, recordId: entry.id })),
-    })).filter(provider => provider.models.length || provider.entries.length);
-    return copy({ ...state, providers });
+      entries: provider.entries.filter(entry => visible(providers, { providerId: provider.providerId, modelId: entry.modelId, recordId: entry.id })),
+    })).filter(provider => provider.models.length || provider.entries.length));
+  }
+  function publicState(state: HostedState): HostedState {
+    return copy({ ...state, providers: publicProviders(state.providers) });
+  }
+  /** Browser read projection only. The digest still binds the complete immutable stored candidate,
+   * including protected baseline records; it is not a hash of these scoped providers. The trusted
+   * host's approved renderData is shared unchanged with preview and delivery. */
+  function publicSnapshot(snapshot: HostedSnapshot): HostedSnapshot {
+    const providers = publicProviders(snapshot.providers);
+    // Completeness diagnostics lack provider IDs; recomputing avoids collisions with a hidden provider.
+    const diagnostics = providers.flatMap(provider => provider.entries.flatMap(entry => diagnoseContentEntryCompleteness(provider.models.find(model => model.id === entry.modelId)!, entry)));
+    return copy({ ...snapshot, providers, diagnostics });
+  }
+  function publicResult(result: HostedResult): HostedResult {
+    return copy({ ...result, state: publicState(result.state), ...(result.snapshot ? { snapshot: publicSnapshot(result.snapshot) } : {}) });
   }
   function checkExpected(state: HostedState, expected: HostedIdentities): void {
     if (state.definition !== options.definition || expected.definition !== state.definition) fail("definition-conflict", "Hosted definition changed; explicit reconciliation is required.");
@@ -157,18 +171,19 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
     const existing = database.receipts.find(item => item.actorId === actorId && item.operationKey === command.operationKey);
     if (!existing) return;
     if (existing.fingerprint !== fingerprint) fail("operation-key-reuse", "Operation key is already bound to another immutable request.");
-    return copy(existing.result);
+    return publicResult(existing.result);
   }
   const service: HostedService = {
     async readState(actor) { await authorize(actor); return publicState((await options.storage.read()).state); },
     async readReceipt(actor, operationKey) {
       const trusted = copy(actor);
       await authorize(trusted);
-      return copy((await options.storage.read()).receipts.find(item => item.actorId === trusted.id && item.operationKey === operationKey) ?? null);
+      const stored = (await options.storage.read()).receipts.find(item => item.actorId === trusted.id && item.operationKey === operationKey);
+      return stored ? copy({ ...stored, result: publicResult(stored.result) }) : null;
     },
     async readSnapshot(actor, snapshotId) {
       await authorize(actor);
-      return copy((await options.storage.read()).snapshots.find(snapshot => snapshot.id === snapshotId) ?? fail("not-found", "Snapshot is unavailable."));
+      return publicSnapshot((await options.storage.read()).snapshots.find(snapshot => snapshot.id === snapshotId) ?? fail("not-found", "Snapshot is unavailable."));
     },
     async getPublication(actor, publicationId) {
       await authorize(actor);
@@ -205,7 +220,7 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
             snapshot = database.snapshots.find(item => item.id === command.snapshotId) ?? fail("not-found", "Snapshot is unavailable.");
             checkExpected(database.state, snapshot);
             if (database.publications.some(item => !terminal(item))) fail("publication-busy", "A publication is already active; recover its authoritative status.");
-            if (snapshot.diagnostics.length) throw new HostedContentError("incomplete", "Complete required and accessible values before submission.", copy(snapshot.diagnostics));
+            if (snapshot.diagnostics.length) throw new HostedContentError("incomplete", "Complete required and accessible values before submission.", publicSnapshot(snapshot).diagnostics);
             await options.validateSubmission(copy(snapshot));
             publication = { id: options.createId(), snapshotId: snapshot.id, expectedBaseline: copy(snapshot.baseline), status: "submitted", lastProvenStatus: "submitted", statusVersion: 1 };
             if (database.publications.some(item => item.id === publication!.id)) fail("configuration-required", "Host ID factory returned an existing publication identity.");
@@ -217,7 +232,7 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
           checkGraph(database.state.providers);
           database.state.draftRevision = options.createId();
         }
-        const result: HostedResult = { state: publicState(database.state), ...(createdEntry ? { createdEntry } : {}), ...(snapshot ? { snapshot: copy(snapshot) } : {}), ...(publication ? { publication: copy(publication) } : {}) };
+        const result: HostedResult = { state: publicState(database.state), ...(createdEntry ? { createdEntry } : {}), ...(snapshot ? { snapshot: publicSnapshot(snapshot) } : {}), ...(publication ? { publication: copy(publication) } : {}) };
         database.receipts.push({ actorId, operationKey: command.operationKey, fingerprint, result: copy(result) });
         return result;
       }));

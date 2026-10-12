@@ -9,6 +9,11 @@ coverage/
 *.local
 *.log
 .DS_Store
+/work/
+/fixtures/hosted-content-consumer/renderer/src/snapshot.json
+/fixtures/hosted-content-consumer/renderer/public/preview.js
+/fixtures/hosted-content-consumer/renderer/public/review.js
+/fixtures/hosted-content-consumer/renderer/preview-metafile.json
 
 # Dogfood host runtime data; the demo Assets store is intentionally tracked.
 /cms/*

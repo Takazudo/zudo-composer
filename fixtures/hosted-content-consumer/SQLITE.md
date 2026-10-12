@@ -1,0 +1,72 @@
+# Durable adapter proof
+
+This fixture is outside the tool's pnpm workspace. It uses only the installed
+`zudo-composer/hosted-content` and `zudo-composer/hosted-content/testing` public
+entries. Node **24** is required here for `node:sqlite`; this fixture does not
+change the tool's supported Node versions or add SQLite to a browser or Worker
+bundle. The external installation runner supplies the exact package dependency
+and preserves the standalone lockfile.
+
+Run in the independently installed fixture:
+
+```sh
+node durable-proof.mjs
+```
+
+The report identifies three different proofs:
+
+- The shipped framework-independent runner against the deterministic memory
+  fake, which forces faults and interleavings but demonstrates no disk or
+  process durability.
+- The same runner against independent SQLite connections to an actual file,
+  including close/reopen, receipt recovery, coherent capture, and both
+  existing-entry and newly-created-entry two-publication traces.
+- Separate child processes, each with its own SQLite connection. These race
+  CAS writes, duplicate creation and snapshot capture; inject a real receipt
+  SQL constraint failure; kill a process after aggregate and receipt writes
+  before commit; replace a process after a lost creation acknowledgement;
+  and complete two integrations while preserving newer created-entry edits.
+
+These are SQLite and fake results. Pinsel must run the same public runner
+against its actual D1 adapter; this fixture makes no D1 verification claim.
+
+## SQLite transaction boundary
+
+`initializeSqliteDatabase(filename, seed)` seeds only an absent database.
+`openSqliteHandle(filename)` opens a new connection. A handle supports one
+in-flight operation; callers open separate handles for concurrency. The HTTP
+test transport opens a separate connection for every request.
+
+Every mutation takes a real `BEGIN IMMEDIATE` lock, reads the aggregate and
+receipts, awaits the supplied callback while holding the transaction, updates
+the aggregate, inserts new receipts, and commits with WAL and
+`synchronous=FULL`. SQLite's unique `(actor_id, operation_key)` constraint and
+immutable existing receipts protect committed keys. Callback, aggregate or
+receipt failures roll back together. Returned/read values are detached.
+The fixture stores state, baseline, snapshots and publication intents in one
+aggregate row and stores operation receipts in a separately constrained table.
+A read transaction gives both queries the same database snapshot.
+
+Busy acquisition retries are bounded to eight seconds by default, with capped
+backoff. Only acquiring the transaction is retried; the async callback is
+never automatically replayed. The backend does not prune receipts or recycle
+keys. No shared JavaScript lock supplies cross-process correctness.
+
+`createSqliteConformanceFactory()` supplies the public runner's independent
+handles, fault injection, transaction gates and restart hooks. The process
+proof additionally pauses **after** aggregate and receipt SQL writes to test
+actual process-crash rollback before `COMMIT`.
+
+## Local HTTP checkpoint
+
+`startHostedFixtureServer({ filename, port, fixture })` provides local-only
+`/api/state`, `/api/policy`, `/api/fixture`, `/api/execute`,
+`/api/receipt?key=`, and `/api/publication?id=` endpoints. It binds loopback
+and uses a fixed fixture actor; production authentication belongs to the host.
+`fixture` may contain `database`, `policy`, `project`,
+`validateSubmission`, `validateMarkdown`, and `presentation`.
+The browser checkpoint closes and recreates this backend, then opens an
+independent browser context against the same SQLite file.
+
+The storage module, HTTP server and process runner are fixture code. They
+must never enter the tool's portable, browser/editor or testing runtime graph.

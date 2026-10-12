@@ -22,7 +22,7 @@ const manifest = {
   devDependencies: { esbuild: "0.28.2", "@playwright/test": "1.62.1", tsx: "4.23.12", typescript: "6.0.3", miniflare: "5.20261006.1-alpha" },
 };
 await writeFile(join(destination, "package.json"), JSON.stringify(manifest, null, 2) + "\n");
-await writeFile(join(destination, "pnpm-workspace.yaml"), "packages: []\nautoInstallPeers: false\nstrictPeerDependencies: true\nallowBuilds:\n  esbuild: true\n  workerd: true\n");
+await writeFile(join(destination, "pnpm-workspace.yaml"), "packages: []\nautoInstallPeers: false\nstrictPeerDependencies: true\nallowBuilds:\n  '@zudo-composer/component-contract': true\n  esbuild: true\n  workerd: true\n");
 execFileSync("corepack", ["pnpm", "install"], { cwd: destination, stdio: "inherit" });
 await writeFile(join(destination, "installed-sha.json"), JSON.stringify({ toolSha: sha, contractSha: "c0b452da075b66757c60bd0d721a47062d4354d0", node: process.version, manifest: JSON.parse(await readFile(join(destination, "package.json"), "utf8")) }, null, 2) + "\n");
 console.log(JSON.stringify({ consumer: destination, toolSha: sha }));

@@ -2,7 +2,7 @@
 /** @jsxImportSource @takazudo/zfb/zudo-react */
 import { mount } from "@takazudo/zfb/zudo-react/client";
 import type { RootHandle } from "@takazudo/zfb/zudo-react/client";
-import { createHostedPreviewHost, HostedPreviewError } from "zudo-composer/hosted-content/editor";
+import { createHostedPreviewHost, HostedPreviewError } from "zudo-composer/hosted-content/preview";
 import { HostDocumentBody } from "./OfferPage";
 import { fixedHostDefinition, offerProjection } from "./project";
 import { hostPack, hostRenderer } from "./identity";

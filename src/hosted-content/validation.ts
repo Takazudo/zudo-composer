@@ -103,7 +103,8 @@ export function assertFieldChange(schema: ContentValueSchema, permission: Hosted
     return;
   }
   if (!permission.replace) forbidden(path);
-  if (schema.kind === "url") assertSafeUrl(next as string);
+  // Content permits an empty URL as a type-valid incomplete draft; approved asset URLs do not.
+  if (schema.kind === "url" && next !== "") assertSafeUrl(next as string);
   if (schema.kind === "markdown") { assertSafeMarkdown(next as string); validateMarkdown?.(next as string); }
 }
 function containsProtected(schema: ContentValueSchema): boolean {

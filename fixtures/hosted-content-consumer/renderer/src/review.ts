@@ -1,4 +1,4 @@
-import { buildHostedPreviewLocation, createHostedPreviewController } from "zudo-composer/hosted-content/editor";
+import { buildHostedPreviewLocation, createHostedPreviewController } from "zudo-composer/hosted-content/preview";
 import { hostPack, hostRenderer } from "./identity";
 import snapshot from "./snapshot.json";
 const frame = document.querySelector<HTMLIFrameElement>("#snapshot-preview");

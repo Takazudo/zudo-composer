@@ -54,7 +54,11 @@
       "types": "./server/hosted-content/testing.d.mts",
       "default": "./server/hosted-content/testing.mjs"
     },
-    "./hosted-content/editor.css": "./server/hosted-content/editor.css"
+    "./hosted-content/editor.css": "./server/hosted-content/editor.css",
+    "./hosted-content/preview": {
+      "types": "./server/hosted-content/preview.d.mts",
+      "default": "./server/hosted-content/preview.mjs"
+    }
   },
   "files": [
     "bin",

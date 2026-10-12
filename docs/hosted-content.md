@@ -15,7 +15,9 @@ import { runHostedContentConformance } from "zudo-composer/hosted-content/testin
 ```
 
 The domain and testing entries are portable. The editor is a separate browser
-entry. `zudo-composer/site-build` remains the Node compilation boundary;
+entry. Hosts with their own rendering framework import the isolated browser
+receiver/controller from `zudo-composer/hosted-content/preview`; this entry has
+no Preact/CodeMirror or editor CSS dependency. `zudo-composer/site-build` remains the Node compilation boundary;
 `zudo-composer/site-project` remains types only. No provider credentials,
 filesystem implementation or full application controller enters the new entries.
 
@@ -34,6 +36,11 @@ protected structure, asset catalog and policy revision. A baseline binds an exac
 canonical Git SHA and integrated content digest. The storage-issued draft token
 covers the entire draft and its baseline association. These are separate
 identities; neither a browser edit counter nor a matching text digest replaces CAS.
+
+Public snapshot responses contain the policy-visible record slice and the trusted
+host's approved render projection. The complete delivery candidate stays in the
+storage adapter for privileged submission/integration. Its digest identifies that
+complete immutable stored candidate; it is not a hash of the filtered browser DTO.
 
 Authenticate every request before calling the service. `authorize` must verify
 the current actor's access to the fixed site, including receipt and status reads.

@@ -134,13 +134,11 @@ export class HostedContentSession {
     let requestRejected = false;
     try {
       await this.persist();
-      const receipt = await this.options.transport.readReceipt(active.request.operationKey);
+      // Executing the exact request lets the server verify its fingerprint.
+      // A receipt key alone cannot prove that it belongs to this payload.
       let response: HostedResult;
-      if (receipt) response = receipt.result;
-      else {
-        try { response = await this.options.transport.execute(active.request); }
-        catch (error) { requestRejected = !!rejectionCode(error); throw error; }
-      }
+      try { response = await this.options.transport.execute(active.request); }
+      catch (error) { requestRejected = !!rejectionCode(error); throw error; }
       const result = copy(response);
       this.acknowledged = result.state;
       if (active.request.kind === "set-fields") {
@@ -158,7 +156,7 @@ export class HostedContentSession {
     }
   }
   flush(): Promise<void> {
-    if (this.flight) return this.flight;
+    if (this.flight) return this.flight.then(() => this.flush());
     const work = async () => {
       if (!this.acknowledged) throw new Error("Authoritative content has not loaded");
       if (this.pending) await this.resolvePending();
@@ -187,8 +185,10 @@ export class HostedContentSession {
     const result = await this.command({ kind: "capture-snapshot" });
     if (!result.snapshot) throw new Error("Snapshot result is missing");
     const snapshot = immutable(result.snapshot);
+    const stale = () => generation !== this.previewGeneration || this.revision !== revision || this.edits.length > 0 || !!this.pending || this.acknowledged?.draftRevision !== snapshot.draftRevision;
+    if (stale()) throw new Error("Preview became stale after a local edit");
     await this.options.preview.render(snapshot, routeId);
-    if (generation !== this.previewGeneration || this.revision !== revision || this.edits.length || this.pending || this.acknowledged?.draftRevision !== snapshot.draftRevision) throw new Error("Preview became stale after a local edit");
+    if (stale()) throw new Error("Preview became stale after a local edit");
     this.reviewed = snapshot; this.reviewedRoute = routeId; this.emit(); return snapshot;
   }
   async submit(): Promise<HostedPublication> {

@@ -19,7 +19,7 @@ snapshot projection. The styleguide fixture is a host-owned catalog route
 using the engine's public registry and `Story` contract. It does not exercise
 the optional full zudo-doc catalog chrome.
 
-The preview uses Composer's public guarded document receiver. Its render
+The preview uses Composer's public `zudo-composer/hosted-content/preview` guarded document receiver. This separate entry keeps Preact/editor code out of the visitor graph. Its render
 callback mounts zudo-react, checks the fixed route and waits for approved image
 decoding before the receiver acknowledges that exact snapshot. The parent review
 fixture uses the public controller and displays its rendered state plus snapshot

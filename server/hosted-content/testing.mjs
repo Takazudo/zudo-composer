@@ -1,4 +1,4 @@
-import { t as createHostedContentService } from "./chunks/service-CldmMJ09.mjs";
+import { t as createHostedContentService } from "./chunks/service-CsQNfrr5.mjs";
 //#region src/hosted-content/testing.ts
 /**
 * Deterministic fault/interleaving reference only. This fake does not demonstrate
@@ -581,6 +581,13 @@ async function runHostedContentConformance(factory) {
 			snapshotId: s1.id
 		})).publication;
 		assert(p1, "first publication intent durably created");
+		await errorCode(() => two.execute(actor, {
+			kind: "begin-publication",
+			operationKey: "competing-publication",
+			expected: identities(current),
+			snapshotId: s1.id
+		}), "publication-busy");
+		equal((await a.storage.read()).publications.length, 1, "one active publication cannot be overwritten");
 		const saveGate = b.holdNextTransaction();
 		const pendingB = two.execute(actor, edit(current, "save-b", "B", target));
 		await saveGate.entered;
@@ -603,12 +610,22 @@ async function runHostedContentConformance(factory) {
 		}, "baseline advances to A");
 		assert(integratedA.draftRevision !== savedB.state.draftRevision, "integration advances CAS revision");
 		equal(await two.execute(actor, edit(current, "save-b", "B", target)), savedB, "exact save replay survives baseline advancement");
+		const recoveredP1 = await one.execute(actor, {
+			kind: "begin-publication",
+			operationKey: "publication-a",
+			expected: identities(current),
+			snapshotId: s1.id
+		});
+		equal(recoveredP1.snapshot, s1, "accepted publication replay retains original reviewed snapshot after B save and integration");
+		equal(recoveredP1.publication, p1, "accepted publication replay retains original publication receipt");
+		if (isNewEntry) equal(integratedA.providers[0].entries.find((entry) => entry.id === target.recordId)?.lifecycle, "draft", "newer created Entry B remains working draft after A integration");
 		const s2 = (await two.execute(actor, {
 			kind: "capture-snapshot",
 			operationKey: "snapshot-b",
 			expected: identities(integratedA)
 		})).snapshot;
 		equal(s2.providers.find((provider) => provider.providerId === target.providerId)?.entries.find((entry) => entry.id === target.recordId)?.values[field], "B", "second delivery candidate contains B including created entry");
+		if (isNewEntry) equal(s2.providers[0].entries.find((entry) => entry.id === target.recordId)?.lifecycle, "published", "second immutable delivery includes the still-draft created Entry B");
 		const p2 = (await two.execute(actor, {
 			kind: "begin-publication",
 			operationKey: "publication-b",
@@ -631,6 +648,7 @@ async function runHostedContentConformance(factory) {
 			gitSha: "2".repeat(40),
 			contentDigest: s2.digest
 		}, "baseline advances to B");
+		if (isNewEntry) equal(integratedB.providers[0].entries.find((entry) => entry.id === target.recordId)?.lifecycle, "published", "matching newly integrated Entry B may be marked clean");
 		const beforeLate = await reopened.storage.read();
 		await recovery.recordConfirmedIntegration({
 			publicationId: p1.id,

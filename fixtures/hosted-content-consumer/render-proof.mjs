@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile, copyFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { createFixtureSeed, createFixtureService, fixtureActor, fixtureEntry } from "./fixture-data.mjs";
+import { createFixtureSeed, createFixtureService, fixtureActor } from "./fixture-data.mjs";
 import { initializeSqliteDatabase, openSqliteHandle } from "./sqlite-storage.mjs";
 import { projectHostedContent } from "./renderer/src/project.ts";
 export const rendererRoot = join(dirname(fileURLToPath(import.meta.url)), "renderer");
@@ -25,10 +25,12 @@ export async function prepareRenderProof(filename) {
     const captured = await service.execute(fixtureActor, { kind: "capture-snapshot", operationKey: "render-capture", expected: identities(state) });
     const snapshot = captured.snapshot;
     assert(snapshot && snapshot.renderData.questions[0].id === created.createdEntry.recordId);
-    assert.equal(snapshot.providers[0].entries.find(entry => entry.id === created.createdEntry.recordId).lifecycle, "draft");
+    assert.equal(state.providers[0].entries.find(entry => entry.id === created.createdEntry.recordId).lifecycle, "draft", "Creation remains a draft in durable authoring state; the reviewed delivery candidate includes it");
     await mkdir(join(rendererRoot, "src"), { recursive: true });
     await writeFile(join(rendererRoot, "src/snapshot.json"), JSON.stringify(snapshot, null, 2));
-    await writeFile(join(rendererRoot, "public/approved.svg"), '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#d3b779"/><circle cx="160" cy="90" r="50" fill="#172b36"/></svg>');
+    const assetBytes = await readFile(join(rendererRoot, "public/approved.svg"));
+    const { createHash } = await import("node:crypto");
+    assert.equal(createHash("sha256").update(assetBytes).digest("hex"), snapshot.assets[0].checksum, "Approved asset bytes must match the saved pin");
     return snapshot;
   } finally { handle.close(); }
 }
