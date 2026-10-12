@@ -219,11 +219,11 @@ corepack pnpm verify-root-git-install [-- --sha <40-hex>]
 ```
 
 `verify-root-git-install` proves the whole-root Git install Pinsel pins: in a
-temporary directory outside the repository it runs
-`pnpm add zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<sha>`
+temporary directory outside the repository it declares
+`zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<sha>`
 together with the component contract's package-root commit from
-`contract-handoff.json`, asserts the lockfile records both full commits and no
-`file:`/`link:`/`workspace:`/`path:` entry, reinstalls with
+`contract-handoff.json`, resolves a fresh lockfile, asserts it records both
+full commits and no `file:`/`link:`/`workspace:`/`path:` entry, installs with
 `--frozen-lockfile`, imports every public subpath, checks the installed
 portable output byte for byte against the checkout, and runs the same probe
 and strict consumer type checks as `public:installed`. The commit must already

@@ -3,8 +3,9 @@
 // to the component contract's package-root commit, with nothing from this
 // checkout: no sibling path, no tarball, no workspace. The consumer lives in a
 // temporary directory outside the repository, resolves both packages from
-// GitHub, reinstalls under --frozen-lockfile, imports every public subpath
-// and runs the same public-entry probe the packed-install proof uses.
+// GitHub into a fresh lockfile, installs under --frozen-lockfile, imports
+// every public subpath and runs the same public-entry probe the packed-install
+// proof uses.
 //
 // Usage: node scripts/verify-root-git-install.mjs [--sha <40-hex>]
 // The commit defaults to HEAD and must already be reachable on the public
@@ -62,27 +63,29 @@ try {
   await mkdir(join(host, "components"), { recursive: true });
   await mkdir(join(host, "styles"), { recursive: true });
   await writeFile(join(host, "package.json"), `${JSON.stringify({
-    name: "root-git-install-proof", private: true, version: "0.0.0", type: "module", packageManager: toolPackage.packageManager,
+    name: "public-entry-host", private: true, version: "0.0.0", type: "module", packageManager: toolPackage.packageManager,
     exports: { "./components": "./components/pack.mjs" },
-    dependencies: { preact: toolPackage.peerDependencies.preact },
+    // Written verbatim rather than through `pnpm add`, which rewrites the spec
+    // to the `github:` shorthand; the host keeps the exact spec it pins.
+    dependencies: { "zudo-composer": toolSpec, [contractHandoff.packageName]: contractHandoff.rootGitSpec, preact: toolPackage.peerDependencies.preact },
     // The consumer type check needs the same TypeScript/Vite identities the packed proof uses.
     devDependencies: { typescript: toolPackage.devDependencies.typescript, "@types/node": toolPackage.devDependencies["@types/node"], vite: toolPackage.dependencies.vite },
   }, null, 2)}\n`);
   // No workspace packages, no overrides: the only way to the tool is the Git spec.
   await writeFile(join(host, "pnpm-workspace.yaml"), `packages: []\nstrictPeerDependencies: true\nallowBuilds:\n  '${contractHandoff.packageName}': true\n  esbuild: true\n`);
-  await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "root-git-install-proof/components" });\n');
+  await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "public-entry-host/components" });\n');
   await writeFile(join(host, "components/pack.mjs"), `import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
 export function Banner() { return null; }
-export const componentPack = defineComponentPack({ packId: "root-git-install-proof", packVersion: "1.0.0", components: [defineComponent()(Banner, {
+export const componentPack = defineComponentPack({ packId: "public-entry-host", packVersion: "1.0.0", components: [defineComponent()(Banner, {
   id: "proof.banner", schemaVersion: 1, title: "Banner", category: "Proof", description: "Root Git install proof",
-  source: { module: "root-git-install-proof/components", exportKind: "named", exportName: "Banner" },
+  source: { module: "public-entry-host/components", exportKind: "named", exportName: "Banner" },
   defaults: { headline: "Banner" }, fields: [{ prop: "headline", label: "Headline", schema: { type: "string" }, editor: { kind: "text" } }],
 })] });\n`);
   await copyFile(join(root, "templates/host/styles/base.css"), join(host, "styles/base.css"));
   for (const file of ["probe.mjs", "types.mts"]) await copyFile(join(root, "scripts/fixtures/public-install", file), join(host, file));
   await copyFile(join(root, "type-tests/site-project.ts"), join(host, "site-project.ts"));
 
-  await pnpm(["add", `zudo-composer@${toolSpec}`, `${contractHandoff.packageName}@${contractHandoff.rootGitSpec}`], host);
+  await pnpm(["install", "--lockfile-only"], host);
   const manifest = JSON.parse(await readFile(join(host, "package.json"), "utf8"));
   assert.equal(manifest.dependencies["zudo-composer"], toolSpec, "package.json must retain the exact root Git spec");
   assert.equal(manifest.dependencies[contractHandoff.packageName], contractHandoff.rootGitSpec, "package.json must retain the exact contract Git spec");
@@ -93,7 +96,6 @@ export const componentPack = defineComponentPack({ packId: "root-git-install-pro
   assertNoLocalProtocols(manifest.dependencies["zudo-composer"], "tool dependency spec");
   assert.ok(!lock.includes("&path:"), "lockfile must not record a Git subdirectory selector");
 
-  await rm(join(host, "node_modules"), { recursive: true, force: true });
   await pnpm(["install", "--frozen-lockfile"], host);
   assert.equal(await readFile(join(host, "pnpm-lock.yaml"), "utf8"), lock, "frozen reinstall must not rewrite the lockfile");
 
