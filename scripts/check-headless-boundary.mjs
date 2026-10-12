@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
-const roots = ['src/shared', 'src/composer', 'src/content', 'src/assets', 'src/mapping', 'src/site-project', 'plugins'].map((entry) => path.join(repositoryRoot, entry));
+const roots = ['src/shared', 'src/composer', 'src/content', 'src/assets', 'src/mapping', 'src/site-project', 'src/hosted-content', 'plugins'].map((entry) => path.join(repositoryRoot, entry));
 /** @type {string[]} */
 const files = [];
 /** @type {string[]} */
@@ -63,7 +63,7 @@ for (const file of files) {
 const BROWSER_STORAGE = /\b(?:localStorage|sessionStorage|indexedDB|IDBDatabase|IDBFactory|IDBOpenDBRequest|IDBTransaction)\b/;
 const persistenceRoots = [
   'src/composer/storage', 'src/content/storage', 'src/mapping/storage', 'src/sitemapper/storage', 'src/assets/storage',
-  'src/site-project', 'src/features/release', 'src/shared', 'server', 'plugins',
+  'src/site-project', 'src/hosted-content', 'src/features/release', 'src/shared', 'server', 'plugins',
 ];
 const persistenceFiles = [
   'src/app/workspace-storage.ts', 'src/app/workspace-seeding.ts', 'src/app/workspace-snapshot.ts', 'src/app/provider-integration.ts',
@@ -89,14 +89,14 @@ for (const file of persistenceScanned) {
 // Mapping is allowed to consume only the pure catalog/model seams required to
 // resolve provider-qualified Content and Composition references.
 const mappingImports = files.filter((file) => file.includes(`${path.sep}src${path.sep}mapping${path.sep}`));
-const contentAndMapping = files.filter((file) => file.includes(`${path.sep}src${path.sep}content${path.sep}`) || file.includes(`${path.sep}src${path.sep}mapping${path.sep}`) || file.includes(`${path.sep}src${path.sep}site-project${path.sep}`));
+const contentAndMapping = files.filter((file) => file.includes(`${path.sep}src${path.sep}content${path.sep}`) || file.includes(`${path.sep}src${path.sep}mapping${path.sep}`) || file.includes(`${path.sep}src${path.sep}site-project${path.sep}`) || file.includes(`${path.sep}src${path.sep}hosted-content${path.sep}`));
 for (const file of contentAndMapping) {
   const source = await readFile(file, 'utf8');
   const content = boundarySource(source, { fileName: file });
   const code = boundarySource(source, { fileName: file, strings: false });
   if (/\b(?:window|localStorage)\b|globalThis\.document|\bHTMLElement\b/.test(code)) violations.push(`${path.relative(repositoryRoot, file)}: headless DOM dependency`);
   if (/\b(?:legacy|migration|migrate|compatibility shim|fallback registry)\b/i.test(code)) violations.push(`${path.relative(repositoryRoot, file)}: legacy or migration compatibility`);
-  if (file.includes(`${path.sep}src${path.sep}site-project${path.sep}`) && /(?:from|import\()\s*["'](?:node:)?(?:fs|path|os|url|child_process)["']/.test(content)) {
+  if ((file.includes(`${path.sep}src${path.sep}site-project${path.sep}`) || file.includes(`${path.sep}src${path.sep}hosted-content${path.sep}`)) && /(?:from|import\()\s*["'](?:node:)?(?:fs|path|os|url|child_process|crypto)["']/.test(content)) {
     violations.push(`${path.relative(repositoryRoot, file)}: headless Node dependency`);
   }
 }
