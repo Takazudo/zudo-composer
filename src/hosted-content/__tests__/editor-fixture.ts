@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { createContentEntryRecord, createContentModelRecord } from "../../content/library/helpers";
 import type { ContentFieldDefinition, ContentValueSchema } from "../../content/model/types";
 import { createHostedContentService } from "../service";
-import type { HostedCommand, HostedDatabase, HostedPolicy, HostedStorage, HostedTransport, JsonValue } from "../types";
+import { createMemoryHostedStorage } from "../testing";
+import type { HostedCommand, HostedDatabase, HostedPolicy, HostedTransport, JsonValue } from "../types";
 const stamp = "2026-01-01T00:00:00.000Z";
 export const page = { providerId: "content", modelId: "page", recordId: "home" };
 export const faq = { providerId: "content", modelId: "faq", recordId: "faq-a" };
@@ -24,7 +25,7 @@ export function editorFixture(options: { numericResults?: boolean; nestedNumeric
     createContentEntryRecord("faq", { question: "First question", answer: "First answer" }, { id: "faq-a", timestamp: stamp }),
     createContentEntryRecord("faq", { question: "Detached question", answer: "Detached answer" }, { id: "faq-detached", timestamp: stamp }),
     createContentEntryRecord("faq", { question: "Private question", answer: "Hidden" }, { id: "private", timestamp: stamp })] }];
-  let database: HostedDatabase = { state: { draftRevision: "r0", baseline: { gitSha: "g0", contentDigest: "c0" }, definition: "d0", integrationFence: 0, providers }, baselineProviders: structuredClone(providers), snapshots: [], receipts: [], publications: [] };
+  const memory = createMemoryHostedStorage({ state: { draftRevision: "r0", baseline: { gitSha: "g0", contentDigest: "c0" }, definition: "d0", integrationFence: 0, providers }, baselineProviders: structuredClone(providers), snapshots: [], receipts: [], publications: [] });
   const policy: HostedPolicy = {
     models: [{ providerId: "content", modelId: "page", entryIds: ["home"], fields: [
       ...["title", "price", "enabled", "summary", "date", "url", "color", "choice", "notes"].map((fieldId) => ({ fieldId, replace: true, clear: true })),
@@ -36,11 +37,7 @@ export function editorFixture(options: { numericResults?: boolean; nestedNumeric
     collections: [{ id: "questions", owner: page, fieldId: "questions", target: { providerId: "content", modelId: "faq" }, create: true, add: true, reorder: true, maxItems: 5, initialValues: { question: "新しい質問", answer: "新しい回答" } }],
     assets: ["first", "second"].map((assetId) => ({ providerId: "assets", assetId, versionId: "v1", checksum: `sha-${assetId}`, url: `/${assetId}.png`, label: assetId })),
   };
-  let queue = Promise.resolve();
-  const storage: HostedStorage = { read: async () => structuredClone(database), transaction<T>(work: (database: HostedDatabase) => Promise<T>): Promise<T> {
-    const pending = queue.then(async () => { const candidate = structuredClone(database); const result = await work(candidate); database = candidate; return structuredClone(result); });
-    queue = pending.then(() => undefined, () => undefined); return pending;
-  } };
+  const storage = memory.storage;
   let id = 0;
   const service = createHostedContentService({ siteId: "test", definition: "d0", storage, policy, authorize: () => undefined,
     digest: async (value) => createHash("sha256").update(value).digest("hex"), createId: () => `server-${++id}`, now: () => stamp,
@@ -50,5 +47,5 @@ export function editorFixture(options: { numericResults?: boolean; nestedNumeric
     readState: () => service.readState(actor), readReceipt: (key) => service.readReceipt(actor, key), getPublication: (id) => service.getPublication(actor, id),
     execute: (request) => { requests.push(request); return service.execute(actor, request); },
   };
-  return { transport, policy, service, actor, requests, database: () => structuredClone(database), replace: (next: HostedDatabase) => { database = next; } };
+  return { transport, policy, service, actor, requests, database: () => memory.dump(), replace: (next: HostedDatabase) => memory.replace(next) };
 }

@@ -14,20 +14,20 @@ process.on("message", async message => {
     let result;
     switch (message.action) {
       case "read": result = await service.readState(actor); break;
-      case "database": result = await handle.storage.read(); break;
+      case "database": result = await handle.dump(); break;
       case "execute": result = await service.execute(actor, message.request); break;
       case "receipt": result = await service.readReceipt(actor, message.operationKey); break;
       case "snapshot": result = await service.readSnapshot(actor, message.snapshotId); break;
       case "publication": result = await service.getPublication(actor, message.publicationId); break;
       case "integration": result = await service.recordConfirmedIntegration(message.evidence); break;
       case "status": result = await service.recordStatus(message.evidence); break;
-      case "fault": handle.faultNextTransaction(message.fault); result = true; break;
+      case "fault": handle.faultNextCommit(message.fault); result = true; break;
       case "hold":
-        gate = handle.holdNextTransaction();
-        void gate.entered.then(() => process.send({ event: "transaction-held" }));
+        gate = handle.holdNextCommit();
+        void gate.entered.then(() => process.send({ event: "commit-prepared" }));
         result = true; break;
       case "hold-commit":
-        gate = handle.holdNextCommit();
+        gate = handle.holdNextDurableCommit();
         void gate.entered.then(() => process.send({ event: "commit-held" }));
         result = true; break;
       case "release": gate?.release(); result = true; break;

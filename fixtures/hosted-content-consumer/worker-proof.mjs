@@ -4,13 +4,12 @@ import { build } from "esbuild";
 import { Miniflare } from "miniflare";
 
 const result = await build({ stdin: { contents: `
-import { runHostedContentConformance, createMemoryHostedConformanceFactory, createHostedContentConformanceSeed, createHostedContentConformancePolicy } from "zudo-composer/hosted-content/testing";
+import { runHostedContentConformance, createMemoryHostedConformanceFactory, createMemoryHostedStorage, createHostedContentConformanceSeed, createHostedContentConformancePolicy } from "zudo-composer/hosted-content/testing";
 import { canonicalSerialize, createHostedContentService } from "zudo-composer/hosted-content";
 export default { async fetch() {
   const report = await runHostedContentConformance(createMemoryHostedConformanceFactory());
-  let database = createHostedContentConformanceSeed();
   const service = createHostedContentService({ siteId: "worker-proof", definition: "definition-v1", policy: createHostedContentConformancePolicy(),
-    storage: { async read() { return structuredClone(database); }, async transaction(work) { const candidate = structuredClone(database); const value = await work(candidate); database = candidate; return value; } },
+    storage: createMemoryHostedStorage(createHostedContentConformanceSeed()).storage,
     authorize(actor) { if (actor.id !== "allowed-editor") throw Error("Unauthorized"); }, createId: () => crypto.randomUUID(), now: () => "2026-01-01T00:00:00.000Z",
     digest: async value => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))), byte => byte.toString(16).padStart(2, "0")).join(""),
     project: (providers, assets) => ({ providers, assets }), validateSubmission() {} });
@@ -29,7 +28,7 @@ try {
   const response = await worker.dispatchFetch("http://worker.test/");
   assert.equal(response.status, 200);
   const data = await response.json();
-  assert.equal(data.report.scenarios.length, 12);
+  assert.equal(data.report.scenarios.length, 13);
   assert.match(data.digest, /^[a-f0-9]{64}$/);
   assert.equal(data.canonical, '{"bool":false,"text":"日本語","zero":0}');
   console.log(JSON.stringify({ runtime: "local workerd", ...data }));

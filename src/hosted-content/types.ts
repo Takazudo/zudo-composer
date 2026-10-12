@@ -47,14 +47,38 @@ export type HostedCommand = HostedCommandBase & (
 );
 export interface HostedResult { state: HostedState; createdEntry?: ContentEntryRef; snapshot?: HostedSnapshot; publication?: HostedPublication }
 export interface HostedReceipt { actorId: string; operationKey: string; fingerprint: string; result: HostedResult }
+/** Complete logical content of one site's storage, for seeding and fixture inspection only. The service never loads it whole. */
 export interface HostedDatabase {
-  state: HostedState; baselineProviders: HostedProvider[]; receipts: HostedReceipt[];
+  state: HostedState; baselineProviders: HostedProvider[]; activePublicationId?: string | null; receipts: HostedReceipt[];
   snapshots: HostedSnapshot[]; publications: HostedPublication[];
 }
-/** The adapter holds a database transaction across the callback and persists its detached aggregate atomically. */
+/** The one mutable row. Its size is bounded by the working and baseline content, never by history. */
+export interface HostedHead {
+  /** Opaque storage version compared by every commit; it changes on every successful commit. */
+  version: string;
+  state: HostedState; baselineProviders: HostedProvider[]; activePublicationId: string | null;
+}
+/** One conditional write. Receipts and snapshots are insert-only; a publication replaces the row with its id. */
+export interface HostedCommit {
+  expectedVersion: string; head: HostedHead;
+  receipt?: HostedReceipt; snapshot?: HostedSnapshot; publication?: HostedPublication;
+}
+/**
+ * Narrow keyed reads plus one atomic conditional commit, e.g. a single D1 `batch()`.
+ * The service prepares every commit from detached reads, so no transaction stays open across host code,
+ * and retries a refused commit from fresh reads. Every read returns detached data.
+ */
 export interface HostedStorage {
-  read(): Promise<HostedDatabase>;
-  transaction<T>(work: (database: HostedDatabase) => Promise<T>): Promise<T>;
+  readHead(): Promise<HostedHead>;
+  readReceipt(actorId: string, operationKey: string): Promise<HostedReceipt | null>;
+  readSnapshot(snapshotId: string): Promise<HostedSnapshot | null>;
+  readPublication(publicationId: string): Promise<HostedPublication | null>;
+  /**
+   * Write everything or nothing. Resolve false, writing nothing, when the stored head version differs from
+   * `expectedVersion` or the receipt (actorId, operationKey) or snapshot id already exists. Throw only when the
+   * outcome is unknown or storage failed; a throw after a durable write is recovered through the receipt.
+   */
+  commit(change: HostedCommit): Promise<boolean>;
 }
 export interface HostedActor { id: string }
 export interface HostedServiceOptions {
@@ -64,7 +88,7 @@ export interface HostedServiceOptions {
   createId(): string;
   now(): string;
   /** Host-owned pure projection includes the fixed templates, outlets, routes and mappings. No Node compilation per request. */
-  project(providers: HostedProvider[], assets: HostedAsset[]): JsonValue;
+  project(providers: HostedProvider[], assets: HostedAsset[]): JsonValue | Promise<JsonValue>;
   validateSubmission(snapshot: HostedSnapshot): void | Promise<void>;
   validateMarkdown?(value: string): void;
 }
@@ -77,7 +101,8 @@ export interface HostedService {
   recordStatus(evidence: { publicationId: string; snapshotId: string; statusVersion: number; status: HostedPublicationStage; message?: string; facts?: Record<string, string> }): Promise<HostedPublication>;
   recordConfirmedIntegration(evidence: { publicationId: string; snapshotId: string; expectedBaseline: HostedIdentities["baseline"]; gitSha: string; contentDigest: string }): Promise<HostedState>;
 }
-export type HostedErrorCode = "invalid-request" | "invalid-value" | "forbidden" | "not-found" | "revision-conflict" | "baseline-conflict" | "definition-conflict" | "operation-key-reuse" | "publication-busy" | "incomplete" | "configuration-required";
+/** `unavailable` means storage kept refusing a commit; nothing was written and the exact request may be retried. */
+export type HostedErrorCode = "invalid-request" | "invalid-value" | "forbidden" | "not-found" | "revision-conflict" | "baseline-conflict" | "definition-conflict" | "operation-key-reuse" | "publication-busy" | "incomplete" | "configuration-required" | "unavailable";
 export class HostedContentError extends Error {
   constructor(readonly code: HostedErrorCode, message: string, readonly diagnostics?: ContentCompletenessDiagnostic[]) { super(message); this.name = "HostedContentError"; }
 }

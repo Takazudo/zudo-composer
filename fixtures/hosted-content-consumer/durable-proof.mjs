@@ -84,34 +84,35 @@ export async function runSqliteProcessProof() {
     let initial = await a.request("read");
     await a.request("hold");
     const first = a.request("execute", { request: edit(initial, "process-cas-a", "A") });
-    await a.event("transaction-held");
-    const second = b.request("execute", { request: edit(initial, "process-cas-b", "B") });
+    await a.event("commit-prepared");
+    // B commits from the same revision while A's prepared commit waits; A's retry must conflict.
+    const second = await b.request("execute", { request: edit(initial, "process-cas-b", "B") });
     await a.request("release");
-    const outcomes = await Promise.allSettled([first, second]);
-    check(outcomes[0].status, "fulfilled", "held writer commits");
-    check(outcomes[1].status, "rejected", "other process sees CAS conflict");
-    check(outcomes[1].reason.code, "revision-conflict", "cross-process typed conflict");
-    check(title(await b.request("read")), "A", "cross-process CAS retains winner");
+    const outcomes = await Promise.allSettled([first]);
+    check(outcomes[0].status, "rejected", "held process sees CAS conflict");
+    check(outcomes[0].reason.code, "revision-conflict", "cross-process typed conflict");
+    check(title(await a.request("read")), "B", "cross-process CAS retains winner");
+    check(title(second.state), "B", "winner acknowledgement matches storage");
 
     initial = await b.request("read");
     const create = { kind: "create-entry", operationKey: "process-duplicate-create", expected: identity(initial),
       collectionId: "lesson-faqs", values: { question: "新しい質問", answer: "新しい回答" }, before: null };
     await a.request("hold"); const createOne = a.request("execute", { request: create });
-    await a.event("transaction-held"); const createTwo = b.request("execute", { request: create });
-    await a.request("release"); const [createdA, createdB] = await Promise.all([createOne, createTwo]);
+    await a.event("commit-prepared"); const createdB = await b.request("execute", { request: create });
+    await a.request("release"); const createdA = await createOne;
     check(createdA, createdB, "two processes recover exact created identity");
     let database = await b.request("database");
     check(database.state.providers[0].entries.length, 3, "cross-process duplicate creates once");
     check(database.receipts.filter(receipt => receipt.operationKey === create.operationKey).length, 1, "one create receipt");
 
-    // Receipt INSERT fails after the aggregate UPDATE, and SQLite rolls both back.
+    // Receipt INSERT fails after the head UPDATE, and SQLite rolls both back.
     const beforeFailure = await a.request("database");
     await a.request("fault", { fault: "receipt-persistence" });
     const failedWrite = await Promise.allSettled([a.request("execute", { request: edit(beforeFailure.state, "receipt-failed", "bad") })]);
     check(failedWrite[0].status, "rejected", "receipt constraint failure reaches caller");
-    check(await b.request("database"), beforeFailure, "aggregate update rolled back with actual receipt SQL failure");
+    check(await b.request("database"), beforeFailure, "head update rolled back with actual receipt SQL failure");
 
-    // Kill after both aggregate UPDATE and receipt INSERT, before the real COMMIT.
+    // Kill after both head UPDATE and receipt INSERT, before the real COMMIT.
     await a.request("hold-commit");
     const aborted = a.request("execute", { request: edit(beforeFailure.state, "crash-before-commit", "bad") });
     const abortedOutcome = Promise.allSettled([aborted]);
@@ -136,13 +137,14 @@ export async function runSqliteProcessProof() {
 
     // Multi-record creation races a capture from the prior revision in two processes.
     const e = await open("process-e"); const current = await d.request("read");
-    await d.request("hold");
-    const writing = d.request("execute", { request: { kind: "create-entry", operationKey: "process-capture-write",
-      expected: identity(current), collectionId: "lesson-faqs", values: {}, before: null } });
-    await d.event("transaction-held");
+    await e.request("hold");
     const capture = e.request("execute", { request: { kind: "capture-snapshot", operationKey: "process-race-capture",
       expected: identity(current) } });
-    const captureOutcome = Promise.allSettled([capture]); await d.request("release"); await writing;
+    const captureOutcome = Promise.allSettled([capture]);
+    await e.event("commit-prepared");
+    await d.request("execute", { request: { kind: "create-entry", operationKey: "process-capture-write",
+      expected: identity(current), collectionId: "lesson-faqs", values: {}, before: null } });
+    await e.request("release");
     check((await captureOutcome)[0].reason.code, "revision-conflict", "cross-process capture refuses mixed prior revision");
     const latest = await e.request("read");
     const captured = await e.request("execute", { request: { kind: "capture-snapshot", operationKey: "process-coherent-capture",
@@ -156,14 +158,15 @@ export async function runSqliteProcessProof() {
     // Two complete publications of a newly created Entry, with B racing integration A.
     const publicationA = (await d.request("execute", { request: { kind: "begin-publication",
       operationKey: "process-publication-a", expected: identity(latest), snapshotId: captured.snapshot.id } })).publication;
-    await e.request("hold");
-    const savingB = e.request("execute", { request: { kind: "set-fields", operationKey: "process-new-entry-b",
-      expected: identity(latest), entry: createdA.createdEntry, values: { question: "新しいB" }, clear: [] } });
-    await e.event("transaction-held");
     const evidenceA = { publicationId: publicationA.id, snapshotId: captured.snapshot.id,
       expectedBaseline: publicationA.expectedBaseline, gitSha: "1".repeat(40), contentDigest: captured.snapshot.digest };
+    await d.request("hold");
     const integrationA = d.request("integration", { evidence: evidenceA });
-    await e.request("release"); await savingB;
+    await d.event("commit-prepared");
+    // Integration A was prepared first; B commits before it, so A's retry must preserve B.
+    await e.request("execute", { request: { kind: "set-fields", operationKey: "process-new-entry-b",
+      expected: identity(latest), entry: createdA.createdEntry, values: { question: "新しいB" }, clear: [] } });
+    await d.request("release");
     const afterA = await integrationA;
     check(afterA.providers[0].entries.find(entry => entry.id === createdA.createdEntry.recordId).values.question,
       "新しいB", "cross-process integration A preserves racing newer Entry B");

@@ -259,7 +259,8 @@ interface HostedReceipt {
     fingerprint: string;
     result: HostedResult;
 }
-type HostedErrorCode = "invalid-request" | "invalid-value" | "forbidden" | "not-found" | "revision-conflict" | "baseline-conflict" | "definition-conflict" | "operation-key-reuse" | "publication-busy" | "incomplete" | "configuration-required";
+/** `unavailable` means storage kept refusing a commit; nothing was written and the exact request may be retried. */
+type HostedErrorCode = "invalid-request" | "invalid-value" | "forbidden" | "not-found" | "revision-conflict" | "baseline-conflict" | "definition-conflict" | "operation-key-reuse" | "publication-busy" | "incomplete" | "configuration-required" | "unavailable";
 interface HostedTransport {
     readState(): Promise<HostedState>;
     execute(request: HostedCommand): Promise<HostedResult>;

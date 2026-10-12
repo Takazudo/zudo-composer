@@ -6,7 +6,7 @@ describe("public hosted Content conformance runner", () => {
     const result = await runHostedContentConformance(createMemoryHostedConformanceFactory());
     expect(result.scenarios).toEqual([
       "independent-cas", "duplicate-create-and-key-reuse", "competing-reorder",
-      "rollback-before-commit", "rollback-receipt-persistence", "rollback-async-callback", "lost-create-ack-restart",
+      "rollback-before-commit", "rollback-receipt-persistence", "conditional-commit-atomicity", "commit-retry-after-bookkeeping", "lost-create-ack-restart",
       "coherent-immutable-capture", "two-integrations-existing-entry", "two-integrations-new-entry",
       "external-baseline-and-definition-conflict", "external-integration-conflict",
     ]);

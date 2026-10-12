@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createContentEntryRecord, createContentModelRecord } from "../../content/library/helpers";
 import { createHostedContentService } from "../service";
+import { createMemoryHostedStorage } from "../testing";
 import { canonicalSerialize } from "../canonical";
 import type { HostedCommand, HostedDatabase, HostedIdentities, HostedPolicy, HostedServiceOptions, HostedStorage, JsonValue } from "../types";
 
@@ -25,22 +26,14 @@ function fixture() {
   const homepage = createContentEntryRecord("page", { title: "初期", price: 10, enabled: true, slug: "home", details: { label: "Visible", secret: "Locked" }, rows: [{ label: "A", secret: "one" }, { label: "B", secret: "two" }], image: { kind: "image", asset: { providerId: "assets", assetId: "first" }, alt: "Image", decorative: false, caption: "" }, faqs: [json(faq)] }, { id: "home", timestamp });
   homepage.lifecycle = "published";
   const providers = [{ providerId: "content", models: [pageModel, faqModel], entries: [homepage, createContentEntryRecord("faq", { question: "Q", answer: "A" }, { id: "one", timestamp }), createContentEntryRecord("faq", { question: "Private", answer: "Never listed" }, { id: "private", timestamp })] }];
-  let database: HostedDatabase = { state: { draftRevision: "r0", baseline: { gitSha: "g0", contentDigest: "c0" }, definition: "definition", providers, integrationFence: 0 }, baselineProviders: structuredClone(providers), snapshots: [], publications: [], receipts: [] };
-  let queue = Promise.resolve(), failCommit = false, loseResponse = false;
-  const storage: HostedStorage = {
-    async read() { return structuredClone(database); },
-    transaction<T>(work: (database: HostedDatabase) => Promise<T>): Promise<T> {
-      const operation = queue.then(async () => {
-        const draft = structuredClone(database), result = await work(draft);
-        if (failCommit) { failCommit = false; throw new Error("receipt persistence failed"); }
-        database = structuredClone(draft);
-        if (loseResponse) { loseResponse = false; throw new Error("response lost"); }
-        return result;
-      });
-      queue = operation.then(() => undefined, () => undefined);
-      return operation;
-    },
-  };
+  const memory = createMemoryHostedStorage({ state: { draftRevision: "r0", baseline: { gitSha: "g0", contentDigest: "c0" }, definition: "definition", providers, integrationFence: 0 }, baselineProviders: structuredClone(providers), snapshots: [], publications: [], receipts: [] });
+  let failCommit = false, loseResponse = false;
+  const storage: HostedStorage = { ...memory.storage, async commit(change) {
+    if (failCommit) { failCommit = false; throw new Error("receipt persistence failed"); }
+    const committed = await memory.storage.commit(change);
+    if (committed && loseResponse) { loseResponse = false; throw new Error("response lost"); }
+    return committed;
+  } };
   const policy: HostedPolicy = {
     models: [{ providerId: "content", modelId: "page", entryIds: ["home"], fields: [
       ...["title", "price", "enabled", "body", "url"].map(fieldId => ({ fieldId, replace: true, clear: true })),
@@ -55,11 +48,11 @@ function fixture() {
   let id = 0;
   const options: HostedServiceOptions = { siteId: "site", definition: "definition", policy, storage, authorize: () => undefined, digest: async value => createHash("sha256").update(value).digest("hex"), createId: () => `id-${++id}`, now: () => timestamp, project: providers => json(providers.map(provider => provider.entries.filter(entry => entry.id !== "private").map(entry => ({ id: entry.id, values: entry.values, lifecycle: entry.lifecycle })))), validateSubmission: () => undefined };
   const service = createHostedContentService(options);
-  const expected = () => identities(database.state);
+  const expected = () => identities(memory.dump().state);
   const set = (operationKey: string, values: Record<string, JsonValue>, entry = page): HostedCommand => ({ kind: "set-fields", operationKey, expected: expected(), entry, values, clear: [] });
   const capture = (operationKey: string): HostedCommand => ({ kind: "capture-snapshot", operationKey, expected: expected() });
   const begin = (operationKey: string, snapshotId: string): HostedCommand => ({ kind: "begin-publication", operationKey, expected: expected(), snapshotId });
-  return { service, storage, options, expected, set, capture, begin, db: () => structuredClone(database), failCommit: () => { failCommit = true; }, loseResponse: () => { loseResponse = true; }, replace: (next: HostedDatabase) => { database = next; } };
+  return { service, storage, options, expected, set, capture, begin, db: () => memory.dump(), failCommit: () => { failCommit = true; }, loseResponse: () => { loseResponse = true; }, replace: (next: HostedDatabase) => memory.replace(next) };
 }
 
 async function rejectsWithoutWrite(f: ReturnType<typeof fixture>, command: unknown, code: string) {
@@ -109,7 +102,7 @@ describe("hosted Content trusted boundary", () => {
     expect(await reopened.execute(actor, command)).toEqual(committed);
     expect(await reopened.readReceipt(actor, command.operationKey)).toEqual(receipt);
     expect(JSON.stringify(await reopened.readReceipt(actor, command.operationKey))).not.toContain("Never listed");
-    await expect(reopened.execute(actor, f.set("fresh-after-definition-change", { title: "New" }))).rejects.toMatchObject({ code: "definition-conflict" });
+    await expect(reopened.execute(actor, f.set("fresh-after-definition-change", { title: "New" }))).rejects.toMatchObject({ code: "configuration-required" });
     const changedRequest = { ...command, expected: { ...command.expected, definition: "new-definition" } };
     await expect(reopened.execute(actor, changedRequest)).rejects.toMatchObject({ code: "operation-key-reuse" });
   });
@@ -152,7 +145,7 @@ describe("hosted Content trusted boundary", () => {
     const f = fixture(), changed = f.db();
     changed.state.providers[0]!.models[0]!.document.fields.find(item => item.id === "price")!.kind = "text";
     f.replace(changed);
-    await rejectsWithoutWrite(f, f.set("stale-definition", { title: "Changed" }), "definition-conflict");
+    await rejectsWithoutWrite(f, f.set("stale-definition", { title: "Changed" }), "configuration-required");
   });
 
   it("compares nested protected leaves and blocks reference lists and disguised list structure", async () => {
@@ -249,7 +242,12 @@ describe("hosted Content trusted boundary", () => {
     const f = fixture(), command: HostedCommand = { kind: "create-entry", operationKey: "create", expected: f.expected(), collectionId: "faqs", values: { question: "Q2", answer: "A2" }, before: null };
     const captured = f.capture("capture");
     const [create, capture] = await Promise.allSettled([f.service.execute(actor, command), f.service.execute(actor, captured)]);
-    expect(create.status).toBe("fulfilled"); expect(capture).toMatchObject({ status: "rejected", reason: { code: "revision-conflict" } });
+    expect(create.status).toBe("fulfilled");
+    // Either order is coherent: a capture that committed first holds exactly the prior revision.
+    if (capture.status === "fulfilled") {
+      expect(capture.value.snapshot!.draftRevision).toBe(captured.expected.draftRevision);
+      expect(capture.value.snapshot!.providers[0]!.entries.map(entry => entry.id)).toEqual(["home", "one", "private"]);
+    } else expect(capture).toMatchObject({ status: "rejected", reason: { code: "revision-conflict" } });
     const { snapshot } = await f.service.execute(actor, f.capture("current"));
     const before = structuredClone(snapshot!);
     expect(snapshot!.providers[0]!.entries.find(entry => entry.id === (create as PromiseFulfilledResult<Awaited<ReturnType<typeof f.service.execute>>>).value.createdEntry!.recordId)?.lifecycle).toBe("published");
@@ -307,9 +305,13 @@ describe("hosted Content trusted boundary", () => {
       f.service.execute(actor, edit),
     ]);
     expect(results[0]!.status).toBe("fulfilled");
-    expect(results[1]).toMatchObject({ status: "rejected", reason: { code: "baseline-conflict" } });
-    expect(f.db().state.providers[0]!.entries[0]!.values.title).toBe("初期");
-    expect(await f.service.readReceipt(actor, edit.operationKey)).toBeNull();
+    // Whichever commits first, integration never overwrites the save: it is fenced or preserved.
+    if (results[1]!.status === "rejected") {
+      expect(results[1]).toMatchObject({ reason: { code: "baseline-conflict" } });
+      expect(f.db().state.providers[0]!.entries[0]!.values.title).toBe("初期");
+      expect(await f.service.readReceipt(actor, edit.operationKey)).toBeNull();
+    } else expect(f.db().state.providers[0]!.entries[0]!.values.title).toBe("Retain in browser");
+    expect(f.db().state.baseline.gitSha).toBe("g1");
   });
 
   it("authorizes exact receipt recovery and rolls back failed host projection/submission validation", async () => {

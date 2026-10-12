@@ -260,17 +260,47 @@ interface HostedReceipt {
     fingerprint: string;
     result: HostedResult;
 }
+/** Complete logical content of one site's storage, for seeding and fixture inspection only. The service never loads it whole. */
 interface HostedDatabase {
     state: HostedState;
     baselineProviders: HostedProvider[];
+    activePublicationId?: string | null;
     receipts: HostedReceipt[];
     snapshots: HostedSnapshot[];
     publications: HostedPublication[];
 }
-/** The adapter holds a database transaction across the callback and persists its detached aggregate atomically. */
+/** The one mutable row. Its size is bounded by the working and baseline content, never by history. */
+interface HostedHead {
+    /** Opaque storage version compared by every commit; it changes on every successful commit. */
+    version: string;
+    state: HostedState;
+    baselineProviders: HostedProvider[];
+    activePublicationId: string | null;
+}
+/** One conditional write. Receipts and snapshots are insert-only; a publication replaces the row with its id. */
+interface HostedCommit {
+    expectedVersion: string;
+    head: HostedHead;
+    receipt?: HostedReceipt;
+    snapshot?: HostedSnapshot;
+    publication?: HostedPublication;
+}
+/**
+ * Narrow keyed reads plus one atomic conditional commit, e.g. a single D1 `batch()`.
+ * The service prepares every commit from detached reads, so no transaction stays open across host code,
+ * and retries a refused commit from fresh reads. Every read returns detached data.
+ */
 interface HostedStorage {
-    read(): Promise<HostedDatabase>;
-    transaction<T>(work: (database: HostedDatabase) => Promise<T>): Promise<T>;
+    readHead(): Promise<HostedHead>;
+    readReceipt(actorId: string, operationKey: string): Promise<HostedReceipt | null>;
+    readSnapshot(snapshotId: string): Promise<HostedSnapshot | null>;
+    readPublication(publicationId: string): Promise<HostedPublication | null>;
+    /**
+     * Write everything or nothing. Resolve false, writing nothing, when the stored head version differs from
+     * `expectedVersion` or the receipt (actorId, operationKey) or snapshot id already exists. Throw only when the
+     * outcome is unknown or storage failed; a throw after a durable write is recovered through the receipt.
+     */
+    commit(change: HostedCommit): Promise<boolean>;
 }
 interface HostedActor {
     id: string;
@@ -285,7 +315,7 @@ interface HostedServiceOptions {
     createId(): string;
     now(): string;
     /** Host-owned pure projection includes the fixed templates, outlets, routes and mappings. No Node compilation per request. */
-    project(providers: HostedProvider[], assets: HostedAsset[]): JsonValue;
+    project(providers: HostedProvider[], assets: HostedAsset[]): JsonValue | Promise<JsonValue>;
     validateSubmission(snapshot: HostedSnapshot): void | Promise<void>;
     validateMarkdown?(value: string): void;
 }
@@ -311,7 +341,8 @@ interface HostedService {
         contentDigest: string;
     }): Promise<HostedState>;
 }
-type HostedErrorCode = "invalid-request" | "invalid-value" | "forbidden" | "not-found" | "revision-conflict" | "baseline-conflict" | "definition-conflict" | "operation-key-reuse" | "publication-busy" | "incomplete" | "configuration-required";
+/** `unavailable` means storage kept refusing a commit; nothing was written and the exact request may be retried. */
+type HostedErrorCode = "invalid-request" | "invalid-value" | "forbidden" | "not-found" | "revision-conflict" | "baseline-conflict" | "definition-conflict" | "operation-key-reuse" | "publication-busy" | "incomplete" | "configuration-required" | "unavailable";
 declare class HostedContentError extends Error {
     readonly code: HostedErrorCode;
     readonly diagnostics?: ContentCompletenessDiagnostic[] | undefined;
@@ -633,4 +664,4 @@ declare function hostedDocumentErrorMessage(request: HostedDocumentRender, code:
 declare function matchesHostedPreviewBinding(a: HostedPreviewBinding, b: HostedPreviewBinding): boolean;
 
 export { COMPOSER_PREVIEW_CHANNEL, COMPOSER_PREVIEW_PROTOCOL_VERSION, HostedContentError, canonicalSerialize, createHostedContentService, hostedDocumentErrorMessage, hostedDocumentErrorSchema, hostedPreviewBindingSchema, hostedPreviewResponseSchema, hostedReadyMessage, hostedReadySchema, hostedRenderMessage, hostedRenderSchema, hostedRenderedMessage, hostedRenderedSchema, matchesHostedPreviewBinding, readHostedPreviewRequest, readHostedPreviewResponse };
-export type { ContentEntryRecord, ContentEntryRef, ContentModelRecord, HostedActor, HostedAsset, HostedCollectionPermission, HostedCommand, HostedDatabase, HostedDocumentError, HostedDocumentRender, HostedDocumentRendered, HostedErrorCode, HostedFieldPermission, HostedIdentities, HostedModelPermission, HostedPolicy, HostedPreviewBinding, HostedPreviewGuardFailure, HostedPreviewResponse, HostedProvider, HostedPublication, HostedPublicationStage, HostedReceipt, HostedRendererIdentity, HostedResult, HostedService, HostedServiceOptions, HostedSnapshot, HostedState, HostedStorage, HostedTransport, MessageEventLike, MessagePoster, MessageTarget, PreviewPackIdentity };
+export type { ContentEntryRecord, ContentEntryRef, ContentModelRecord, HostedActor, HostedAsset, HostedCollectionPermission, HostedCommand, HostedCommit, HostedDatabase, HostedDocumentError, HostedDocumentRender, HostedDocumentRendered, HostedErrorCode, HostedFieldPermission, HostedHead, HostedIdentities, HostedModelPermission, HostedPolicy, HostedPreviewBinding, HostedPreviewGuardFailure, HostedPreviewResponse, HostedProvider, HostedPublication, HostedPublicationStage, HostedReceipt, HostedRendererIdentity, HostedResult, HostedService, HostedServiceOptions, HostedSnapshot, HostedState, HostedStorage, HostedTransport, MessageEventLike, MessagePoster, MessageTarget, PreviewPackIdentity };

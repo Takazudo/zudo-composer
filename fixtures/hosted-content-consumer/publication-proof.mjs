@@ -145,9 +145,8 @@ export async function createFixtureExportSink({ directory, baseline, definition,
 /** Host-owned provider reads complete candidate bytes through its trusted adapter. */
 export function createFixturePublicationProvider({ service, storage, sink }) {
   const raw = async publicationId => {
-    const database = await storage.read();
-    const publication = database.publications.find(item => item.id === publicationId);
-    const snapshot = database.snapshots.find(item => item.id === publication?.snapshotId);
+    const publication = await storage.readPublication(publicationId);
+    const snapshot = publication ? await storage.readSnapshot(publication.snapshotId) : null;
     if (!publication || !snapshot) throw new HostedContentError("not-found", "Stored publication or trusted candidate not found.");
     return { publication, snapshot };
   };
@@ -236,7 +235,7 @@ export async function runFixturePublicationProof({ directory, artifactDirectory 
       values: target.modelId === "faq" ? { question: value } : { title: value }, clear: [] });
   const captureBegin = async (context, state, suffix) => {
     const captured = await context.service.execute(fixtureActor, { kind: "capture-snapshot", operationKey: `capture-${suffix}`, expected: identities(state) });
-    const snapshot = (await context.handle.storage.read()).snapshots.find(item => item.id === captured.snapshot.id);
+    const snapshot = await context.handle.storage.readSnapshot(captured.snapshot.id);
     const begun = await context.service.execute(fixtureActor, { kind: "begin-publication", operationKey: `begin-${suffix}`,
       expected: identities(state), snapshotId: snapshot.id });
     return { snapshot, publication: begun.publication };
@@ -260,7 +259,7 @@ export async function runFixturePublicationProof({ directory, artifactDirectory 
         await context.provider.verify(A.publication.id);
         const independent = openContext();
         const savedB = await save(independent.service, savedA.state, "save-b", newlyCreated ? "新規の質問B" : "講座B", target);
-        check((await context.handle.storage.read()).snapshots.find(item => item.id === A.snapshot.id), originalA, "B save cannot mutate candidate A");
+        check(await context.handle.storage.readSnapshot(A.snapshot.id), originalA, "B save cannot mutate candidate A");
         const remoteA = await sink.confirmIntegration(A.publication.id);
         check((await sink.readRemote()).baseline, { gitSha: remoteA.evidence.gitSha, contentDigest: A.snapshot.digest }, "Remote integration persists before database reconciliation");
         check((await context.service.readState(fixtureActor)).baseline, initial.baseline, "Crash gap leaves database baseline at B0");
@@ -298,7 +297,7 @@ export async function runFixturePublicationProof({ directory, artifactDirectory 
         await context.service.recordStatus({ publicationId: A.publication.id, snapshotId: A.snapshot.id, statusVersion: 999, status: "building" });
         check(await context.service.readState(fixtureActor), afterB, "Late A integration/status cannot regress baseline or clean newer work");
         check((await context.service.getPublication(fixtureActor, A.publication.id)).status, "integrated", "Late A status never claims building after integration");
-        check((await context.handle.storage.read()).snapshots.find(item => item.id === A.snapshot.id), originalA, "Original complete candidate A stays immutable through two integrations");
+        check(await context.handle.storage.readSnapshot(A.snapshot.id), originalA, "Original complete candidate A stays immutable through two integrations");
         check(operationB.snapshot, B.snapshot, "Remote export B uses exact candidate B bytes");
         const name = newlyCreated ? "new-entry" : "existing-entry";
         snapshots.push({ scenario: name, A: originalA, B: B.snapshot, target });
@@ -314,7 +313,7 @@ export async function runFixturePublicationProof({ directory, artifactDirectory 
       check(failed.status, "failed", "Export failure is a persisted provider fact");
       check((await context.service.getPublication(fixtureActor, publication.id)).status, "failed", "Export failure reports failed without live/deployed claim");
       check((await context.service.readState(fixtureActor)), saved.state, "Export failure retains durable draft");
-      check((await context.handle.storage.read()).snapshots[0], snapshot, "Export failure retains immutable candidate");
+      check(await context.handle.storage.readSnapshot(snapshot.id), snapshot, "Export failure retains immutable candidate");
       check((await sink.readRemote()).baseline, saved.state.baseline, "Failed export cannot advance remote baseline");
     });
 
@@ -358,7 +357,7 @@ export async function runFixturePublicationProof({ directory, artifactDirectory 
       await context.provider.synchronize(publication.id);
       check((await context.service.getPublication(fixtureActor, publication.id)).status, "conflict", "Independent canonical base conflict is recoverable provider truth");
       check(await context.service.readState(fixtureActor), saved.state, "External canonical conflict retains draft and original known baseline");
-      check((await context.handle.storage.read()).snapshots[0], snapshot, "External canonical conflict retains exact reviewed candidate");
+      check(await context.handle.storage.readSnapshot(snapshot.id), snapshot, "External canonical conflict retains exact reviewed candidate");
       check((await sink.readRemote()).baseline, external, "Remote CAS never overwrites outside canonical update");
     });
 

@@ -1,20 +1,24 @@
 import { createHostedContentService } from "./service";
 import type {
-  ContentEntryRef, HostedActor, HostedCommand, HostedDatabase, HostedIdentities,
-  HostedPolicy, HostedProvider, HostedResult, HostedService, HostedState, HostedStorage, JsonValue,
+  ContentEntryRef, HostedActor, HostedCommand, HostedCommit, HostedDatabase, HostedHead, HostedIdentities,
+  HostedPolicy, HostedProvider, HostedPublication, HostedReceipt, HostedResult, HostedService, HostedSnapshot, HostedState, HostedStorage, JsonValue,
 } from "./types";
 
 /** These faults occur at the storage boundary, never by forging a service receipt. */
 export type HostedConformanceFault = "before-commit" | "receipt-persistence" | "lost-acknowledgement";
 export interface HostedConformanceGate {
-  /** Resolves while the actual database transaction is held, before its callback runs. */
+  /** Resolves once the next commit was prepared and submitted, before the backend applies it. */
   entered: Promise<void>;
   release(): void;
 }
 export interface HostedConformanceHandle {
   storage: HostedStorage;
-  faultNextTransaction(fault: HostedConformanceFault): void;
-  holdNextTransaction(): HostedConformanceGate;
+  /** `receipt-persistence` must fail an actual statement after the head write inside the same atomic commit. */
+  faultNextCommit(fault: HostedConformanceFault): void;
+  /** Delay applying the next commit. Other handles keep committing, so the held commit must be refused and retried. */
+  holdNextCommit(): HostedConformanceGate;
+  /** Complete logical storage content for assertions; never used by the service. */
+  dump(): Promise<HostedDatabase>;
 }
 export interface HostedConformanceBackend {
   /** Every call must open an independent storage handle. */
@@ -32,14 +36,55 @@ export interface HostedConformanceReport {
   assertions: number;
 }
 
+const receiptKey = (actorId: string, operationKey: string): string => JSON.stringify([actorId, operationKey]);
+interface MemoryData { head: HostedHead; receipts: Map<string, HostedReceipt>; snapshots: Map<string, HostedSnapshot>; publications: Map<string, HostedPublication> }
+function load(seed: HostedDatabase): MemoryData {
+  const database = clone(seed);
+  return { head: { version: "seed", state: database.state, baselineProviders: database.baselineProviders, activePublicationId: database.activePublicationId ?? null },
+    receipts: new Map(database.receipts.map((item) => [receiptKey(item.actorId, item.operationKey), item])),
+    snapshots: new Map(database.snapshots.map((item) => [item.id, item])), publications: new Map(database.publications.map((item) => [item.id, item])) };
+}
+function dumpData(data: MemoryData): HostedDatabase {
+  return clone({ state: data.head.state, baselineProviders: data.head.baselineProviders, activePublicationId: data.head.activePublicationId,
+    receipts: [...data.receipts.values()], snapshots: [...data.snapshots.values()], publications: [...data.publications.values()] });
+}
+/** The conditional write every adapter must implement atomically. */
+function applyCommit(data: MemoryData, change: HostedCommit): MemoryData | null {
+  if (data.head.version !== change.expectedVersion || change.head.version === change.expectedVersion) return null;
+  if (change.receipt && data.receipts.has(receiptKey(change.receipt.actorId, change.receipt.operationKey))) return null;
+  if (change.snapshot && data.snapshots.has(change.snapshot.id)) return null;
+  const next = { head: clone(change.head), receipts: new Map(data.receipts), snapshots: new Map(data.snapshots), publications: new Map(data.publications) };
+  if (change.receipt) next.receipts.set(receiptKey(change.receipt.actorId, change.receipt.operationKey), clone(change.receipt));
+  if (change.snapshot) next.snapshots.set(change.snapshot.id, clone(change.snapshot));
+  if (change.publication) next.publications.set(change.publication.id, clone(change.publication));
+  return next;
+}
+function memoryReads(read: () => MemoryData): Omit<HostedStorage, "commit"> {
+  return {
+    async readHead() { return clone(read().head); },
+    async readReceipt(actorId, operationKey) { return clone(read().receipts.get(receiptKey(actorId, operationKey)) ?? null); },
+    async readSnapshot(snapshotId) { return clone(read().snapshots.get(snapshotId) ?? null); },
+    async readPublication(publicationId) { return clone(read().publications.get(publicationId) ?? null); },
+  };
+}
+
+/** In-process storage for tests and single-isolate examples. It proves no durability or cross-process behavior. */
+export function createMemoryHostedStorage(seed: HostedDatabase): { storage: HostedStorage; dump(): HostedDatabase; replace(database: HostedDatabase): void } {
+  let data = load(seed);
+  return {
+    storage: { ...memoryReads(() => data), async commit(change) { const next = applyCommit(data, clone(change)); if (next) data = next; return !!next; } },
+    dump: () => dumpData(data),
+    replace(database) { const version = data.head.version; data = load(database); data.head.version = `${version}+replaced`; },
+  };
+}
+
 /**
  * Deterministic fault/interleaving reference only. This fake does not demonstrate
  * disk durability, process isolation, SQLite or D1 behavior.
  */
 export function createMemoryHostedConformanceFactory(): HostedConformanceFactory {
   return { async create(seed) {
-    let database = clone(seed);
-    let tail: Promise<void> = Promise.resolve();
+    let data = load(seed);
     let generation = 0;
     let disposed = false;
     return {
@@ -50,29 +95,25 @@ export function createMemoryHostedConformanceFactory(): HostedConformanceFactory
         const check = (): void => {
           if (disposed || openedAt !== generation) throw new Error("Conformance handle is closed");
         };
+        const reads = memoryReads(() => { check(); return data; });
         return {
           storage: {
-            async read() { check(); await tail; check(); return clone(database); },
-            transaction<T>(work: (database: HostedDatabase) => Promise<T>): Promise<T> {
+            ...reads,
+            async commit(change) {
+              check();
               const selectedFault = fault; fault = undefined;
               const selectedGate = held; held = undefined;
-              const pending = tail.then(async () => {
-                check();
-                if (selectedGate) { selectedGate.entered(); await selectedGate.wait; }
-                const detached = clone(database);
-                const result = await work(detached);
-                if (selectedFault === "before-commit" || selectedFault === "receipt-persistence")
-                  throw new Error(`Injected ${selectedFault}`);
-                database = clone(detached);
-                if (selectedFault === "lost-acknowledgement") throw new Error("Injected lost acknowledgement after commit");
-                return clone(result);
-              });
-              tail = pending.then(() => undefined, () => undefined);
-              return pending;
+              const detached = clone(change);
+              if (selectedGate) { selectedGate.entered(); await selectedGate.wait; check(); }
+              if (selectedFault === "before-commit" || selectedFault === "receipt-persistence") throw new Error(`Injected ${selectedFault}`);
+              const next = applyCommit(data, detached);
+              if (next) data = next;
+              if (next && selectedFault === "lost-acknowledgement") throw new Error("Injected lost acknowledgement after commit");
+              return !!next;
             },
           },
-          faultNextTransaction(next) { check(); fault = next; },
-          holdNextTransaction() {
+          faultNextCommit(next) { check(); fault = next; },
+          holdNextCommit() {
             check();
             let release!: () => void; let entered!: () => void;
             const gate = { entered: new Promise<void>((resolve) => { entered = resolve; }),
@@ -80,10 +121,11 @@ export function createMemoryHostedConformanceFactory(): HostedConformanceFactory
             held = { entered, wait: new Promise<void>((resolve) => { release = resolve; }) };
             return gate;
           },
+          async dump() { check(); return dumpData(data); },
         };
       },
-      async restart() { await tail; generation++; },
-      async close() { await tail; disposed = true; generation++; },
+      async restart() { generation++; },
+      async close() { disposed = true; generation++; },
     };
   } };
 }
@@ -205,39 +247,45 @@ export async function runHostedContentConformance(factory: HostedConformanceFact
     } finally { await backend.close(); }
   };
 
+  /** A direct storage write from outside the service, e.g. a canonical change the host has not adopted yet. */
+  const writeHead = async (handle: HostedConformanceHandle, change: (head: HostedHead) => void): Promise<void> => {
+    const head = await handle.storage.readHead(); const next = clone(head); change(next); next.version = `${head.version}+external`;
+    assert(await handle.storage.commit({ expectedVersion: head.version, head: next }), "external head write commits");
+  };
+
   await scenario("independent-cas", async (_backend, a, _b, one, two) => {
     const initial = await one.readState(actor);
-    const gate = a.holdNextTransaction();
+    const gate = a.holdNextCommit();
     const first = one.execute(actor, edit(initial, "cas-a", "A"));
     await gate.entered;
-    const second = two.execute(actor, edit(initial, "cas-b", "B"));
+    // The second writer commits while the first, prepared from the same revision, is held.
+    const second = await two.execute(actor, edit(initial, "cas-b", "B"));
     gate.release();
-    const results = await Promise.allSettled([first, second]);
-    assert(results.filter((result) => result.status === "fulfilled").length === 1, "one CAS write succeeds");
-    const rejected = results.find((result) => result.status === "rejected");
-    assert(rejected?.status === "rejected" && rejected.reason?.code === "revision-conflict", "other CAS write conflicts");
+    await errorCode(() => first, "revision-conflict");
     const saved = await two.readState(actor);
-    equal(value(saved, lesson, "title"), "A", "CAS winner retained");
+    equal(saved, second.state, "CAS winner is the stored state");
+    equal(value(saved, lesson, "title"), "B", "CAS winner retained");
     equal(value(saved, lesson, "faqs"), [faq], "CAS keeps membership");
+    equal(await two.readReceipt(actor, "cas-a"), null, "refused writer has no receipt");
   });
 
   await scenario("duplicate-create-and-key-reuse", async (_backend, a, _b, one, two) => {
     const initial = await one.readState(actor);
     const request: HostedCommand = { kind: "create-entry", operationKey: "create-same", expected: identities(initial),
       collectionId: "lesson-faqs", values: { question: "質問A", answer: "回答A" }, before: null };
-    const gate = a.holdNextTransaction();
+    const gate = a.holdNextCommit();
     const first = one.execute(actor, request); await gate.entered;
-    const second = two.execute(actor, clone(request)); gate.release();
-    const [left, right] = await Promise.all([first, second]);
+    const right = await two.execute(actor, clone(request)); gate.release();
+    const left = await first;
     equal(left, right, "duplicate create returns original exact receipt");
     assert(Boolean(left.createdEntry), "create assigns an entry identity");
-    const db = await a.storage.read();
+    const db = await a.dump();
     equal(db.receipts.length, 1, "duplicate has one receipt");
     equal(db.state.providers[0]?.entries.length, 3, "duplicate creates only one entry");
     equal(value(db.state, lesson, "faqs"), [faq, left.createdEntry], "create atomically appends membership");
     await errorCode(() => two.execute(actor, { ...request, values: { question: "別の質問", answer: "回答A" } }), "operation-key-reuse");
     await errorCode(() => two.execute(actor, { ...request, expected: identities(db.state) }), "operation-key-reuse");
-    equal(await a.storage.read(), db, "key reuse cannot change database");
+    equal(await a.dump(), db, "key reuse cannot change database");
   });
 
   await scenario("competing-reorder", async (_backend, a, _b, one, two) => {
@@ -247,48 +295,68 @@ export async function runHostedContentConformance(factory: HostedConformanceFact
     assert(created.createdEntry, "reorder fixture created");
     const request: HostedCommand = { kind: "reorder", operationKey: "reorder-a", expected: identities(created.state),
       collectionId: "lesson-faqs", entries: [created.createdEntry!, faq] };
-    const gate = a.holdNextTransaction(); const first = one.execute(actor, request); await gate.entered;
-    const second = two.execute(actor, { ...request, operationKey: "reorder-b", entries: [faq, created.createdEntry!] });
+    const winner: HostedCommand = { ...request, operationKey: "reorder-b", entries: [faq, created.createdEntry!] };
+    const gate = a.holdNextCommit(); const first = one.execute(actor, request); await gate.entered;
+    await two.execute(actor, winner);
     gate.release();
-    const results = await Promise.allSettled([first, second]);
-    assert(results[0]?.status === "fulfilled", "first reorder succeeds");
-    assert(results[1]?.status === "rejected" && results[1].reason?.code === "revision-conflict", "concurrent reorder conflicts");
-    equal(value(await two.readState(actor), lesson, "faqs"), request.entries, "winning reorder exact IDs and order");
+    await errorCode(() => first, "revision-conflict");
+    equal(value(await two.readState(actor), lesson, "faqs"), winner.entries, "winning reorder exact IDs and order");
   });
 
   for (const fault of ["before-commit", "receipt-persistence"] as const) {
     await scenario(`rollback-${fault}`, async (_backend, a, _b, one, two) => {
-      const before = await a.storage.read(); a.faultNextTransaction(fault);
+      const before = await a.dump(); a.faultNextCommit(fault);
       let failed = false;
       try { await one.execute(actor, edit(before.state, "rollback", "must-not-persist")); } catch { failed = true; }
       assert(failed, `${fault} reaches caller`);
-      equal(await a.storage.read(), before, `${fault}: aggregate and receipts rollback together`);
+      equal(await a.dump(), before, `${fault}: head and receipts rollback together`);
       equal(await two.readReceipt(actor, "rollback"), null, `${fault}: no successful receipt`);
       const retried = await two.execute(actor, edit(before.state, "rollback", "must-not-persist"));
       equal(value(retried.state, lesson, "title"), "must-not-persist", `${fault}: exact retry can succeed`);
     });
   }
 
-  await scenario("rollback-async-callback", async (_backend, a, b) => {
-    const original = await a.storage.read();
-    let failed = false;
-    try {
-      await a.storage.transaction(async (database) => {
-        database.state.draftRevision = "uncommitted";
-        database.state.providers[0]!.entries[0]!.values.title = "uncommitted";
-        await Promise.resolve();
-        throw new Error("Async callback failed after changing its detached aggregate");
-      });
-    } catch { failed = true; }
-    assert(failed, "async callback failure reaches caller");
-    equal(await b.storage.read(), original, "async callback failure rolls back every aggregate record");
+  await scenario("conditional-commit-atomicity", async (_backend, a, b, one) => {
+    const saved = await one.execute(actor, edit(await one.readState(actor), "atomic-save", "saved"));
+    const captured = await one.execute(actor, { kind: "capture-snapshot", operationKey: "atomic-capture", expected: identities(saved.state) });
+    const before = await b.dump();
+    const head = await a.storage.readHead();
+    const changed = clone(head); changed.version = "atomic-next"; changed.state.draftRevision = "uncommitted";
+    changed.state.providers[0]!.entries[0]!.values.title = "uncommitted";
+    const receipt = await a.storage.readReceipt(actor.id, "atomic-save");
+    const snapshot = await a.storage.readSnapshot(captured.snapshot!.id);
+    assert(receipt && snapshot, "committed receipt and snapshot are readable by key");
+    assert(!await a.storage.commit({ expectedVersion: `${head.version}-stale`, head: changed }), "stale version is refused");
+    assert(!await a.storage.commit({ expectedVersion: head.version, head: changed, receipt: { ...receipt!, fingerprint: "other" } }), "existing receipt key is refused");
+    assert(!await a.storage.commit({ expectedVersion: head.version, head: changed, snapshot: snapshot! }), "existing snapshot id is refused");
+    equal(await b.dump(), before, "refused commits write nothing, including the head");
+    assert(await a.storage.commit({ expectedVersion: head.version, head: changed }), "current version commits");
+    equal((await b.storage.readHead()).version, "atomic-next", "a successful commit stores the new version");
+    equal((await b.storage.readHead()).state, changed.state, "the complete head is replaced atomically");
+  });
+
+  await scenario("commit-retry-after-bookkeeping", async (_backend, a, _b, one, two) => {
+    const initial = await one.readState(actor);
+    const gate = a.holdNextCommit();
+    const first = one.execute(actor, { kind: "capture-snapshot", operationKey: "retry-capture-a", expected: identities(initial) });
+    await gate.entered;
+    // A snapshot advances the storage version but not the draft revision.
+    const second = await two.execute(actor, { kind: "capture-snapshot", operationKey: "retry-capture-b", expected: identities(initial) });
+    gate.release();
+    const retried = await first;
+    assert(retried.snapshot && second.snapshot && retried.snapshot.id !== second.snapshot.id, "refused commit retried from fresh reads");
+    equal(retried.snapshot!.draftRevision, initial.draftRevision, "retried capture keeps its unchanged draft revision");
+    equal(await two.readSnapshot(actor, retried.snapshot!.id), retried.snapshot, "retried snapshot persisted");
+    equal(await two.readSnapshot(actor, second.snapshot!.id), second.snapshot, "concurrent snapshot persisted");
+    equal(await two.execute(actor, { kind: "capture-snapshot", operationKey: "retry-capture-a", expected: identities(initial) }), retried, "retried receipt replays exactly");
+    equal((await a.dump()).receipts.length, 2, "one receipt per operation");
   });
 
   await scenario("lost-create-ack-restart", async (backend, a, _b, one) => {
     const initial = await one.readState(actor);
     const request: HostedCommand = { kind: "create-entry", operationKey: "lost-create", expected: identities(initial),
       collectionId: "lesson-faqs", values: { question: "失われた応答", answer: "保存済み" }, before: null };
-    a.faultNextTransaction("lost-acknowledgement");
+    a.faultNextCommit("lost-acknowledgement");
     let failed = false; try { await one.execute(actor, request); } catch { failed = true; }
     assert(failed, "response loss surfaces uncertainty");
     await backend.restart();
@@ -297,19 +365,20 @@ export async function runHostedContentConformance(factory: HostedConformanceFact
     assert(receipt?.result.createdEntry, "original creation receipt survives restart");
     const replay = await recovered.execute(actor, clone(request));
     equal(replay, receipt?.result, "restart retry returns original receipt and IDs");
-    const db = await reopened.storage.read();
+    const db = await reopened.dump();
     equal(db.state.providers[0]?.entries.length, 3, "lost create response never duplicates entry");
     equal(db.receipts.length, 1, "lost create response never duplicates receipt");
   });
 
   await scenario("coherent-immutable-capture", async (_backend, a, _b, one, two) => {
     const initial = await one.readState(actor);
-    const gate = a.holdNextTransaction();
-    const changing = one.execute(actor, { kind: "create-entry", operationKey: "capture-create", expected: identities(initial),
-      collectionId: "lesson-faqs", values: { question: "coherent", answer: "coherent" }, before: null });
+    const gate = a.holdNextCommit();
+    const capture = one.execute(actor, { kind: "capture-snapshot", operationKey: "capture-race", expected: identities(initial) });
     await gate.entered;
-    const capture = two.execute(actor, { kind: "capture-snapshot", operationKey: "capture-race", expected: identities(initial) });
-    gate.release(); await changing;
+    // A multi-record create commits after the capture was prepared from the prior revision.
+    await two.execute(actor, { kind: "create-entry", operationKey: "capture-create", expected: identities(initial),
+      collectionId: "lesson-faqs", values: { question: "coherent", answer: "coherent" }, before: null });
+    gate.release();
     await errorCode(() => capture, "revision-conflict");
     const latest = await two.readState(actor);
     const captured = await two.execute(actor, { kind: "capture-snapshot", operationKey: "capture-coherent", expected: identities(latest) });
@@ -323,15 +392,15 @@ export async function runHostedContentConformance(factory: HostedConformanceFact
     const changed = await one.execute(actor, edit(latest, "after-capture", "later"));
     equal(await two.readSnapshot(actor, frozen.id), frozen, "later saves cannot mutate captured bytes");
     const published = await two.execute(actor, { kind: "capture-snapshot", operationKey: "current", expected: identities(changed.state) });
-    const staleDb = await a.storage.read();
+    const staleDb = await a.dump();
     await errorCode(() => two.execute(actor, { kind: "begin-publication", operationKey: "stale-submit",
       expected: identities(changed.state), snapshotId: frozen.id }), "revision-conflict");
-    equal(await a.storage.read(), staleDb, "stale submit does not create operation or receipt");
+    equal(await a.dump(), staleDb, "stale submit does not create operation or receipt");
     assert(published.snapshot?.id !== frozen.id, "new revision has independent snapshot identity");
   });
 
   for (const isNewEntry of [false, true]) {
-    await scenario(isNewEntry ? "two-integrations-new-entry" : "two-integrations-existing-entry", async (backend, a, b, one, two) => {
+    await scenario(isNewEntry ? "two-integrations-new-entry" : "two-integrations-existing-entry", async (backend, a, _b, one, two) => {
       let current = await one.readState(actor); let target = lesson;
       let saved: HostedResult;
       if (isNewEntry) {
@@ -345,15 +414,14 @@ export async function runHostedContentConformance(factory: HostedConformanceFact
       assert(p1, "first publication intent durably created");
       await errorCode(() => two.execute(actor, { kind: "begin-publication", operationKey: "competing-publication",
         expected: identities(current), snapshotId: s1.id }), "publication-busy");
-      equal((await a.storage.read()).publications.length, 1, "one active publication cannot be overwritten");
-      const saveGate = b.holdNextTransaction();
-      const pendingB = two.execute(actor, edit(current, "save-b", "B", target));
-      await saveGate.entered;
-      // Integration starts while the independent client holds its actual write transaction.
+      equal((await a.dump()).publications.length, 1, "one active publication cannot be overwritten");
+      const integrationGate = a.holdNextCommit();
       const pendingIntegrationA = one.recordConfirmedIntegration({ publicationId: p1.id, snapshotId: s1.id,
         expectedBaseline: p1.expectedBaseline, gitSha: "1".repeat(40), contentDigest: s1.digest });
-      saveGate.release();
-      const savedB = await pendingB;
+      await integrationGate.entered;
+      // Integration A was prepared before B committed; its refused commit must retry over B, never overwrite it.
+      const savedB = await two.execute(actor, edit(current, "save-b", "B", target));
+      integrationGate.release();
       const field = isNewEntry ? "question" : "title";
       equal(value(savedB.state, target, field), "B", "later B saved during publication A");
       const integratedA = await pendingIntegrationA;
@@ -382,13 +450,13 @@ export async function runHostedContentConformance(factory: HostedConformanceFact
       equal(integratedB.baseline, { gitSha: "2".repeat(40), contentDigest: s2.digest }, "baseline advances to B");
       if (isNewEntry) equal(integratedB.providers[0]!.entries.find(entry => entry.id === target.recordId)?.lifecycle,
         "published", "matching newly integrated Entry B may be marked clean");
-      const beforeLate = await reopened.storage.read();
+      const beforeLate = await reopened.dump();
       await recovery.recordConfirmedIntegration({ publicationId: p1.id, snapshotId: s1.id,
         expectedBaseline: p1.expectedBaseline, gitSha: "1".repeat(40), contentDigest: s1.digest });
       equal((await recovery.readState(actor)).baseline, integratedB.baseline, "late P1 cannot regress B2 baseline");
       await recovery.recordStatus({ publicationId: p1.id, snapshotId: s1.id, statusVersion: 1, status: "building" });
       equal((await recovery.getPublication(actor, p1.id)).status, "integrated", "late P1 status cannot regress integrated truth");
-      equal((await reopened.storage.read()).state, beforeLate.state, "late callback never marks newer state clean");
+      equal((await reopened.dump()).state, beforeLate.state, "late callback never marks newer state clean");
       if (isNewEntry) assert(Array.isArray(value(integratedB, lesson, "faqs")) &&
         (value(integratedB, lesson, "faqs") as ContentEntryRef[]).some((ref) => ref.recordId === target.recordId),
       "new entry membership remains after both integrations");
@@ -399,15 +467,15 @@ export async function runHostedContentConformance(factory: HostedConformanceFact
     const initial = await one.readState(actor);
     const saved = await one.execute(actor, edit(initial, "external-save", "retained"));
     const captured = await one.execute(actor, { kind: "capture-snapshot", operationKey: "external-capture", expected: identities(saved.state) });
-    await a.storage.transaction(async (db) => { db.state.baseline = { gitSha: "e".repeat(40), contentDigest: "external" }; });
+    await writeHead(a, (head) => { head.state.baseline = { gitSha: "e".repeat(40), contentDigest: "external" }; });
     await errorCode(() => two.execute(actor, { kind: "begin-publication", operationKey: "external-submit",
       expected: identities(saved.state), snapshotId: captured.snapshot!.id }), "baseline-conflict");
     equal(value(await one.readState(actor), lesson, "title"), "retained", "external baseline conflict retains draft");
     equal(await one.readSnapshot(actor, captured.snapshot!.id), captured.snapshot, "external baseline conflict retains reviewed snapshot");
     const newBaseline = await one.readState(actor);
-    await a.storage.transaction(async (db) => { db.state.definition = "definition-v2"; });
-    await errorCode(() => two.execute(actor, edit(newBaseline, "definition-edit", "blocked")), "definition-conflict");
-    equal(value((await a.storage.read()).state, lesson, "title"), "retained", "definition conflict never destroys draft");
+    await writeHead(a, (head) => { head.state.definition = "definition-v2"; });
+    await errorCode(() => two.execute(actor, edit(newBaseline, "definition-edit", "blocked")), "configuration-required");
+    equal(value((await a.dump()).state, lesson, "title"), "retained", "definition change never destroys draft");
   });
 
   await scenario("external-integration-conflict", async (_backend, a, _b, one, two) => {
@@ -416,13 +484,11 @@ export async function runHostedContentConformance(factory: HostedConformanceFact
       expected: identities(saved.state) })).snapshot!;
     const publication = (await one.execute(actor, { kind: "begin-publication", operationKey: "external-integration-submit",
       expected: identities(saved.state), snapshotId: snapshot.id })).publication!;
-    await a.storage.transaction(async (database) => {
-      database.state.baseline = { gitSha: "f".repeat(40), contentDigest: "external-integrated-content" };
-    });
-    const before = await a.storage.read();
+    await writeHead(a, (head) => { head.state.baseline = { gitSha: "f".repeat(40), contentDigest: "external-integrated-content" }; });
+    const before = await a.dump();
     await errorCode(() => two.recordConfirmedIntegration({ publicationId: publication.id, snapshotId: snapshot.id,
       expectedBaseline: publication.expectedBaseline, gitSha: "1".repeat(40), contentDigest: snapshot.digest }), "baseline-conflict");
-    equal(await a.storage.read(), before, "external integration conflict retains exact operation, draft and snapshot");
+    equal(await a.dump(), before, "external integration conflict retains exact operation, draft and snapshot");
   });
 
   return report;

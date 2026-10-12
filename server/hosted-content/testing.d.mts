@@ -229,17 +229,47 @@ interface HostedReceipt {
     fingerprint: string;
     result: HostedResult;
 }
+/** Complete logical content of one site's storage, for seeding and fixture inspection only. The service never loads it whole. */
 interface HostedDatabase {
     state: HostedState;
     baselineProviders: HostedProvider[];
+    activePublicationId?: string | null;
     receipts: HostedReceipt[];
     snapshots: HostedSnapshot[];
     publications: HostedPublication[];
 }
-/** The adapter holds a database transaction across the callback and persists its detached aggregate atomically. */
+/** The one mutable row. Its size is bounded by the working and baseline content, never by history. */
+interface HostedHead {
+    /** Opaque storage version compared by every commit; it changes on every successful commit. */
+    version: string;
+    state: HostedState;
+    baselineProviders: HostedProvider[];
+    activePublicationId: string | null;
+}
+/** One conditional write. Receipts and snapshots are insert-only; a publication replaces the row with its id. */
+interface HostedCommit {
+    expectedVersion: string;
+    head: HostedHead;
+    receipt?: HostedReceipt;
+    snapshot?: HostedSnapshot;
+    publication?: HostedPublication;
+}
+/**
+ * Narrow keyed reads plus one atomic conditional commit, e.g. a single D1 `batch()`.
+ * The service prepares every commit from detached reads, so no transaction stays open across host code,
+ * and retries a refused commit from fresh reads. Every read returns detached data.
+ */
 interface HostedStorage {
-    read(): Promise<HostedDatabase>;
-    transaction<T>(work: (database: HostedDatabase) => Promise<T>): Promise<T>;
+    readHead(): Promise<HostedHead>;
+    readReceipt(actorId: string, operationKey: string): Promise<HostedReceipt | null>;
+    readSnapshot(snapshotId: string): Promise<HostedSnapshot | null>;
+    readPublication(publicationId: string): Promise<HostedPublication | null>;
+    /**
+     * Write everything or nothing. Resolve false, writing nothing, when the stored head version differs from
+     * `expectedVersion` or the receipt (actorId, operationKey) or snapshot id already exists. Throw only when the
+     * outcome is unknown or storage failed; a throw after a durable write is recovered through the receipt.
+     */
+    commit(change: HostedCommit): Promise<boolean>;
 }
 interface HostedActor {
     id: string;
@@ -270,14 +300,18 @@ interface HostedService {
 /** These faults occur at the storage boundary, never by forging a service receipt. */
 type HostedConformanceFault = "before-commit" | "receipt-persistence" | "lost-acknowledgement";
 interface HostedConformanceGate {
-    /** Resolves while the actual database transaction is held, before its callback runs. */
+    /** Resolves once the next commit was prepared and submitted, before the backend applies it. */
     entered: Promise<void>;
     release(): void;
 }
 interface HostedConformanceHandle {
     storage: HostedStorage;
-    faultNextTransaction(fault: HostedConformanceFault): void;
-    holdNextTransaction(): HostedConformanceGate;
+    /** `receipt-persistence` must fail an actual statement after the head write inside the same atomic commit. */
+    faultNextCommit(fault: HostedConformanceFault): void;
+    /** Delay applying the next commit. Other handles keep committing, so the held commit must be refused and retried. */
+    holdNextCommit(): HostedConformanceGate;
+    /** Complete logical storage content for assertions; never used by the service. */
+    dump(): Promise<HostedDatabase>;
 }
 interface HostedConformanceBackend {
     /** Every call must open an independent storage handle. */
@@ -294,6 +328,12 @@ interface HostedConformanceReport {
     scenarios: string[];
     assertions: number;
 }
+/** In-process storage for tests and single-isolate examples. It proves no durability or cross-process behavior. */
+declare function createMemoryHostedStorage(seed: HostedDatabase): {
+    storage: HostedStorage;
+    dump(): HostedDatabase;
+    replace(database: HostedDatabase): void;
+};
 /**
  * Deterministic fault/interleaving reference only. This fake does not demonstrate
  * disk durability, process isolation, SQLite or D1 behavior.
@@ -312,5 +352,5 @@ declare function createHostedConformanceService(storage: HostedStorage, handleId
  */
 declare function runHostedContentConformance(factory: HostedConformanceFactory): Promise<HostedConformanceReport>;
 
-export { createHostedConformanceService, createHostedContentConformancePolicy, createHostedContentConformanceSeed, createMemoryHostedConformanceFactory, hostedConformanceDigest, runHostedContentConformance };
+export { createHostedConformanceService, createHostedContentConformancePolicy, createHostedContentConformanceSeed, createMemoryHostedConformanceFactory, createMemoryHostedStorage, hostedConformanceDigest, runHostedContentConformance };
 export type { HostedConformanceBackend, HostedConformanceFactory, HostedConformanceFault, HostedConformanceGate, HostedConformanceHandle, HostedConformanceReport };

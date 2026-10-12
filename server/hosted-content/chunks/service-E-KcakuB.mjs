@@ -836,6 +836,7 @@ var rank = {
 	integrated: 3,
 	deployed: 4
 };
+var commitAttempts = 16;
 /** Trusted, site-bound service. Host callbacks are privileged; never expose them as client verbs. */
 function createHostedContentService(supplied) {
 	const options = {
@@ -903,7 +904,8 @@ function createHostedContentService(supplied) {
 		});
 	}
 	function checkExpected(state, expected) {
-		if (state.definition !== options.definition || expected.definition !== state.definition) fail("definition-conflict", "Hosted definition changed; explicit reconciliation is required.");
+		if (state.definition !== options.definition) fail("configuration-required", "The hosted definition changed; the host must adopt the canonical baseline before edits continue.");
+		if (expected.definition !== state.definition) fail("definition-conflict", "Hosted definition changed; reload and review the retained draft.");
 		if (!sameValue(expected.baseline, state.baseline)) fail("baseline-conflict", "Canonical baseline changed; reload and review the retained draft.");
 		if (expected.draftRevision !== state.draftRevision) fail("revision-conflict", "The draft changed; reload and review before reapplying.");
 	}
@@ -982,25 +984,25 @@ function createHostedContentService(supplied) {
 		owner.updatedAt = options.now();
 		return created;
 	}
-	function assertDefinitions(database) {
-		if (database.state.providers.length !== database.baselineProviders.length) fail("definition-conflict", "Working providers differ from the canonical baseline.");
-		for (const provider of database.state.providers) {
-			const baseline = database.baselineProviders.find((item) => item.providerId === provider.providerId);
-			if (!baseline || !sameValue(provider.models, baseline.models)) fail("definition-conflict", "Working model definitions differ from the canonical baseline.");
+	function assertDefinitions(head) {
+		if (head.state.providers.length !== head.baselineProviders.length) fail("configuration-required", "Working providers differ from the canonical baseline.");
+		for (const provider of head.state.providers) {
+			const baseline = head.baselineProviders.find((item) => item.providerId === provider.providerId);
+			if (!baseline || !sameValue(provider.models, baseline.models)) fail("configuration-required", "Working model definitions differ from the canonical baseline.");
 		}
 	}
-	function deliveryProviders(database) {
-		const providers = copy(database.baselineProviders);
-		for (const current of database.state.providers) {
+	function deliveryProviders(head) {
+		const providers = copy(head.baselineProviders);
+		for (const current of head.state.providers) {
 			const baseline = providers.find((provider) => provider.providerId === current.providerId);
-			if (!baseline || !sameValue(baseline.models, current.models)) fail("definition-conflict", "Working model definitions differ from the canonical baseline.");
+			if (!baseline || !sameValue(baseline.models, current.models)) fail("configuration-required", "Working model definitions differ from the canonical baseline.");
 			for (const entry of current.entries) {
 				const ref = {
 					providerId: current.providerId,
 					modelId: entry.modelId,
 					recordId: entry.id
 				};
-				if (!visible(database.state.providers, ref)) continue;
+				if (!visible(head.state.providers, ref)) continue;
 				const delivered = {
 					...copy(entry),
 					lifecycle: "published"
@@ -1012,30 +1014,51 @@ function createHostedContentService(supplied) {
 		}
 		return providers;
 	}
-	function receipt(database, actorId, command, fingerprint) {
-		const existing = database.receipts.find((item) => item.actorId === actorId && item.operationKey === command.operationKey);
+	function receipt(existing, fingerprint) {
 		if (!existing) return;
 		if (existing.fingerprint !== fingerprint) fail("operation-key-reuse", "Operation key is already bound to another immutable request.");
 		return copy(existing.result);
 	}
+	/** Prepare from detached reads, then commit conditionally; a refused commit is retried from fresh reads. */
+	async function mutate(work) {
+		for (let attempt = 0; attempt < commitAttempts; attempt++) {
+			const head = copy(await options.storage.readHead());
+			const { value, write } = await work(copy(head));
+			if (!write) return copy(value);
+			if (await options.storage.commit(copy({
+				...write,
+				expectedVersion: head.version,
+				head: {
+					...write.head,
+					version: options.createId()
+				}
+			}))) return copy(value);
+		}
+		return fail("unavailable", "Storage kept refusing the commit; nothing was written. Retry the same request.");
+	}
+	async function readSnapshot(snapshotId) {
+		return await options.storage.readSnapshot(snapshotId) ?? fail("not-found", "Snapshot is unavailable.");
+	}
+	async function readPublication(publicationId) {
+		return await options.storage.readPublication(publicationId) ?? fail("not-found", "Publication is unavailable.");
+	}
 	return {
 		async readState(actor) {
 			await authorize(actor);
-			return publicState((await options.storage.read()).state);
+			return publicState((await options.storage.readHead()).state);
 		},
 		async readReceipt(actor, operationKey) {
 			const trusted = copy(actor);
 			await authorize(trusted);
-			const stored = (await options.storage.read()).receipts.find((item) => item.actorId === trusted.id && item.operationKey === operationKey);
-			return stored ? copy(stored) : null;
+			return copy(await options.storage.readReceipt(trusted.id, operationKey));
 		},
 		async readSnapshot(actor, snapshotId) {
 			await authorize(actor);
-			return publicSnapshot((await options.storage.read()).snapshots.find((snapshot) => snapshot.id === snapshotId) ?? fail("not-found", "Snapshot is unavailable."));
+			return publicSnapshot(await readSnapshot(snapshotId));
 		},
 		async getPublication(actor, publicationId) {
 			await authorize(actor);
-			return copy((await options.storage.read()).publications.find((publication) => publication.id === publicationId) ?? fail("not-found", "Publication is unavailable."));
+			return copy(await readPublication(publicationId));
 		},
 		async execute(actor, request) {
 			const command = parseHostedCommand(request);
@@ -1047,33 +1070,31 @@ function createHostedContentService(supplied) {
 				actorId,
 				command
 			}));
-			const recovered = receipt(await options.storage.read(), actorId, command, fingerprint);
-			if (recovered) return recovered;
-			return copy(await options.storage.transaction(async (database) => {
-				const replay = receipt(database, actorId, command, fingerprint);
-				if (replay) return replay;
-				checkExpected(database.state, command.expected);
-				assertDefinitions(database);
-				let createdEntry, snapshot, publication;
+			return mutate(async (head) => {
+				const replay = receipt(await options.storage.readReceipt(actorId, command.operationKey), fingerprint);
+				if (replay) return { value: replay };
+				checkExpected(head.state, command.expected);
+				assertDefinitions(head);
+				let createdEntry, snapshot, captured, publication;
 				switch (command.kind) {
 					case "set-fields":
-						setFields(database.state.providers, command.entry, command.values, command.clear);
+						setFields(head.state.providers, command.entry, command.values, command.clear);
 						break;
 					case "create-entry":
 					case "add-entry":
 					case "reorder":
-						createdEntry = changeCollection(database.state.providers, command);
+						createdEntry = changeCollection(head.state.providers, command);
 						break;
 					case "capture-snapshot": {
-						const providers = deliveryProviders(database), assets = copy(options.policy.assets), diagnostics = checkGraph(providers);
-						const renderData = copy(options.project(copy(providers), copy(assets)));
+						const providers = deliveryProviders(head), assets = copy(options.policy.assets), diagnostics = checkGraph(providers);
+						const renderData = copy(await options.project(copy(providers), copy(assets)));
 						const digest = await options.digest(canonicalSerialize({
 							providers,
 							assets,
 							renderData
 						}));
-						snapshot = {
-							...identity(database.state),
+						snapshot = captured = {
+							...identity(head.state),
 							id: options.createId(),
 							digest,
 							providers,
@@ -1081,14 +1102,14 @@ function createHostedContentService(supplied) {
 							diagnostics,
 							renderData
 						};
-						if (database.snapshots.some((item) => item.id === snapshot.id)) fail("configuration-required", "Host ID factory returned an existing snapshot identity.");
-						database.snapshots.push(copy(snapshot));
+						if (await options.storage.readSnapshot(captured.id)) fail("configuration-required", "Host ID factory returned an existing snapshot identity.");
 						break;
 					}
-					case "begin-publication":
-						snapshot = database.snapshots.find((item) => item.id === command.snapshotId) ?? fail("not-found", "Snapshot is unavailable.");
-						checkExpected(database.state, snapshot);
-						if (database.publications.some((item) => !terminal(item))) fail("publication-busy", "A publication is already active; recover its authoritative status.");
+					case "begin-publication": {
+						snapshot = await readSnapshot(command.snapshotId);
+						checkExpected(head.state, snapshot);
+						const active = head.activePublicationId ? await options.storage.readPublication(head.activePublicationId) : null;
+						if (active && !terminal(active)) fail("publication-busy", "A publication is already active; recover its authoritative status.");
 						if (snapshot.diagnostics.length) throw new HostedContentError("incomplete", "Complete required and accessible values before submission.", publicSnapshot(snapshot).diagnostics);
 						await options.validateSubmission(copy(snapshot));
 						publication = {
@@ -1099,27 +1120,36 @@ function createHostedContentService(supplied) {
 							lastProvenStatus: "submitted",
 							statusVersion: 1
 						};
-						if (database.publications.some((item) => item.id === publication.id)) fail("configuration-required", "Host ID factory returned an existing publication identity.");
-						database.publications.push(copy(publication));
+						if (await options.storage.readPublication(publication.id)) fail("configuration-required", "Host ID factory returned an existing publication identity.");
+						head.activePublicationId = publication.id;
+						break;
+					}
 				}
 				if (command.kind !== "capture-snapshot" && command.kind !== "begin-publication") {
-					checkGraph(database.state.providers);
-					database.state.draftRevision = options.createId();
+					checkGraph(head.state.providers);
+					head.state.draftRevision = options.createId();
 				}
 				const result = {
-					state: publicState(database.state),
+					state: publicState(head.state),
 					...createdEntry ? { createdEntry } : {},
 					...snapshot ? { snapshot: publicSnapshot(snapshot) } : {},
 					...publication ? { publication: copy(publication) } : {}
 				};
-				database.receipts.push({
-					actorId,
-					operationKey: command.operationKey,
-					fingerprint,
-					result: copy(result)
-				});
-				return result;
-			}));
+				return {
+					value: result,
+					write: {
+						head,
+						receipt: {
+							actorId,
+							operationKey: command.operationKey,
+							fingerprint,
+							result: copy(result)
+						},
+						...captured ? { snapshot: captured } : {},
+						...publication ? { publication } : {}
+					}
+				};
+			});
 		},
 		async recordStatus(evidence) {
 			const input = copy(evidence);
@@ -1133,55 +1163,68 @@ function createHostedContentService(supplied) {
 				"conflict",
 				"unavailable"
 			].includes(input.status)) fail("invalid-request", "Malformed host status evidence.");
-			return copy(await options.storage.transaction(async (database) => {
-				const publication = database.publications.find((item) => item.id === input.publicationId) ?? fail("not-found", "Publication is unavailable.");
+			return mutate(async (head) => {
+				const publication = await readPublication(input.publicationId);
 				if (publication.snapshotId !== input.snapshotId) fail("invalid-request", "Status evidence names a different snapshot.");
-				if (input.statusVersion <= publication.statusVersion) return publication;
+				if (input.statusVersion <= publication.statusVersion) return { value: publication };
 				if ((input.status === "integrated" || input.status === "deployed") && publication.integratedFence === void 0) fail("invalid-request", "Confirmed integration evidence is required first.");
-				if (terminal(publication) && !(publication.status === "integrated" && input.status === "deployed")) return publication;
-				if ((rank[input.status] ?? Infinity) < (rank[publication.lastProvenStatus ?? publication.status] ?? -1)) return publication;
+				if (terminal(publication) && !(publication.status === "integrated" && input.status === "deployed")) return { value: publication };
+				if ((rank[input.status] ?? Infinity) < (rank[publication.lastProvenStatus ?? publication.status] ?? -1)) return { value: publication };
 				publication.status = input.status;
 				if (input.status === "submitted" || input.status === "building" || input.status === "verified" || input.status === "integrated" || input.status === "deployed") publication.lastProvenStatus = input.status;
 				publication.statusVersion = input.statusVersion;
 				if (input.message !== void 0) publication.message = input.message;
 				if (input.facts !== void 0) publication.facts = copy(input.facts);
-				return publication;
-			}));
+				return {
+					value: publication,
+					write: {
+						head,
+						publication
+					}
+				};
+			});
 		},
 		async recordConfirmedIntegration(evidence) {
 			const input = copy(evidence);
-			return copy(await options.storage.transaction(async (database) => {
-				const publication = database.publications.find((item) => item.id === input.publicationId) ?? fail("not-found", "Publication is unavailable.");
-				const snapshot = database.snapshots.find((item) => item.id === publication.snapshotId) ?? fail("not-found", "Publication snapshot is unavailable.");
+			return mutate(async (head) => {
+				const publication = await readPublication(input.publicationId);
+				const snapshot = await options.storage.readSnapshot(publication.snapshotId) ?? fail("not-found", "Publication snapshot is unavailable.");
 				if (input.snapshotId !== snapshot.id || !sameValue(input.expectedBaseline, publication.expectedBaseline) || input.contentDigest !== snapshot.digest || !input.gitSha) fail("baseline-conflict", "Integration evidence must identify the exact submitted baseline and content.");
 				if (publication.integratedFence !== void 0) {
 					if (publication.gitSha !== input.gitSha) fail("baseline-conflict", "Publication was integrated at another commit.");
-					return publicState(database.state);
+					return { value: publicState(head.state) };
 				}
 				if (["failed", "conflict"].includes(publication.status)) fail("baseline-conflict", "Terminal publication cannot be reconciled without host recovery.");
-				if (database.state.definition !== snapshot.definition || database.state.definition !== options.definition) fail("definition-conflict", "Definition changed before integration.");
-				if (!sameValue(database.state.baseline, input.expectedBaseline)) fail("baseline-conflict", "Canonical baseline advanced outside this operation.");
-				database.baselineProviders = copy(snapshot.providers);
-				for (const provider of database.state.providers) for (const entry of provider.entries) {
+				if (head.state.definition !== options.definition) fail("configuration-required", "The hosted definition changed; the host must adopt the canonical baseline first.");
+				if (head.state.definition !== snapshot.definition) fail("definition-conflict", "Definition changed before integration.");
+				if (!sameValue(head.state.baseline, input.expectedBaseline)) fail("baseline-conflict", "Canonical baseline advanced outside this operation.");
+				head.baselineProviders = copy(snapshot.providers);
+				for (const provider of head.state.providers) for (const entry of provider.entries) {
 					const submitted = snapshot.providers.find((item) => item.providerId === provider.providerId)?.entries.find((item) => item.id === entry.id && item.modelId === entry.modelId);
 					if (submitted && submitted.generation === entry.generation && sameValue(submitted.values, entry.values) && entry.lifecycle !== submitted.lifecycle) {
 						entry.lifecycle = submitted.lifecycle;
 						entry.generation += 1;
 					}
 				}
-				database.state.baseline = {
+				head.state.baseline = {
 					gitSha: input.gitSha,
 					contentDigest: input.contentDigest
 				};
-				database.state.integrationFence += 1;
-				database.state.draftRevision = options.createId();
-				publication.integratedFence = database.state.integrationFence;
+				head.state.integrationFence += 1;
+				head.state.draftRevision = options.createId();
+				publication.integratedFence = head.state.integrationFence;
 				publication.gitSha = input.gitSha;
 				publication.status = "integrated";
 				publication.lastProvenStatus = "integrated";
 				publication.statusVersion += 1;
-				return publicState(database.state);
-			}));
+				return {
+					value: publicState(head.state),
+					write: {
+						head,
+						publication
+					}
+				};
+			});
 		}
 	};
 }

@@ -23,7 +23,7 @@ The report identifies three different proofs:
   existing-entry and newly-created-entry two-publication traces.
 - Separate child processes, each with its own SQLite connection. These race
   CAS writes, duplicate creation and snapshot capture; inject a real receipt
-  SQL constraint failure; kill a process after aggregate and receipt writes
+  SQL constraint failure; kill a process after head and receipt writes
   before commit; replace a process after a lost creation acknowledgement;
   and complete two integrations while preserving newer created-entry edits.
 
@@ -37,25 +37,29 @@ against its actual D1 adapter; this fixture makes no D1 verification claim.
 in-flight operation; callers open separate handles for concurrency. The HTTP
 test transport opens a separate connection for every request.
 
-Every mutation takes a real `BEGIN IMMEDIATE` lock, reads the aggregate and
-receipts, awaits the supplied callback while holding the transaction, updates
-the aggregate, inserts new receipts, and commits with WAL and
-`synchronous=FULL`. SQLite's unique `(actor_id, operation_key)` constraint and
-immutable existing receipts protect committed keys. Callback, aggregate or
-receipt failures roll back together. Returned/read values are detached.
-The fixture stores state, baseline, snapshots and publication intents in one
-aggregate row and stores operation receipts in a separately constrained table.
-A read transaction gives both queries the same database snapshot.
+The service never holds a transaction across host code. It reads the head
+row and keyed receipt/snapshot/publication rows, prepares the change, then calls
+`commit`. Each commit is one short `BEGIN IMMEDIATE` transaction that runs the
+same static statement list a host would send as one D1 `batch()`: a head
+`UPDATE … WHERE version = ?`, a guard insert that aborts when that update did
+not apply, insert-only receipt and snapshot rows, and a publication upsert.
+A constraint failure rolls everything back and resolves `false`; the service
+then retries from fresh reads, where it finds the newer revision or the
+committed receipt. Other failures roll back and reach the caller. Commits use
+WAL and `synchronous=FULL`. Returned/read values are detached.
+
+The head row holds only the working state, baseline providers and the active
+publication ID, so its size does not grow with history. Each receipt, snapshot
+and publication is its own keyed row.
 
 Busy acquisition retries are bounded to eight seconds by default, with capped
-backoff. Only acquiring the transaction is retried; the async callback is
-never automatically replayed. The backend does not prune receipts or recycle
-keys. No shared JavaScript lock supplies cross-process correctness.
+backoff. The backend does not prune receipts or recycle keys. No shared
+JavaScript lock supplies cross-process correctness.
 
 `createSqliteConformanceFactory()` supplies the public runner's independent
-handles, fault injection, transaction gates and restart hooks. The process
-proof additionally pauses **after** aggregate and receipt SQL writes to test
-actual process-crash rollback before `COMMIT`.
+handles, fault injection, commit gates and restart hooks. The process proof
+additionally pauses **after** the batch statements, inside the open
+transaction, to test actual process-crash rollback before `COMMIT`.
 
 ## Local HTTP checkpoint
 
