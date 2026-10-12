@@ -204,8 +204,8 @@ try {
   await Promise.allSettled([
     page?.content().then((html) => writeFile(join(evidence, "failure-dom.html"), html)),
     page?.screenshot({ path: join(evidence, "failure.png"), fullPage: true }),
-    context?.tracing.stop({ path: join(evidence, "failure-trace.zip") }),
   ]);
+  await context?.tracing.stop({ path: join(evidence, "failure-trace.zip") }).catch(() => {});
   throw error;
 }
 finally {
