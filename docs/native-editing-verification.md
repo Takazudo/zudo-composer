@@ -259,3 +259,29 @@ guarded undo. It refuses unsupported host shapes and keeps planning and apply
 blocked while the authoring server runs. Next work remains (1) browser-safe
 save/revision coordination, (2) page-first review UI, and (3) one restricted
 local agent runner with distinct proposal, approval and receipt state.
+
+## Dependency and styleguide integration (2026-10-12)
+
+This section records the finalization integration; all evidence above remains
+historical. PR #898 merged into `main` as
+`294ac876ae0ddd3515fe214ef161dcfd3cac416d` and PR #899 as
+`14bab18ebc59b04ab4639b14f76c501274337a86`. Both were merged additively into
+this branch. The only conflicts were the four generated `demo-sample` CMS
+current pointers; they were reset to this branch's committed bytes and
+regenerated with `cms:regenerate`, then `cms:check` passed for four hosts.
+The combined tree carries UI pack handoff identity
+`776fb59a46bb53ceb0fa1ff823e83fae764597ac`, Markdown WASM 4.3.1, contract
+`c0b452da075b66757c60bd0d721a47062d4354d0`, the `./editing` export, the
+`edit:installed` aggregate step and CI's installed-editing/reopen step
+alongside the styleguide Chromium, browser and Wind checks.
+
+Executed on the integrated tree with Node 24.13.1 and Corepack pnpm 11.5.2
+after a root frozen install:
+
+- Focused `server/edit` suites, the reviewed-edit filesystem suite, the
+  dev-server shutdown suite and the authoring browser-shutdown ordering
+  regression passed: 7 files / 51 tests.
+- `public:check` reported the 9 checked-in public Node entries current.
+- `edit:installed` passed managed image, exact Japanese text and supplied
+  table insertions, receipts and guarded undo, the installed public editing
+  entry, Composer first open and Composer server restart.
