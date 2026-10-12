@@ -1,0 +1,8 @@
+{
+  "packageOutputSha": "93487e318c04f1e8487f14ff86a4d72a67986b1b",
+  "evidenceOnlyPaths": "verification/hosted-content/93487e31",
+  "completePackedPayloadSha256": "a516f49070b96a2a454cc3c2f54e4aa463bdf1de2d0503c0cf143d4f82963c1e",
+  "files": 661,
+  "normalization": "package.json object key ordering and whitespace only; all keys, values, arrays, dependencies, exports and metadata retained. pnpm workspace dev-dependency enumeration emits varying object key order. Every other file compared as raw bytes, size and executable bit.",
+  "result": "complete packed payload equivalent before and after excluded evidence addition; raw package.json formatting differs"
+}
