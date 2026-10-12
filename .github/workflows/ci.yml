@@ -115,10 +115,13 @@ jobs:
             .artifacts/hosted-consumer/tool-payload-inventory.json
             .artifacts/hosted-consumer/worker-metafile.json
             .artifacts/hosted-consumer/renderer/preview-metafile.json
+            .artifacts/hosted-consumer/renderer/browser-failure/
+            .artifacts/hosted-consumer/work/**/renderer/browser-failure/
             .artifacts/hosted-consumer/work/*/publication-render-evidence.json
             .artifacts/hosted-consumer/work/*/browser-transport-evidence.json
             .artifacts/hosted-consumer/work/*/browser-bundle-evidence.json
             .artifacts/hosted-consumer/work/*/browser-checkpoint-metafile.json
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
 

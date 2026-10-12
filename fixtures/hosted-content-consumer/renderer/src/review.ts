@@ -10,7 +10,8 @@ const status = document.querySelector<HTMLOutputElement>("#preview-status");
 if (!frame || !status) throw Error("Missing review fixture elements");
 const location = buildHostedPreviewLocation("/preview.html", window.location.origin);
 const preview = createHostedPreviewController({ frame, location, hostWindow: window, pack: hostPack,
-  renderer: hostRenderer, onState(state) { status.value = state.status; status.dataset.state = state.status; } });
+  renderer: hostRenderer, onState(state) { status.value = state.status === "error" ? state.error.message : state.status; status.dataset.state = state.status; },
+  onRejected(reason, detail) { status.dataset.lastRejected = `${reason}: ${detail ?? ""}`; } });
 frame.src = location.src;
 void preview.render(authoritativeSnapshot, "home").then((receipt) => {
   status.dataset.snapshotId = receipt.snapshotId;
