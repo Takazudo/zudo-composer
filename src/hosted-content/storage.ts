@@ -54,6 +54,12 @@ export interface ContentDraftApplyInput {
   readonly mutation: ContentMutation;
   readonly expectedDraftRevision: number;
   readonly expectedBaselineRevision: string;
+  /**
+   * Digest of the caller's own request when the mutation was derived from it
+   * (see `applyHostContentRequest`). A replay is then matched by this digest
+   * rather than by the derived mutation, whose timestamps differ per attempt.
+   */
+  readonly requestDigest?: string;
 }
 
 export interface ContentOperationReceipt {
@@ -184,7 +190,7 @@ export async function createMemoryContentDraftStorage(baseline: ContentBaseline,
     async readDraft() { return serialized(async () => ({ status: "ok", value: await draft() })); },
     apply(input) {
       return serialized(async (): Promise<ContentDraftMutationResult<ContentDraftApplied>> => {
-        const requestDigest = await contentDraftRequestDigest(input);
+        const requestDigest = input.requestDigest ?? await contentDraftRequestDigest(input);
         const existing = receipts.get(input.operationId);
         if (existing) {
           if (existing.requestDigest !== requestDigest) return conflict("operation-id");
