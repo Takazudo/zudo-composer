@@ -1,0 +1,9 @@
+packages: []
+autoInstallPeers: false
+strictPeerDependencies: true
+allowBuilds:
+  '@zudo-composer/component-contract': true
+  esbuild: true
+  workerd: true
+minimumReleaseAgeExclude:
+  - '@cloudflare/workers-types@5.20261012.1'
