@@ -61,10 +61,11 @@ describe("packed host discovery and manifest isolation", () => {
   it("covers all four real hosts from disk and retains the default synthesized proof", () => {
     const hosts = discoverPackedHosts(repositoryRoot);
     expect(hosts.map((host) => basename(host))).toEqual(expect.arrayContaining(["demo-blog", "demo-landing", "demo-sample", "demo-webshop"]));
-    expect(selectPackedHosts([], hosts)).toEqual({ hosts, fixture: true, generated: true, negative: undefined });
-    expect(selectPackedHosts(["--host", "demo-blog"], hosts)).toEqual({ hosts: [hosts[0]], fixture: false, generated: false, negative: undefined });
-    expect(selectPackedHosts(["--host", "generated"], hosts)).toEqual({ hosts: [], fixture: false, generated: true, negative: undefined });
-    expect(selectPackedHosts(["--host", "self-host"], hosts)).toEqual({ hosts: [], fixture: true, generated: false, negative: undefined });
+    expect(selectPackedHosts([], hosts)).toEqual({ hosts, fixture: true, generated: true, hostedContent: true, negative: undefined });
+    expect(selectPackedHosts(["--host", "demo-blog"], hosts)).toEqual({ hosts: [hosts[0]], fixture: false, generated: false, hostedContent: false, negative: undefined });
+    expect(selectPackedHosts(["--host", "generated"], hosts)).toEqual({ hosts: [], fixture: false, generated: true, hostedContent: false, negative: undefined });
+    expect(selectPackedHosts(["--host", "self-host"], hosts)).toEqual({ hosts: [], fixture: true, generated: false, hostedContent: false, negative: undefined });
+    expect(selectPackedHosts(["--host", "hosted-content-host"], hosts)).toEqual({ hosts: [], fixture: false, generated: false, hostedContent: true, negative: undefined });
     expect(() => selectPackedHosts(["--host", "generated", "--negative", "missing-runtime"], hosts)).toThrow("disk host");
     expect(selectPackedHosts(["--host", "demo-blog", "--negative", "missing-runtime"], hosts).negative).toBe("missing-runtime");
     expect(() => selectPackedHosts(["--negative", "missing-runtime"], hosts)).toThrow("exactly one --host");
@@ -79,7 +80,7 @@ describe("packed host discovery and manifest isolation", () => {
     await put(root, "fixtures/self-host/package.json", JSON.stringify(declared()));
     await put(root, "packages/demo-missing-manifest/site-project.ts");
     expect(discoverPackedHosts(root).map((host) => basename(host))).toEqual(["demo-missing-manifest", "future-host"]);
-    expect(packedHostMatrix(root).host).toEqual(["demo-missing-manifest", "future-host", "generated", "self-host"]);
+    expect(packedHostMatrix(root).host).toEqual(["demo-missing-manifest", "future-host", "generated", "self-host", "hosted-content-host"]);
     await put(root, "packages/fifth-host/package.json", JSON.stringify(declared()));
     expect(packedHostMatrix(root).host).toContain("fifth-host");
     for (const host of packedHostMatrix(root).host) expect(() => selectPackedHosts(["--host", host], discoverPackedHosts(root))).not.toThrow();

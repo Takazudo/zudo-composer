@@ -4,6 +4,7 @@ import { CollectionIcon, PlusIcon, SearchIcon, SingleIcon } from "../../componen
 import { Button, Chip, EmptyState, Input, SegmentedControl } from "../../components/ui";
 import type { ContentModelKind } from "../../content";
 import type { ContentAuthoringController, ContentAuthoringState } from "./controller";
+import { useContentRestriction } from "./restriction";
 
 type ModelFilter = "all" | ContentModelKind;
 
@@ -13,6 +14,7 @@ export function ContentModelDirectory({ state, controller, run, onAddModel }: {
   run(action: () => void | Promise<void>): void;
   onAddModel(): void;
 }): JSX.Element {
+  const restricted = useContentRestriction() !== null;
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<ModelFilter>("all");
   const models = useMemo(() => state.models.filter((model) => {
@@ -25,7 +27,7 @@ export function ContentModelDirectory({ state, controller, run, onAddModel }: {
     <header class="sg-content-directory__intro">
       <div><p class="sg-content-eyebrow">Workspace / Content</p><h2>All models</h2><p>Models describe reusable data. Entries hold the canonical values.</p></div>
       <div class="sg-content-directory__counts"><strong>{state.models.length}</strong><span>models</span><strong>{totalEntries}</strong><span>entries</span></div>
-      <Button variant="primary" onClick={onAddModel}><PlusIcon size="sm" />Create model</Button>
+      {restricted ? null : <Button variant="primary" onClick={onAddModel}><PlusIcon size="sm" />Create model</Button>}
     </header>
     <div class="sg-content-directory__toolbar">
       <SegmentedControl<ModelFilter> label="Model kind" value={kind} onChange={setKind} options={[
@@ -33,7 +35,7 @@ export function ContentModelDirectory({ state, controller, run, onAddModel }: {
       ]} />
       <Input icon={SearchIcon} aria-label="Search models" placeholder="Find a model…" value={query} onInput={(event) => setQuery(event.currentTarget.value)} />
     </div>
-    {models.length === 0 ? <EmptyState inline title={state.models.length ? "No models match" : "No Content models yet"} description={state.models.length ? "Try another search or model kind." : "Create a collection or singleton to define your first content shape."} action={state.models.length ? <Button onClick={() => { setQuery(""); setKind("all"); }}>Clear filters</Button> : <Button variant="primary" onClick={onAddModel}>Create model</Button>} /> :
+    {models.length === 0 ? <EmptyState inline title={state.models.length ? "No models match" : "No Content models yet"} description={state.models.length ? "Try another search or model kind." : "Create a collection or singleton to define your first content shape."} action={state.models.length ? <Button onClick={() => { setQuery(""); setKind("all"); }}>Clear filters</Button> : restricted ? undefined : <Button variant="primary" onClick={onAddModel}>Create model</Button>} /> :
       <div class="sg-content-model-grid">{models.map((model) => {
         const Icon = model.kind === "collection" ? CollectionIcon : SingleIcon;
         return <button class="sg-content-model-card" key={`${state.providerId}:${model.id}`} onClick={() => run(() => controller.openModel(model.id))}>

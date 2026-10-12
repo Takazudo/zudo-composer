@@ -155,6 +155,11 @@ const expectedRootExports = {
   './styles': './src/style.css',
   './package.json': './package.json',
   './editing': { types: './server/editing.d.mts', default: './server/editing.mjs' },
+  './content': { types: './server/content.d.mts', default: './server/content.mjs' },
+  './host-storage': { types: './server/host-storage.d.mts', default: './server/host-storage.mjs' },
+  './preview-protocol': { types: './server/preview-protocol.d.mts', default: './server/preview-protocol.mjs' },
+  './export': { types: './server/export.d.mts', default: './server/export.mjs' },
+  './content-editor': { types: './server/content-editor.d.mts', default: './src/features/content-editor/index.ts' },
 };
 assert(JSON.stringify(rootPackageJson.exports) === JSON.stringify(expectedRootExports), 'the root package exports map changed');
 
@@ -202,6 +207,12 @@ for (const required of [
   'server/public/site-project.mts',
   'server/public/vite.mts',
   'server/public/config.mts',
+  'server/public/content.mts',
+  'server/public/host-storage.mts',
+  'server/public/preview-protocol.mts',
+  'server/public/export.mts',
+  'server/public/content-editor.mts',
+  'plugins/content-editor-plugins.mjs',
   'server/site-build/compile.ts',
   'server/site-build/artifact.mjs',
   'server/site-build/assets.ts',

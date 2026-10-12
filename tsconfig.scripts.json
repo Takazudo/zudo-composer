@@ -72,7 +72,10 @@
     "server/cli/init-entry.mjs",
     "server/site-build/print-routes.ts",
     "scripts/build-public-entries.mjs",
+    "scripts/public-entries.mjs",
+    "scripts/check-portable-entries.mjs",
     "scripts/verify-public-install.mjs",
+    "scripts/verify-root-git-install.mjs",
     "scripts/check-site-static.mjs",
     "scripts/build-site-static.mjs",
     "scripts/boundary-source.d.mts"

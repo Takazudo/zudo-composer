@@ -10,6 +10,8 @@ export interface CompileSiteProjectOptions {
   policy?: SitemapPublicationPolicy;
   /** Manifest-only catalog used by Mapping, reuse, and JSX generation. */
   componentCatalog: ComponentCatalog;
+  /** Generates `modules[].code`; absent, every route compiles with no modules. */
+  planModules?: typeof import("../../composer/source/plan-linked-jsx").planLinkedJsxModules;
 }
 
 export interface SiteCompilerDiagnostic {

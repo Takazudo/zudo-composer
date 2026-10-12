@@ -27,6 +27,10 @@
 // Every disk-discovered demo host is then copied outside the repository and
 // independently installed, booted, seeded, tested and built. dist-site writes
 // are allowed only after the installed public artifact verifier accepts them.
+//
+// The hosted-content-host lane installs fixtures/hosted-content-host the same
+// way, runs its own Worker/build/emitted-graph proof, and drives the built
+// restricted editor in a browser against its Worker module.
 
 import assert from "node:assert/strict";
 import { lstat, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -309,6 +313,63 @@ ${server.output()}`, { cause });
   }
 }
 
+/** @param {string} workspace @param {Tarballs} tarballs @param {ToolPackage} toolPackage */
+async function proveHostedContentHost(workspace, tarballs, toolPackage) {
+  const hostRoot = join(workspace, "hosted-content-host");
+  let server;
+  let browser;
+  try {
+    step("hosted-content-host: copying the consumer fixture outside the repository");
+    await copyPackedHost(join(root, "fixtures/hosted-content-host"), hostRoot);
+    await configurePackedHost(hostRoot, tarballs, toolPackage.packageManager);
+    step("hosted-content-host: installing the packed tool and contract");
+    await run(pnpm, ["install", "--no-frozen-lockfile"], hostRoot);
+    await run(pnpm, ["install", "--frozen-lockfile"], hostRoot);
+    await assertInstalledHost(hostRoot, environment, roots);
+    step("hosted-content-host: Worker service, Worker-only type check, editor build and emitted-graph scan");
+    const { stdout } = await run(process.execPath, ["verify.mjs"], hostRoot);
+    step(`hosted-content-host: ${stdout.trim().split("\n").at(-1)}`);
+
+    step("hosted-content-host: editing through the built restricted editor in a browser");
+    server = await spawnHostServer(hostRoot, { env: environment, command: process.execPath, args: ["serve.mjs"] });
+    browser = await chromium.launch();
+    const page = await browser.newPage();
+    /** @type {string[]} */
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+    const before = await (await fetch(`${ORIGIN}/api/draft`)).json();
+    try {
+      await page.goto(`${ORIGIN}/admin/content`);
+      const tree = page.getByRole("tree", { name: "Content" });
+      await tree.getByRole("treeitem", { name: /^Courses/ }).click({ timeout: 60_000 });
+      await tree.getByRole("treeitem", { name: /^水彩画入門/ }).click({ timeout: 60_000 });
+      const title = page.getByRole("textbox", { name: "Title", exact: true });
+      await title.fill("水彩画入門（ブラウザ編集）");
+      await page.locator('[data-save-status="saved"]').waitFor({ timeout: 60_000 });
+      assert.ok(await page.getByRole("textbox", { name: "Slug", exact: true }).isDisabled(), "the protected slug must render read-only");
+      assert.equal(await page.getByRole("radiogroup", { name: "Editor mode" }).count(), 0, "the restricted editor must not offer schema or relationship modes");
+      assert.equal(new URL(page.url()).pathname, "/admin/content", "the editor must not rewrite the host's address");
+    } catch (cause) {
+      const text = await page.locator("body").innerText().catch(() => "<no body>");
+      throw new Error(`The restricted editor failed on the installed host. The page was showing:\n${text}\nBrowser errors:\n${errors.join("\n") || "<none>"}\nServer output:\n${server.output()}`, { cause });
+    }
+    const after = await (await fetch(`${ORIGIN}/api/draft`)).json();
+    assert.equal(after.value.snapshot.entries.find((/** @type {{id: string}} */ entry) => entry.id === "watercolor").values.title, "水彩画入門（ブラウザ編集）");
+    assert.equal(after.value.snapshot.entries.find((/** @type {{id: string}} */ entry) => entry.id === "watercolor").values.slug, "watercolor", "the slug route must be unchanged");
+    assert.ok(after.value.draftRevision > before.value.draftRevision, "the save must advance the durable draft revision");
+    for (const route of ["/composer", "/mapping", "/sitemapper", "/assets"]) {
+      assert.equal((await fetch(`${ORIGIN}${route}`)).status, 403, `${route} must be refused by the hosted service`);
+    }
+    assert.deepEqual(errors, [], "the restricted editor reported browser errors");
+    step(`hosted-content-host: passed; browser save moved the draft from revision ${before.value.draftRevision} to ${after.value.draftRevision}`);
+  } finally {
+    await browser?.close();
+    await server?.stop();
+    await rm(hostRoot, { recursive: true, force: true });
+  }
+}
+
 /** @param {string} hostRoot */
 async function verifyInstalledSiteArtifact(hostRoot) {
   // Import from the consumer cwd, never from this script's checkout. Building
@@ -480,7 +541,7 @@ checkNoDeploy({ root });
 const workspace = await createPackedWorkspace(roots);
 try {
   step(`external workspace: ${workspace}`);
-  step(`packing the actual tool, contract and UI pack for ${selection.hosts.length} disk host(s)${selection.fixture ? " and the synthesized fixture" : ""}`);
+  step(`packing the actual tool, contract and UI pack for ${selection.hosts.length} disk host(s)${selection.fixture ? " and the synthesized fixture" : ""}${selection.hostedContent ? " and the hosted content host" : ""}`);
   /** @type {Tarballs} */
   const tarballs = {};
   for (const [name, directory] of [["zudo-composer", root], ["@zudo-composer/component-contract", join(root, "packages/component-contract")], ["@zudo-composer/ui", join(root, "packages/ui")]]) {
@@ -492,6 +553,7 @@ try {
   }
   const toolPackage = /** @type {ToolPackage} */ (JSON.parse(await readFile(join(root, "package.json"), "utf8")));
   if (selection.fixture) await proveSynthesizedHost(workspace, tarballs, toolPackage);
+  if (selection.hostedContent) await proveHostedContentHost(workspace, tarballs, toolPackage);
   for (const host of selection.hosts) await proveDiskHost(host, workspace, tarballs, toolPackage, selection.negative);
   if (selection.generated) {
     step("generated: creating canonical ready output through a separately installed CLI");
@@ -502,7 +564,7 @@ try {
     await generated.assertPristine();
     step("generated: passed installed creation, strict pristine-output checks and the full packed-host proof");
   }
-  step(`passed: ${selection.hosts.length} disk host(s)${selection.fixture ? " plus the synthesized fixture" : ""}${selection.generated ? " plus freshly generated output" : ""}`);
+  step(`passed: ${selection.hosts.length} disk host(s)${selection.fixture ? " plus the synthesized fixture" : ""}${selection.hostedContent ? " plus the hosted content host" : ""}${selection.generated ? " plus freshly generated output" : ""}`);
 } finally {
   await rm(workspace, { recursive: true, force: true });
 }

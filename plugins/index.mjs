@@ -8,6 +8,7 @@ export { default as composerFileProviderPlugin } from "./composer-file-provider-
 export { siteProjectSourcePlugin } from "./site-project-source-plugin.mjs";
 export { default as componentPackPlugin, COMPONENT_PACK_ID } from "./component-pack-plugin.mjs";
 export { default as hostStylesPlugin, HOST_STYLES_ID } from "./host-styles-plugin.mjs";
+export { contentEditorPlugins } from "./content-editor-plugins.mjs";
 export { assertPackSourcesResolvable, resolveComponentPack } from "./component-pack.mjs";
 export { APP_ROOT, appModuleId, fsModuleId, resolveWorkspaceRoot } from "./roots.mjs";
 export { loadHostContext } from "../server/host-context.mjs";

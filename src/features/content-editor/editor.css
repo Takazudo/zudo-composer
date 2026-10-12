@@ -1,0 +1,71 @@
+/* Hosted content editor chrome (zudo-composer/content-editor).
+ *
+ * The tool's own chrome tokens and utilities, the shared component sheets the
+ * Content route imports, and the minimal shell around it. No component-pack
+ * or visitor CSS: the preview iframe is the host's own document.
+ */
+@import "../../base.css";
+@import "../content/styles.css";
+
+.sg-hosted-content-editor {
+  --sg-header-h: 3rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.sg-hosted-content-editor__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-hsp-sm);
+  min-height: var(--sg-header-h);
+  padding-inline: var(--spacing-hsp-lg);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.sg-hosted-content-editor__title {
+  margin: 0;
+  font-size: var(--text-base);
+}
+
+.sg-hosted-content-editor__status {
+  margin: 0;
+  margin-inline-end: auto;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+
+.sg-hosted-content-editor[data-status="conflict"] .sg-hosted-content-editor__status,
+.sg-hosted-content-editor[data-status="failed"] .sg-hosted-content-editor__status { color: var(--color-danger); }
+
+.sg-hosted-content-editor__note { padding: var(--spacing-hsp-lg); color: var(--color-muted); }
+
+.sg-hosted-content-editor__export { display: inline-flex; align-items: center; gap: var(--spacing-hsp-xs); font-size: var(--text-sm); }
+
+.sg-hosted-content-editor__preview { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+
+.sg-hosted-content-editor__preview-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-hsp-sm);
+  padding: var(--spacing-hsp-sm);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.sg-hosted-content-editor__preview-state { color: var(--color-muted); font-size: var(--text-sm); }
+
+.sg-hosted-content-editor__frame { flex: 1; width: 100%; min-height: 24rem; border: 0; background: var(--color-bg); }
+
+.sg-hosted-asset-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: var(--spacing-hsp-sm); margin: 0; padding: 0; list-style: none; }
+
+.sg-hosted-asset-picker__item { display: flex; flex-direction: column; gap: var(--spacing-hsp-xs); padding: var(--spacing-hsp-sm); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+
+.sg-hosted-asset-picker__item[data-current] { border-color: var(--color-accent); }
+
+.sg-hosted-asset-picker__thumb { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; }
+
+.sg-hosted-asset-picker__name { overflow-wrap: anywhere; font-size: var(--text-sm); }
+
+.sg-content-protected { min-width: 0; margin: 0; padding: 0; border: 0; }

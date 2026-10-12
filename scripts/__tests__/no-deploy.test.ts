@@ -357,7 +357,7 @@ describe("CI and aggregate packed-host coverage", () => {
     expect(markerStep.run).toContain("packages/demo-*/dist-editor/assets");
   });
 
-  it("uses disk discovery for all four hosts, generated output and the retained synthesized proof", async () => {
+  it("uses disk discovery for all four hosts, generated output, the retained synthesized proof and the hosted content host", async () => {
     const workflow = parse(await readFile(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8"));
     const matrixJob = workflow.jobs["packed-host-matrix"];
     const job = workflow.jobs["packed-host-install"];
@@ -370,8 +370,8 @@ describe("CI and aggregate packed-host coverage", () => {
     expect(invocation.run).toBe('pnpm smoke:host-install -- --host "$PACKED_HOST"');
     expect(invocation.env.PACKED_HOST).toBe("${{ matrix.host }}");
     const names = packedHostMatrix(repositoryRoot).host;
-    expect(names).toEqual(expect.arrayContaining(["demo-blog", "demo-landing", "demo-sample", "demo-webshop", "generated", "self-host"]));
-    expect(names.length).toBe(discoverPackedHosts(repositoryRoot).length + 2);
+    expect(names).toEqual(expect.arrayContaining(["demo-blog", "demo-landing", "demo-sample", "demo-webshop", "generated", "self-host", "hosted-content-host"]));
+    expect(names.length).toBe(discoverPackedHosts(repositoryRoot).length + 3);
     const manifest = JSON.parse(await readFile(join(repositoryRoot, "package.json"), "utf8"));
     expect(shellCommands(manifest.scripts.check)).toContainEqual(["pnpm", "smoke:host-install"]);
     expect(shellCommands(manifest.scripts.check)[0]).toEqual(["pnpm", "no-deploy:check"]);

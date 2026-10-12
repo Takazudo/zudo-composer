@@ -7,6 +7,7 @@ import { Menu, MenuItem, MenuSeparator, useMenu } from "../../components/overlay
 import { Button, Pane, PaneBody, PaneHeader } from "../../components/ui";
 import { buildContentOutline, isContentMoreRowId } from "./content-outline";
 import type { ContentAuthoringController, ContentAuthoringState } from "./controller";
+import { restrictionAllowsModel, useContentRestriction } from "./restriction";
 
 export interface ContentNavigatorProps {
   state: ContentAuthoringState;
@@ -72,18 +73,20 @@ function ContentRowMenu({ node, kind, canHoldAnotherEntry, onOpen, onAddEntry, o
  */
 export function ContentNavigator({ state, controller, run, onAddModel, onDeleteModel, onDeleteEntry, onCopyEntryId, onSelectionAccepted }: ContentNavigatorProps): JSX.Element {
   const { setActivePane } = useEditorChrome();
+  const restriction = useContentRestriction();
+  const models = useMemo(() => state.models.filter((model) => restrictionAllowsModel(restriction, model.id)), [restriction, state.models]);
   const openModel = state.model;
   const openModelId = openModel?.id ?? null;
 
   const nodes = useMemo(() => buildContentOutline({
-    models: state.models,
+    models,
     entryCounts: state.entryCounts,
     incompleteCounts: state.incompleteCounts,
     openModel,
     entries: state.entries,
     hasMoreEntries: state.nextCursor !== undefined,
     isEntryIncomplete: (entry) => controller.completeness(entry).length > 0,
-  }), [controller, openModel, state.entries, state.entryCounts, state.incompleteCounts, state.models, state.nextCursor]);
+  }), [controller, models, openModel, state.entries, state.entryCounts, state.incompleteCounts, state.nextCursor]);
 
   // Opening a model must reveal it. Adjusted during render rather than in an
   // effect: an effect runs after paint, so the model would flash closed on the
@@ -104,6 +107,8 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
   // `createdAt` and creation prepends, so a position between two of them cannot
   // be persisted without an order field. Only the terminal rows insert.
   function canInsert(target: OutlineInsertTarget): boolean {
+    // A restricted role creates no models and, through this tree, no Entries.
+    if (restriction !== null) return false;
     if (target.parentId === null) return target.index === state.models.length;
     if (target.parentId !== openModelId) return false;
     return canAddEntry && target.index === openChildCount;
@@ -129,7 +134,7 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
 
   return (
     <Pane label="Content">
-      <PaneHeader as="h1" title="Content" count={state.models.length} actions={<RailCollapseButton rail="nav" />} />
+      <PaneHeader as="h1" title="Content" count={models.length} actions={<RailCollapseButton rail="nav" />} />
       <PaneBody>
         <OutlineTree
           label="Content"
@@ -154,7 +159,7 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
             </>
           }
           renderActions={(node) => {
-            if (isContentMoreRowId(node.id)) return null;
+            if (isContentMoreRowId(node.id) || restriction !== null) return null;
             const model = state.models.find((candidate) => candidate.id === node.id) ?? null;
             // Judged against the row's own model, not the open one: a Single is
             // full once it holds its single Entry, whichever model is loaded.

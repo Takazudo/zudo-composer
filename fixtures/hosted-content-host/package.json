@@ -1,0 +1,22 @@
+{
+  "name": "hosted-content-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Independent consumer of the hosted content entries: a Worker-style service over the portable entries and the restricted editor built through zudo-composer/vite.",
+  "packageManager": "pnpm@11.5.2",
+  "scripts": {
+    "build": "vite build",
+    "verify": "node verify.mjs",
+    "serve": "node serve.mjs"
+  },
+  "dependencies": {
+    "@zudo-composer/component-contract": "^1.0.0",
+    "preact": "^10.29.8",
+    "zudo-composer": "0.0.0"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3",
+    "vite": "^8.2.2"
+  }
+}

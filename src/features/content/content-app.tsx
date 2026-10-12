@@ -1,4 +1,4 @@
-import type { JSX } from "preact";
+import type { ComponentChildren, JSX } from "preact";
 import { useWorkspace } from "../../app/workspace-context";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useBreadcrumb, type EditorStatus } from "../../app/chrome-context";
@@ -20,6 +20,7 @@ import { createContentAuthoringController, type ContentAuthoringController, type
 import { contentEntryLabel, contentEntryTitleField } from "./presentation";
 import type { ContentPreviewSource } from "./preview-source";
 import type { ContentAssetPickerRenderer } from "./structured-field-editor";
+import { restrictionAllowsField, useContentRestriction } from "./restriction";
 
 export interface ContentRouteContentProps {
   provider: ContentProvider;
@@ -29,6 +30,8 @@ export interface ContentRouteContentProps {
   renderAssetPicker?: ContentAssetPickerRenderer;
   assetPickerCapabilities?: { upload: boolean };
   loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]>;
+  /** Replaces the component preview inspector, e.g. a hosted editor's saved-snapshot document preview. */
+  inspector?: ComponentChildren;
 }
 
 /** Names the persisted rail geometry: one Content editor, not one per record. */
@@ -74,7 +77,11 @@ function contentHref(providerId: string, modelId: string, entryId?: string, view
  * published through `useEditorStatus` rather than drawn here, because autosave
  * remains authoritative and the app chrome owns where its state is shown.
  */
-export function ContentApp({ provider, controller: supplied, componentProvider, createPreviewSource, renderAssetPicker, assetPickerCapabilities, loadActivatedBaseline }: ContentRouteContentProps): JSX.Element {
+export function ContentApp({ provider, controller: supplied, componentProvider, createPreviewSource, renderAssetPicker, assetPickerCapabilities, loadActivatedBaseline, inspector }: ContentRouteContentProps): JSX.Element {
+  // Restricted (hosted content-only) mode: no schema, relationship, raw or
+  // structural controls, and the host owns the address bar.
+  const restriction = useContentRestriction();
+  const restricted = restriction !== null;
   const integration = useWorkspace()?.integration;
   const controller = useMemo(() => supplied ?? createContentAuthoringController(provider, { providers: integration?.contentProviders, assetProvider: integration?.assetProvider, loadActivatedBaseline }), [integration, loadActivatedBaseline, provider, supplied]);
   const [state, setState] = useState<ContentAuthoringState>(controller.state);
@@ -123,6 +130,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   useEffect(() => {
     if (appliedIntent.current || state.phase !== "ready") return;
     appliedIntent.current = true;
+    if (restricted) { setIntentAccepted(true); return; }
     const outcome = parseIntent();
     if (outcome.status === "invalid") { setIntentError(outcome.message); return; }
     if (outcome.status !== "matched" || outcome.intent.route !== "content") { setIntentAccepted(true); return; }
@@ -141,7 +149,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   // author is looking at. `replaceState` keeps it out of the history stack —
   // choosing a record is not a navigation.
   useEffect(() => {
-    if (!intentAccepted || state.phase !== "ready") return;
+    if (!intentAccepted || state.phase !== "ready" || restricted) return;
     if (typeof window === "undefined" || typeof window.history?.replaceState !== "function") return;
     window.history.replaceState(null, "", state.model ? contentHref(provider.descriptor.id, state.model.id, state.entry?.id, state.viewId, state.entry ? deepSelection : null) : CONTENT_ROUTE);
     notifyRouteSelection();
@@ -169,7 +177,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   // at the top of the form the author is filling in.
   const missing = state.entry ? controller.completeness().length : 0;
   const activeEntryTab = entryTab === "fields" && state.viewId ? `view:${state.viewId}` : entryTab;
-  const entryTabs = [{ id: "fields", label: "Fields" }, { id: "raw", label: "Raw" }, { id: "used-by", label: "Used by", count: state.incoming.length }, ...(state.model?.document.presentation?.views.map((view) => ({ id: `view:${view.id}`, label: view.label })) ?? [])];
+  const entryTabs = [{ id: "fields", label: "Fields" }, ...(restricted ? [] : [{ id: "raw", label: "Raw" }, { id: "used-by", label: "Used by", count: state.incoming.length }]), ...(state.model?.document.presentation?.views.map((view) => ({ id: `view:${view.id}`, label: view.label })) ?? [])];
 
   useBreadcrumb([
     { label: "Content", href: CONTENT_ROUTE },
@@ -239,7 +247,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
             action={
               <>
                 <Button onClick={() => run(() => controller.retryInitialization())}>Retry</Button>
-                <Button variant="danger" onClick={confirmStartFresh}>Start fresh…</Button>
+                {restricted ? null : <Button variant="danger" onClick={confirmStartFresh}>Start fresh…</Button>}
               </>
             }
           />
@@ -254,13 +262,13 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
     <EditorChrome
       editorKey={CONTENT_EDITOR_KEY}
       class="sg-content-app"
-      back={{ href: CONTENT_ROUTE, label: "Back to Content" }}
+      back={restricted ? undefined : { href: CONTENT_ROUTE, label: "Back to Content" }}
       title={
         <RecordTitle
           value={schemaMode ? (state.model?.document.name ?? "") : typeof entryTitle === "string" ? entryTitle : ""}
           label={schemaMode ? "Model name" : "Entry title"}
           placeholder={schemaMode ? "Model name" : "Untitled Entry"}
-          disabled={schemaMode ? state.model === null : state.entry === null || titleField === null}
+          disabled={schemaMode ? state.model === null : state.entry === null || titleField === null || !restrictionAllowsField(restriction, state.entry.modelId, titleField.id)}
           onCommit={(next) => run(() => {
             if (schemaMode) controller.renameModel(next);
             else if (titleField) controller.updateEntryValue(titleField.id, next);
@@ -270,7 +278,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
       status={statusOf(state.saveStatus, state.message, () => controller.retrySave())}
       dirty={state.saveStatus === "dirty" || state.saveStatus === "saving" || state.saveStatus === "error"}
       paneLabels={{ nav: "Content", main: schemaMode ? "Schema" : "Entry", insp: "Preview" }}
-      center={
+      center={restricted ? undefined : (
         <SegmentedControl<ContentWorkMode>
           label="Editor mode"
           size="sm"
@@ -278,7 +286,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
           options={state.model === null ? NO_MODEL_MODE_OPTIONS : MODE_OPTIONS}
           onChange={(mode) => run(async () => { if (mode === "model-fields") await controller.inspectSchema(); else if (mode === "relationships") await controller.inspectRelationships(); else controller.browseEntries(); setDeepSelection(null); acceptVisibleSelection(); })}
         />
-      }
+      )}
       right={
         <>
           <Button
@@ -304,6 +312,11 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
             <EllipsisIcon size="sm" />
           </Button>
           <Menu controller={overflow} label="Content actions">
+            {restricted ? (
+              <MenuItem icon={CopyIcon} disabled={state.entry === null} onSelect={() => { if (state.entry) copyEntryId(state.entry.id); }}>
+                Copy entry ID
+              </MenuItem>
+            ) : <>
             {schemaMode ? (
               <MenuItem icon={FileIcon} onSelect={() => { controller.browseEntries(); acceptVisibleSelection(); }}>Edit entry</MenuItem>
             ) : (
@@ -335,6 +348,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
             >
               Delete {state.entry ? "entry" : "model"}…
             </MenuItem>
+            </>}
           </Menu>
         </>
       }
@@ -393,7 +407,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
               {notice ? <Banner tone="info">{notice}</Banner> : null}
               {!state.model ? (
                 <><p class="sg-content-hint">No model selected</p><ContentModelDirectory state={state} controller={controller} run={run} onAddModel={() => setAddModelOpen(true)} /></>
-              ) : schemaMode ? (
+              ) : schemaMode && !restricted ? (
                 <ContentSchemaAuthor
                   state={state}
                   controller={controller}
@@ -406,17 +420,17 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
                     onConfirm: () => run(() => controller.removeField(field.id)),
                   })}
                 />
-              ) : relationshipsMode ? (
+              ) : relationshipsMode && !restricted ? (
                 <ContentRelationshipsView state={state} />
               ) : state.entry ? (
-                <div class="sg-content-entry-workspace"><PaneTabs label="Entry workspace" class="sg-content-entry-tabs" tabs={entryTabs} activeId={activeEntryTab} onSelect={(id) => { setDeepSelection(null); if (id.startsWith("view:")) { controller.selectView(id.slice(5)); setEntryTab("fields"); } else { controller.selectView(null); setEntryTab(id as "fields" | "raw" | "used-by"); } }} />{entryTab === "raw" ? <ContentRawView model={state.model} entry={state.entry} /> : entryTab === "used-by" ? <ContentUsedByView state={state} controller={controller} /> : <ContentEntryAuthor state={state} controller={controller} run={run} renderAssetPicker={renderAssetPicker} assetPickerCapabilities={assetPickerCapabilities} />}</div>
+                <div class="sg-content-entry-workspace"><PaneTabs label="Entry workspace" class="sg-content-entry-tabs" tabs={entryTabs} activeId={activeEntryTab} onSelect={(id) => { setDeepSelection(null); if (id.startsWith("view:")) { controller.selectView(id.slice(5)); setEntryTab("fields"); } else { controller.selectView(null); setEntryTab(id as "fields" | "raw" | "used-by"); } }} />{entryTab === "raw" && !restricted ? <ContentRawView model={state.model} entry={state.entry} /> : entryTab === "used-by" && !restricted ? <ContentUsedByView state={state} controller={controller} /> : <ContentEntryAuthor state={state} controller={controller} run={run} renderAssetPicker={renderAssetPicker} assetPickerCapabilities={assetPickerCapabilities} />}</div>
               ) : (
                 <ContentEntriesWorkspace state={state} controller={controller} run={run} />
               )}
             </PaneBody>
           </Pane>
         }
-        inspector={
+        inspector={inspector ?? (
           <ContentPreviewPane
             providerId={provider.descriptor.id}
             model={state.model}
@@ -425,7 +439,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
             componentProvider={componentProvider}
             createPreviewSource={createPreviewSource}
           />
-        }
+        )}
       />
       <ContentAddModelDialog
         open={addModelOpen}
