@@ -296,7 +296,9 @@ silent overwrite or replacement draft:
 - `rebase` carries each retained field change that still validates and reports
   every drop with a reason (`entry-removed`, `model-removed`, `field-removed`,
   `canonical-changed`, `invalid-value`, `forbidden`); canonical values changed
-  in Git are never overwritten. `discard` resets the draft to canonical content.
+  in Git are never overwritten. A draft-created collection Entry whose owner
+  membership change is dropped is dropped too (`canonical-changed`), never
+  carried as an unlisted orphan. `discard` resets the draft to canonical content.
   `apply: false` returns the same `{ applied, state, carried, dropped }` report
   and writes nothing, so run a dry run first.
 - An applied adoption issues a new draft revision, advances the integration fence

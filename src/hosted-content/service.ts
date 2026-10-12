@@ -45,10 +45,14 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
     if (!Array.isArray(value)) fail("invalid-value", "Collection membership is malformed.");
     return value as unknown as ContentEntryRef[];
   }
+  function ownerExists(providers: HostedProvider[], collection: HostedCollectionPermission): boolean {
+    return !!providers.find(provider => provider.providerId === collection.owner.providerId)?.entries.some(entry => entry.id === collection.owner.recordId && entry.modelId === collection.owner.modelId);
+  }
   function permitted(providers: HostedProvider[], ref: ContentEntryRef): boolean {
     const model = options.policy.models.find(item => item.providerId === ref.providerId && item.modelId === ref.modelId);
     if (!model) return false;
-    return model.entryIds.includes(ref.recordId) || options.policy.collections.some(collection => collection.target.providerId === ref.providerId && collection.target.modelId === ref.modelId && membership(providers, collection).some(item => contentEntryRefKey(item) === contentEntryRefKey(ref)));
+    // An absent owner Entry grants no membership; it must not lock every actor out.
+    return model.entryIds.includes(ref.recordId) || options.policy.collections.some(collection => collection.target.providerId === ref.providerId && collection.target.modelId === ref.modelId && ownerExists(providers, collection) && membership(providers, collection).some(item => contentEntryRefKey(item) === contentEntryRefKey(ref)));
   }
   function visible(providers: HostedProvider[], ref: ContentEntryRef): boolean {
     return permitted(providers, ref) || options.policy.collections.some(collection => contentEntryRefKey(collection.owner) === contentEntryRefKey(ref));
@@ -186,7 +190,7 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
   }
   /** Carry each retained change onto new canonical content only where it still validates; report every drop. */
   function rebaseDraft(head: HostedHead, canonical: HostedProvider[]): { providers: HostedProvider[]; carried: HostedRebaseChange[]; dropped: HostedAdoptionResult["dropped"] } {
-    const providers = copy(canonical), carried: HostedRebaseChange[] = [], dropped: HostedAdoptionResult["dropped"] = [];
+    const providers = copy(canonical), carried: HostedRebaseChange[] = [], dropped: HostedAdoptionResult["dropped"] = [], createdRefs: ContentEntryRef[] = [];
     for (const { ref, entry, base, fieldIds } of authoredChanges(head)) {
       const drop = (reason: HostedRebaseDropReason, ids = fieldIds) => { for (const fieldId of ids) dropped.push({ entry: ref, fieldId, reason }); };
       const provider = providers.find(item => item.providerId === ref.providerId);
@@ -213,9 +217,18 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
         }
       }
       if (!applied) continue;
-      if (created) provider.entries.push(target);
+      if (created) { provider.entries.push(target); createdRefs.push(ref); }
       target.generation = Math.max(target.generation, entry.generation) + 1;
       target.updatedAt = options.now();
+    }
+    // A created Entry whose owner membership change was dropped would be an unlisted orphan.
+    for (const ref of createdRefs) {
+      if (permitted(providers, ref)) continue;
+      const provider = providers.find(item => item.providerId === ref.providerId)!;
+      provider.entries = provider.entries.filter(entry => !(entry.id === ref.recordId && entry.modelId === ref.modelId));
+      const orphaned = carried.filter(change => contentEntryRefKey(change.entry) === contentEntryRefKey(ref));
+      carried.splice(0, carried.length, ...carried.filter(change => !orphaned.includes(change)));
+      dropped.push(...orphaned.map(change => ({ ...change, reason: "canonical-changed" as const })));
     }
     return { providers, carried, dropped };
   }

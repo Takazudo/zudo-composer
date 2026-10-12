@@ -346,8 +346,13 @@ describe("hosted Content trusted boundary", () => {
       { entry: page, fieldId: "price", reason: "canonical-changed" },
       { entry: page, fieldId: "faqs", reason: "canonical-changed" },
       { entry: faq, fieldId: "answer", reason: "entry-removed" },
+      // The created Entry would be orphaned once its owner's membership change is dropped.
+      { entry: created.createdEntry, fieldId: "question", reason: "canonical-changed" },
+      { entry: created.createdEntry, fieldId: "answer", reason: "canonical-changed" },
     ]);
+    expect(removal.carried).not.toContainEqual(expect.objectContaining({ entry: created.createdEntry }));
     expect(removal.state.providers[0]!.entries.map(entry => entry.id)).not.toContain("one");
+    expect(removal.state.providers[0]!.entries.map(entry => entry.id)).not.toContain(created.createdEntry!.recordId);
     expect(f.db()).toEqual(before);
     canonical[0]!.entries.find(entry => entry.id === "home")!.values.faqs = [json(faq)];
     canonical[0]!.entries.push(structuredClone(initial.baselineProviders[0]!.entries.find(entry => entry.id === "one")!));
@@ -366,6 +371,15 @@ describe("hosted Content trusted boundary", () => {
     invalid[0]!.entries.find(entry => entry.id === "home")!.values.image = { kind: "image", asset: { providerId: "assets", assetId: "unapproved" }, alt: "", decorative: true, caption: "" };
     await expect(f.service.adoptCanonicalBaseline({ ...evidence, expected: { baseline: { gitSha: "g9", contentDigest: "c9" }, definition: "definition" }, providers: invalid })).rejects.toMatchObject({ code: "configuration-required" });
     await expect(f.service.adoptCanonicalBaseline({ ...evidence, draft: "merge" } as never)).rejects.toMatchObject({ code: "invalid-request" });
+  });
+
+  it("keeps every actor readable when a collection owner Entry is absent", async () => {
+    const f = fixture(), stored = f.db();
+    const providers = structuredClone(stored.state.providers);
+    providers[0]!.entries.splice(providers[0]!.entries.findIndex(entry => entry.id === "home"), 1);
+    f.replace({ ...stored, state: { ...stored.state, providers } });
+    const state = await f.service.readState(actor);
+    expect(state.providers[0]!.entries.map(entry => entry.id)).toEqual(["one"]);
   });
 
   it("retains content on failed exports and rejects forged integration, external baseline/definition changes", async () => {
