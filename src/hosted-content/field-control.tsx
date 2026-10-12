@@ -70,7 +70,11 @@ interface ControlProps {
   onIncompleteNumber?(controlId: string, raw: string | null): void;
   onChange(value: JsonValue | undefined): void;
 }
-/** Typed values only. No routes, provider constructors, upload, schema or source execution. */
+/**
+ * Typed values only. No routes, provider constructors, upload, schema or source execution.
+ * Object/list/asset controls are separate from the local StructuredValueEditor/AssetUseCard (#903 §6) because those
+ * take the full ContentAuthoringController, route intents ("Open in Assets") and upload; scalars and Markdown source are shared.
+ */
 export function HostedFieldControl(props: ControlProps): JSX.Element {
   const { schema, field, value, permission, identity, label, content, policy, labels, onChange } = props;
   if (!permission.replace && !["object", "list", "asset-use", "reference", "reference-list"].includes(schema.kind)) return <output aria-label={label}>{value === undefined ? labels.none : typeof value === "string" ? value : JSON.stringify(value)}</output>;

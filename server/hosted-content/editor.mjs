@@ -1794,7 +1794,11 @@ function MarkdownSourceControl({ identity, label, required, value, onChange, lab
 		]
 	});
 }
-/** Typed values only. No routes, provider constructors, upload, schema or source execution. */
+/**
+* Typed values only. No routes, provider constructors, upload, schema or source execution.
+* Object/list/asset controls are separate from the local StructuredValueEditor/AssetUseCard (#903 §6) because those
+* take the full ContentAuthoringController, route intents ("Open in Assets") and upload; scalars and Markdown source are shared.
+*/
 function HostedFieldControl(props) {
 	const { schema, field, value, permission, identity, label, content, policy, labels, onChange } = props;
 	if (!permission.replace && ![
