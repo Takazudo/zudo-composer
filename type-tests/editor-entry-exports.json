@@ -1,0 +1,30 @@
+{
+  "content-editor": {
+    "values": [
+      "CONTENT_EDITOR_LABELS",
+      "CONTENT_EDITOR_LABELS_JA",
+      "HostedContentForbiddenError",
+      "canSubmitPreviewedSnapshot",
+      "changedEntryValues",
+      "contentEditorDisplayStatus",
+      "createContentEditorSession",
+      "mountContentEditor"
+    ],
+    "types": [
+      "ContentEditorAsset",
+      "ContentEditorAssetCatalog",
+      "ContentEditorDisplayStatus",
+      "ContentEditorExportOptions",
+      "ContentEditorFormStatus",
+      "ContentEditorHandle",
+      "ContentEditorLabels",
+      "ContentEditorPendingOperation",
+      "ContentEditorPreviewOptions",
+      "ContentEditorSaveState",
+      "ContentEditorSession",
+      "ContentEditorSessionOptions",
+      "ContentEditorState",
+      "MountContentEditorOptions"
+    ]
+  }
+}

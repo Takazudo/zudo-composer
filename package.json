@@ -57,6 +57,10 @@
     "./export": {
       "types": "./server/export.d.mts",
       "default": "./server/export.mjs"
+    },
+    "./content-editor": {
+      "types": "./server/content-editor.d.mts",
+      "default": "./src/features/content-editor/index.ts"
     }
   },
   "files": [

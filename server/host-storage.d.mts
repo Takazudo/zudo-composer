@@ -561,6 +561,38 @@ interface HostContentPolicy {
 interface HostContentActor {
     readonly subject: string;
 }
+interface ContentMutationRequestBase {
+    readonly projectId: string;
+    readonly providerId: string;
+    readonly modelId: string;
+    /** The Content snapshot mutation token the request was prepared against. */
+    readonly expectedRevision: number;
+}
+type ContentMutationRequest = (ContentMutationRequestBase & {
+    readonly kind: "put-entry-values";
+    readonly entryId: string;
+    readonly values: Readonly<Record<string, JsonValue>>;
+}) | (ContentMutationRequestBase & {
+    readonly kind: "create-entry";
+    readonly entryId: string;
+    readonly values: Readonly<Record<string, JsonValue>>;
+}) | (ContentMutationRequestBase & {
+    readonly kind: "delete-entry";
+    readonly entryId: string;
+})
+/** Rewrites one permitted `number` field across every entry of the model, in the listed order. */
+ | (ContentMutationRequestBase & {
+    readonly kind: "reorder";
+    readonly fieldId: string;
+    readonly entryIds: readonly string[];
+});
+type ContentMutationRefusalCode = "malformed-request" | "forbidden" | "wrong-project" | "stale" | "unknown-model" | "unknown-field" | "not-found" | "conflict" | "invalid-value" | "unsafe-reference";
+interface ContentMutationRefusal {
+    readonly ok: false;
+    readonly code: ContentMutationRefusalCode;
+    readonly message: string;
+    readonly path?: string;
+}
 
 interface ContentBaseline {
     /** The integrated project, exactly as the host's canonical source holds it. */
@@ -580,6 +612,12 @@ interface ContentDraftApplyInput {
     readonly mutation: ContentMutation;
     readonly expectedDraftRevision: number;
     readonly expectedBaselineRevision: string;
+    /**
+     * Digest of the caller's own request when the mutation was derived from it
+     * (see `applyHostContentRequest`). A replay is then matched by this digest
+     * rather than by the derived mutation, whose timestamps differ per attempt.
+     */
+    readonly requestDigest?: string;
 }
 interface ContentOperationReceipt {
     readonly operationId: string;
@@ -693,5 +731,52 @@ declare const CONTENT_STORAGE_CONFORMANCE_CASES: readonly ContentStorageConforma
  */
 declare function runContentStorageConformance(factory: ContentStorageConformanceFactory, harness?: ContentStorageConformanceHarness): Promise<void>;
 
-export { CONTENT_STORAGE_CONFORMANCE_CASES, CONTENT_STORAGE_CONFORMANCE_POLICY, contentDraftRequestDigest, contentSnapshotId, createContentStorageConformanceBaseline, createMemoryContentDraftStorage, projectWithContentSnapshot, runContentStorageConformance, sha256Hex };
-export type { ContentBaseline, ContentBaselineAdvanceInput, ContentDraftApplied, ContentDraftApplyInput, ContentDraftConflictReason, ContentDraftMutationResult, ContentDraftReadResult, ContentDraftState, ContentDraftStorageAdapter, ContentOperationReceipt, ContentSnapshotRecord, ContentStorageConformanceCase, ContentStorageConformanceFactory, ContentStorageConformanceHarness, MemoryContentDraftStorageOptions };
+interface HostContentApplyInput {
+    /** Caller-minted, reused verbatim for every retry of the same intent. */
+    readonly operationId: string;
+    /** Untrusted request JSON; validated by `authorizeContentMutation`. */
+    readonly request: unknown;
+    /** The baseline identity the editor loaded alongside `request.expectedRevision`. */
+    readonly expectedBaselineRevision: string;
+}
+/** The adapter's result vocabulary plus the policy's own refusal. Nothing is written on `refused`. */
+type HostContentApplyResult = ContentDraftMutationResult<ContentDraftApplied> | {
+    status: "refused";
+    refusal: ContentMutationRefusal;
+};
+interface HostContentServiceOptions {
+    readonly policy: HostContentPolicy;
+    /** Verified by the host before the request is read. */
+    readonly actor: HostContentActor;
+    readonly now?: () => string;
+}
+declare function isHostContentOperationId(value: unknown): value is string;
+/** Digest binding the actor, the exact request and the expected baseline: the replay identity of one operation. */
+declare function hostContentRequestDigest(actor: HostContentActor, request: unknown, expectedBaselineRevision: string): Promise<string>;
+/** Decide and apply one editor save. See the module header for the order of checks. */
+declare function applyHostContentRequest(adapter: ContentDraftStorageAdapter, input: HostContentApplyInput, options: HostContentServiceOptions): Promise<HostContentApplyResult>;
+/** A receipt is only returned to the actor that wrote it. */
+declare function readHostContentReceipt(adapter: ContentDraftStorageAdapter, operationId: string, actor: HostContentActor): Promise<ContentDraftReadResult<ContentOperationReceipt>>;
+interface ContentEditorApplyInput {
+    readonly operationId: string;
+    readonly request: ContentMutationRequest;
+    readonly expectedBaselineRevision: string;
+}
+/**
+ * What the browser editor needs from the host. Every method may reject (a
+ * transport failure); the editor treats a rejected `apply` as an uncertain
+ * write and resolves it through `readReceipt` and an identical retry.
+ */
+interface ContentEditorStorage {
+    read(): Promise<ContentDraftReadResult<ContentDraftState>>;
+    apply(input: ContentEditorApplyInput): Promise<HostContentApplyResult>;
+    readReceipt(operationId: string): Promise<ContentDraftReadResult<ContentOperationReceipt>>;
+    snapshot(input: {
+        expectedDraftRevision: number;
+    }): Promise<ContentDraftMutationResult<ContentSnapshotRecord>>;
+}
+/** Binds the editor shape to an adapter in the same process, with the host's trusted policy and actor. */
+declare function createContentEditorStorage(adapter: ContentDraftStorageAdapter, options: HostContentServiceOptions): ContentEditorStorage;
+
+export { CONTENT_STORAGE_CONFORMANCE_CASES, CONTENT_STORAGE_CONFORMANCE_POLICY, applyHostContentRequest, contentDraftRequestDigest, contentSnapshotId, createContentEditorStorage, createContentStorageConformanceBaseline, createMemoryContentDraftStorage, hostContentRequestDigest, isHostContentOperationId, projectWithContentSnapshot, readHostContentReceipt, runContentStorageConformance, sha256Hex };
+export type { ContentBaseline, ContentBaselineAdvanceInput, ContentDraftApplied, ContentDraftApplyInput, ContentDraftConflictReason, ContentDraftMutationResult, ContentDraftReadResult, ContentDraftState, ContentDraftStorageAdapter, ContentEditorApplyInput, ContentEditorStorage, ContentOperationReceipt, ContentSnapshotRecord, ContentStorageConformanceCase, ContentStorageConformanceFactory, ContentStorageConformanceHarness, HostContentApplyInput, HostContentApplyResult, HostContentServiceOptions, MemoryContentDraftStorageOptions };

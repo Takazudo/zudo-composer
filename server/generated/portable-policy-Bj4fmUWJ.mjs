@@ -907,6 +907,7 @@ function checkValues(policy, modelPolicy, model, snapshot, values, entryId) {
 		const field = fields.get(fieldId);
 		if (!field) return refuse("unknown-field", `Model "${model.id}" has no field "${fieldId}".`, path);
 		if (!modelPolicy.fields.includes(fieldId)) return refuse("forbidden", `Field "${field.key}" is not editable by this role.`, path);
+		if (value === null) continue;
 		if (!isValueValidForField(field, value)) return refuse("invalid-value", `Value for field "${field.key}" does not match ${field.kind}.`, path);
 		for (const ref of entryRefs(field, value)) {
 			if (ref.providerId !== policy.providerId) return refuse("unsafe-reference", `Reference in "${field.key}" targets another Content provider.`, path);
@@ -919,6 +920,9 @@ function checkValues(policy, modelPolicy, model, snapshot, values, entryId) {
 			if (diagnostic) return refuse(diagnostic.code === "unsafe-link" ? "unsafe-reference" : "invalid-value", `Markdown in "${field.key}": ${diagnostic.message}`, path);
 		}
 	}
+}
+function withoutCleared(values) {
+	return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== null));
 }
 function numberField(model, fieldId) {
 	return traverseContentSchema(model.document.fields).find(({ field, path }) => path.length === 1 && field.id === fieldId && field.kind === "number")?.field;
@@ -973,10 +977,10 @@ function authorizeContentMutation(policy, actor, request, snapshot, options = {}
 			const record = {
 				...existing,
 				updatedAt: timestamp < existing.updatedAt ? existing.updatedAt : timestamp,
-				values: {
+				values: withoutCleared({
 					...existing.values,
 					...structuredClone(typed.values)
-				}
+				})
 			};
 			const issue = contentEntrySemanticIssue(record, model);
 			if (issue) return refuse("invalid-value", issue, "values");
@@ -992,7 +996,7 @@ function authorizeContentMutation(policy, actor, request, snapshot, options = {}
 			if (model.document.kind === "single" && modelEntries.length > 0) return refuse("forbidden", `Model "${modelId}" holds a single entry.`, "modelId");
 			const refused = checkValues(policy, modelPolicy, model, snapshot, typed.values, typed.entryId);
 			if (refused) return refused;
-			const record = createContentEntryRecord(modelId, structuredClone(typed.values), {
+			const record = createContentEntryRecord(modelId, withoutCleared(structuredClone(typed.values)), {
 				id: typed.entryId,
 				timestamp: now()
 			});

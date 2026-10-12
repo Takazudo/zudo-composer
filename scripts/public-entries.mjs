@@ -27,4 +27,12 @@ export const PUBLIC_ENTRIES = {
     "preview-protocol": "server/public/preview-protocol.mts",
     export: "server/public/export.mts",
   },
+  /**
+   * Browser entries shipped as source: declaration-only here, with Preact JSX
+   * and the DOM library. Their runtime is bundled by the host through
+   * `zudo-composer/vite`.
+   */
+  editorEntries: {
+    "content-editor": "server/public/content-editor.mts",
+  },
 };

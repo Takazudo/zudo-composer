@@ -12,5 +12,6 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["server/public/*.mts"]
+  "include": ["server/public/*.mts"],
+  "exclude": ["server/public/content-editor.mts"]
 }

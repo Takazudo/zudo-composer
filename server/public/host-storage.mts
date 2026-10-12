@@ -29,3 +29,15 @@ export {
   type ContentStorageConformanceFactory,
   type ContentStorageConformanceHarness,
 } from "../../src/hosted-content/conformance.js";
+export {
+  applyHostContentRequest,
+  createContentEditorStorage,
+  hostContentRequestDigest,
+  isHostContentOperationId,
+  readHostContentReceipt,
+  type ContentEditorApplyInput,
+  type ContentEditorStorage,
+  type HostContentApplyInput,
+  type HostContentApplyResult,
+  type HostContentServiceOptions,
+} from "../../src/hosted-content/editor-service.js";

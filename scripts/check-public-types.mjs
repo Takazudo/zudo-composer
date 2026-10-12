@@ -86,3 +86,19 @@ for (const [subpath, expected] of Object.entries(portableExpected)) {
   pinned += expected.values.length + expected.types.length;
 }
 console.log(`Portable public surfaces pinned: ${Object.keys(portableExpected).length} entries, ${pinned} names; source and generated declarations agree.`);
+
+/** @type {Record<string, { values: string[], types: string[] }>} */
+const editorExpected = JSON.parse(await readFile(resolve(root, "type-tests/editor-entry-exports.json"), "utf8"));
+const editorOptions = compilerOptions("tsconfig.public-editor.json");
+let editorPinned = 0;
+for (const [subpath, expected] of Object.entries(editorExpected)) {
+  for (const key of /** @type {const} */ (["values", "types"])) {
+    assert.deepEqual(expected[key], [...new Set(expected[key])].sort(), `type-tests/editor-entry-exports.json ${subpath}.${key} must be sorted and unique`);
+  }
+  for (const { entry, exported } of exportsOf(subpath, `server/public/${subpath}.mts`, `server/${subpath}.d.mts`, editorOptions)) {
+    assert.deepEqual(exported.filter((symbol) => symbol.isValue).map(({ name }) => name).sort(), expected.values, `${entry}: editor values changed; deliberately update type-tests/editor-entry-exports.json`);
+    assert.deepEqual(exported.filter((symbol) => !symbol.isValue).map(({ name }) => name).sort(), expected.types, `${entry}: editor types changed; deliberately update type-tests/editor-entry-exports.json`);
+  }
+  editorPinned += expected.values.length + expected.types.length;
+}
+console.log(`Browser editor surface pinned: ${Object.keys(editorExpected).length} entry, ${editorPinned} names; source and generated declarations agree.`);

@@ -63,11 +63,16 @@
     "values": [
       "CONTENT_STORAGE_CONFORMANCE_CASES",
       "CONTENT_STORAGE_CONFORMANCE_POLICY",
+      "applyHostContentRequest",
       "contentDraftRequestDigest",
       "contentSnapshotId",
+      "createContentEditorStorage",
       "createContentStorageConformanceBaseline",
       "createMemoryContentDraftStorage",
+      "hostContentRequestDigest",
+      "isHostContentOperationId",
       "projectWithContentSnapshot",
+      "readHostContentReceipt",
       "runContentStorageConformance",
       "sha256Hex"
     ],
@@ -81,11 +86,16 @@
       "ContentDraftReadResult",
       "ContentDraftState",
       "ContentDraftStorageAdapter",
+      "ContentEditorApplyInput",
+      "ContentEditorStorage",
       "ContentOperationReceipt",
       "ContentSnapshotRecord",
       "ContentStorageConformanceCase",
       "ContentStorageConformanceFactory",
       "ContentStorageConformanceHarness",
+      "HostContentApplyInput",
+      "HostContentApplyResult",
+      "HostContentServiceOptions",
       "MemoryContentDraftStorageOptions"
     ]
   },

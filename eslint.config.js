@@ -32,6 +32,7 @@ export default tseslint.config(
       'server/preview-protocol.d.mts',
       'server/export.mjs',
       'server/export.d.mts',
+      'server/content-editor.d.mts',
       '.vite/**',
       '.artifacts/**',
       'test-results/**',
