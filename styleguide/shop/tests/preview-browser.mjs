@@ -15,20 +15,32 @@ assert.equal(corpus.reduce((sum, story) => sum + story.variants.length, 0), 105)
 assert(corpus.every((story) => story.variants.every((variant) => !variant.controls)), "Do not invent controls absent from the authored demo corpus");
 const server = await servePreview(join(host, "dist"));
 let browser;
+let context;
+let page;
 const report = { host: "shop", checks: [], variants: 0 };
 try {
   browser = await chromium.launch({ ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {}), headless: true });
-  const context = await browser.newContext({ viewport: { width: 1500, height: 1100 }, permissions: ["clipboard-read", "clipboard-write"] });
-  const page = await context.newPage();
+  context = await browser.newContext({ viewport: { width: 1500, height: 1100 }, permissions: ["clipboard-read", "clipboard-write"] });
+  page = await context.newPage();
+  await context.tracing.start({ screenshots: true, snapshots: true });
   page.setDefaultTimeout(15000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
   page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
   page.on("response", (response) => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
   const selector = `${previewFrameSelector}[src*="variant=WithContent"]`;
+  // The mobile drawer (inert, lg:hidden) precedes the desktop sidebar in the DOM, so an unscoped link lookup matches an invisible element first.
+  const openContainer = async () => {
+    const link = page.getByRole("complementary", { name: "Documentation sidebar" }).getByRole("link", { name: "Container", exact: true });
+    await expect(link).toHaveCount(1);
+    await expect(link).toBeVisible();
+    await link.click();
+    await expect(page).toHaveURL(/\/components\/container\/?$/);
+    await expect(page.locator(previewFrameSelector).first()).toBeVisible();
+  };
   await page.goto(`${server.origin}/`);
   await page.getByRole("link", { name: "Components", exact: true }).click();
-  await page.getByRole("link", { name: "Container", exact: true }).first().click();
+  await openContainer();
   await expect(page.locator('fieldset[aria-busy="false"]')).toBeVisible();
   const frame = page.frameLocator(selector);
   await expect(frame.locator("[data-sg-variant-root]")).not.toBeEmpty();
@@ -93,7 +105,7 @@ try {
     await expect(page.getByRole("button", { name: "Close panel", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Close panel", exact: true }).click();
     await page.getByRole("link", { name: "Components", exact: true }).click();
-    await page.getByRole("link", { name: "Container", exact: true }).first().click();
+    await openContainer();
     await expect(page.locator('fieldset[aria-busy="false"]')).toBeVisible();
   }
   report.checks.push("Populated detail/header/dashboard token entry points, actual computed token edit, disabled Apply, reopen and repeated SPA navigation");
@@ -185,8 +197,19 @@ try {
   report.checks.push("All 105 actual variants in isolated Preact frames, actual PNG inventory and pagehide disposal");
   report.result = "PASS";
   console.log(JSON.stringify(report, null, 2));
-} catch (error) { report.result = "FAIL"; report.error = String(error); throw error; }
+} catch (error) {
+  report.result = "FAIL";
+  report.error = String(error);
+  report.url = page?.url();
+  await Promise.allSettled([
+    page?.content().then((html) => writeFile(join(evidence, "failure-dom.html"), html)),
+    page?.screenshot({ path: join(evidence, "failure.png"), fullPage: true }),
+    context?.tracing.stop({ path: join(evidence, "failure-trace.zip") }),
+  ]);
+  throw error;
+}
 finally {
+  if (report.result === "PASS") await context?.tracing.stop().catch(() => {});
   await writeFile(join(evidence, "result.json"), JSON.stringify(report, null, 2) + "\n");
   await browser?.close();
   await server.close();
