@@ -1,4 +1,4 @@
-import type { RecordTransactionContext, RecordTransactionPlan, RecordTransactionSnapshot } from "./node-fs/record-transaction";
+import type { RecordTransactionContext, RecordTransactionPlan, RecordTransactionSnapshot } from "./record-transaction-types";
 /** Whole-record transaction capability, independent of a filesystem transport. */
 export interface RecordTransactionStorage {
   readonly root: string;

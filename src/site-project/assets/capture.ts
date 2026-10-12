@@ -3,7 +3,7 @@ import type { ComponentCatalog } from "../../composer/model/types";
 import type { VersionedAssetStore } from "../../assets/library";
 import type { AssetSnapshot } from "../../assets/model";
 import { createAssetReferenceLock } from "../../assets/references";
-import { compileSiteProject } from "../compiler/compiler";
+import { compileSiteProject } from "../compiler";
 import type { SiteCompilerDiagnostic } from "../compiler/types";
 import { resolveSiteProjectAsset } from "./impact";
 /** Inspect impact plus the compile diagnostics that made it incomplete, if any:

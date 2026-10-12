@@ -3,7 +3,7 @@ import type { CompositionDocument, CompositionNode } from "../../composer/model/
 import { materializeGlobalTemplateView } from "../../composer/reuse/materialize";
 import { resolveGlobalTemplate } from "../../composer/reuse/resolver";
 import type { GlobalTemplateResolutionOutcome } from "../../composer/reuse/types";
-import { planLinkedJsxModules } from "../../composer/source/plan-linked-jsx";
+import type { planLinkedJsxModules } from "../../composer/source/plan-linked-jsx";
 import type { ContentEntrySnapshot } from "../../content/library/types";
 import type { ContentEntryRecord, ContentModelRecord } from "../../content/model/types";
 import { evaluateResolvedMapping, resolveMappingDefinition } from "../../mapping/resolver/resolver";
@@ -234,6 +234,10 @@ function asModule(plan: Extract<ReturnType<typeof planLinkedJsxModules>["records
  * Compile a validated, portable SiteProject snapshot into deterministic route
  * and linked-JSX manifests. All reads are completed from one detached in-memory
  * snapshot; no provider, runtime component, or platform API is imported.
+ *
+ * Module source is generated only through `options.planModules`; the index
+ * wrapper supplies the JSX planner, while the portable projection omits it so
+ * the browser/Worker graph never carries the JSX generator.
  */
 export async function compileSiteProject(
   project: SiteProject,
@@ -569,20 +573,23 @@ export async function compileSiteProject(
     }
 
     const resolutions = resolution ? new Map([[routeRecordId, resolution]]) : undefined;
-    const batch = planLinkedJsxModules({
-      allowUnresolvedAssetDownloads: options.policy === "authoring-preview",
-      manifest: options.componentCatalog,
-      records: [...dependencies, routeRecord],
-      ...(resolutions ? { resolutions } : {}),
-      moduleSpecifier: (recordId) => moduleSpecifier(providerId, routeRecordId, recordId),
-    });
-    const blocked = batch.records.find((plan) => plan.status === "blocked");
-    if (blocked?.status === "blocked") {
-      const code = blocked.diagnostic.kind === "dependency" ? blocked.diagnostic.code : "jsx-generation-failed";
-      diagnostics.push({ severity: "blocking", code, message: `JSX module generation failed for Composition "${blocked.recordId}".`, path: compositionSelector(blocked.recordId === routeRecordId ? localRef! : { providerId, recordId: blocked.recordId }), pathname: expanded.pathname, nodeId: node.id, ...(selectedEntry ? { entry: selectedEntry } : {}) });
-      continue;
+    let modules: SiteCompiledModule[] = [];
+    if (options.planModules) {
+      const batch = options.planModules({
+        allowUnresolvedAssetDownloads: options.policy === "authoring-preview",
+        manifest: options.componentCatalog,
+        records: [...dependencies, routeRecord],
+        ...(resolutions ? { resolutions } : {}),
+        moduleSpecifier: (recordId) => moduleSpecifier(providerId, routeRecordId, recordId),
+      });
+      const blocked = batch.records.find((plan) => plan.status === "blocked");
+      if (blocked?.status === "blocked") {
+        const code = blocked.diagnostic.kind === "dependency" ? blocked.diagnostic.code : "jsx-generation-failed";
+        diagnostics.push({ severity: "blocking", code, message: `JSX module generation failed for Composition "${blocked.recordId}".`, path: compositionSelector(blocked.recordId === routeRecordId ? localRef! : { providerId, recordId: blocked.recordId }), pathname: expanded.pathname, nodeId: node.id, ...(selectedEntry ? { entry: selectedEntry } : {}) });
+        continue;
+      }
+      modules = batch.records.filter((plan) => plan.status === "generated").map(asModule).sort(compareModules);
     }
-    const modules = batch.records.filter((plan) => plan.status === "generated").map(asModule).sort(compareModules);
     routes.push({
       ...(materializationSources.has(expanded.pathname) ? { materializationSources: materializationSources.get(expanded.pathname)! } : {}),
       pathname: expanded.pathname,

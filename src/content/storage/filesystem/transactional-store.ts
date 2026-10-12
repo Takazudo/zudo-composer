@@ -61,18 +61,15 @@ import {
 import type { ContentEntryRecord, ContentLoadOutcome, ContentModelRecord } from "../../model";
 import { isPlainObject, isSafeRecordId } from "../../../shared";
 import type { RecordTransactionStorage } from "../../../shared/record-transaction-storage";
-import type {
-  DurableExtraErrorCode,
-  RecordEnvelope,
-  SafeRootErrorPolicy,
-} from "../../../shared/node-fs";
+import type { DurableExtraErrorCode, SafeRootErrorPolicy } from "../../../shared/error-policy";
+import type { RecordEnvelope } from "../../../shared/record-transaction-types";
 import {
   CONTENT_ENTRY_RECORD_PREFIX,
   CONTENT_FILESYSTEM_LAYOUT,
   CONTENT_META_RECORD_ID,
   CONTENT_MODEL_RECORD_PREFIX,
   MAX_CONTENT_ID_LENGTH,
-} from "./types";
+} from "./layout";
 
 type Operation = ContentPersistenceOperation;
 
