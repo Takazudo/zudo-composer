@@ -1,0 +1,42 @@
+/* Explicit editor chrome; never import this sheet in the visitor document. */
+.hosted-content-editor {
+  --hosted-surface: #fff;
+  --hosted-text: #242424;
+  --hosted-border: #b8b8b8;
+  --hosted-focus: #185abc;
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--hosted-border);
+  border-radius: .375rem;
+  color: var(--hosted-text);
+  background: var(--hosted-surface);
+  font: 400 1rem/1.5 system-ui, sans-serif;
+  color-scheme: light;
+}
+.hosted-content-editor *, .hosted-content-editor *::before, .hosted-content-editor *::after { box-sizing: border-box; }
+.hosted-content-editor__field { display: grid; gap: .375rem; }
+.hosted-content-editor .cms-input {
+  inline-size: 100%;
+  min-block-size: 2.25rem;
+  padding: .375rem .625rem;
+  border: 1px solid var(--hosted-border);
+  border-radius: .25rem;
+  color: inherit;
+  background: var(--hosted-surface);
+  font: inherit;
+}
+.hosted-content-editor__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.hosted-content-editor button {
+  min-block-size: 2.25rem;
+  padding: .375rem .75rem;
+  border: 1px solid var(--hosted-border);
+  border-radius: .25rem;
+  color: inherit;
+  background: var(--hosted-surface);
+  font: inherit;
+  cursor: pointer;
+}
+.hosted-content-editor button:disabled { opacity: .55; cursor: default; }
+.hosted-content-editor :is(input, button):focus-visible { outline: 2px solid var(--hosted-focus); outline-offset: 2px; }
+.hosted-content-editor p { margin: 0; }

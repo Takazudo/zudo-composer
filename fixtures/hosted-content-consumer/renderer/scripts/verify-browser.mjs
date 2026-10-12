@@ -1,0 +1,32 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { chromium } from "@playwright/test";
+const base = process.argv[2];
+if (!base) throw Error("Supply the local independent host server URL");
+const snapshot = JSON.parse(await readFile("src/snapshot.json", "utf8"));
+const browser = await chromium.launch({ headless: true });
+try {
+  const noJs = await browser.newContext({ javaScriptEnabled: false });
+  const visitor = await noJs.newPage();
+  await visitor.goto(base, { waitUntil: "networkidle" });
+  const article = visitor.locator('[data-host-component="host:OfferPage"]');
+  await article.locator("h1").waitFor();
+  assert.equal(await article.locator("h1").textContent(), snapshot.renderData.title);
+  const canonical = await article.innerHTML();
+  assert(await article.locator("img").evaluate((image) => image.complete && image.naturalWidth > 0), "No-JS approved image failed");
+  await visitor.goto(new URL("/styleguide/", base).href);
+  assert.equal(await visitor.locator('[data-sg-story="hosted-offer"] article').innerHTML(), canonical);
+  const context = await browser.newContext();
+  const review = await context.newPage();
+  const errors = [];
+  review.on("pageerror", (error) => errors.push(error.message));
+  await review.goto(new URL("/review.html", base).href);
+  await review.locator('#preview-status[data-state="rendered"]').waitFor();
+  assert.equal(await review.locator("#preview-status").getAttribute("data-snapshot-id"), snapshot.id);
+  assert.equal(await review.locator("#preview-status").getAttribute("data-digest"), snapshot.digest);
+  const frame = review.frameLocator("#snapshot-preview");
+  assert.equal(await frame.locator("article").innerHTML(), canonical);
+  assert.equal(await frame.locator("#visitor-root").getAttribute("data-snapshot-id"), snapshot.id);
+  assert.deepEqual(errors, []);
+  console.log("JavaScript-disabled ZFB visitor, real registered SG story and acknowledged zudo-react iframe match exactly.");
+} finally { await browser.close(); }

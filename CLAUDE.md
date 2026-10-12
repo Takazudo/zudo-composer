@@ -64,8 +64,9 @@ The SiteProject operator/API guide is [`docs/site-project.md`](./docs/site-proje
 It is the source for provider-scoped graph, whole-project apply, active
 identity/CAS revisions, immutable builds, diagnostics, JSON-stdin examples,
 disposable local state, and guarded browser acceptance commands.
-Hosted persistence, a hosted API, and authentication are future adapter work;
-nothing in this repository claims them.
+Restricted hosted Content adapters live under `src/hosted-content` with separate
+portable, browser/CSS and testing exports. See `docs/hosted-content.md`. The host
+owns authentication, actual D1 persistence and production providers.
 
 ## Clean-break authority
 

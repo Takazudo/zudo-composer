@@ -16,6 +16,7 @@ export default tseslint.config(
       'coverage',
       'worktrees/**',
       'server/generated/**',
+      'server/hosted-content/**',
       'server/authoring.mjs',
       'server/authoring.d.mts',
       'server/editing.d.mts',

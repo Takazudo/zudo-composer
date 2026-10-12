@@ -33,6 +33,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm no-deploy:check
       - run: pnpm public:check
+      - run: pnpm hosted:check
       - run: pnpm sample:check
       - run: pnpm cms:check
       - run: pnpm consumer:boundary

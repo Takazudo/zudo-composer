@@ -166,8 +166,9 @@ JSON-stdin API, CAS revisions, immutable builds, diagnostics, local editing
 flow, and guarded browser acceptance commands are documented in
 [`docs/site-project.md`](./docs/site-project.md). Production
 uses the bundled sample; local project state is disposable and ignored.
-Hosted persistence, a hosted API, and authentication are future adapter work;
-nothing in this repository claims them.
+Restricted hosted Content adapters are documented in
+[the host integration guide](./docs/hosted-content.md). Authentication, actual D1
+persistence and production providers remain host-owned.
 
 ## Demo assets in this repository
 
