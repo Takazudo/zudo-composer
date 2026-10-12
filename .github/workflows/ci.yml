@@ -307,6 +307,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm doc:check
       - run: pnpm doc:build-site
       - run: pnpm hosted-demo:verify doc/dist "${{ github.sha }}"
         env:
@@ -388,6 +389,13 @@ jobs:
           path: styleguide/shop/dist
           if-no-files-found: error
           retention-days: 7
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: shop-sg-browser-evidence-${{ github.sha }}
+          path: styleguide/shop/.shop-build/evidence
+          if-no-files-found: ignore
+          retention-days: 7
 
   landing-sg-site-build:
     runs-on: ubuntu-latest
@@ -424,6 +432,13 @@ jobs:
           path: styleguide/landing/dist
           if-no-files-found: error
           retention-days: 7
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: landing-sg-browser-evidence-${{ github.sha }}
+          path: styleguide/landing/.landing-build/evidence
+          if-no-files-found: ignore
+          retention-days: 7
 
   blog-sg-site-build:
     runs-on: ubuntu-latest
@@ -459,4 +474,11 @@ jobs:
           name: blog-sg-site-${{ github.sha }}
           path: styleguide/blog/dist
           if-no-files-found: error
+          retention-days: 7
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: blog-sg-browser-evidence-${{ github.sha }}
+          path: styleguide/blog/.blog-build/evidence
+          if-no-files-found: ignore
           retention-days: 7
