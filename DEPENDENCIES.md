@@ -92,7 +92,7 @@ must preserve actual routes, visible content, links and CSS; Sample's parser
 change requires separate behavior evidence rather than global byte equality.
 
 Deliberate duplication remains: independent install scopes; the transitional
-2.22.x SG engine versus 4.3.1 doc/UI parser; TypeScript 5.9 versus 6 tooling
+2.22.x SG engine versus 4.3.3 doc/UI parser; TypeScript 5.9 versus 6 tooling
 ranges; direct image tooling versus Miniflare's exact sharp ownership; and
 undici's separate compatible parent ranges. Common-version pnpm resolution
 may share physical modules. Artificial duplicate packages are not required.
@@ -295,3 +295,26 @@ found a prohibited run URL in these records and a test locator selecting a
 hidden sidebar link. Portable run IDs and a unique actual catalog-card locator
 correct those defects without bypassing the handoff gate or browser assertions.
 Final exact-head CI and any later corrections are recorded on PR #899.
+
+## Round 906 registry bump
+
+All `@takazudo/*` registry dependencies moved on their existing channels and
+operators: ZFB/runtime/md-wasm 4.3.1 -> 4.3.3, zudo-doc/history 6.0.0 -> 6.1.1
+(doc keeps its caret ranges) and zudo-sg `^0.5.0` -> `^0.5.2`; zdtp 0.8.6 was
+already current. The resolver changed 26 declarations across six manifests.
+
+ZFB 4.3.2/4.3.3 change no JavaScript surface: 4.3.2 fixes zudo-wind's MDX
+`ignoreAttributes` scan, 4.3.3 moves the frontmatter YAML parser past
+RUSTSEC-2026-0333 with unchanged acceptance. The md-wasm tarballs differ only in
+metadata, README and the four WASM binaries; render WASM is now 2,198,163 bytes
+(SHA-256 `53a0c6332bd610b5075f8658cab6fe276301c1d99b982220f2d956b738dc0b68`).
+zudo-doc 6.1.1 requires the 4.3.3 family; its 6.0.1-6.1.0 additions
+(header-logo tokens, `mdxExtras` typing fix, sidebar client-data projection,
+`initialPathMode`, explicit-only sidebar persistence) are not opted into.
+zudo-sg 0.5.2 adds the opt-in external-runtime exports, which the hosts do not
+adopt, and raises CodeMirror/Lezer floors. All four hosts already resolve one
+`@lezer/common` 1.5.3 identity that meets those floors, so no dedupe was needed.
+
+Release-age exclusions stay exact and list only versions present in each lock.
+Sample keeps md-wasm `4.3.1 || 4.3.3` because its exact Git UI handoff still
+declares 4.3.1 until the next `package/ui-v1` commit.
