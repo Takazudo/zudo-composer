@@ -16,3 +16,6 @@ html[data-sg-preview-doc] body {
   font-family: var(--font-blog-serif);
   color-scheme: light;
 }
+
+/* Host frame spacing is authored independently of the shell Wind graph. */
+.sg-preview-root { padding: 1rem; }

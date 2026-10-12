@@ -1,4 +1,4 @@
-import type { Story } from "@takazudo/zudo-sg/stories";
+import type { Story } from "../preview/story-types";
 import { packDefaults, storyMeta, showcase } from "./showcases";
 
 export default storyMeta("blog.nav-link");

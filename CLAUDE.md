@@ -29,7 +29,7 @@ This repository also owns its dogfood component set in `packages/ui`
 (`@zudo-composer/ui`): typed component sidecars, the runtime pack, and
 canonical Composer CSS. Its package metadata is `@zudo-composer/ui@0.1.0`
 and its component-pack protocol identity is `@zudo-composer/ui@1.0.0`. The
-pack's focused `@takazudo/zfb-md-wasm` dependency, exactly `4.3.0`, is allowed
+pack's focused `@takazudo/zfb-md-wasm` dependency, exactly `4.3.1`, is allowed
 for `ProseMd` as a dependency of `packages/ui`, never of the tool; no zudo-doc,
 zfb application runtime/config, virtual-zfb, or styleguide registry may enter
 this tool. The tool never lists the pack under `dependencies` or
@@ -40,6 +40,10 @@ interchangeable with it.
 
 The standalone `styleguide/sample/` host is outside this tool; it catalogs the
 tool's pack without making the styleguide engine part of the tool.
+The four independent catalog shells use zudo-react/Wind. Their actual packs
+remain in host-owned Preact/Tailwind preview graphs; do not serialize render
+functions or merge preview CSS into the shell Wind graph. Browser thumbnail
+capture requires the host-owned pinned Playwright browser before each build.
 
 The tool's authoring routes are `/`, `/composer`, same-origin
 `/composer/preview`, `/content`, `/mapping`, `/sitemapper`, and `/assets`.
@@ -110,12 +114,12 @@ fast-forward branch whose root tree equals the package directory:
 | Package | Source | Handoff file | Branch | Package commit |
 | --- | --- | --- | --- | --- |
 | `@zudo-composer/component-contract@1.0.0` | `packages/component-contract` | `contract-handoff.json` | `package/component-contract-v1` | `c0b452da075b66757c60bd0d721a47062d4354d0` |
-| `@zudo-composer/ui@0.1.0` (pack `@zudo-composer/ui@1.0.0`) | `packages/ui` | `ui-handoff.json` | `package/ui-v1` | `ed372ac37a24485ed469554822db38c8ec1a334e` |
+| `@zudo-composer/ui@0.1.0` (pack `@zudo-composer/ui@1.0.0`) | `packages/ui` | `ui-handoff.json` | `package/ui-v1` | `776fb59a46bb53ceb0fa1ff823e83fae764597ac` |
 
 External hosts install each through its exact root Git spec,
 `git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0`
 for the contract and
-`git+https://github.com/Takazudo/zudo-composer.git#ed372ac37a24485ed469554822db38c8ec1a334e`
+`git+https://github.com/Takazudo/zudo-composer.git#776fb59a46bb53ceb0fa1ff823e83fae764597ac`
 for the UI pack — never through a branch/tag, sibling checkout, `workspace:`,
 `file:`, `link:`, `path:`, copied source, or a pnpm Git subdirectory selector.
 Inside this monorepo both relationships are `workspace:*` development
@@ -144,7 +148,7 @@ The host installs the UI pack and component contract by their exact root Git
 specs, so its dependencies show the pinned package commits recorded by the
 handoff files:
 
-- `@zudo-composer/ui`: `git+https://github.com/Takazudo/zudo-composer.git#ed372ac37a24485ed469554822db38c8ec1a334e`
+- `@zudo-composer/ui`: `git+https://github.com/Takazudo/zudo-composer.git#776fb59a46bb53ceb0fa1ff823e83fae764597ac`
 - `@zudo-composer/component-contract`: `git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0`
 
 This is the proven Git-spec state from the scaffold; it does not fall back to
@@ -255,7 +259,7 @@ artifact access. The production workflow is serialized per target and accepts
 only a successful same-repository `main` CI run, its exact SHA-named artifact,
 and the current `main` head. It captures the active single-version
 deployment, performs a Wrangler dry run, uploads the verified directory with
-Wrangler 4.130.0, and activates only the version returned by that upload.
+Wrangler 4.149.0, and activates only the version returned by that upload.
 Pull-request validation has no Cloudflare secrets.
 
 The `sample-sg` target runs `pnpm sg:build-site`; `shop-sg`, `landing-sg` and

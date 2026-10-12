@@ -26,21 +26,22 @@ allowBuilds:
 # `pnpm clean --lockfile` clears that error but re-resolves every `^` range in
 # the repo, which is a much wider change than the bump itself.
 minimumReleaseAgeExclude:
-  - '@cloudflare/workerd-darwin-64@1.20260908.1'
-  - '@cloudflare/workerd-darwin-arm64@1.20260908.1'
-  - '@cloudflare/workerd-linux-64@1.20260908.1'
-  - '@cloudflare/workerd-linux-arm64@1.20260908.1'
-  - '@cloudflare/workerd-windows-64@1.20260908.1'
-  - miniflare@5.20260908.0-alpha
-  - workerd@1.20260908.1
-  - wrangler@4.130.0
-  - '@takazudo/zudo-doc-history-server@5.28.0'
-  - '@takazudo/zudo-doc@5.28.0'
-  - '@takazudo/zfb-darwin-arm64@2.22.0'
-  - '@takazudo/zfb-darwin-x64@2.22.0'
-  - '@takazudo/zfb-linux-arm64-gnu@2.22.0'
-  - '@takazudo/zfb-linux-x64-gnu@2.22.0'
-  - '@takazudo/zfb-md-wasm@2.22.0 || 4.3.0'
-  - '@takazudo/zfb-runtime@2.22.0'
-  - '@takazudo/zfb-win32-x64-msvc@2.22.0'
-  - '@takazudo/zfb@2.22.0'
+  - '@cloudflare/workerd-darwin-64@1.20261006.1'
+  - '@cloudflare/workerd-darwin-arm64@1.20261006.1'
+  - '@cloudflare/workerd-linux-64@1.20261006.1'
+  - '@cloudflare/workerd-linux-arm64@1.20261006.1'
+  - '@cloudflare/workerd-windows-64@1.20261006.1'
+  - miniflare@5.20261006.1-alpha
+  - workerd@1.20261006.1
+  - wrangler@4.149.0
+  - '@takazudo/zudo-doc-history-server@6.0.0'
+  - '@takazudo/zudo-doc@6.0.0'
+  - '@takazudo/zfb-darwin-arm64@4.3.1'
+  - '@takazudo/zfb-darwin-x64@4.3.1'
+  - '@takazudo/zfb-linux-arm64-gnu@4.3.1'
+  - '@takazudo/zfb-linux-x64-gnu@4.3.1'
+  - '@takazudo/zfb-md-wasm@4.3.1'
+  - '@takazudo/zfb-runtime@4.3.1'
+  - '@takazudo/zfb-win32-x64-msvc@4.3.1'
+  - '@takazudo/zfb@4.3.1'
+  - '@takazudo/zfb-slugify@4.3.1'

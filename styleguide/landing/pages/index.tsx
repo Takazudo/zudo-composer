@@ -1,7 +1,5 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 // The root page stays host-owned so it can import site-wide islands.
-import type { JSX } from "preact";
+import type { JSX } from "@takazudo/zfb/zudo-react/jsx-runtime";
 // Optional islands seed; see pages/lib/_zudo-sg-islands.ts.
 import "./lib/_zudo-sg-islands";
 // Statically imported (not just reached through `chromeBindingsModule`'s
@@ -15,7 +13,7 @@ export default function IndexPage(): JSX.Element {
   return (
     <html lang="en">
       <head>
-        <meta charSet="utf-8" />
+        <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Landing Styleguide</title>
       </head>

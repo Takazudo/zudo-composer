@@ -1,11 +1,15 @@
+import { externalPreview } from "./src/config/preview.mjs";
+
 /** @satisfies {import("@takazudo/zudo-sg/config").ZudoSgComposeOptions} */
-export default {
+const config = {
+  registry: { mode: "descriptor", module: "./src/styleguide/descriptors.ts" },
+  externalPreview,
   componentsRoots: [{ dir: "stories", importBase: "../../stories" }],
   registryOut: "./src/styleguide/sg-registry.ts",
   categoryOrder: ["Chrome", "Layout", "Content", "Articles", "Comments"],
   uiPackageName: "demo-blog",
   barrelIndex: null,
-  previewStyles: "./src/styles/preview-entry.css",
+  previewStyles: "./src/styles/shell-preview.css",
   catalog: { title: "Blog components", intro: "The real Margin Notes component pack, with articles, author pages, comments, and newsletter interactions." },
   tokens: { manifestOut: "./src/styleguide/token-manifest.ts" },
   // Tabs-only shape (routingFile/writeRoot omitted): the header trigger's
@@ -15,3 +19,5 @@ export default {
     tabsModule: "./src/config/preview-token-panel-tabs.ts",
   },
 };
+
+export default config;

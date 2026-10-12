@@ -5,29 +5,34 @@
   "type": "module",
   "packageManager": "pnpm@11.5.2",
   "scripts": {
-    "gen": "zudo-sg gen-registry && zudo-sg gen-token-manifest",
-    "dev": "pnpm gen && zfb dev",
-    "build": "pnpm gen && zfb build",
-    "check": "pnpm gen && tsc --noEmit"
+    "gen": "tsx --tsconfig tsconfig.preview.json scripts/build-corpus.ts && zudo-sg gen-token-manifest",
+    "dev": "node scripts/dev.mjs",
+    "build": "pnpm gen && pnpm preview:build && zfb build && pnpm verify:artifact",
+    "check": "pnpm gen && tsc --noEmit && tsc --noEmit -p tsconfig.preview.json",
+    "preview:build": "vite build --config preview/vite.config.ts && node scripts/build-preview-document.mjs && tsx --tsconfig tsconfig.preview.json scripts/build-thumbnails.ts",
+    "verify:artifact": "tsx --tsconfig tsconfig.preview.json scripts/verify-artifact.ts",
+    "verify:browser": "node tests/preview-browser.mjs"
   },
   "dependencies": {
-    "@takazudo/zdtp": "0.8.5",
-    "@takazudo/zfb": "2.22.0",
-    "@takazudo/zfb-md-wasm": "2.22.0",
-    "@takazudo/zfb-runtime": "2.22.0",
-    "@takazudo/zudo-doc": "5.28.0",
-    "@takazudo/zudo-sg": "^0.4.1",
+    "@takazudo/zdtp": "0.8.6",
+    "@takazudo/zfb": "4.3.1",
+    "@takazudo/zfb-md-wasm": "4.3.1",
+    "@takazudo/zfb-runtime": "4.3.1",
+    "@takazudo/zudo-doc": "6.0.0",
+    "@takazudo/zudo-sg": "^0.5.0",
     "@zudo-composer/component-contract": "git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
-    "@zudo-composer/ui": "git+https://github.com/Takazudo/zudo-composer.git#ed372ac37a24485ed469554822db38c8ec1a334e",
+    "@zudo-composer/ui": "git+https://github.com/Takazudo/zudo-composer.git#776fb59a46bb53ceb0fa1ff823e83fae764597ac",
     "diff": "^8.0.4",
-    "katex": "^0.16.38",
     "preact": "^10.29.8",
-    "preact-render-to-string": "^6.6.6",
     "tailwindcss": "^4.2.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "@playwright/test": "1.62.1",
+    "vite": "7.3.7",
+    "@tailwindcss/vite": "^4.2.0",
+    "tsx": "^4.20.0"
   }
 }

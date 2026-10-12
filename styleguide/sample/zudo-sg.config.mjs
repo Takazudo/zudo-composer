@@ -1,11 +1,15 @@
+import { externalPreview } from "./src/config/preview.mjs";
+
 /** @satisfies {import("@takazudo/zudo-sg/config").ZudoSgComposeOptions} */
-export default {
+const config = {
+  registry: { mode: "descriptor", module: "./src/styleguide/descriptors.ts" },
+  externalPreview,
   componentsRoots: [{ dir: "stories", importBase: "../../stories" }],
   registryOut: "./src/styleguide/sg-registry.ts",
   categoryOrder: ["Shared", "Cards", "Content", "Media"],
   uiPackageName: "@zudo-composer/ui",
   barrelIndex: null,
-  previewStyles: "./src/styles/preview-entry.css",
+  previewStyles: "./src/styles/shell-preview.css",
   tokens: {
     cssFiles: [
       "./node_modules/@zudo-composer/ui/styles/tokens.css",
@@ -20,3 +24,5 @@ export default {
     tabsModule: "./src/config/preview-token-panel-tabs.ts",
   },
 };
+
+export default config;

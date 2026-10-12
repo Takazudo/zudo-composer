@@ -1,4 +1,5 @@
 {
+  "extends": "@takazudo/zudo-doc/tsconfig.base.json",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -9,9 +10,17 @@
     "noEmit": true,
     "strict": true,
     "jsx": "react-jsx",
-    "jsxImportSource": "preact",
+    "jsxImportSource": "@takazudo/zfb/zudo-react",
     "skipLibCheck": false
   },
-  "include": ["pages", "src", "stories", "zfb.config.ts", "zudo-sg.config.mjs"],
-  "exclude": ["src/generated/**/*.js"]
+  "include": [
+    "pages",
+    "src",
+    "zfb.config.ts",
+    "zudo-sg.config.mjs"
+  ],
+  "exclude": [
+    "src/generated",
+    "src/styleguide/sg-registry.ts"
+  ]
 }

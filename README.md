@@ -66,11 +66,20 @@ with its own lockfile and is not a workspace member. The root lockfile must
 never contain `@takazudo/zudo-sg`; `provider:boundary` enforces that
 separation. Stories belong to this host and never live under `packages/ui`.
 
+All four catalogs use the published zudo-react/Wind shell and a separate,
+same-origin Preact/Tailwind preview at `/components/preview`. Descriptors,
+variant source and preview loaders come from each host’s actual story corpus.
+The host-owned detail route uses public layout, workbench and code-panel APIs.
+Preview assets and settled component thumbnails are built before the shell;
+install the pinned Playwright Chromium browser before building or developing.
+The dev command rebuilds the corpus, preview and thumbnails serially when
+authored inputs change, then restarts the catalog server.
+
 The host installs the UI pack and component contract by their exact root Git
 specs, so its dependencies show the pinned package commits recorded by the
 handoff files:
 
-- `@zudo-composer/ui`: `git+https://github.com/Takazudo/zudo-composer.git#ed372ac37a24485ed469554822db38c8ec1a334e`
+- `@zudo-composer/ui`: `git+https://github.com/Takazudo/zudo-composer.git#776fb59a46bb53ceb0fa1ff823e83fae764597ac`
 - `@zudo-composer/component-contract`: `git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0`
 
 This is the proven Git-spec state from the scaffold; it does not fall back to
@@ -82,6 +91,7 @@ From the repository root, use:
 
 ```sh
 corepack pnpm -C styleguide/sample install --frozen-lockfile
+corepack pnpm -C styleguide/sample exec playwright install chromium
 corepack pnpm -C styleguide/sample dev
 corepack pnpm -C styleguide/sample build
 corepack pnpm -C styleguide/sample check
@@ -104,6 +114,7 @@ select the right output directory:
 ```sh
 corepack pnpm install --frozen-lockfile
 corepack pnpm -C styleguide/shop install --frozen-lockfile
+corepack pnpm -C styleguide/shop exec playwright install chromium
 corepack pnpm -C styleguide/shop check
 corepack pnpm -C styleguide/shop dev
 corepack pnpm sg:build-styleguide shop-sg
@@ -219,7 +230,7 @@ contract, which the package declares as a **peer dependency** so the host's own
 pnpm add -D \
   "zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<commit>" \
   "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0" \
-  "@zudo-composer/ui@git+https://github.com/Takazudo/zudo-composer.git#ed372ac37a24485ed469554822db38c8ec1a334e"
+  "@zudo-composer/ui@git+https://github.com/Takazudo/zudo-composer.git#776fb59a46bb53ceb0fa1ff823e83fae764597ac"
 ```
 
 Replace `<commit>` with a full 40-character tool commit. This consumer install
@@ -585,8 +596,8 @@ it through a package-only commit recorded by [`ui-handoff.json`](./ui-handoff.js
 | Package | `@zudo-composer/ui` |
 | Source path | `packages/ui` |
 | Branch | `package/ui-v1` |
-| Package commit | `ed372ac37a24485ed469554822db38c8ec1a334e` |
-| Exact external Git spec | `git+https://github.com/Takazudo/zudo-composer.git#ed372ac37a24485ed469554822db38c8ec1a334e` |
+| Package commit | `776fb59a46bb53ceb0fa1ff823e83fae764597ac` |
+| Exact external Git spec | `git+https://github.com/Takazudo/zudo-composer.git#776fb59a46bb53ceb0fa1ff823e83fae764597ac` |
 | Package metadata | `@zudo-composer/ui@0.1.0` |
 | Component-pack protocol identity | `@zudo-composer/ui@1.0.0` |
 
