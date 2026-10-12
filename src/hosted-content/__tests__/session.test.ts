@@ -99,6 +99,18 @@ describe("hosted immutable save session", () => {
     await value.initialize(); value.edit(entry, "title", "未保存"); await expect(value.flush()).rejects.toThrow("expired");
     expect(expiry).toHaveBeenCalledOnce(); expect(title(value)).toBe("未保存"); expect(value.state.pending!.request.operationKey).toBe("key1");
   });
+  it("does not treat expired authentication as proof that an earlier unknown operation failed", async () => {
+    const base = backend(); const execute = base.transport.execute; let lost = true; let expired = false;
+    base.transport.execute = async (request) => {
+      if (expired) throw new HostedContentError("forbidden", "authentication expired");
+      const result = await execute(request); if (lost) { lost = false; throw new Error("lost after commit"); } return result;
+    };
+    const { value } = session(base, { isAuthenticationExpired: (error) => error instanceof Error && error.message === "authentication expired" });
+    await value.initialize(); value.edit(entry, "title", "A"); await expect(value.flush()).rejects.toThrow("lost after commit");
+    const original = value.state.pending!.request; expired = true; await expect(value.flush()).rejects.toThrow("authentication expired");
+    expect(value.state.pending!.rejected).toBe(false); expect(value.state.pending!.request).toEqual(original); await expect(value.reapply(base.content())).rejects.toThrow("Recover");
+    expired = false; value.edit(entry, "title", "B"); await value.flush(); expect(title(value)).toBe("B"); expect(base.content().draftRevision).toBe("r2");
+  });
   it("never marks a stale render current and binds publication to the reviewed snapshot", async () => {
     const base = backend(); const rendered = deferred<void>(); const preview = { render: vi.fn(() => rendered.promise) };
     const { value } = session(base, { preview }); await value.initialize();
@@ -144,6 +156,14 @@ describe("hosted immutable save session", () => {
     value.edit(entry, "title", "B"); await expect(value.flush()).rejects.toThrow("Key reused");
     expect(value.state.pending!.rejected).toBe(true); expect(value.state.dirty).toBe(true);
     expect(title(value)).toBe("B"); expect(base.content().providers[0]!.entries[0]!.values.title).toBe("A");
+  });
+  it("cancelling an unsent creation does not mark an unrelated in-flight save clean", async () => {
+    const base = backend(); const execute = base.transport.execute; const gate = deferred<void>();
+    base.transport.execute = async (request) => { await gate.promise; return execute(request); };
+    const { value } = session(base); await value.initialize(); value.edit(entry, "title", "A"); const saving = value.flush();
+    value.stageCreation("questions", { question: "Unsent" }); value.cancelCreation();
+    expect(value.state.phase).toBe("saving"); expect(value.state.pending).not.toBeNull();
+    gate.resolve(); await saving; expect(value.state.phase).toBe("saved");
   });
   it("keeps unrelated entry edits while acknowledging one entry", async () => {
     const base = backend(); const initial = state(); initial.providers[0]!.entries.push(createContentEntryRecord(entry.modelId, { title: "Other" }, { id: "other", timestamp: stamp }));

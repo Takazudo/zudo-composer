@@ -90,7 +90,9 @@ export function assertFieldChange(schema: ContentValueSchema, permission: Hosted
     }
     const sortedBefore = before.map(canonicalSerialize).sort(), sortedAfter = after.map(canonicalSerialize).sort();
     if (sameValue(sortedBefore, sortedAfter) && !permission.listReorder) forbidden(path);
-    for (let index = 0; index < Math.max(before.length, after.length); index++) assertFieldChange(schema.item, { ...permission, clear: permission.listRemove }, before[index], after[index], policy, `${path}[${index}]`, validateMarkdown);
+    // On a list maxLength limits cardinality, not the character count of each item.
+    // Explicit object child permissions retain their own bounds when visited below.
+    for (let index = 0; index < Math.max(before.length, after.length); index++) assertFieldChange(schema.item, { ...permission, maxLength: undefined, clear: permission.listRemove }, before[index], after[index], policy, `${path}[${index}]`, validateMarkdown);
     return;
   }
   if (schema.kind === "asset-use") {

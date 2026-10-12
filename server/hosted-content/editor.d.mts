@@ -281,15 +281,24 @@ interface HostedPendingOperation {
     rejectedCode?: HostedErrorCode;
 }
 /** The host persists this detached object. Session memory alone is not reload durability. */
+interface HostedCreationDraft {
+    collectionId: string;
+    values: Record<string, JsonValue>;
+    revision: number;
+}
 interface HostedRecoveryCheckpoint {
     version: 1;
     acknowledged: HostedState | null;
     edits: HostedLocalEdit[];
     localRevision: number;
     pending: HostedPendingOperation | null;
+    publication?: HostedPublication | null;
+    creationDraft?: HostedCreationDraft | null;
 }
 interface HostedEditorSessionState {
     phase: HostedSavePhase;
+    invalidInputs: readonly string[];
+    presentationRevision: number;
     content: HostedState | null;
     localRevision: number;
     dirty: boolean;
@@ -297,6 +306,10 @@ interface HostedEditorSessionState {
     error: unknown;
     reviewedSnapshot: HostedSnapshot | null;
     publication: HostedPublication | null;
+    publicationError: unknown;
+    publicationStale: boolean;
+    creationDraft: HostedCreationDraft | null;
+    lastCreatedEntry: ContentEntryRef | null;
 }
 interface HostedPreviewAdapter {
     render(snapshot: HostedSnapshot, routeId: string): Promise<unknown>;
@@ -330,6 +343,8 @@ declare class HostedContentSession {
     private options;
     private acknowledged;
     private edits;
+    private invalidInputs;
+    private presentationRevision;
     private revision;
     private pending;
     private phase;
@@ -338,6 +353,10 @@ declare class HostedContentSession {
     private reviewedRoute;
     private unsubscribePreview?;
     private publication;
+    private publicationError;
+    private publicationStale;
+    private creationDraft;
+    private lastCreatedEntry;
     private previewGeneration;
     private flight;
     private listeners;
@@ -352,11 +371,22 @@ declare class HostedContentSession {
     checkpoint(): HostedRecoveryCheckpoint;
     private persist;
     initialize(): Promise<void>;
+    /** Browser-internal incomplete number text is local only, never a typed draft value. */
+    setIncompleteInput(controlId: string, incomplete: boolean): void;
+    stageCreation(collectionId: string, values: Record<string, JsonValue>): void;
+    cancelCreation(): void;
     edit(entry: ContentEntryRef, fieldId: string, value: JsonValue | undefined): void;
     private fail;
     private resolvePending;
     flush(): Promise<void>;
     private command;
+    private collectionAction;
+    createEntry(collectionId: string, values: Record<string, JsonValue>, before?: ContentEntryRef | null): Promise<HostedResult>;
+    addEntry(collectionId: string, entry: ContentEntryRef, before?: ContentEntryRef | null): Promise<HostedResult>;
+    reorder(collectionId: string, entries: ContentEntryRef[]): Promise<HostedResult>;
+    /** A clean refresh may adopt a confirmed integration; dirty edits need explicit review. */
+    refresh(): Promise<void>;
+    refreshPublication(): Promise<HostedPublication>;
     captureAndPreview(routeId: string): Promise<HostedSnapshot>;
     submit(): Promise<HostedPublication>;
     /** Read-only conflict review; retained edits remain untouched. */
@@ -367,6 +397,31 @@ declare class HostedContentSession {
     discard(authoritative: HostedState): Promise<void>;
     /** Presentation disposal leaves recovery and any in-flight operation intact. */
     dispose(): void;
+}
+
+interface HostedControlLabels {
+    clear: string;
+    addItem: string;
+    removeItem: string;
+    moveUp: string;
+    moveDown: string;
+    choose: string;
+    none: string;
+    unavailable: string;
+    asset: string;
+    item: string;
+    bold: string;
+    italic: string;
+    link: string;
+    heading: string;
+    alt: string;
+    caption: string;
+    decorative: string;
+    label: string;
+    title: string;
+    description: string;
+    showSize: string;
+    showType: string;
 }
 
 interface PreviewPackIdentity {
@@ -564,7 +619,7 @@ interface HostedEditorSelection {
     entry: ContentEntryRef;
     fieldId: string;
 }
-interface HostedEditorLabels {
+interface HostedEditorLabels extends HostedControlLabels {
     save: string;
     preview: string;
     submit: string;
@@ -576,12 +631,40 @@ interface HostedEditorLabels {
     recovering: string;
     conflict: string;
     failed: string;
+    content: string;
+    edit: string;
+    create: string;
+    addExisting: string;
+    cancel: string;
+    review: string;
+    reapply: string;
+    discard: string;
+    localValue: string;
+    serverValue: string;
+    reload: string;
+    refreshStatus: string;
+    statusUnavailable: string;
+    cannotClear: string;
+    lastKnownStatus: string;
+    previewCurrent: string;
+    previewRequired: string;
+    submissionIncomplete: string;
+    submitted: string;
+    building: string;
+    verified: string;
+    integrated: string;
+    deployed: string;
+    unavailable: string;
 }
 interface HostedContentEditorOptions extends HostedSessionOptions {
     policy: HostedPolicy;
     selection: HostedEditorSelection;
+    /** Defaults to the permitted record form; field mode is the minimal checkpoint surface. */
+    presentation?: "record" | "field";
     routeId?: string;
     labels?: Partial<HostedEditorLabels>;
+    /** Map typed diagnostics and transport failures to host-facing messages. */
+    formatError?(error: unknown): string;
     onNavigate?(selection: HostedEditorSelection): void | Promise<void>;
 }
 interface HostedContentEditorHandle {
@@ -590,10 +673,14 @@ interface HostedContentEditorHandle {
     subscribe(listener: (state: HostedEditorSessionState) => void): () => void;
     flush(): Promise<void>;
     navigate(selection: HostedEditorSelection): Promise<void>;
+    refresh(): Promise<void>;
+    preview(): ReturnType<HostedContentSession["captureAndPreview"]>;
+    submit(): ReturnType<HostedContentSession["submit"]>;
+    refreshPublication(): ReturnType<HostedContentSession["refreshPublication"]>;
     dispose(): void;
 }
-/** Thin durable checkpoint surface. Only the selected permitted existing text field is mounted. */
+/** Mount only the policy projection. Location paths/queries never select local authoring tools. */
 declare function mountHostedContentEditor(container: HTMLElement, options: HostedContentEditorOptions): HostedContentEditorHandle;
 
 export { HostedContentSession, HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost, mountHostedContentEditor };
-export type { HostedContentEditorHandle, HostedContentEditorOptions, HostedEditorLabels, HostedEditorSelection, HostedEditorSessionState, HostedPreviewAdapter, HostedPreviewController, HostedPreviewControllerOptions, HostedPreviewHostOptions, HostedPreviewLocation, HostedPreviewRenderContext, HostedPreviewState, HostedRecoveryCheckpoint, HostedSessionOptions };
+export type { HostedContentEditorHandle, HostedContentEditorOptions, HostedControlLabels, HostedEditorLabels, HostedEditorSelection, HostedEditorSessionState, HostedPreviewAdapter, HostedPreviewController, HostedPreviewControllerOptions, HostedPreviewHostOptions, HostedPreviewLocation, HostedPreviewRenderContext, HostedPreviewState, HostedRecoveryCheckpoint, HostedSessionOptions };

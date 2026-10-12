@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const sha = process.argv[2];
-assert.match(sha ?? "", /^[a-f0-9]{40}$/, "Provide a reachable full Composer package-output Git SHA");
+assert.ok(sha, "Provide a reachable full Composer package-output Git SHA");
+assert.match(sha, /^[a-f0-9]{40}$/, "Provide a reachable full Composer package-output Git SHA");
 const root = resolve(import.meta.dirname, "..");
 const destination = process.argv[3] ? resolve(process.argv[3]) : await mkdtemp(join(tmpdir(), "composer-hosted-consumer-"));
 await mkdir(destination, { recursive: true });
@@ -18,6 +19,7 @@ const manifest = {
     "@zudo-composer/component-contract": "git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
     preact: "10.29.8", "@takazudo/zfb": "4.3.1", "@takazudo/zfb-runtime": "4.3.1",
     "@takazudo/zudo-sg": "0.5.0", "@takazudo/zdtp": "0.8.6", "@takazudo/zudo-doc": "6.0.0",
+    marked: "16.3.0", // host-only Markdown renderer; never a tool runtime dependency
   },
   devDependencies: { esbuild: "0.28.2", "@playwright/test": "1.62.1", "@cloudflare/workers-types": "5.20261012.1", tsx: "4.23.12", typescript: "6.0.3", miniflare: "5.20261006.1-alpha" },
 };

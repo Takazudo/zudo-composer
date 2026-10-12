@@ -4,14 +4,16 @@ export type HostedSavePhase = "loading" | "clean" | "dirty" | "saving" | "saved"
 export interface HostedLocalEdit { entry: ContentEntryRef; fieldId: string; value?: JsonValue; revision: number }
 export interface HostedPendingOperation { request: HostedCommand; localRevision: number; rejected: boolean; rejectedCode?: HostedErrorCode }
 /** The host persists this detached object. Session memory alone is not reload durability. */
+export interface HostedCreationDraft { collectionId: string; values: Record<string, JsonValue>; revision: number }
 export interface HostedRecoveryCheckpoint {
   version: 1; acknowledged: HostedState | null; edits: HostedLocalEdit[];
   localRevision: number; pending: HostedPendingOperation | null;
+  publication?: HostedPublication | null; creationDraft?: HostedCreationDraft | null;
 }
 export interface HostedEditorSessionState {
-  phase: HostedSavePhase; content: HostedState | null; localRevision: number;
+  phase: HostedSavePhase; invalidInputs: readonly string[]; presentationRevision: number; content: HostedState | null; localRevision: number;
   dirty: boolean; pending: HostedPendingOperation | null; error: unknown;
-  reviewedSnapshot: HostedSnapshot | null; publication: HostedPublication | null;
+  reviewedSnapshot: HostedSnapshot | null; publication: HostedPublication | null; publicationError: unknown; publicationStale: boolean; creationDraft: HostedCreationDraft | null; lastCreatedEntry: ContentEntryRef | null;
 }
 export interface HostedPreviewAdapter {
   render(snapshot: HostedSnapshot, routeId: string): Promise<unknown>;
@@ -47,6 +49,8 @@ function rejectionCode(error: unknown): HostedErrorCode | null {
 export class HostedContentSession {
   private acknowledged: HostedState | null = null;
   private edits: HostedLocalEdit[] = [];
+  private invalidInputs = new Set<string>();
+  private presentationRevision = 0;
   private revision = 0;
   private pending: HostedPendingOperation | null = null;
   private phase: HostedSavePhase = "loading";
@@ -55,6 +59,10 @@ export class HostedContentSession {
   private reviewedRoute: string | null = null;
   private unsubscribePreview?: () => void;
   private publication: HostedPublication | null = null;
+  private publicationError: unknown = null;
+  private publicationStale = false;
+  private creationDraft: HostedCreationDraft | null = null;
+  private lastCreatedEntry: ContentEntryRef | null = null;
   private previewGeneration = 0;
   private flight: Promise<void> | null = null;
   private listeners = new Set<(state: HostedEditorSessionState) => void>();
@@ -67,6 +75,8 @@ export class HostedContentSession {
       this.edits = recovered.edits;
       this.revision = recovered.localRevision;
       this.pending = recovered.pending ? immutable(recovered.pending) : null;
+      this.publication = recovered.publication ?? null; this.publicationStale = !!this.publication;
+      this.creationDraft = recovered.creationDraft ?? null;
     }
     this.unsubscribePreview = options.preview?.subscribe?.(() => this.emit());
   }
@@ -77,7 +87,7 @@ export class HostedContentSession {
       if (!entry) continue;
       if (edit.value === undefined) delete entry.values[edit.fieldId]; else entry.values[edit.fieldId] = copy(edit.value);
     }
-    return { ...immutable({ phase: this.phase, content, localRevision: this.revision, dirty: this.edits.length > 0, pending: this.pending, reviewedSnapshot: this.hasCurrentPreview() ? this.reviewed : null, publication: this.publication }), error: this.error };
+    return { ...immutable({ phase: this.phase, invalidInputs: [...this.invalidInputs], presentationRevision: this.presentationRevision, content, localRevision: this.revision, dirty: this.edits.length > 0 || !!this.creationDraft || this.invalidInputs.size > 0, pending: this.pending, reviewedSnapshot: this.hasCurrentPreview() ? this.reviewed : null, publication: this.publication, publicationStale: this.publicationStale, creationDraft: this.creationDraft, lastCreatedEntry: this.lastCreatedEntry }), publicationError: this.publicationError, error: this.error };
   }
   private hasCurrentPreview(): boolean {
     if (!this.reviewed) return false;
@@ -95,7 +105,7 @@ export class HostedContentSession {
     this.listeners.add(listener); listener(this.state); return () => this.listeners.delete(listener);
   }
   private emit() { const state = this.state; for (const listener of this.listeners) listener({ ...state, error: this.error }); }
-  checkpoint(): HostedRecoveryCheckpoint { return copy({ version: 1, acknowledged: this.acknowledged, edits: this.edits, localRevision: this.revision, pending: this.pending }); }
+  checkpoint(): HostedRecoveryCheckpoint { return copy({ version: 1, acknowledged: this.acknowledged, edits: this.edits, localRevision: this.revision, pending: this.pending, publication: this.publication, creationDraft: this.creationDraft }); }
   private persist(): Promise<void> {
     const checkpoint = this.checkpoint();
     const write = this.checkpointWrites.catch(() => undefined).then(() => this.options.persistRecovery?.(checkpoint));
@@ -104,9 +114,32 @@ export class HostedContentSession {
   async initialize(): Promise<void> {
     try {
       if (!this.acknowledged) this.acknowledged = copy(await this.options.transport.readState());
-      this.phase = this.pending ? (this.pending.rejected ? (conflicts.has(this.pending.rejectedCode ?? "") ? "conflict" : "failed") : "recovering") : this.edits.length ? "dirty" : "clean";
-      await this.persist(); this.emit();
+      this.phase = this.pending ? (this.pending.rejected ? (conflicts.has(this.pending.rejectedCode ?? "") ? "conflict" : "failed") : "recovering") : this.edits.length || this.creationDraft ? "dirty" : "clean";
+      await this.persist();
+      if (this.publication) await this.refreshPublication().catch(() => undefined);
+      this.emit();
     } catch (error) { this.fail(error); throw error; }
+  }
+  /** Browser-internal incomplete number text is local only, never a typed draft value. */
+  setIncompleteInput(controlId: string, incomplete: boolean): void {
+    if (incomplete) this.invalidInputs.add(controlId); else this.invalidInputs.delete(controlId);
+    this.revision++; this.reviewed = null; this.options.preview?.invalidate?.();
+    if (!this.pending) this.phase = this.edits.length || this.creationDraft || this.invalidInputs.size ? "dirty" : "clean";
+    this.emit();
+  }
+  stageCreation(collectionId: string, values: Record<string, JsonValue>): void {
+    this.revision++; this.creationDraft = copy({ collectionId, values, revision: this.revision });
+    this.reviewed = null; this.options.preview?.invalidate?.();
+    if (!this.pending) this.phase = "dirty"; this.emit(); void this.persist().catch((error) => this.fail(error));
+  }
+  cancelCreation(): void {
+    if (this.pending?.request.kind === "create-entry" && !this.pending.rejected) throw new Error("Recover the original creation first");
+    const collectionId = this.creationDraft?.collectionId;
+    for (const controlId of this.invalidInputs) if (collectionId && controlId.startsWith(`create/${collectionId}/`)) this.invalidInputs.delete(controlId);
+    this.creationDraft = null;
+    if (this.pending?.request.kind === "create-entry" && this.pending.rejected) { this.pending = null; this.error = null; }
+    if (!this.pending) this.phase = this.edits.length || this.invalidInputs.size ? "dirty" : "clean";
+    this.emit(); void this.persist().catch((error) => this.fail(error));
   }
   edit(entry: ContentEntryRef, fieldId: string, value: JsonValue | undefined): void {
     if (!this.acknowledged) throw new Error("Authoritative content has not loaded");
@@ -121,10 +154,13 @@ export class HostedContentSession {
   }
   private fail(error: unknown, requestRejected = false): void {
     this.error = error;
-    const definite = requestRejected ? rejectionCode(error) : null;
+    const expired = !!this.options.isAuthenticationExpired?.(error);
+    // Authentication can fail before receipt recovery; it proves nothing about
+    // whether the original operation committed before its response was lost.
+    const definite = requestRejected && !expired ? rejectionCode(error) : null;
     if (this.pending && definite) this.pending = immutable({ ...this.pending, rejected: true, rejectedCode: definite });
     this.phase = definite && conflicts.has(definite) ? "conflict" : this.pending && !definite ? "recovering" : "failed";
-    if (this.options.isAuthenticationExpired?.(error)) this.options.onAuthenticationExpired?.(error);
+    if (expired) this.options.onAuthenticationExpired?.(error);
     this.emit(); void this.persist().catch(() => undefined);
   }
   private async resolvePending(): Promise<HostedResult> {
@@ -146,8 +182,18 @@ export class HostedContentSession {
         this.edits = this.edits.filter((edit) => !sameEntry(edit.entry, committedEntry) || edit.revision > active.localRevision);
       }
       this.pending = null;
-      if (result.publication) this.publication = result.publication;
-      this.phase = this.edits.length ? "dirty" : "saved";
+      if (result.publication) { this.publication = result.publication; this.publicationStale = false; }
+      if (result.createdEntry) {
+        this.lastCreatedEntry = result.createdEntry;
+        if (active.request.kind === "create-entry" && this.creationDraft?.collectionId === active.request.collectionId) {
+          // A later creation-form edit belongs to the newly assigned Entry.
+          if (this.creationDraft.revision > active.localRevision) for (const [fieldId, value] of Object.entries(this.creationDraft.values)) {
+            this.edits.push(copy({ entry: result.createdEntry, fieldId, value, revision: this.creationDraft.revision }));
+          }
+          this.creationDraft = null;
+        }
+      }
+      this.phase = this.edits.length || this.creationDraft || this.invalidInputs.size ? "dirty" : "saved";
       await this.persist(); this.emit(); return result;
     } catch (error) {
       // A checkpoint failure after acknowledgement also retains the exact operation.
@@ -160,6 +206,7 @@ export class HostedContentSession {
     const work = async () => {
       if (!this.acknowledged) throw new Error("Authoritative content has not loaded");
       if (this.pending) await this.resolvePending();
+      if (this.invalidInputs.size) throw new Error("Correct the incomplete number before saving");
       while (this.edits.length) {
         const entry = this.edits[0]!.entry;
         const fields = this.edits.filter((e) => sameEntry(e.entry, entry));
@@ -171,29 +218,70 @@ export class HostedContentSession {
     };
     this.flight = work().finally(() => { this.flight = null; }); return this.flight;
   }
-  private async command(command: Omit<Extract<HostedCommand, { kind: "capture-snapshot" }>, "operationKey" | "expected"> | Omit<Extract<HostedCommand, { kind: "begin-publication" }>, "operationKey" | "expected">): Promise<HostedResult> {
+  private async command(command: { [K in HostedCommand["kind"]]: Omit<Extract<HostedCommand, { kind: K }>, "operationKey" | "expected"> }[HostedCommand["kind"]]): Promise<HostedResult> {
     if (this.flight || this.pending || this.edits.length || !this.acknowledged) throw new Error("Resolve local saves before this action");
     this.pending = immutable({ request: { ...command, operationKey: this.options.createOperationKey(), expected: identities(this.acknowledged) } as HostedCommand, localRevision: this.revision, rejected: false });
     let result!: HostedResult;
     this.flight = this.resolvePending().then((value) => { result = value; }).finally(() => { this.flight = null; });
     await this.flight; return result;
   }
+  private async collectionAction(action: Extract<Parameters<HostedContentSession["command"]>[0], { kind: "create-entry" | "add-entry" | "reorder" }>): Promise<HostedResult> {
+    await this.flush();
+    if (this.creationDraft && (action.kind !== "create-entry" || action.collectionId !== this.creationDraft.collectionId)) throw new Error("Save or cancel the new item first");
+    // Before allocation/dispatch the staged values may have changed while a
+    // prior record save was finishing. Freeze that current intent, then retry it exactly.
+    if (action.kind === "create-entry" && this.creationDraft?.collectionId === action.collectionId) action = { ...action, values: copy(this.creationDraft.values) };
+    this.revision++; this.reviewed = null; this.options.preview?.invalidate?.();
+    return this.command(action);
+  }
+  createEntry(collectionId: string, values: Record<string, JsonValue>, before: ContentEntryRef | null = null): Promise<HostedResult> {
+    return this.collectionAction({ kind: "create-entry", collectionId, values, before });
+  }
+  addEntry(collectionId: string, entry: ContentEntryRef, before: ContentEntryRef | null = null): Promise<HostedResult> {
+    return this.collectionAction({ kind: "add-entry", collectionId, entry, before });
+  }
+  reorder(collectionId: string, entries: ContentEntryRef[]): Promise<HostedResult> {
+    return this.collectionAction({ kind: "reorder", collectionId, entries });
+  }
+  /** A clean refresh may adopt a confirmed integration; dirty edits need explicit review. */
+  async refresh(): Promise<void> {
+    if (this.flight || this.pending || this.edits.length || this.creationDraft || this.invalidInputs.size) throw new Error("Review retained changes before loading current content");
+    try {
+      const authoritative = await this.options.transport.readState();
+      if (this.flight || this.pending || this.edits.length || this.creationDraft || this.invalidInputs.size) throw new Error("Content was edited while loading current content");
+      this.acknowledged = copy(authoritative); this.invalidInputs.clear(); this.presentationRevision++; this.revision++; this.reviewed = null; this.options.preview?.invalidate?.();
+      this.error = null; this.phase = "clean"; await this.persist(); this.emit();
+    } catch (error) { this.fail(error); throw error; }
+  }
+  async refreshPublication(): Promise<HostedPublication> {
+    const current = this.publication;
+    if (!current) throw new Error("No publication has been submitted");
+    try {
+      const status = copy(await this.options.transport.getPublication(current.id));
+      if (status.id !== current.id || status.snapshotId !== current.snapshotId) throw new Error("Publication status does not match the submitted snapshot");
+      if (this.publication?.id === current.id && status.statusVersion >= this.publication.statusVersion) { this.publication = status; this.publicationStale = false; }
+      this.publicationError = null; await this.persist(); this.emit(); return immutable(this.publication!);
+    } catch (error) { this.publicationError = error; this.publicationStale = true; if (this.options.isAuthenticationExpired?.(error)) this.options.onAuthenticationExpired?.(error); this.emit(); throw error; }
+  }
   async captureAndPreview(routeId: string): Promise<HostedSnapshot> {
     if (!this.options.preview) throw new Error("Preview adapter is required");
     const generation = ++this.previewGeneration; this.reviewed = null; this.emit();
-    await this.flush(); const revision = this.revision;
+    await this.flush();
+    if (this.creationDraft || this.invalidInputs.size) throw new Error("Save or cancel the new item before previewing");
+    const revision = this.revision;
     const result = await this.command({ kind: "capture-snapshot" });
     if (!result.snapshot) throw new Error("Snapshot result is missing");
     const snapshot = immutable(result.snapshot);
     const stale = () => generation !== this.previewGeneration || this.revision !== revision || this.edits.length > 0 || !!this.pending || this.acknowledged?.draftRevision !== snapshot.draftRevision;
     if (stale()) throw new Error("Preview became stale after a local edit");
-    await this.options.preview.render(snapshot, routeId);
+    try { await this.options.preview.render(snapshot, routeId); }
+    catch (error) { this.error = error; this.emit(); throw error; }
     if (stale()) throw new Error("Preview became stale after a local edit");
     this.reviewed = snapshot; this.reviewedRoute = routeId; this.emit(); return snapshot;
   }
   async submit(): Promise<HostedPublication> {
     const snapshot = this.reviewed;
-    if (!snapshot || !this.hasCurrentPreview() || this.edits.length || this.pending || snapshot.diagnostics.length || this.acknowledged?.draftRevision !== snapshot.draftRevision) throw new Error("Preview the complete current saved draft before submitting");
+    if (!snapshot || !this.hasCurrentPreview() || this.edits.length || this.creationDraft || this.invalidInputs.size || this.pending || snapshot.diagnostics.length || this.acknowledged?.draftRevision !== snapshot.draftRevision) throw new Error("Preview the complete current saved draft before submitting");
     const result = await this.command({ kind: "begin-publication", snapshotId: snapshot.id });
     if (!result.publication) throw new Error("Publication result is missing");
     return result.publication;
@@ -203,14 +291,14 @@ export class HostedContentSession {
   /** Explicit host/user decision after displaying the authoritative difference. */
   async reapply(authoritative: HostedState): Promise<void> {
     if (this.flight || (this.pending && !this.pending.rejected)) throw new Error("Recover the original operation first");
-    this.acknowledged = copy(authoritative); this.pending = null; this.reviewed = null; this.options.preview?.invalidate?.(); this.error = null; this.phase = this.edits.length ? "dirty" : "clean";
+    this.acknowledged = copy(authoritative); this.pending = null; this.reviewed = null; this.options.preview?.invalidate?.(); this.error = null; this.phase = this.edits.length || this.creationDraft || this.invalidInputs.size ? "dirty" : "clean";
     await this.persist(); this.emit();
   }
   /** Explicit discard is unavailable while an operation could still commit. */
   async discard(authoritative: HostedState): Promise<void> {
     if (this.flight || (this.pending && !this.pending.rejected)) throw new Error("Recover the original operation first");
-    this.acknowledged = copy(authoritative); this.edits = []; this.pending = null;
-    this.revision++; this.reviewed = null; this.options.preview?.invalidate?.();
+    this.acknowledged = copy(authoritative); this.edits = []; this.invalidInputs.clear(); this.creationDraft = null; this.pending = null;
+    this.presentationRevision++; this.revision++; this.reviewed = null; this.options.preview?.invalidate?.();
     this.error = null; this.phase = "clean"; await this.persist(); this.emit();
   }
   /** Presentation disposal leaves recovery and any in-flight operation intact. */

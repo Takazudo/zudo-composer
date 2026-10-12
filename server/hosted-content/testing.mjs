@@ -1,4 +1,4 @@
-import { t as createHostedContentService } from "./chunks/service-BdmopMLC.mjs";
+import { t as createHostedContentService } from "./chunks/service-DfLCUxSQ.mjs";
 //#region src/hosted-content/testing.ts
 /**
 * Deterministic fault/interleaving reference only. This fake does not demonstrate

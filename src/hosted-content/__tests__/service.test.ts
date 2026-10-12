@@ -17,6 +17,7 @@ function fixture() {
     { ...field("slug"), kind: "slug" }, { ...field("body"), kind: "markdown" }, { ...field("url"), kind: "url" },
     { ...field("details"), kind: "object", fields: [{ ...field("label"), kind: "text" }, { ...field("secret"), kind: "text" }] },
     { ...field("rows"), kind: "list", item: { kind: "object", fields: [{ ...field("label"), kind: "text" }, { ...field("secret"), kind: "text" }] } },
+    { ...field("results"), kind: "list", item: { kind: "text" } },
     { ...field("image"), kind: "asset-use", use: "image" },
     { ...field("faqs"), kind: "reference-list", ordered: true, target: { providerId: "content", recordId: "faq" } },
   ] }, { id: "page", timestamp });
@@ -45,6 +46,7 @@ function fixture() {
       ...["title", "price", "enabled", "body", "url"].map(fieldId => ({ fieldId, replace: true, clear: true })),
       { fieldId: "details", children: [{ fieldId: "label", replace: true, clear: true }] },
       { fieldId: "rows", children: [{ fieldId: "label", replace: true }] },
+      { fieldId: "results", replace: true, listAdd: true, maxLength: 3 },
       { fieldId: "image", assetSelect: true, assetDescription: ["alt", "caption", "decorative"] },
     ] }, { providerId: "content", modelId: "faq", entryIds: ["one"], fields: [{ fieldId: "question", replace: true }, { fieldId: "answer", replace: true }] }],
     collections: [{ id: "faqs", owner: page, fieldId: "faqs", target: { providerId: "content", modelId: "faq" }, create: true, add: true, reorder: true, maxItems: 10, initialValues: {} }],
@@ -159,6 +161,25 @@ describe("hosted Content trusted boundary", () => {
     const forbiddenValues: Record<string, JsonValue>[] = [{ slug: "elsewhere" }, { details: { label: "New", secret: "Changed" } }, { details: { label: "New" } }, { faqs: [] }, { rows: [{ label: "B", secret: "two" }, { label: "A", secret: "one" }] }, { rows: [] }];
     for (const values of forbiddenValues) await rejectsWithoutWrite(f, f.set("bad", values), "forbidden");
     await f.service.execute(actor, f.set("list-leaf", { rows: [{ label: "Edited", secret: "one" }, { label: "B", secret: "two" }] }));
+  });
+
+  it("limits list cardinality without applying that bound to primitive item text", async () => {
+    const f = fixture();
+    const result = await f.service.execute(actor, f.set("long-list-item", { results: ["A useful result"] }));
+    expect(result.state.providers[0]!.entries.find(entry => entry.id === "home")!.values.results).toEqual(["A useful result"]);
+    await f.service.execute(actor, f.set("three-results", { results: ["A useful result", "Another useful result", "日本語の長い結果"] }));
+    await rejectsWithoutWrite(f, f.set("four-results", { results: ["A useful result", "Another useful result", "日本語の長い結果", "One too many"] }), "invalid-value");
+  });
+
+  it("retains explicit child string bounds inside a cardinality-bounded object list", async () => {
+    const f = fixture(), policy = structuredClone(f.options.policy);
+    const permission = policy.models[0]!.fields.find(item => item.fieldId === "rows")!;
+    permission.maxLength = 2;
+    permission.children![0]!.maxLength = 10;
+    const service = createHostedContentService({ ...f.options, policy });
+    await service.execute(actor, f.set("bounded-list-leaf", { rows: [{ label: "Useful", secret: "one" }, { label: "B", secret: "two" }] }));
+    await rejectsWithoutWrite({ ...f, service }, f.set("too-long-leaf", { rows: [{ label: "Longer than ten", secret: "one" }, { label: "B", secret: "two" }] }), "invalid-value");
+    await rejectsWithoutWrite({ ...f, service }, f.set("protected-leaf", { rows: [{ label: "Useful", secret: "changed" }, { label: "B", secret: "two" }] }), "forbidden");
   });
 
   it("allows pinned asset selection and description but rejects outside assets, executable Markdown and unsafe URLs", async () => {

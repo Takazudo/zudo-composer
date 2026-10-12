@@ -12,7 +12,7 @@ list determines FAQ membership/order. Newly created draft FAQ Entries appear
 without a publication-only filter. Images resolve only through the supplied
 approved version/checksum catalog.
 
-`src/OfferPage.tsx` owns the actual zudo-react component and approved layout.
+`src/OfferPage.tsx` owns the actual zudo-react component and approved layout. Notes use host-only pinned `marked@16.3.0` and the SDK `rawHtml` element API to render headings, bold and safe links. The host rejects raw HTML, unsafe link schemes and Markdown images; approved images remain separate Content asset fields. Composer receives only the Markdown source string and never imports this parser or ProseMd.
 The ZFB visitor route, real `@takazudo/zudo-sg` story/registry route and isolated
 preview iframe all import this exact module and consume the same immutable
 snapshot projection. The styleguide fixture is a host-owned catalog route

@@ -9,6 +9,8 @@ await build({ entryPoints: { preview: "src/preview.tsx", review: "src/review.ts"
       if (!output.endsWith("preview.js")) continue;
       const hostComponent = Object.entries(detail.inputs).find(([input]) => input.endsWith("src/OfferPage.tsx"));
       if (!hostComponent || hostComponent[1].bytesInOutput === 0) throw Error("The preview output must execute the shared real host component");
+      const markdown = Object.entries(detail.inputs).find(([input, value]) => /(?:^|\/)marked(?:@|\/)|\/marked\//.test(input) && value.bytesInOutput > 0);
+      if (!markdown) throw Error("Shared preview must emit the real host-only Markdown parser");
       const receiver = Object.entries(detail.inputs).find(([input, value]) => input.endsWith("/hosted-content/preview.mjs") && value.bytesInOutput > 0);
       if (!receiver) throw Error("The preview output must execute the public neutral Composer receiver");
     }

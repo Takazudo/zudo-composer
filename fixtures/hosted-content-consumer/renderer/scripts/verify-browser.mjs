@@ -13,6 +13,10 @@ try {
   await article.locator("h1").waitFor();
   assert.equal(await article.locator("h1").textContent(), snapshot.renderData.title);
   const canonical = await article.innerHTML();
+  const notes = article.locator("[data-host-notes]");
+  assert(await notes.locator("h1,h2,h3,h4,h5,h6").count() > 0, "No-JS Notes must contain rendered headings");
+  assert(await notes.locator("strong").count() > 0, "No-JS Notes must contain rendered bold text");
+  assert(await notes.locator('a[href^="https://"]').count() > 0, "No-JS Notes must contain real safe links");
   assert(await article.locator("img").evaluate((image) => image.complete && image.naturalWidth > 0), "No-JS approved image failed");
   await visitor.goto(new URL("/styleguide/", base).href);
   assert.equal(await visitor.locator('[data-sg-story="hosted-offer"] article').innerHTML(), canonical);
@@ -26,6 +30,7 @@ try {
   assert.equal(await review.locator("#preview-status").getAttribute("data-digest"), snapshot.digest);
   const frame = review.frameLocator("#snapshot-preview");
   assert.equal(await frame.locator("article").innerHTML(), canonical);
+  assert(await frame.locator("[data-host-notes] strong").count() > 0, "Acknowledged iframe must render bold Notes, not literal Markdown source");
   assert.equal(await frame.locator("#visitor-root").getAttribute("data-snapshot-id"), snapshot.id);
   assert.deepEqual(errors, []);
   console.log("JavaScript-disabled ZFB visitor, real registered SG story and acknowledged zudo-react iframe match exactly.");

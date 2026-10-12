@@ -2,6 +2,7 @@
 /** @jsxImportSource @takazudo/zfb/zudo-react */
 import type { Child } from "@takazudo/zfb/zudo-react";
 import type { OfferProjection } from "./project";
+import { renderHostMarkdown } from "./markdown";
 
 /** The same real host module is consumed by ZFB, the SG story and the preview iframe. */
 export function OfferPage({ data }: { data: OfferProjection }) {
@@ -11,7 +12,7 @@ export function OfferPage({ data }: { data: OfferProjection }) {
     <figure><img src={data.image.url} alt={data.image.alt} width={320} height={180}
       data-asset-version={data.image.versionId} data-asset-checksum={data.image.checksum} />
       <figcaption>{data.image.caption}</figcaption></figure>
-    <p data-host-notes>{data.notes}</p>
+    <div data-host-notes rawHtml={renderHostMarkdown(data.notes)} />
     <section id={data.route.fragment} aria-label="よくある質問"><h2>よくある質問</h2>
       {data.questions.map((item) => <div key={item.id} data-faq-id={item.id}>
         <h3>{item.question}</h3><p>{item.answer}</p>

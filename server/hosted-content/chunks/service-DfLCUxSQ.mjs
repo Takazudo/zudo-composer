@@ -762,6 +762,7 @@ function assertFieldChange(schema, permission, previous, next, policy, path, val
 		if (sameValue(before.map(canonicalSerialize).sort(), after.map(canonicalSerialize).sort()) && !permission.listReorder) forbidden(path);
 		for (let index = 0; index < Math.max(before.length, after.length); index++) assertFieldChange(schema.item, {
 			...permission,
+			maxLength: void 0,
 			clear: permission.listRemove
 		}, before[index], after[index], policy, `${path}[${index}]`, validateMarkdown);
 		return;

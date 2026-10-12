@@ -27,7 +27,7 @@ export async function provePublicationRendering(artifactDirectory) {
   const toolSpec = rendererManifest.dependencies["zudo-composer"];
   assert.match(toolSpec, /^git\+https:\/\/github\.com\/Takazudo\/zudo-composer\.git#[a-f0-9]{40}$/);
   const evidence = { installedToolSpec: toolSpec, installedToolSha: toolSpec.split("#")[1], node: process.version,
-    publication: result.evidence, cycles: [], browser: "not executed: pinned Chromium download blocked by HTTP403 Domain forbidden",
+    publication: result.evidence, cycles: [], browser: "not executed by this Node/static proof; separate real browser acceptance required",
     system: "persisted local synthetic publication sink; no live Git/API publication or deployment" };
   for (const trace of result.snapshots) {
     assert.notEqual(trace.A.id, trace.B.id, "Each publication names its own immutable saved snapshot");
@@ -58,7 +58,7 @@ export async function provePublicationRendering(artifactDirectory) {
       evidence.cycles.push({ scenario: trace.scenario, cycle, snapshotId: snapshot.id, digest: snapshot.digest,
         draftRevision: snapshot.draftRevision, targetEntryId: trace.target.recordId, targetField, exactMappedValue: mappedValue,
         faqIds: snapshot.renderData.questions.map(question => question.id), image: snapshot.renderData.image,
-        checks: { realZfbStatic: "PASS", registeredSgStory: "PASS", exactCandidateMapping: "PASS", completeFaqMembershipAndOrder: "PASS", exactAssetPin: "PASS", exactEmittedAssetBytes: "PASS", sharedNeutralPreviewByteGraph: "PASS", browserRuntime: "NOT RUN" },
+        checks: { realZfbStatic: "PASS", registeredSgStory: "PASS", exactCandidateMapping: "PASS", formattedMarkdownHeadingBoldSafeLink: "PASS", hostMarkdownUnsafeSourceRejection: "PASS", completeFaqMembershipAndOrder: "PASS", exactAssetPin: "PASS", exactEmittedAssetBytes: "PASS", sharedNeutralPreviewByteGraph: "PASS", browserRuntime: "NOT RUN" },
         artifactDirectory: output, staticFiles });
       console.log(JSON.stringify({ proof: "publication-static-cycle", scenario: trace.scenario, cycle, snapshotId: snapshot.id, digest: snapshot.digest, exactMappedValue: mappedValue }));
     }

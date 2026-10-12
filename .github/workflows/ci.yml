@@ -96,6 +96,8 @@ jobs:
           node-version: 24
       - run: pnpm install --frozen-lockfile
       - run: pnpm public:check
+      - name: Verify retained package-output payload
+        run: node scripts/check-hosted-payload.mjs --check verification/hosted-content/current-payload.json
       - run: pnpm hosted:installed "${{ github.sha }}" .artifacts/hosted-consumer
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -109,7 +111,14 @@ jobs:
             .artifacts/hosted-consumer/renderer/pnpm-lock.yaml
             .artifacts/hosted-consumer/renderer/pnpm-workspace.yaml
             .artifacts/hosted-consumer/verification.json
+            .artifacts/hosted-consumer/installed-sha.json
+            .artifacts/hosted-consumer/tool-payload-inventory.json
             .artifacts/hosted-consumer/worker-metafile.json
+            .artifacts/hosted-consumer/renderer/preview-metafile.json
+            .artifacts/hosted-consumer/work/*/publication-render-evidence.json
+            .artifacts/hosted-consumer/work/*/browser-transport-evidence.json
+            .artifacts/hosted-consumer/work/*/browser-bundle-evidence.json
+            .artifacts/hosted-consumer/work/*/browser-checkpoint-metafile.json
           if-no-files-found: ignore
           retention-days: 7
 

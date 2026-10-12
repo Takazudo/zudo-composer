@@ -45,6 +45,7 @@ export async function buildRenderer() {
   await run(process.execPath, ["scripts/build-preview.mjs"]);
   await run("corepack", ["pnpm", "exec", "zfb", "build"]);
   await run(process.execPath, ["scripts/verify-static.mjs"]);
+  await run(process.execPath, ["scripts/verify-markdown.mjs"]);
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const filename = resolve(process.argv[2] ?? "work/render-proof.sqlite");

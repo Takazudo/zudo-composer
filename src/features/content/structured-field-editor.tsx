@@ -3,9 +3,10 @@ import type { ComponentChildren, JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { encodeContentValuePath } from "../../app/route-intents";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, TrashIcon, WarningIcon } from "../../components/icons";
-import { Button, Checkbox, Field, Input, Select, Switch, Textarea } from "../../components/ui";
+import { Button, Checkbox, Field, Select } from "../../components/ui";
 import type { ContentEntryRef, ContentFieldDefinition, ContentAssetRef, ContentAssetUse, ContentValueSchema } from "../../content";
 import type { ContentAuthoringController } from "./controller";
+import { ContentScalarControl } from "./scalar-control";
 import { AssetUseCard } from "./asset-use-card";
 
 type ContentAuthorRun = (action: () => void | Promise<void>) => void;
@@ -16,8 +17,6 @@ export type ContentAssetPickerRenderer = (request: {
   onSelect(use: ContentAssetUse): void;
   onClose(): void;
 }) => ComponentChildren;
-
-const text = (value: JsonValue | undefined) => typeof value === "string" || typeof value === "number" ? String(value) : "";
 
 function ReferenceControl({ schema, value, path, label, multiple, controller, commit }: { schema: Extract<ContentValueSchema, { kind: "reference" | "reference-list" }>; value: JsonValue | undefined; path: readonly (string | number)[]; label: string; multiple: boolean; controller: ContentAuthoringController; commit(value: JsonValue | undefined): void }): JSX.Element {
   const [options, setOptions] = useState<Awaited<ReturnType<ContentAuthoringController["referenceEntries"]>>>([]);
@@ -40,15 +39,12 @@ function ReferenceControl({ schema, value, path, label, multiple, controller, co
 
 export function StructuredValueEditor({ schema, field, value, path, controller, run, renderAssetPicker, assetPickerCapabilities, commit }: { schema: ContentValueSchema; field: ContentFieldDefinition; value: JsonValue | undefined; path: readonly (string | number)[]; controller: ContentAuthoringController; run: ContentAuthorRun; renderAssetPicker?: ContentAssetPickerRenderer; assetPickerCapabilities?: { upload: boolean }; commit(value: JsonValue | undefined): void }): JSX.Element {
   const invoke = (next: JsonValue | undefined) => run(() => commit(next));
-  if (schema.kind === "choice") return <Select value={text(value)} onChange={(event) => invoke(event.currentTarget.value || undefined)}><option value="">Choose an option</option>{schema.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select>;
+  if (schema.kind === "choice") return <ContentScalarControl schema={schema} value={value} onChange={invoke} />;
   if (schema.kind === "reference" || schema.kind === "reference-list") return <ReferenceControl schema={schema} value={value} path={path} label={field.label} multiple={schema.kind === "reference-list"} controller={controller} commit={invoke} />;
   if (schema.kind === "asset-use") return <AssetUseCard kind={schema.use} value={value} controller={controller} renderAssetPicker={renderAssetPicker} assetPickerCapabilities={assetPickerCapabilities} commit={invoke} />;
   if (schema.kind === "object") { const object = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, JsonValue> : {}; return <fieldset class="sg-content-structured"><legend>{field.label}</legend>{schema.fields.map((child) => <div data-content-value-path={encodeContentValuePath([...path, child.id])} key={child.id}><Field controlId={`content-entry-${field.id}-${[...path, child.id].join("-")}`} label={child.label} required={child.required}><StructuredValueEditor schema={child} field={child} value={object[child.id]} path={[...path, child.id]} controller={controller} run={run} renderAssetPicker={renderAssetPicker} assetPickerCapabilities={assetPickerCapabilities} commit={(next) => { const updated = { ...object }; if (next === undefined || next === "") delete updated[child.id]; else updated[child.id] = next; invoke(updated); }} /></Field></div>)}</fieldset>; }
   if (schema.kind === "list") { const list = Array.isArray(value) ? value : []; return <div class="sg-content-list">{list.map((item, index) => <div class="sg-content-list__item" data-content-value-path={encodeContentValuePath([...path, index])} key={index}><StructuredValueEditor schema={schema.item} field={field} value={item} path={[...path, index]} controller={controller} run={run} renderAssetPicker={renderAssetPicker} assetPickerCapabilities={assetPickerCapabilities} commit={(next) => { const updated = [...list]; if (next === undefined) updated.splice(index, 1); else updated[index] = next; invoke(updated); }} /><Button iconOnly size="sm" aria-label={`Remove item ${index + 1}`} onClick={() => { const updated = [...list]; updated.splice(index, 1); invoke(updated); }}><TrashIcon size="xs" /></Button></div>)}<Button size="sm" onClick={() => invoke([...list, emptyValue(schema.item)])}><PlusIcon size="xs" />Add item</Button></div>; }
-  if (schema.kind === "boolean") return <Switch label={field.label} checked={value === true} onCheckedChange={(checked) => invoke(checked)} />;
-  if (schema.kind === "long-text") return <Textarea rows={5} value={text(value)} onInput={(event) => invoke(event.currentTarget.value)} />;
-  if (schema.kind === "number") return <Input type="number" value={text(value)} onInput={(event) => invoke(event.currentTarget.value === "" ? undefined : event.currentTarget.valueAsNumber)} />;
-  return <Input type={schema.kind === "date" ? "date" : schema.kind === "color" ? "color" : schema.kind === "url" ? "url" : "text"} value={text(value)} onInput={(event) => invoke(event.currentTarget.value)} />;
+  return <ContentScalarControl schema={schema} value={value} label={schema.kind === "boolean" ? field.label : undefined} onChange={invoke} />;
 }
 
 function emptyValue(schema: ContentValueSchema): JsonValue {

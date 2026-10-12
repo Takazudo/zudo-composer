@@ -1,7 +1,13 @@
 import { HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost } from "./preview.mjs";
 import { createContext, h, render } from "preact";
-import { useContext, useEffect, useState } from "preact/hooks";
-import { jsx, jsxs } from "preact/jsx-runtime";
+import { useContext, useEffect, useId, useRef, useState } from "preact/hooks";
+import { Fragment, jsx, jsxs } from "preact/jsx-runtime";
+import { defaultKeymap, history, historyKeymap, isolateHistory } from "@codemirror/commands";
+import { insertNewlineContinueMarkup, markdown, markdownKeymap } from "@codemirror/lang-markdown";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { Annotation, Compartment, EditorSelection, EditorState, Transaction } from "@codemirror/state";
+import { EditorView, keymap } from "@codemirror/view";
+import { tags } from "@lezer/highlight";
 //#region src/components/icons/index.ts
 /**
 * Composer/Sitemapper app-chrome icon set — renderer-safe: plain `.ts` + Preact `h()`,
@@ -111,6 +117,14 @@ function stroked(strokeWidth) {
 		"stroke-linejoin": "round"
 	};
 }
+function evenOddPath(d) {
+	return h("path", {
+		"fill-rule": "evenodd",
+		"clip-rule": "evenodd",
+		d
+	});
+}
+var ChevronDownIcon = makeIcon((w, hgt, cls, style) => svgRoot(w, hgt, cls, style, FILLED, [evenOddPath("M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z")]));
 /** Build a filled icon from one path while preserving the shared shell. */
 function filledPathIcon(d) {
 	return makeIcon((w, hgt, cls, style) => svgRoot(w, hgt, cls, style, FILLED, [h("path", { d })]));
@@ -768,6 +782,69 @@ function Input({ size = "md", icon: Icon, class: className, elementRef, ...rest 
 		}), input]
 	});
 }
+/**
+* The caret is a real icon rather than a background image: a data-URI SVG could
+* not take its stroke from a colour token, and no component may carry a literal.
+* `class` lands on the wrapper, which is what callers lay out.
+*/
+function Select({ size = "md", class: className, children, ...rest }) {
+	const field = useFieldControl();
+	return /* @__PURE__ */ jsxs("span", {
+		class: cx("cms-select-wrap", className),
+		children: [/* @__PURE__ */ jsx("select", {
+			...rest,
+			class: cx("cms-select", size === "sm" && "cms-select--sm"),
+			id: rest.id ?? field?.controlId,
+			"aria-describedby": rest["aria-describedby"] ?? field?.describedBy,
+			"aria-invalid": rest["aria-invalid"] ?? (field?.invalid ? "true" : void 0),
+			required: rest.required ?? field?.required,
+			children
+		}), /* @__PURE__ */ jsx(ChevronDownIcon, {
+			size: "sm",
+			class: "cms-select__caret"
+		})]
+	});
+}
+function Textarea({ class: className, ...rest }) {
+	const field = useFieldControl();
+	return /* @__PURE__ */ jsx("textarea", {
+		...rest,
+		class: cx("cms-textarea", className),
+		id: rest.id ?? field?.controlId,
+		"aria-describedby": rest["aria-describedby"] ?? field?.describedBy,
+		"aria-invalid": rest["aria-invalid"] ?? (field?.invalid ? "true" : void 0),
+		required: rest.required ?? field?.required
+	});
+}
+function Switch(props) {
+	const { checked, onCheckedChange, disabled, name, id, class: className, label, ...aria } = props;
+	const field = useFieldControl();
+	return /* @__PURE__ */ jsxs("label", {
+		class: cx("cms-switch", disabled && "cms-switch--disabled", className),
+		children: [
+			/* @__PURE__ */ jsx("input", {
+				...aria,
+				type: "checkbox",
+				role: "switch",
+				class: "cms-switch__input",
+				checked,
+				disabled,
+				name,
+				id: id ?? field?.controlId,
+				"aria-describedby": aria["aria-describedby"] ?? field?.describedBy,
+				onChange: (event) => onCheckedChange(event.currentTarget.checked)
+			}),
+			/* @__PURE__ */ jsx("span", {
+				class: "cms-switch__track",
+				"aria-hidden": "true"
+			}),
+			label === void 0 ? null : /* @__PURE__ */ jsx("span", {
+				class: "cms-switch__label",
+				children: label
+			})
+		]
+	});
+}
 //#endregion
 //#region src/hosted-content/session.ts
 var copy = (value) => JSON.parse(JSON.stringify(value));
@@ -812,6 +889,8 @@ var HostedContentSession = class {
 	options;
 	acknowledged = null;
 	edits = [];
+	invalidInputs = /* @__PURE__ */ new Set();
+	presentationRevision = 0;
 	revision = 0;
 	pending = null;
 	phase = "loading";
@@ -820,6 +899,10 @@ var HostedContentSession = class {
 	reviewedRoute = null;
 	unsubscribePreview;
 	publication = null;
+	publicationError = null;
+	publicationStale = false;
+	creationDraft = null;
+	lastCreatedEntry = null;
 	previewGeneration = 0;
 	flight = null;
 	listeners = /* @__PURE__ */ new Set();
@@ -833,6 +916,9 @@ var HostedContentSession = class {
 			this.edits = recovered.edits;
 			this.revision = recovered.localRevision;
 			this.pending = recovered.pending ? immutable(recovered.pending) : null;
+			this.publication = recovered.publication ?? null;
+			this.publicationStale = !!this.publication;
+			this.creationDraft = recovered.creationDraft ?? null;
 		}
 		this.unsubscribePreview = options.preview?.subscribe?.(() => this.emit());
 	}
@@ -847,13 +933,19 @@ var HostedContentSession = class {
 		return {
 			...immutable({
 				phase: this.phase,
+				invalidInputs: [...this.invalidInputs],
+				presentationRevision: this.presentationRevision,
 				content,
 				localRevision: this.revision,
-				dirty: this.edits.length > 0,
+				dirty: this.edits.length > 0 || !!this.creationDraft || this.invalidInputs.size > 0,
 				pending: this.pending,
 				reviewedSnapshot: this.hasCurrentPreview() ? this.reviewed : null,
-				publication: this.publication
+				publication: this.publication,
+				publicationStale: this.publicationStale,
+				creationDraft: this.creationDraft,
+				lastCreatedEntry: this.lastCreatedEntry
 			}),
+			publicationError: this.publicationError,
 			error: this.error
 		};
 	}
@@ -886,7 +978,9 @@ var HostedContentSession = class {
 			acknowledged: this.acknowledged,
 			edits: this.edits,
 			localRevision: this.revision,
-			pending: this.pending
+			pending: this.pending,
+			publication: this.publication,
+			creationDraft: this.creationDraft
 		});
 	}
 	persist() {
@@ -898,13 +992,50 @@ var HostedContentSession = class {
 	async initialize() {
 		try {
 			if (!this.acknowledged) this.acknowledged = copy(await this.options.transport.readState());
-			this.phase = this.pending ? this.pending.rejected ? conflicts.has(this.pending.rejectedCode ?? "") ? "conflict" : "failed" : "recovering" : this.edits.length ? "dirty" : "clean";
+			this.phase = this.pending ? this.pending.rejected ? conflicts.has(this.pending.rejectedCode ?? "") ? "conflict" : "failed" : "recovering" : this.edits.length || this.creationDraft ? "dirty" : "clean";
 			await this.persist();
+			if (this.publication) await this.refreshPublication().catch(() => void 0);
 			this.emit();
 		} catch (error) {
 			this.fail(error);
 			throw error;
 		}
+	}
+	/** Browser-internal incomplete number text is local only, never a typed draft value. */
+	setIncompleteInput(controlId, incomplete) {
+		if (incomplete) this.invalidInputs.add(controlId);
+		else this.invalidInputs.delete(controlId);
+		this.revision++;
+		this.reviewed = null;
+		this.options.preview?.invalidate?.();
+		if (!this.pending) this.phase = this.edits.length || this.creationDraft || this.invalidInputs.size ? "dirty" : "clean";
+		this.emit();
+	}
+	stageCreation(collectionId, values) {
+		this.revision++;
+		this.creationDraft = copy({
+			collectionId,
+			values,
+			revision: this.revision
+		});
+		this.reviewed = null;
+		this.options.preview?.invalidate?.();
+		if (!this.pending) this.phase = "dirty";
+		this.emit();
+		this.persist().catch((error) => this.fail(error));
+	}
+	cancelCreation() {
+		if (this.pending?.request.kind === "create-entry" && !this.pending.rejected) throw new Error("Recover the original creation first");
+		const collectionId = this.creationDraft?.collectionId;
+		for (const controlId of this.invalidInputs) if (collectionId && controlId.startsWith(`create/${collectionId}/`)) this.invalidInputs.delete(controlId);
+		this.creationDraft = null;
+		if (this.pending?.request.kind === "create-entry" && this.pending.rejected) {
+			this.pending = null;
+			this.error = null;
+		}
+		if (!this.pending) this.phase = this.edits.length || this.invalidInputs.size ? "dirty" : "clean";
+		this.emit();
+		this.persist().catch((error) => this.fail(error));
 	}
 	edit(entry, fieldId, value) {
 		if (!this.acknowledged) throw new Error("Authoritative content has not loaded");
@@ -925,14 +1056,15 @@ var HostedContentSession = class {
 	}
 	fail(error, requestRejected = false) {
 		this.error = error;
-		const definite = requestRejected ? rejectionCode(error) : null;
+		const expired = !!this.options.isAuthenticationExpired?.(error);
+		const definite = requestRejected && !expired ? rejectionCode(error) : null;
 		if (this.pending && definite) this.pending = immutable({
 			...this.pending,
 			rejected: true,
 			rejectedCode: definite
 		});
 		this.phase = definite && conflicts.has(definite) ? "conflict" : this.pending && !definite ? "recovering" : "failed";
-		if (this.options.isAuthenticationExpired?.(error)) this.options.onAuthenticationExpired?.(error);
+		if (expired) this.options.onAuthenticationExpired?.(error);
 		this.emit();
 		this.persist().catch(() => void 0);
 	}
@@ -959,8 +1091,23 @@ var HostedContentSession = class {
 				this.edits = this.edits.filter((edit) => !sameEntry(edit.entry, committedEntry) || edit.revision > active.localRevision);
 			}
 			this.pending = null;
-			if (result.publication) this.publication = result.publication;
-			this.phase = this.edits.length ? "dirty" : "saved";
+			if (result.publication) {
+				this.publication = result.publication;
+				this.publicationStale = false;
+			}
+			if (result.createdEntry) {
+				this.lastCreatedEntry = result.createdEntry;
+				if (active.request.kind === "create-entry" && this.creationDraft?.collectionId === active.request.collectionId) {
+					if (this.creationDraft.revision > active.localRevision) for (const [fieldId, value] of Object.entries(this.creationDraft.values)) this.edits.push(copy({
+						entry: result.createdEntry,
+						fieldId,
+						value,
+						revision: this.creationDraft.revision
+					}));
+					this.creationDraft = null;
+				}
+			}
+			this.phase = this.edits.length || this.creationDraft || this.invalidInputs.size ? "dirty" : "saved";
 			await this.persist();
 			this.emit();
 			return result;
@@ -975,6 +1122,7 @@ var HostedContentSession = class {
 		const work = async () => {
 			if (!this.acknowledged) throw new Error("Authoritative content has not loaded");
 			if (this.pending) await this.resolvePending();
+			if (this.invalidInputs.size) throw new Error("Correct the incomplete number before saving");
 			while (this.edits.length) {
 				const entry = this.edits[0].entry;
 				const fields = this.edits.filter((e) => sameEntry(e.entry, entry));
@@ -1022,19 +1170,104 @@ var HostedContentSession = class {
 		await this.flight;
 		return result;
 	}
+	async collectionAction(action) {
+		await this.flush();
+		if (this.creationDraft && (action.kind !== "create-entry" || action.collectionId !== this.creationDraft.collectionId)) throw new Error("Save or cancel the new item first");
+		if (action.kind === "create-entry" && this.creationDraft?.collectionId === action.collectionId) action = {
+			...action,
+			values: copy(this.creationDraft.values)
+		};
+		this.revision++;
+		this.reviewed = null;
+		this.options.preview?.invalidate?.();
+		return this.command(action);
+	}
+	createEntry(collectionId, values, before = null) {
+		return this.collectionAction({
+			kind: "create-entry",
+			collectionId,
+			values,
+			before
+		});
+	}
+	addEntry(collectionId, entry, before = null) {
+		return this.collectionAction({
+			kind: "add-entry",
+			collectionId,
+			entry,
+			before
+		});
+	}
+	reorder(collectionId, entries) {
+		return this.collectionAction({
+			kind: "reorder",
+			collectionId,
+			entries
+		});
+	}
+	/** A clean refresh may adopt a confirmed integration; dirty edits need explicit review. */
+	async refresh() {
+		if (this.flight || this.pending || this.edits.length || this.creationDraft || this.invalidInputs.size) throw new Error("Review retained changes before loading current content");
+		try {
+			const authoritative = await this.options.transport.readState();
+			if (this.flight || this.pending || this.edits.length || this.creationDraft || this.invalidInputs.size) throw new Error("Content was edited while loading current content");
+			this.acknowledged = copy(authoritative);
+			this.invalidInputs.clear();
+			this.presentationRevision++;
+			this.revision++;
+			this.reviewed = null;
+			this.options.preview?.invalidate?.();
+			this.error = null;
+			this.phase = "clean";
+			await this.persist();
+			this.emit();
+		} catch (error) {
+			this.fail(error);
+			throw error;
+		}
+	}
+	async refreshPublication() {
+		const current = this.publication;
+		if (!current) throw new Error("No publication has been submitted");
+		try {
+			const status = copy(await this.options.transport.getPublication(current.id));
+			if (status.id !== current.id || status.snapshotId !== current.snapshotId) throw new Error("Publication status does not match the submitted snapshot");
+			if (this.publication?.id === current.id && status.statusVersion >= this.publication.statusVersion) {
+				this.publication = status;
+				this.publicationStale = false;
+			}
+			this.publicationError = null;
+			await this.persist();
+			this.emit();
+			return immutable(this.publication);
+		} catch (error) {
+			this.publicationError = error;
+			this.publicationStale = true;
+			if (this.options.isAuthenticationExpired?.(error)) this.options.onAuthenticationExpired?.(error);
+			this.emit();
+			throw error;
+		}
+	}
 	async captureAndPreview(routeId) {
 		if (!this.options.preview) throw new Error("Preview adapter is required");
 		const generation = ++this.previewGeneration;
 		this.reviewed = null;
 		this.emit();
 		await this.flush();
+		if (this.creationDraft || this.invalidInputs.size) throw new Error("Save or cancel the new item before previewing");
 		const revision = this.revision;
 		const result = await this.command({ kind: "capture-snapshot" });
 		if (!result.snapshot) throw new Error("Snapshot result is missing");
 		const snapshot = immutable(result.snapshot);
 		const stale = () => generation !== this.previewGeneration || this.revision !== revision || this.edits.length > 0 || !!this.pending || this.acknowledged?.draftRevision !== snapshot.draftRevision;
 		if (stale()) throw new Error("Preview became stale after a local edit");
-		await this.options.preview.render(snapshot, routeId);
+		try {
+			await this.options.preview.render(snapshot, routeId);
+		} catch (error) {
+			this.error = error;
+			this.emit();
+			throw error;
+		}
 		if (stale()) throw new Error("Preview became stale after a local edit");
 		this.reviewed = snapshot;
 		this.reviewedRoute = routeId;
@@ -1043,7 +1276,7 @@ var HostedContentSession = class {
 	}
 	async submit() {
 		const snapshot = this.reviewed;
-		if (!snapshot || !this.hasCurrentPreview() || this.edits.length || this.pending || snapshot.diagnostics.length || this.acknowledged?.draftRevision !== snapshot.draftRevision) throw new Error("Preview the complete current saved draft before submitting");
+		if (!snapshot || !this.hasCurrentPreview() || this.edits.length || this.creationDraft || this.invalidInputs.size || this.pending || snapshot.diagnostics.length || this.acknowledged?.draftRevision !== snapshot.draftRevision) throw new Error("Preview the complete current saved draft before submitting");
 		const result = await this.command({
 			kind: "begin-publication",
 			snapshotId: snapshot.id
@@ -1063,7 +1296,7 @@ var HostedContentSession = class {
 		this.reviewed = null;
 		this.options.preview?.invalidate?.();
 		this.error = null;
-		this.phase = this.edits.length ? "dirty" : "clean";
+		this.phase = this.edits.length || this.creationDraft || this.invalidInputs.size ? "dirty" : "clean";
 		await this.persist();
 		this.emit();
 	}
@@ -1072,7 +1305,10 @@ var HostedContentSession = class {
 		if (this.flight || this.pending && !this.pending.rejected) throw new Error("Recover the original operation first");
 		this.acknowledged = copy(authoritative);
 		this.edits = [];
+		this.invalidInputs.clear();
+		this.creationDraft = null;
 		this.pending = null;
+		this.presentationRevision++;
 		this.revision++;
 		this.reviewed = null;
 		this.options.preview?.invalidate?.();
@@ -1091,8 +1327,728 @@ var HostedContentSession = class {
 	}
 };
 //#endregion
+//#region src/features/content/scalar-control.tsx
+var text = (value) => typeof value === "string" || typeof value === "number" ? String(value) : "";
+/** The same primitive value widgets serve local structured forms and hosted forms. */
+function ContentScalarControl({ schema, value, label, required, maxLength, disabled, emptyChoiceLabel = "Choose an option", emptyChoiceDisabled, retainIncompleteNumber, allowEmptyNumber = true, onIncompleteNumber, onChange }) {
+	const common = {
+		"aria-label": label,
+		required,
+		disabled
+	};
+	if (schema.kind === "choice") return /* @__PURE__ */ jsxs(Select, {
+		...common,
+		value: text(value),
+		onChange: (event) => onChange(event.currentTarget.value || void 0),
+		children: [/* @__PURE__ */ jsx("option", {
+			value: "",
+			disabled: emptyChoiceDisabled,
+			children: emptyChoiceLabel
+		}), schema.options.map((option) => /* @__PURE__ */ jsx("option", {
+			value: option.value,
+			children: option.label
+		}, option.value))]
+	});
+	if (schema.kind === "boolean") return /* @__PURE__ */ jsx(Switch, {
+		label: label ?? "Boolean",
+		"aria-label": label,
+		checked: value === true,
+		disabled,
+		onCheckedChange: onChange
+	});
+	if (schema.kind === "long-text") return /* @__PURE__ */ jsx(Textarea, {
+		...common,
+		rows: 5,
+		maxLength,
+		value: text(value),
+		onInput: (event) => onChange(event.currentTarget.value)
+	});
+	if (schema.kind === "number" && retainIncompleteNumber) return /* @__PURE__ */ jsx(RetainedNumberControl, {
+		value,
+		label,
+		required,
+		disabled,
+		allowEmpty: allowEmptyNumber,
+		onIncomplete: onIncompleteNumber,
+		onChange
+	});
+	if (schema.kind === "number") return /* @__PURE__ */ jsx(Input, {
+		...common,
+		type: "number",
+		value: text(value),
+		onInput: (event) => {
+			const next = event.currentTarget.valueAsNumber;
+			onChange(event.currentTarget.value === "" || !Number.isFinite(next) ? void 0 : next);
+		}
+	});
+	return /* @__PURE__ */ jsx(Input, {
+		...common,
+		maxLength,
+		type: schema.kind === "date" ? "date" : schema.kind === "color" ? "color" : schema.kind === "url" ? "url" : "text",
+		value: text(value),
+		onInput: (event) => onChange(event.currentTarget.value)
+	});
+}
+/** Transient invalid browser text stays local; only complete finite numbers reach Content. */
+function RetainedNumberControl({ value, label, required, disabled, allowEmpty, onIncomplete, onChange }) {
+	const [draft, setDraft] = useState(text(value));
+	const [incomplete, setIncomplete] = useState(false);
+	const external = useRef(value);
+	const emitted = useRef(value);
+	if (external.current !== value) {
+		external.current = value;
+		if (emitted.current !== value) setDraft(text(value));
+	}
+	return /* @__PURE__ */ jsx(Input, {
+		type: "number",
+		step: "any",
+		"aria-label": label,
+		required,
+		disabled,
+		"aria-invalid": incomplete ? "true" : void 0,
+		value: draft,
+		onInput: (event) => {
+			const control = event.currentTarget;
+			const raw = control.value;
+			const numeric = control.valueAsNumber;
+			setDraft(raw);
+			if (raw === "" && allowEmpty && !control.validity.badInput) {
+				emitted.current = void 0;
+				setIncomplete(false);
+				onIncomplete?.(null);
+				onChange(void 0);
+				return;
+			}
+			if (raw === "" || !Number.isFinite(numeric)) {
+				setIncomplete(true);
+				onIncomplete?.(raw);
+				return;
+			}
+			emitted.current = numeric;
+			setIncomplete(false);
+			onIncomplete?.(null);
+			onChange(numeric);
+		}
+	});
+}
+//#endregion
+//#region src/features/content/markdown-source.ts
+var externalValue = Annotation.define();
+var semanticHighlightStyle = HighlightStyle.define([
+	{
+		tag: tags.heading,
+		color: "var(--sg-content-markdown-syntax-heading)",
+		fontWeight: "700"
+	},
+	{
+		tag: [tags.strong, tags.emphasis],
+		color: "var(--sg-content-markdown-syntax-emphasis)"
+	},
+	{
+		tag: [tags.link, tags.url],
+		color: "var(--sg-content-markdown-syntax-link)"
+	},
+	{
+		tag: [tags.monospace, tags.processingInstruction],
+		color: "var(--sg-content-markdown-syntax-code)"
+	},
+	{
+		tag: tags.quote,
+		color: "var(--sg-content-markdown-syntax-quote)"
+	}
+]);
+var editorTheme = EditorView.theme({
+	"&": {
+		minHeight: "12rem",
+		color: "var(--sg-content-markdown-editor-fg)",
+		backgroundColor: "var(--sg-content-markdown-editor-bg)",
+		fontSize: "var(--text-sm)"
+	},
+	"&.cm-focused": {
+		outline: "2px solid var(--color-focus)",
+		outlineOffset: "-2px"
+	},
+	".cm-content": {
+		minHeight: "12rem",
+		padding: "var(--spacing-vsp-xs) var(--spacing-hsp-md)",
+		caretColor: "var(--sg-content-markdown-editor-caret)",
+		fontFamily: "var(--font-mono, ui-monospace, monospace)",
+		lineHeight: "var(--leading-relaxed, 1.6)"
+	},
+	".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "var(--sg-content-markdown-editor-selection)" },
+	".cm-cursor": { borderLeftColor: "var(--sg-content-markdown-editor-caret)" },
+	".cm-gutters": {
+		color: "var(--color-muted)",
+		backgroundColor: "var(--sg-content-markdown-editor-bg)",
+		borderRightColor: "var(--color-border)"
+	}
+});
+/** Imperative lifecycle boundary used by the Preact wrapper and focused tests. */
+function createMarkdownEditor(options) {
+	const themeCompartment = new Compartment();
+	const state = EditorState.create({
+		doc: options.value,
+		extensions: [
+			history(),
+			markdown(),
+			syntaxHighlighting(semanticHighlightStyle),
+			EditorView.lineWrapping,
+			editorTheme,
+			themeCompartment.of(EditorView.darkTheme.of(options.theme === "dark")),
+			EditorView.contentAttributes.of({
+				"aria-labelledby": options.labelledBy,
+				"aria-multiline": "true",
+				...options.required ? { "aria-required": "true" } : {},
+				autocorrect: "off",
+				autocomplete: "off",
+				autocapitalize: "off",
+				spellcheck: "true",
+				writingsuggestions: "false"
+			}),
+			keymap.of([
+				{
+					key: "Enter",
+					run: insertNewlineContinueMarkup
+				},
+				...defaultKeymap,
+				...historyKeymap,
+				...markdownKeymap
+			]),
+			EditorView.updateListener.of((update) => {
+				if (!update.docChanged || update.transactions.some((transaction) => transaction.annotation(externalValue))) return;
+				options.onChange(update.state.doc.toString());
+			})
+		]
+	});
+	const view = new EditorView({
+		state,
+		parent: options.parent
+	});
+	return {
+		view,
+		setValue(value) {
+			if (value === view.state.doc.toString()) return;
+			const { anchor, head } = view.state.selection.main;
+			const max = value.length;
+			view.dispatch({
+				changes: {
+					from: 0,
+					to: view.state.doc.length,
+					insert: value
+				},
+				selection: EditorSelection.single(Math.min(anchor, max), Math.min(head, max)),
+				annotations: [externalValue.of(true), Transaction.addToHistory.of(false)]
+			});
+		},
+		setTheme(theme) {
+			view.dispatch({ effects: themeCompartment.reconfigure(EditorView.darkTheme.of(theme === "dark")) });
+		},
+		destroy: () => view.destroy()
+	};
+}
+//#endregion
+//#region src/features/content/markdown-formatting.ts
+var WRAPS = {
+	bold: {
+		open: "**",
+		close: "**",
+		placeholder: "strong text"
+	},
+	italic: {
+		open: "*",
+		close: "*",
+		placeholder: "emphasis"
+	},
+	code: {
+		open: "`",
+		close: "`",
+		placeholder: "code"
+	},
+	link: {
+		open: "[",
+		close: "](https://example.com)",
+		placeholder: "link text"
+	}
+};
+var PREFIXES = {
+	heading: {
+		prefix: "## ",
+		placeholder: "Heading"
+	},
+	quote: {
+		prefix: "> ",
+		placeholder: "Quote"
+	},
+	list: {
+		prefix: "- ",
+		placeholder: "List item"
+	}
+};
+function wrapSelection(state, format) {
+	const { anchor, head, from, to } = state.selection.main;
+	const { open, close, placeholder } = WRAPS[format];
+	const selected = state.sliceDoc(from, to);
+	const content = selected || placeholder;
+	return {
+		changes: {
+			from,
+			to,
+			insert: `${open}${content}${close}`
+		},
+		selection: selected ? EditorSelection.single(anchor + open.length, head + open.length) : EditorSelection.single(from + open.length, from + open.length + content.length)
+	};
+}
+function prefixLines(state, format) {
+	const { anchor, head, from, to } = state.selection.main;
+	const { prefix, placeholder } = PREFIXES[format];
+	if (from === to) {
+		const line = state.doc.lineAt(from);
+		if (line.length === 0) return {
+			changes: {
+				from: line.from,
+				insert: `${prefix}${placeholder}`
+			},
+			selection: EditorSelection.single(line.from + prefix.length, line.from + prefix.length + placeholder.length)
+		};
+	}
+	const firstLine = state.doc.lineAt(from);
+	const finalPosition = to > from && to === state.doc.lineAt(to).from ? to - 1 : to;
+	const lastLine = state.doc.lineAt(finalPosition);
+	const changes = [];
+	for (let number = firstLine.number; number <= lastLine.number; number += 1) changes.push({
+		from: state.doc.line(number).from,
+		insert: prefix
+	});
+	const changeSet = state.changes(changes);
+	const mappedFrom = changeSet.mapPos(from, 1);
+	const mappedTo = changeSet.mapPos(to, -1);
+	return {
+		changes,
+		selection: from === to ? EditorSelection.single(mappedFrom) : EditorSelection.single(anchor > head ? mappedTo : mappedFrom, anchor > head ? mappedFrom : mappedTo)
+	};
+}
+/** Calculate a formatting edit without mutating an editor or a stored Markdown string. */
+function markdownFormattingTransaction(state, format) {
+	return {
+		...format in WRAPS ? wrapSelection(state, format) : prefixLines(state, format),
+		scrollIntoView: true,
+		userEvent: "input.format",
+		annotations: isolateHistory.of("full")
+	};
+}
+/** Apply one formatting action as exactly one undoable CodeMirror transaction. */
+function applyMarkdownFormat(view, format) {
+	view.dispatch(markdownFormattingTransaction(view.state, format));
+	view.focus();
+	return true;
+}
+//#endregion
+//#region src/hosted-content/field-control.tsx
+var hostedControlLabels = {
+	clear: "Clear",
+	addItem: "Add item",
+	removeItem: "Remove item",
+	moveUp: "Move up",
+	moveDown: "Move down",
+	choose: "Choose an option",
+	none: "None",
+	unavailable: "Unavailable",
+	asset: "Approved asset",
+	item: "Item",
+	bold: "Bold",
+	italic: "Italic",
+	link: "Link",
+	heading: "Heading",
+	alt: "Alternative text",
+	caption: "Caption",
+	decorative: "Decorative image",
+	label: "Label",
+	title: "Title",
+	description: "Description",
+	showSize: "Show file size",
+	showType: "Show file type"
+};
+var object = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
+var key = (entry) => JSON.stringify([
+	entry.providerId,
+	entry.modelId,
+	entry.recordId
+]);
+function entryLabel(content, ref) {
+	const provider = content.providers.find((p) => p.providerId === ref.providerId);
+	const entry = provider?.entries.find((e) => e.id === ref.recordId && e.modelId === ref.modelId);
+	const model = provider?.models.find((m) => m.id === ref.modelId);
+	const text = model?.document.fields.find((f) => f.kind === "text" && typeof entry?.values[f.id] === "string");
+	return text ? String(entry.values[text.id]) || model.document.name : model?.document.name ?? "Unavailable";
+}
+function fieldEditable(field, permission) {
+	if (!permission || [
+		"slug",
+		"reference",
+		"reference-list"
+	].includes(field.kind)) return false;
+	if (field.kind === "object") return field.fields.some((child) => fieldEditable(child, permission.children?.find((p) => p.fieldId === child.id) ?? (permission.replace ? {
+		fieldId: child.id,
+		replace: true,
+		clear: permission.clear
+	} : void 0)));
+	if (field.kind === "asset-use") return !!permission.assetSelect || !!permission.assetDescription?.length;
+	if (field.kind === "list") return fieldEditable(field.item, permission);
+	return !!permission.replace || !!permission.clear;
+}
+function fieldClearable(schema, allowed) {
+	if (!allowed?.clear || [
+		"slug",
+		"reference",
+		"reference-list",
+		"list",
+		"asset-use"
+	].includes(schema.kind)) return false;
+	if (schema.kind !== "object") return true;
+	return schema.fields.every((field) => fieldClearable(field, allowed.children?.find((child) => child.fieldId === field.id)));
+}
+function defaultValue(schema) {
+	if (schema.kind === "boolean") return false;
+	if (schema.kind === "number") return 0;
+	if (schema.kind === "object") return {};
+	if (schema.kind === "list" || schema.kind === "reference-list") return [];
+	return "";
+}
+function protectedShape(schema) {
+	return [
+		"slug",
+		"reference",
+		"reference-list",
+		"asset-use"
+	].includes(schema.kind) || schema.kind === "object" && schema.fields.some(protectedShape) || schema.kind === "list" && protectedShape(schema.item);
+}
+function MarkdownSourceControl({ identity, label, required, value, onChange, labels }) {
+	const labelId = `hosted-markdown-${useId()}`;
+	const mount = useRef(null);
+	const controller = useRef(null);
+	const callback = useRef(onChange);
+	callback.current = onChange;
+	useEffect(() => {
+		if (!mount.current) return;
+		const created = createMarkdownEditor({
+			parent: mount.current,
+			value,
+			labelledBy: labelId,
+			required,
+			theme: "light",
+			onChange: (next) => callback.current(next)
+		});
+		controller.current = created;
+		return () => {
+			controller.current = null;
+			created.destroy();
+		};
+	}, [
+		identity,
+		labelId,
+		required
+	]);
+	useEffect(() => controller.current?.setValue(value), [identity, value]);
+	const actions = [
+		{
+			label: labels.bold,
+			format: "bold"
+		},
+		{
+			label: labels.italic,
+			format: "italic"
+		},
+		{
+			label: labels.link,
+			format: "link"
+		},
+		{
+			label: labels.heading,
+			format: "heading"
+		}
+	];
+	return /* @__PURE__ */ jsxs("div", {
+		class: "hosted-content-editor__markdown",
+		children: [
+			/* @__PURE__ */ jsx("span", {
+				id: labelId,
+				class: "hosted-content-editor__sr-only",
+				children: label
+			}),
+			/* @__PURE__ */ jsx("div", {
+				class: "hosted-content-editor__actions",
+				role: "toolbar",
+				"aria-label": label,
+				children: actions.map((action) => /* @__PURE__ */ jsx("button", {
+					type: "button",
+					onPointerDown: (event) => event.preventDefault(),
+					onClick: () => {
+						if (controller.current) applyMarkdownFormat(controller.current.view, action.format);
+					},
+					children: action.label
+				}, action.format))
+			}),
+			/* @__PURE__ */ jsx("div", { ref: mount })
+		]
+	});
+}
+/** Typed values only. No routes, provider constructors, upload, schema or source execution. */
+function HostedFieldControl(props) {
+	const { schema, field, value, permission, identity, label, content, policy, labels, onChange } = props;
+	if (!permission.replace && ![
+		"object",
+		"list",
+		"asset-use",
+		"reference",
+		"reference-list"
+	].includes(schema.kind)) return /* @__PURE__ */ jsx("output", {
+		"aria-label": label,
+		children: value === void 0 ? labels.none : typeof value === "string" ? value : JSON.stringify(value)
+	});
+	if (schema.kind === "object") {
+		const current = object(value);
+		return /* @__PURE__ */ jsxs("fieldset", {
+			class: "hosted-content-editor__structured",
+			children: [/* @__PURE__ */ jsx("legend", { children: label }), schema.fields.map((child) => {
+				const allowed = permission.children?.find((p) => p.fieldId === child.id) ?? (permission.replace ? {
+					fieldId: child.id,
+					replace: true,
+					clear: permission.clear
+				} : void 0);
+				if (!allowed || !fieldEditable(child, allowed)) return null;
+				return /* @__PURE__ */ jsxs("div", {
+					class: "hosted-content-editor__field",
+					children: [
+						/* @__PURE__ */ jsx("span", { children: child.label }),
+						/* @__PURE__ */ jsx(HostedFieldControl, {
+							...props,
+							schema: child,
+							field: child,
+							label: `${label}: ${child.label}`,
+							value: current[child.id],
+							permission: allowed,
+							identity: `${identity}/${child.id}`,
+							onChange: (next) => {
+								const updated = { ...current };
+								if (next === void 0) delete updated[child.id];
+								else updated[child.id] = next;
+								onChange(updated);
+							}
+						}),
+						fieldClearable(child, allowed) ? /* @__PURE__ */ jsx("button", {
+							type: "button",
+							disabled: !!props.hasIncompleteInput?.(`${identity}/${child.id}`),
+							"aria-label": `${labels.clear}: ${label}: ${child.label}`,
+							onClick: () => {
+								if (props.hasIncompleteInput?.(`${identity}/${child.id}`)) return;
+								props.onIncompleteNumber?.(`${identity}/${child.id}`, null);
+								const updated = { ...current };
+								delete updated[child.id];
+								onChange(updated);
+							},
+							children: labels.clear
+						}) : null
+					]
+				}, child.id);
+			})]
+		});
+	}
+	if (schema.kind === "list") {
+		const items = Array.isArray(value) ? value : [];
+		const shapeAllowed = permission.replace && !protectedShape(schema.item);
+		const incomplete = !!props.hasIncompleteInput?.(identity);
+		return /* @__PURE__ */ jsxs("div", {
+			class: "hosted-content-editor__list",
+			children: [items.map((item, index) => /* @__PURE__ */ jsxs("div", {
+				class: "hosted-content-editor__list-item",
+				children: [/* @__PURE__ */ jsx(HostedFieldControl, {
+					...props,
+					schema: schema.item,
+					listItem: true,
+					value: item,
+					label: `${label}: ${labels.item} ${index + 1}`,
+					identity: `${identity}/${index}`,
+					permission: {
+						...permission,
+						maxLength: void 0,
+						clear: permission.listRemove
+					},
+					onChange: (next) => {
+						if (next === void 0) return;
+						const updated = [...items];
+						updated[index] = next;
+						onChange(updated);
+					}
+				}), /* @__PURE__ */ jsxs("div", {
+					class: "hosted-content-editor__actions",
+					children: [shapeAllowed && permission.listRemove ? /* @__PURE__ */ jsx("button", {
+						type: "button",
+						disabled: incomplete,
+						"aria-label": `${labels.removeItem}: ${label} ${index + 1}`,
+						onClick: () => onChange(items.filter((_, i) => i !== index)),
+						children: labels.removeItem
+					}) : null, permission.listReorder && permission.replace && !protectedShape(schema.item) ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("button", {
+						type: "button",
+						disabled: incomplete || index === 0,
+						"aria-label": `${labels.moveUp}: ${label} ${index + 1}`,
+						onClick: () => {
+							const updated = [...items];
+							[updated[index - 1], updated[index]] = [updated[index], updated[index - 1]];
+							onChange(updated);
+						},
+						children: labels.moveUp
+					}), /* @__PURE__ */ jsx("button", {
+						type: "button",
+						disabled: incomplete || index === items.length - 1,
+						"aria-label": `${labels.moveDown}: ${label} ${index + 1}`,
+						onClick: () => {
+							const updated = [...items];
+							[updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
+							onChange(updated);
+						},
+						children: labels.moveDown
+					})] }) : null]
+				})]
+			}, index)), shapeAllowed && permission.listAdd ? /* @__PURE__ */ jsxs("button", {
+				type: "button",
+				disabled: incomplete || permission.maxLength !== void 0 && items.length >= permission.maxLength,
+				onClick: () => onChange([...items, defaultValue(schema.item)]),
+				children: [
+					labels.addItem,
+					": ",
+					label
+				]
+			}) : null]
+		});
+	}
+	if (schema.kind === "reference" || schema.kind === "reference-list") {
+		const refs = schema.kind === "reference-list" ? Array.isArray(value) ? value : [] : value ? [value] : [];
+		return /* @__PURE__ */ jsx("ul", {
+			class: "hosted-content-editor__references",
+			children: refs.map((ref) => /* @__PURE__ */ jsx("li", { children: entryLabel(content, ref) }, key(ref)))
+		});
+	}
+	if (schema.kind === "asset-use") {
+		const current = object(value);
+		const currentRef = object(current.asset);
+		const selected = policy.assets.find((asset) => asset.providerId === currentRef.providerId && asset.assetId === currentRef.assetId);
+		const descriptive = schema.use === "image" ? [
+			"alt",
+			"decorative",
+			"caption"
+		] : schema.use === "download" ? [
+			"label",
+			"showSize",
+			"showType"
+		] : schema.use === "card" ? ["title", "description"] : ["label"];
+		const patch = (name, next) => onChange({
+			...current,
+			[name]: next
+		});
+		const canInitialize = !!current.kind || descriptive.every((name) => permission.assetDescription?.includes(name));
+		return /* @__PURE__ */ jsxs("div", {
+			class: "hosted-content-editor__asset",
+			children: [
+				permission.assetSelect ? /* @__PURE__ */ jsxs(Select, {
+					"aria-label": `${label}: ${labels.asset}`,
+					value: selected ? key({
+						providerId: selected.providerId,
+						modelId: "asset",
+						recordId: selected.assetId
+					}) : "",
+					onChange: (event) => {
+						const asset = policy.assets.find((item) => key({
+							providerId: item.providerId,
+							modelId: "asset",
+							recordId: item.assetId
+						}) === event.currentTarget.value);
+						if (!asset || !canInitialize) return;
+						const initial = {
+							kind: schema.use,
+							asset: {
+								providerId: asset.providerId,
+								assetId: asset.assetId
+							}
+						};
+						for (const name of descriptive) initial[name] = [
+							"decorative",
+							"showSize",
+							"showType"
+						].includes(name) ? false : "";
+						onChange(current.kind ? {
+							...current,
+							asset: initial.asset
+						} : initial);
+					},
+					disabled: !canInitialize,
+					children: [/* @__PURE__ */ jsx("option", {
+						value: "",
+						disabled: true,
+						children: labels.none
+					}), policy.assets.map((asset) => /* @__PURE__ */ jsx("option", {
+						value: key({
+							providerId: asset.providerId,
+							modelId: "asset",
+							recordId: asset.assetId
+						}),
+						children: asset.label
+					}, `${asset.providerId}/${asset.assetId}`))]
+				}) : /* @__PURE__ */ jsx("p", { children: selected?.label ?? labels.unavailable }),
+				selected && schema.use === "image" ? /* @__PURE__ */ jsx("img", {
+					class: "hosted-content-editor__asset-image",
+					src: selected.url,
+					alt: ""
+				}) : null,
+				current.kind ? descriptive.filter((name) => permission.assetDescription?.includes(name)).map((name) => /* @__PURE__ */ jsxs("div", {
+					class: "hosted-content-editor__field",
+					children: [/* @__PURE__ */ jsx("span", { children: labels[name] }), [
+						"decorative",
+						"showSize",
+						"showType"
+					].includes(name) ? /* @__PURE__ */ jsx(Switch, {
+						"aria-label": `${label}: ${labels[name]}`,
+						checked: current[name] === true,
+						onCheckedChange: (next) => patch(name, next)
+					}) : name === "description" ? /* @__PURE__ */ jsx(Textarea, {
+						"aria-label": `${label}: ${labels.description}`,
+						value: typeof current[name] === "string" ? current[name] : "",
+						onInput: (event) => patch(name, event.currentTarget.value)
+					}) : /* @__PURE__ */ jsx(Input, {
+						"aria-label": `${label}: ${labels[name]}`,
+						value: typeof current[name] === "string" ? current[name] : "",
+						onInput: (event) => patch(name, event.currentTarget.value)
+					})]
+				}, name)) : null
+			]
+		});
+	}
+	if (schema.kind === "markdown") return /* @__PURE__ */ jsx(MarkdownSourceControl, {
+		identity,
+		label,
+		required: field.required,
+		value: typeof value === "string" ? value : "",
+		onChange,
+		labels
+	});
+	return /* @__PURE__ */ jsx(ContentScalarControl, {
+		schema,
+		label,
+		required: field.required,
+		maxLength: permission.maxLength,
+		value,
+		emptyChoiceLabel: labels.choose,
+		emptyChoiceDisabled: !permission.clear,
+		disabled: schema.kind === "number" ? props.disabledNumber : void 0,
+		retainIncompleteNumber: true,
+		allowEmptyNumber: !!permission.clear && !props.listItem,
+		onIncompleteNumber: (raw) => props.onIncompleteNumber?.(identity, raw),
+		onChange
+	});
+}
+//#endregion
 //#region src/hosted-content/editor.tsx
 var defaults = {
+	...hostedControlLabels,
 	save: "Save",
 	preview: "Preview",
 	submit: "Submit",
@@ -1103,21 +2059,65 @@ var defaults = {
 	saved: "Saved",
 	recovering: "Recovering save…",
 	conflict: "Content changed. Review your retained changes.",
-	failed: "Save failed. Your changes are retained."
+	failed: "Save failed. Your changes are retained.",
+	content: "Content",
+	edit: "Edit",
+	create: "Create item",
+	addExisting: "Add existing item",
+	cancel: "Cancel",
+	review: "Review current content",
+	reapply: "Reapply my changes",
+	discard: "Discard my changes",
+	localValue: "Your value",
+	serverValue: "Current saved value",
+	reload: "Reload saved content",
+	refreshStatus: "Refresh submission status",
+	statusUnavailable: "Submission status is unavailable. The saved draft is retained.",
+	cannotClear: "This field cannot be cleared.",
+	lastKnownStatus: "Last confirmed status",
+	previewCurrent: "Current saved content previewed",
+	previewRequired: "Preview the current saved content before submitting.",
+	submissionIncomplete: "Required content is incomplete.",
+	submitted: "Submitted",
+	building: "Building",
+	verified: "Verified",
+	integrated: "Integrated",
+	deployed: "Deployed",
+	unavailable: "Unavailable"
 };
-function permitted(options, selection) {
-	return !!options.policy.models.find((model) => model.providerId === selection.entry.providerId && model.modelId === selection.entry.modelId && model.entryIds.includes(selection.entry.recordId))?.fields.some((field) => field.fieldId === selection.fieldId && field.replace);
+var sameRef = (a, b) => a.providerId === b.providerId && a.modelId === b.modelId && a.recordId === b.recordId;
+var refKey = (ref) => JSON.stringify([
+	ref.providerId,
+	ref.modelId,
+	ref.recordId
+]);
+function permission(options, selection) {
+	return options.policy.models.find((model) => model.providerId === selection.entry.providerId && model.modelId === selection.entry.modelId)?.fields.find((field) => field.fieldId === selection.fieldId);
 }
-function selected(state, selection) {
-	const provider = state.content?.providers.find((item) => item.providerId === selection.entry.providerId);
+function memberRefs(content, owner, fieldId) {
+	const values = content.providers.find((provider) => provider.providerId === owner.providerId)?.entries.find((entry) => entry.id === owner.recordId && entry.modelId === owner.modelId)?.values[fieldId];
+	return Array.isArray(values) ? values : [];
+}
+function permittedRef(options, ref, content) {
+	const model = options.policy.models.find((model) => model.providerId === ref.providerId && model.modelId === ref.modelId);
+	if (!model) return false;
+	return model.entryIds.includes(ref.recordId) || options.policy.collections.some((collection) => collection.target.providerId === ref.providerId && collection.target.modelId === ref.modelId && (!content || memberRefs(content, collection.owner, collection.fieldId).some((member) => sameRef(member, ref))));
+}
+function permitted(options, selection, content) {
+	const allowed = permission(options, selection);
+	return permittedRef(options, selection.entry, content) && !!allowed && !!(allowed.replace || allowed.clear || allowed.children?.length || allowed.assetSelect || allowed.assetDescription?.length);
+}
+function selected(content, selection) {
+	const provider = content?.providers.find((item) => item.providerId === selection.entry.providerId);
 	const entry = provider?.entries.find((item) => item.id === selection.entry.recordId && item.modelId === selection.entry.modelId);
-	const field = provider?.models.find((item) => item.id === selection.entry.modelId)?.document.fields.find((item) => item.id === selection.fieldId);
-	return entry && field ? {
+	const model = provider?.models.find((item) => item.id === selection.entry.modelId);
+	return entry && model ? {
 		entry,
-		field
+		model
 	} : null;
 }
-/** Thin durable checkpoint surface. Only the selected permitted existing text field is mounted. */
+var displayValue = (value, none) => value === void 0 ? none : typeof value === "string" ? value : JSON.stringify(value);
+/** Mount only the policy projection. Location paths/queries never select local authoring tools. */
 function mountHostedContentEditor(container, options) {
 	if (!permitted(options, options.selection)) throw new Error("Selection is not permitted");
 	const session = new HostedContentSession(options);
@@ -1127,55 +2127,333 @@ function mountHostedContentEditor(container, options) {
 	};
 	let selection = options.selection;
 	let disposed = false;
-	const draw = () => {
-		if (!disposed) render(/* @__PURE__ */ jsx(Editor, {}), container);
+	const draw = (state = session.state) => {
+		if (!disposed) render(/* @__PURE__ */ jsx(Editor, { state }), container);
 	};
-	function Editor() {
-		const [state, setState] = useState(session.state);
-		useEffect(() => session.subscribe(setState), []);
-		const item = selected(state, selection);
+	async function navigate(next) {
+		if (disposed) throw new Error("Editor presentation is disposed");
+		if (!permitted(options, next, session.state.content)) throw new Error("Selection is not permitted");
+		const field = selected(session.state.content, next)?.model.document.fields.find((field) => field.id === next.fieldId);
+		if (!field || !fieldEditable(field, permission(options, next))) throw new Error("Selection is not permitted");
+		await session.flush();
+		if (session.state.dirty) throw new Error("Save or cancel the new item before navigating");
+		if (disposed) throw new Error("Editor presentation is disposed");
+		await options.onNavigate?.(next);
+		selection = next;
+		draw();
+	}
+	const preview = () => options.routeId ? session.captureAndPreview(options.routeId) : Promise.reject(/* @__PURE__ */ new Error("A host-owned route is required"));
+	function Editor({ state }) {
+		const [actionError, setActionError] = useState(null);
+		const [review, setReview] = useState(null);
+		const [creating, setCreating] = useState(session.state.creationDraft?.collectionId ?? null);
+		const [createValues, setCreateValues] = useState(session.state.creationDraft?.values ?? {});
+		const [existing, setExisting] = useState({});
+		useEffect(() => {
+			if (!state.creationDraft && state.lastCreatedEntry) {
+				setCreating(null);
+				setCreateValues({});
+			}
+		}, [state.creationDraft, state.lastCreatedEntry]);
 		const run = (action) => {
-			action().catch(() => void 0);
+			setActionError(null);
+			action().catch(setActionError);
 		};
 		if (!state.content) return /* @__PURE__ */ jsx("section", {
 			class: "hosted-content-editor",
-			"aria-busy": "true",
+			"aria-busy": state.phase === "loading",
 			children: /* @__PURE__ */ jsx("p", {
 				role: "status",
 				children: state.phase === "failed" ? labels.failed : labels.loading
 			})
 		});
-		if (!item || item.field.kind !== "text") return /* @__PURE__ */ jsx("section", {
+		const content = state.content;
+		const item = selected(content, selection);
+		if (!item || !permitted(options, selection, content)) return /* @__PURE__ */ jsx("section", {
 			class: "hosted-content-editor",
 			children: /* @__PURE__ */ jsx("p", {
 				role: "alert",
-				children: "Selected field is unavailable."
+				children: labels.unavailable
 			})
 		});
-		const value = item.entry.values[item.field.id];
+		const modelPermission = options.policy.models.find((model) => model.providerId === selection.entry.providerId && model.modelId === selection.entry.modelId);
+		const fields = item.model.document.fields.filter((field) => (options.presentation !== "field" || field.id === selection.fieldId) && fieldEditable(field, modelPermission.fields.find((permission) => permission.fieldId === field.id)));
+		const records = content.providers.flatMap((provider) => provider.entries.flatMap((entry) => {
+			const ref = {
+				providerId: provider.providerId,
+				modelId: entry.modelId,
+				recordId: entry.id
+			};
+			const field = provider.models.find((model) => model.id === entry.modelId)?.document.fields.find((field) => fieldEditable(field, permission(options, {
+				entry: ref,
+				fieldId: field.id
+			})));
+			return field && permittedRef(options, ref, content) ? [{
+				selection: {
+					entry: ref,
+					fieldId: field.id
+				},
+				label: entryLabel(content, ref)
+			}] : [];
+		}));
+		const busy = state.phase === "saving";
+		const rejected = !!state.pending?.rejected;
+		const collections = options.policy.collections.filter((collection) => sameRef(collection.owner, selection.entry));
+		const error = actionError ?? state.error;
+		const message = error ? options.formatError?.(error) ?? (error instanceof Error ? error.message : String(error)) : null;
 		return /* @__PURE__ */ jsxs("section", {
 			class: "hosted-content-editor",
+			"aria-busy": busy,
 			children: [
-				/* @__PURE__ */ jsxs("label", {
+				records.length > 1 && options.presentation !== "field" ? /* @__PURE__ */ jsxs("div", {
 					class: "hosted-content-editor__field",
-					children: [/* @__PURE__ */ jsx("span", { children: item.field.label }), /* @__PURE__ */ jsx(Input, {
-						"aria-label": item.field.label,
-						value: typeof value === "string" ? value : "",
-						required: item.field.required,
-						onInput: (event) => session.edit(selection.entry, item.field.id, event.currentTarget.value)
+					children: [/* @__PURE__ */ jsx("span", { children: labels.content }), /* @__PURE__ */ jsx(Select, {
+						"aria-label": labels.content,
+						value: refKey(selection.entry),
+						onChange: (event) => {
+							const next = records.find((record) => refKey(record.selection.entry) === event.currentTarget.value);
+							if (next) run(() => navigate(next.selection));
+						},
+						children: records.map((record) => /* @__PURE__ */ jsx("option", {
+							value: refKey(record.selection.entry),
+							children: record.label
+						}, refKey(record.selection.entry)))
 					})]
+				}) : null,
+				/* @__PURE__ */ jsx("div", {
+					class: "hosted-content-editor__fields",
+					children: fields.map((field) => {
+						const allowed = modelPermission.fields.find((permission) => permission.fieldId === field.id);
+						return /* @__PURE__ */ jsxs("div", {
+							class: "hosted-content-editor__field",
+							"data-hosted-field": field.id,
+							children: [
+								/* @__PURE__ */ jsx("span", { children: field.label }),
+								/* @__PURE__ */ jsx(HostedFieldControl, {
+									schema: field,
+									field,
+									value: item.entry.values[field.id],
+									permission: allowed,
+									identity: `${refKey(selection.entry)}/${field.id}`,
+									hasIncompleteInput: (prefix) => state.invalidInputs.some((controlId) => controlId === prefix || controlId.startsWith(`${prefix}/`)),
+									onIncompleteNumber: (controlId, raw) => {
+										session.setIncompleteInput(controlId, raw !== null);
+										setActionError(raw === null ? null : new Error(labels.cannotClear));
+									},
+									label: field.label,
+									content,
+									policy: options.policy,
+									labels,
+									onChange: (next) => {
+										if (next === void 0 && !allowed.clear) {
+											setActionError(new Error(labels.cannotClear));
+											return;
+										}
+										setActionError(null);
+										session.edit(selection.entry, field.id, next);
+									}
+								}),
+								fieldClearable(field, allowed) ? /* @__PURE__ */ jsx("button", {
+									type: "button",
+									class: "hosted-content-editor__clear",
+									"aria-label": `${labels.clear}: ${field.label}`,
+									onClick: () => {
+										for (const controlId of state.invalidInputs) if (controlId.startsWith(`${refKey(selection.entry)}/${field.id}`)) session.setIncompleteInput(controlId, false);
+										session.edit(selection.entry, field.id, void 0);
+									},
+									children: labels.clear
+								}) : null
+							]
+						}, `${refKey(selection.entry)}/${field.id}/${state.presentationRevision}`);
+					})
 				}),
+				options.presentation !== "field" ? collections.map((collection) => {
+					const members = memberRefs(content, collection.owner, collection.fieldId);
+					const collectionLabel = item.model.document.fields.find((field) => field.id === collection.fieldId)?.label ?? labels.content;
+					const targetProvider = content.providers.find((provider) => provider.providerId === collection.target.providerId);
+					const targetModel = targetProvider?.models.find((model) => model.id === collection.target.modelId);
+					const targetPermission = options.policy.models.find((model) => model.providerId === collection.target.providerId && model.modelId === collection.target.modelId);
+					const candidates = targetProvider?.entries.filter((entry) => entry.modelId === collection.target.modelId && !members.some((member) => member.recordId === entry.id) && permittedRef(options, {
+						...collection.target,
+						recordId: entry.id
+					}, content)) ?? [];
+					const atLimit = members.length >= collection.maxItems;
+					return /* @__PURE__ */ jsxs("fieldset", {
+						class: "hosted-content-editor__collection",
+						children: [
+							/* @__PURE__ */ jsx("legend", { children: collectionLabel }),
+							/* @__PURE__ */ jsx("ol", { children: members.map((ref, index) => {
+								const label = entryLabel(content, ref);
+								const editable = (content.providers.find((provider) => provider.providerId === ref.providerId)?.models.find((model) => model.id === ref.modelId))?.document.fields.find((field) => fieldEditable(field, permission(options, {
+									entry: ref,
+									fieldId: field.id
+								})));
+								const move = (direction) => {
+									const ordered = [...members];
+									[ordered[index], ordered[index + direction]] = [ordered[index + direction], ordered[index]];
+									return session.reorder(collection.id, ordered);
+								};
+								return /* @__PURE__ */ jsxs("li", { children: [/* @__PURE__ */ jsx("span", { children: label }), /* @__PURE__ */ jsxs("div", {
+									class: "hosted-content-editor__actions",
+									children: [editable ? /* @__PURE__ */ jsx("button", {
+										type: "button",
+										disabled: busy,
+										"aria-label": `${labels.edit}: ${label}`,
+										onClick: () => run(() => navigate({
+											entry: ref,
+											fieldId: editable.id
+										})),
+										children: labels.edit
+									}) : null, collection.reorder ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("button", {
+										type: "button",
+										disabled: busy || !!state.pending || index === 0,
+										"aria-label": `${labels.moveUp}: ${label}`,
+										onClick: () => run(() => move(-1)),
+										children: labels.moveUp
+									}), /* @__PURE__ */ jsx("button", {
+										type: "button",
+										disabled: busy || !!state.pending || index === members.length - 1,
+										"aria-label": `${labels.moveDown}: ${label}`,
+										onClick: () => run(() => move(1)),
+										children: labels.moveDown
+									})] }) : null]
+								})] }, refKey(ref));
+							}) }),
+							collection.create && targetModel && targetPermission ? creating === collection.id && state.creationDraft?.collectionId === collection.id ? /* @__PURE__ */ jsxs("form", {
+								class: "hosted-content-editor__create",
+								noValidate: true,
+								onSubmit: (event) => {
+									event.preventDefault();
+									run(async () => {
+										const result = await session.createEntry(collection.id, session.state.creationDraft?.values ?? createValues);
+										setCreating(null);
+										setCreateValues({});
+										const editable = targetModel.document.fields.find((field) => fieldEditable(field, targetPermission.fields.find((permission) => permission.fieldId === field.id)));
+										if (result.createdEntry && editable) await navigate({
+											entry: result.createdEntry,
+											fieldId: editable.id
+										});
+									});
+								},
+								children: [targetModel.document.fields.filter((field) => fieldEditable(field, targetPermission.fields.find((permission) => permission.fieldId === field.id))).map((field) => /* @__PURE__ */ jsxs("div", {
+									class: "hosted-content-editor__field",
+									children: [/* @__PURE__ */ jsx("span", { children: field.label }), /* @__PURE__ */ jsx(HostedFieldControl, {
+										schema: field,
+										field,
+										permission: targetPermission.fields.find((permission) => permission.fieldId === field.id),
+										value: createValues[field.id] ?? collection.initialValues[field.id],
+										identity: `create/${collection.id}/${field.id}`,
+										disabledNumber: busy || !!state.pending && !state.pending.rejected,
+										hasIncompleteInput: (prefix) => state.invalidInputs.some((controlId) => controlId === prefix || controlId.startsWith(`${prefix}/`)),
+										onIncompleteNumber: (controlId, raw) => {
+											session.setIncompleteInput(controlId, raw !== null);
+											setActionError(raw === null ? null : new Error(labels.cannotClear));
+										},
+										label: field.label,
+										content,
+										policy: options.policy,
+										labels,
+										onChange: (next) => {
+											if (next === void 0) {
+												setActionError(new Error(labels.cannotClear));
+												return;
+											}
+											setCreateValues((current) => {
+												const updated = {
+													...current,
+													[field.id]: next
+												};
+												session.stageCreation(collection.id, updated);
+												return updated;
+											});
+										}
+									})]
+								}, field.id)), /* @__PURE__ */ jsxs("div", {
+									class: "hosted-content-editor__actions",
+									children: [/* @__PURE__ */ jsx("button", {
+										type: "submit",
+										disabled: busy || !!state.pending || atLimit,
+										children: labels.create
+									}), /* @__PURE__ */ jsx("button", {
+										type: "button",
+										disabled: busy || !!state.pending && !state.pending.rejected,
+										onClick: () => {
+											try {
+												session.cancelCreation();
+												setCreating(null);
+												setCreateValues({});
+											} catch (error) {
+												setActionError(error);
+											}
+										},
+										children: labels.cancel
+									})]
+								})]
+							}) : /* @__PURE__ */ jsxs("button", {
+								type: "button",
+								disabled: busy || !!state.pending || atLimit,
+								onClick: () => {
+									session.stageCreation(collection.id, {});
+									setCreateValues({});
+									setCreating(collection.id);
+								},
+								children: [
+									labels.create,
+									": ",
+									collectionLabel
+								]
+							}) : null,
+							collection.add && candidates.length ? /* @__PURE__ */ jsxs("div", {
+								class: "hosted-content-editor__actions",
+								children: [/* @__PURE__ */ jsxs(Select, {
+									"aria-label": `${labels.addExisting}: ${collectionLabel}`,
+									value: existing[collection.id] ?? "",
+									onChange: (event) => setExisting((current) => ({
+										...current,
+										[collection.id]: event.currentTarget.value
+									})),
+									children: [/* @__PURE__ */ jsx("option", {
+										value: "",
+										children: labels.choose
+									}), candidates.map((candidate) => /* @__PURE__ */ jsx("option", {
+										value: candidate.id,
+										children: entryLabel(content, {
+											...collection.target,
+											recordId: candidate.id
+										})
+									}, candidate.id))]
+								}), /* @__PURE__ */ jsx("button", {
+									type: "button",
+									disabled: busy || !!state.pending || atLimit || !existing[collection.id],
+									onClick: () => run(async () => {
+										await session.addEntry(collection.id, {
+											...collection.target,
+											recordId: existing[collection.id]
+										});
+										setExisting((current) => ({
+											...current,
+											[collection.id]: ""
+										}));
+									}),
+									children: labels.addExisting
+								})]
+							}) : null
+						]
+					}, collection.id);
+				}) : null,
 				/* @__PURE__ */ jsxs("div", {
 					class: "hosted-content-editor__actions",
 					children: [
 						/* @__PURE__ */ jsx("button", {
 							type: "button",
+							disabled: busy || rejected || !!state.invalidInputs.length,
 							onClick: () => run(() => session.flush()),
 							children: labels.save
 						}),
 						options.preview && options.routeId ? /* @__PURE__ */ jsx("button", {
 							type: "button",
-							onClick: () => run(() => session.captureAndPreview(options.routeId)),
+							disabled: busy || rejected || !!state.invalidInputs.length,
+							onClick: () => run(preview),
 							children: labels.preview
 						}) : null,
 						options.preview ? /* @__PURE__ */ jsx("button", {
@@ -1183,37 +2461,111 @@ function mountHostedContentEditor(container, options) {
 							disabled: !state.reviewedSnapshot || state.dirty || !!state.pending || !!state.reviewedSnapshot.diagnostics.length,
 							onClick: () => run(() => session.submit()),
 							children: labels.submit
-						}) : null
+						}) : null,
+						/* @__PURE__ */ jsx("button", {
+							type: "button",
+							disabled: busy || state.dirty || !!state.pending,
+							onClick: () => run(() => session.refresh()),
+							children: labels.reload
+						})
 					]
 				}),
 				/* @__PURE__ */ jsx("p", {
 					role: "status",
 					"aria-live": "polite",
 					children: labels[state.phase]
-				})
+				}),
+				options.preview ? /* @__PURE__ */ jsx("p", { children: state.reviewedSnapshot ? labels.previewCurrent : labels.previewRequired }) : null,
+				state.reviewedSnapshot?.diagnostics.length ? /* @__PURE__ */ jsxs("div", {
+					role: "alert",
+					children: [/* @__PURE__ */ jsx("p", { children: labels.submissionIncomplete }), /* @__PURE__ */ jsx("ul", { children: state.reviewedSnapshot.diagnostics.map((diagnostic, index) => /* @__PURE__ */ jsx("li", { children: diagnostic.message }, index)) })]
+				}) : null,
+				message ? /* @__PURE__ */ jsx("p", {
+					role: "alert",
+					children: message
+				}) : null,
+				rejected ? /* @__PURE__ */ jsxs("div", {
+					class: "hosted-content-editor__recovery",
+					children: [/* @__PURE__ */ jsx("button", {
+						type: "button",
+						onClick: () => run(async () => setReview(await session.reviewAuthoritative())),
+						children: labels.review
+					}), review ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("dl", { children: fields.map((field) => {
+						const current = selected(review, selection)?.entry.values[field.id];
+						return /* @__PURE__ */ jsxs("div", { children: [
+							/* @__PURE__ */ jsx("dt", { children: field.label }),
+							/* @__PURE__ */ jsxs("dd", { children: [
+								labels.localValue,
+								": ",
+								displayValue(item.entry.values[field.id], labels.none)
+							] }),
+							/* @__PURE__ */ jsxs("dd", { children: [
+								labels.serverValue,
+								": ",
+								displayValue(current, labels.none)
+							] })
+						] }, field.id);
+					}) }), /* @__PURE__ */ jsxs("div", {
+						class: "hosted-content-editor__actions",
+						children: [/* @__PURE__ */ jsx("button", {
+							type: "button",
+							onClick: () => run(async () => {
+								await session.reapply(review);
+								setReview(null);
+							}),
+							children: labels.reapply
+						}), /* @__PURE__ */ jsx("button", {
+							type: "button",
+							onClick: () => run(async () => {
+								await session.discard(review);
+								setReview(null);
+							}),
+							children: labels.discard
+						})]
+					})] }) : null]
+				}) : null,
+				state.publication ? /* @__PURE__ */ jsxs("div", {
+					class: "hosted-content-editor__publication",
+					children: [
+						/* @__PURE__ */ jsxs("p", {
+							role: "status",
+							children: [state.publicationStale ? `${labels.lastKnownStatus}: ` : "", labels[state.publication.status]]
+						}),
+						state.publication.message ? /* @__PURE__ */ jsx("p", { children: state.publication.message }) : null,
+						state.publicationError ? /* @__PURE__ */ jsx("p", {
+							role: "alert",
+							children: labels.statusUnavailable
+						}) : null,
+						/* @__PURE__ */ jsx("button", {
+							type: "button",
+							onClick: () => run(() => session.refreshPublication()),
+							children: labels.refreshStatus
+						})
+					]
+				}) : null
 			]
 		});
 	}
-	draw();
+	const unsubscribeSession = session.subscribe(draw);
 	return {
 		get state() {
 			return session.state;
 		},
-		ready: session.initialize(),
+		ready: session.initialize().then(() => {
+			const field = selected(session.state.content, selection)?.model.document.fields.find((field) => field.id === selection.fieldId);
+			if (!field || !permitted(options, selection, session.state.content) || !fieldEditable(field, permission(options, selection))) throw new Error("Selection is not permitted");
+		}),
 		subscribe: (listener) => session.subscribe(listener),
 		flush: () => session.flush(),
-		async navigate(next) {
-			if (disposed) throw new Error("Editor presentation is disposed");
-			if (!permitted(options, next)) throw new Error("Selection is not permitted");
-			await session.flush();
-			if (disposed) throw new Error("Editor presentation is disposed");
-			await options.onNavigate?.(next);
-			selection = next;
-			draw();
-		},
+		navigate,
+		refresh: () => session.refresh(),
+		preview,
+		submit: () => session.submit(),
+		refreshPublication: () => session.refreshPublication(),
 		dispose() {
 			if (disposed) return;
 			disposed = true;
+			unsubscribeSession();
 			render(null, container);
 			session.dispose();
 		}
