@@ -874,10 +874,13 @@ function createHostedContentService(supplied) {
 		if (!Array.isArray(value)) fail("invalid-value", "Collection membership is malformed.");
 		return value;
 	}
+	function ownerExists(providers, collection) {
+		return !!providers.find((provider) => provider.providerId === collection.owner.providerId)?.entries.some((entry) => entry.id === collection.owner.recordId && entry.modelId === collection.owner.modelId);
+	}
 	function permitted(providers, ref) {
 		const model = options.policy.models.find((item) => item.providerId === ref.providerId && item.modelId === ref.modelId);
 		if (!model) return false;
-		return model.entryIds.includes(ref.recordId) || options.policy.collections.some((collection) => collection.target.providerId === ref.providerId && collection.target.modelId === ref.modelId && membership(providers, collection).some((item) => contentEntryRefKey(item) === contentEntryRefKey(ref)));
+		return model.entryIds.includes(ref.recordId) || options.policy.collections.some((collection) => collection.target.providerId === ref.providerId && collection.target.modelId === ref.modelId && ownerExists(providers, collection) && membership(providers, collection).some((item) => contentEntryRefKey(item) === contentEntryRefKey(ref)));
 	}
 	function visible(providers, ref) {
 		return permitted(providers, ref) || options.policy.collections.some((collection) => contentEntryRefKey(collection.owner) === contentEntryRefKey(ref));
@@ -1047,7 +1050,7 @@ function createHostedContentService(supplied) {
 	}
 	/** Carry each retained change onto new canonical content only where it still validates; report every drop. */
 	function rebaseDraft(head, canonical) {
-		const providers = copy(canonical), carried = [], dropped = [];
+		const providers = copy(canonical), carried = [], dropped = [], createdRefs = [];
 		for (const { ref, entry, base, fieldIds } of authoredChanges(head)) {
 			const drop = (reason, ids = fieldIds) => {
 				for (const fieldId of ids) dropped.push({
@@ -1095,9 +1098,23 @@ function createHostedContentService(supplied) {
 				}
 			}
 			if (!applied) continue;
-			if (created) provider.entries.push(target);
+			if (created) {
+				provider.entries.push(target);
+				createdRefs.push(ref);
+			}
 			target.generation = Math.max(target.generation, entry.generation) + 1;
 			target.updatedAt = options.now();
+		}
+		for (const ref of createdRefs) {
+			if (permitted(providers, ref)) continue;
+			const provider = providers.find((item) => item.providerId === ref.providerId);
+			provider.entries = provider.entries.filter((entry) => !(entry.id === ref.recordId && entry.modelId === ref.modelId));
+			const orphaned = carried.filter((change) => contentEntryRefKey(change.entry) === contentEntryRefKey(ref));
+			carried.splice(0, carried.length, ...carried.filter((change) => !orphaned.includes(change)));
+			dropped.push(...orphaned.map((change) => ({
+				...change,
+				reason: "canonical-changed"
+			})));
 		}
 		return {
 			providers,

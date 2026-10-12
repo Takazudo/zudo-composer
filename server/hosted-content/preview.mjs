@@ -55,7 +55,7 @@ function createHostedPreviewController(options) {
 	};
 	const fail = (error) => {
 		rejectPending(error);
-		if (retained) retained.request = null;
+		retained = null;
 		publish({
 			status: "error",
 			error
@@ -161,17 +161,22 @@ function createHostedPreviewController(options) {
 		},
 		render(snapshot, routeId) {
 			if (disposed || terminal) return Promise.reject(new HostedPreviewError(disposed ? "disposed" : "identity-mismatch", "Preview connection is unavailable"));
-			const detached = hostedRenderMessage(options.pack, options.renderer, {
-				frameSession: session ?? "awaiting-host",
-				frameGeneration: generation,
-				requestId: sequence + 1,
-				snapshotId: snapshot.id,
-				snapshotDigest: snapshot.digest,
-				draftRevision: snapshot.draftRevision,
-				baseline: snapshot.baseline,
-				definition: snapshot.definition,
-				routeId
-			}, snapshot.renderData);
+			let detached;
+			try {
+				detached = hostedRenderMessage(options.pack, options.renderer, {
+					frameSession: session ?? "awaiting-host",
+					frameGeneration: generation,
+					requestId: sequence + 1,
+					snapshotId: snapshot.id,
+					snapshotDigest: snapshot.digest,
+					draftRevision: snapshot.draftRevision,
+					baseline: snapshot.baseline,
+					definition: snapshot.definition,
+					routeId
+				}, snapshot.renderData);
+			} catch (error) {
+				return Promise.reject(error);
+			}
 			rejectPending(new HostedPreviewError("superseded", "A newer preview request replaced this request"));
 			return new Promise((resolve, reject) => {
 				retained = {

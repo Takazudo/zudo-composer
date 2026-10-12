@@ -1,6 +1,6 @@
 import { HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost } from "./preview.mjs";
 import { createContext, h, render } from "preact";
-import { useContext, useEffect, useId, useRef, useState } from "preact/hooks";
+import { useContext, useEffect, useRef, useState } from "preact/hooks";
 import { Fragment, jsx, jsxs } from "preact/jsx-runtime";
 import { defaultKeymap, history, historyKeymap, isolateHistory } from "@codemirror/commands";
 import { insertNewlineContinueMarkup, markdown, markdownKeymap } from "@codemirror/lang-markdown";
@@ -1210,9 +1210,15 @@ var HostedContentSession = class {
 	/** A clean refresh may adopt a confirmed integration; dirty edits need explicit review. */
 	async refresh() {
 		if (this.flight || this.pending || this.edits.length || this.creationDraft || this.invalidInputs.size) throw new Error("Review retained changes before loading current content");
+		let authoritative;
 		try {
-			const authoritative = await this.options.transport.readState();
-			if (this.flight || this.pending || this.edits.length || this.creationDraft || this.invalidInputs.size) throw new Error("Content was edited while loading current content");
+			authoritative = await this.options.transport.readState();
+		} catch (error) {
+			this.fail(error);
+			throw error;
+		}
+		if (this.flight || this.pending || this.edits.length || this.creationDraft || this.invalidInputs.size) throw new Error("Content was edited while loading current content");
+		try {
 			this.acknowledged = copy(authoritative);
 			this.invalidInputs.clear();
 			this.presentationRevision++;
@@ -1329,6 +1335,13 @@ var HostedContentSession = class {
 	}
 };
 //#endregion
+//#region src/components/use-dom-id.ts
+var nextDomId = 0;
+function useDomId() {
+	const [id] = useState(() => `cms-id-${++nextDomId}`);
+	return id;
+}
+//#endregion
 //#region src/features/content/scalar-control.tsx
 var text = (value) => typeof value === "string" || typeof value === "number" ? String(value) : "";
 /** The same primitive value widgets serve local structured forms and hosted forms. */
@@ -1378,10 +1391,7 @@ function ContentScalarControl({ schema, value, label, required, maxLength, disab
 		...common,
 		type: "number",
 		value: text(value),
-		onInput: (event) => {
-			const next = event.currentTarget.valueAsNumber;
-			onChange(event.currentTarget.value === "" || !Number.isFinite(next) ? void 0 : next);
-		}
+		onInput: (event) => onChange(event.currentTarget.value === "" ? void 0 : event.currentTarget.valueAsNumber)
 	});
 	return /* @__PURE__ */ jsx(Input, {
 		...common,
@@ -1725,7 +1735,7 @@ function protectedShape(schema) {
 	].includes(schema.kind) || schema.kind === "object" && schema.fields.some(protectedShape) || schema.kind === "list" && protectedShape(schema.item);
 }
 function MarkdownSourceControl({ identity, label, required, value, onChange, labels }) {
-	const labelId = `hosted-markdown-${useId()}`;
+	const labelId = `hosted-markdown-${useDomId()}`;
 	const mount = useRef(null);
 	const controller = useRef(null);
 	const callback = useRef(onChange);
