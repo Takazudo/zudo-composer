@@ -116,6 +116,12 @@ describe("hosted permitted record controls", () => {
     expect(view.state.doc.toString()).toContain("<script>"); expect(container.querySelector("script")).toBeNull(); expect(values(fixture).notes).not.toContain("script");
     const destroy = vi.spyOn(view, "destroy"); handle.dispose(); expect(destroy).toHaveBeenCalledOnce(); expect(container.querySelector(".cm-editor")).toBeNull(); destroy.mockRestore();
   });
+  it("gives Markdown labels document-unique ids across separately mounted editors", async () => {
+    const first = mount(editorFixture()); const second = mount(editorFixture()); await first.handle.ready; await second.handle.ready;
+    await waitFor(() => expect(document.querySelectorAll(".cm-content")).toHaveLength(2));
+    const ids = [first.container, second.container].map((container) => container.querySelector(".cm-content")!.getAttribute("aria-labelledby")!);
+    expect(new Set(ids).size).toBe(2); ids.forEach((id) => expect(document.querySelectorAll(`[id="${id}"]`)).toHaveLength(1));
+  });
   it("creates with server IDs, navigates new members, adds existing entries and preserves reorder membership", async () => {
     const fixture = editorFixture(); const { handle } = mount(fixture); await handle.ready;
     fireEvent.click(screen.getByRole("button", { name: "Create item: questions" })); await input("question", "新しい質問"); await input("answer", "新しい回答");

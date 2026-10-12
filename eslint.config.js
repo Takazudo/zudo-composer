@@ -51,7 +51,6 @@ export default tseslint.config(
   tseslint.configs.recommended,
   {
     files: ['src/**/*.{ts,tsx}'],
-    ignores: ['src/hosted-content/**'],
     rules: {
       'no-restricted-imports': ['error', {
         paths: [{ name: 'preact/hooks', importNames: ['useId'], message: 'Use useDomId from src/components/use-dom-id; Preact useId ids collide across this app.' }],

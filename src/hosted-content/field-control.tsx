@@ -1,5 +1,6 @@
 import type { JSX } from "preact";
-import { useEffect, useId, useRef } from "preact/hooks";
+import { useEffect, useRef } from "preact/hooks";
+import { useDomId } from "../components/use-dom-id";
 import { Input, Select, Switch, Textarea } from "../components/ui/form-controls";
 import { ContentScalarControl } from "../features/content/scalar-control";
 import { createMarkdownEditor, type MarkdownEditorController } from "../features/content/markdown-source";
@@ -50,7 +51,7 @@ function protectedShape(schema: ContentValueSchema): boolean {
   return ["slug", "reference", "reference-list", "asset-use"].includes(schema.kind) || schema.kind === "object" && schema.fields.some(protectedShape) || schema.kind === "list" && protectedShape(schema.item);
 }
 function MarkdownSourceControl({ identity, label, required, value, onChange, labels }: { identity: string; label: string; required: boolean; value: string; onChange(value: string): void; labels: HostedControlLabels }) {
-  const labelId = `hosted-markdown-${useId()}`;
+  const labelId = `hosted-markdown-${useDomId()}`;
   const mount = useRef<HTMLDivElement>(null); const controller = useRef<MarkdownEditorController | null>(null); const callback = useRef(onChange); callback.current = onChange;
   useEffect(() => {
     if (!mount.current) return;
