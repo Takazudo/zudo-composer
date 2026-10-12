@@ -1,4 +1,4 @@
-import { defineConfig } from "zfb/config";
+import { defineConfig } from "@takazudo/zfb/config";
 import { zudoDoc } from "@takazudo/zudo-doc/config";
 
 export default defineConfig(
