@@ -1,0 +1,288 @@
+{
+  "installedToolSha": "0038091d5cfd3225289fc2f5be311ddff556b889",
+  "node": "v24.21.0",
+  "packageManager": "pnpm@11.5.2",
+  "contractSha": "c0b452da075b66757c60bd0d721a47062d4354d0",
+  "contractProtocol": 2,
+  "peerPreact": "10.29.8",
+  "commands": [
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "/home/runner/work/zudo-composer/zudo-composer/scripts/install-hosted-consumer.mjs",
+        "0038091d5cfd3225289fc2f5be311ddff556b889",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/work/install-browser-bundle"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/work/install-browser-transport.sqlite",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/work/install-browser-transport"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/work/install-render.sqlite"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/work/install-publication-render"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/renderer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/work/frozen-browser-bundle"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/work/frozen-browser-transport.sqlite",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/work/frozen-browser-transport"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/work/frozen-render.sqlite"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/work/frozen-publication-render"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "playwright",
+        "install",
+        "--with-deps",
+        "chromium"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "browser-proof.mjs",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/work/browser.sqlite"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
+      "args": [
+        "browser-broad-proof.mjs",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/work/browser-broad.sqlite",
+        "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer/work/browser-broad"
+      ],
+      "cwd": "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    }
+  ],
+  "payloadSha256": "b320da08f684334727d1cfe0e37044334cf244170d3e12dc4b6f2b5b9ecdbed8",
+  "lockDigests": {
+    "package.json": "533cda18ec544cbbba48f8b8671bf6d5800f75c5961be6bdcafbb59f5aa2be33",
+    "pnpm-lock.yaml": "e7af87f497572662db1d6ea6768e5401e5ed2623cebed23cace3243aafddfd90",
+    "renderer/package.json": "0dba1184460d3d14360b8985b6ffeb1066e1a4392531a47b18064724cb0037a7",
+    "renderer/pnpm-lock.yaml": "734003253fe04f471294867953fdbe098c07ae6c849e749d54698c6ea8f9c1ff"
+  },
+  "independentInstall": "passed",
+  "frozenReinstall": "passed",
+  "worker": "passed",
+  "browserBundle": "passed",
+  "nodeBoundary": "passed",
+  "sqlite": "passed",
+  "httpTransport": "passed",
+  "staticRenderer": "passed",
+  "browser": "passed"
+}
