@@ -6,7 +6,7 @@ import type { JsonValue } from "@zudo-composer/component-contract";
 import { loadHostContext } from "../host-context.mjs";
 import { captureHost, resolvePage, type CaptureHostOptions, type HostCapture } from "./inspect";
 import { EditError, openPlans } from "./plans";
-import { acquireAuthoringLease } from "./authoring-lease.mjs";
+import { executeAuthoringOperation } from "./authoring-lease.mjs";
 import { canonicalStringifyJson } from "../../src/site-project/model/canonical";
 import { indexDocument } from "../../src/composer/model/index-model";
 import { addNode, updateProps } from "../../src/composer/model/commands";
@@ -153,10 +153,7 @@ export function createEditingService(options: CaptureHostOptions) {
     tokens: state.tokens, workspace: state.workspace, sourceAuthored: state.sourceAuthored,
     config: state.config.nativeEditing ?? null,
   });
-  const leased = async <T>(action: () => Promise<T>) => {
-    const lease = await acquireAuthoringLease(options.config.workspaceRoot, "reviewed-edit");
-    try { return await action(); } finally { await lease.release(); }
-  };
+  const leased = <T>(action: () => Promise<T>) => executeAuthoringOperation(options.config.workspaceRoot, action) as Promise<T>;
   const pin = async (state: HostCapture, request: EditRequest): Promise<AssetVersionPin | null> => {
     if (request.insert.kind !== "image") return null;
     const assetId = request.insert.assetId;
