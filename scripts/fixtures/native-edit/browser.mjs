@@ -1,5 +1,5 @@
 // @ts-check
-/* global sessionStorage */
+/* global sessionStorage, MouseEvent */
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -32,6 +32,33 @@ export async function proveBrowserEdits(page, host, cli, initialized) {
   const second = await page.context().newPage();
   await second.goto("http://127.0.0.1:4175/composer?provider=files&composition=home");
   await expect(second.frameLocator('iframe[title="Composer preview canvas"]').getByText("Before replacement", { exact: true })).toBeVisible({ timeout: 60_000 });
+  // The same public structural save path must retain its dirty input on failure.
+  const unchanged = await canonical();
+  let blockedSaves = 0;
+  await second.route("**/__zudo_composer_file_provider", route => {
+    const operation = route.request().postDataJSON()?.operation;
+    if (operation === "put" || operation === "save-lifecycle-record") { blockedSaves++; return route.abort(); }
+    return route.continue();
+  });
+  await second.frameLocator('iframe[title="Composer preview canvas"]').locator('[data-zc-node-id="paragraph"]').click();
+  const structuralText = second.getByRole("textbox", { name: "Text", exact: true });
+  await structuralText.fill("Unseen unsaved Japanese 日本語");
+  await structuralText.blur();
+  await expect.poll(() => blockedSaves).toBeGreaterThan(0);
+  await frame.locator('[data-zc-node-id="list"]').click();
+  await page.getByLabel("Exact text", { exact: true }).fill("Retained exact request");
+  await page.getByRole("button", { name: "Review insertion", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Save all authoring tabs");
+  await expect(structuralText).toHaveValue("Unseen unsaved Japanese 日本語");
+  await expect(page.getByLabel("Exact text", { exact: true })).toHaveValue("Retained exact request");
+  await expect(page.getByRole("button", { name: "Apply to draft", exact: true })).toHaveCount(0);
+  assert.deepEqual(await canonical(), unchanged, "Failed structural flush cannot be bypassed by the operator tab");
+  await second.unroute("**/__zudo_composer_file_provider");
+  await structuralText.fill("Before replacement");
+  await structuralText.blur();
+  await expect(second.getByText("Saved", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Inspect current page", exact: true }).click();
+  await expect(frame.getByText("Before replacement", { exact: true })).toBeVisible();
   for (const insertion of [
     { kind: "image", node: "paragraph", label: "Managed image" },
     { kind: "text", node: "list", label: "Exact text" },
@@ -80,11 +107,24 @@ export async function proveBrowserEdits(page, host, cli, initialized) {
     if (insertion.kind === "text") await expect(frame.getByText(browserText, { exact: true })).toBeVisible();
     if (insertion.kind === "image") await expect(frame.getByRole("img", { name: "Browser managed image", exact: true })).toBeVisible();
     if (insertion.kind === "table") await expect(frame.getByRole("cell", { name: "供給値", exact: true })).toBeVisible();
-    await apply.click();
+    let applyRequests = 0;
+    if (insertion.kind === "image") await page.route("**/__zudo-native-edit", async route => {
+      if (route.request().postDataJSON()?.operation !== "apply") return route.continue();
+      applyRequests++;
+      await route.fetch(); // Commit is real; only its browser acknowledgement is lost.
+      await route.abort().catch(() => {});
+    });
+    if (insertion.kind === "image") await apply.evaluate(element => {
+      element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    else await apply.click();
     // Native mutations invalidate old browser write epochs and reopen records.
     await expect(page.getByRole("region", { name: "Durable receipt", exact: true })).toBeVisible({ timeout: 60_000 });
     const after = await inspect();
     if (insertion.kind === "image") {
+      assert.equal(applyRequests, 1, "Duplicate action delivery must send one application");
+      await page.unroute("**/__zudo-native-edit");
       await expect(second.frameLocator('iframe[title="Composer preview canvas"]').getByRole("img", { name: "Browser managed image", exact: true })).toBeVisible({ timeout: 60_000 });
       assert.ok(delayedProvider, "Real provider request must carry its bound epoch");
       const staleHeaders = Object.fromEntries(Object.entries(delayedProvider.headers).filter(([key]) => key.startsWith("x-zudo-") || key === "content-type"));
@@ -145,5 +185,5 @@ export async function proveBrowserEdits(page, host, cli, initialized) {
   await page.getByRole("tab", { name: "Page", exact: true }).click();
   await expect(page.locator('iframe[title="Native page preview"]')).toBeVisible();
   await second.close();
-  console.log("Installed page-first UI: exact insertions, approval isolation, two tabs, delayed stale requests, unchanged JSON/JSX before Apply, durable recovery, guarded undo, discard, malformed table, missing assets, synthetic IME and narrow tabs passed.");
+  console.log("Installed page-first UI: exact insertions, approval isolation, dirty structural save retention, two tabs, delayed stale writes, duplicate Apply/lost acknowledgement recovery, unchanged JSON/JSX before Apply, guarded undo, discard, malformed table, missing assets, synthetic IME and narrow tabs passed.");
 }
