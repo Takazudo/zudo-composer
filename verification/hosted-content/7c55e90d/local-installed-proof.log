@@ -1,0 +1,50 @@
+{"proof":"public-node-compilation","route":"/","linkedTemplate":"approved-layout","outlet":"main","mappedTitle":"日本語の講座","projectionParity":"byte-identical"}
+{"runtime":"local workerd","report":{"scenarios":["independent-cas","duplicate-create-and-key-reuse","competing-reorder","rollback-before-commit","rollback-receipt-persistence","conditional-commit-atomicity","commit-retry-after-bookkeeping","lost-create-ack-restart","coherent-immutable-capture","two-integrations-existing-entry","two-integrations-new-entry","external-baseline-adoption","definition-change-adoption","external-integration-conflict"],"assertions":126},"projection":{"status":"ready","routes":1,"parity":"byte-identical"},"digest":"0303486393d6e34f3a52119c18884bf1fd834e6fbbe1dbf8aa9bff37cdd2cee1","canonical":"{\"bool\":false,\"text\":\"日本語\",\"zero\":0}"}
+{"proof":"installed-editor-browser-assets-and-declarations","browserExecution":"NOT RUN: this command only builds/inspects browser assets and checks declarations","editorJavascriptBundle":"PASS","explicitPublicEditorCss":"PASS","emittedDependencyMetafile":"PASS","editorHostRendererNodeVirtualLeaks":[],"strictPublicBrowserHostDeclarations":"PASS","actualSourceMarkdownControls":"PASS","assetHashes":{"browser-checkpoint.js":"895b89576ada813fda6934e4464fefd616626cadbe7cb8bd23849502feaf311e","browser-checkpoint.css":"d2a2f45463b5f6273c538254f050a63ec39a91c4a92dc78caa2981edf2f161ec"},"installedToolSpec":"git+https://github.com/Takazudo/zudo-composer.git#7c55e90da4ce0a1e513b84d418110436234c877d","installedToolSha":"7c55e90da4ce0a1e513b84d418110436234c877d","metafileSha256":"942873b96419c079cb566ae358a749e2d6e898afcbc2f9b2e72c08ec42c27759"}
+{"proof":"public-node-compilation","route":"/","linkedTemplate":"approved-layout","outlet":"main","mappedTitle":"日本語の講座","projectionParity":"byte-identical"}
+    "scenarios": [
+    "assertions": 126
+    "scenarios": [
+    "assertions": 126
+    "assertions": 24,
+    "scenarios": [
+      "process-cas",
+      "process-duplicate-create",
+      "process-crash-before-commit",
+      "process-coherent-capture",
+      "process-two-integrations-new-entry"
+  "downstreamD1": "not tested"
+{"proof":"actual-browser-http-provider-transport","node":"v24.19.0","browserExecution":"NOT RUN","checks":["direct forbidden field/Markdown/asset rejected without writes or receipts","developer routes and unapproved assets unavailable","public create/add-existing/reorder","exact Markdown and numeric zero","select different approved image and permitted descriptions","durable B receipt after real backend restart","synthetic remote A integration crash gap","lost-ack exact begin replay recovers original receipt and remote integration once","B preserved during A reconciliation","exact saved snapshot Submit","two integrations B0-B1-B2","late A cannot regress B2"],"snapshotA":"1194e2d1-9ae2-4d06-97a1-bc3b2f990454","digestA":"14ad3a2dc1cede5979b3b33e493311413c66ca1fa78f4f9806ead71235327d4c","snapshotB":"d6bca709-17af-4f6d-84ed-29417a794e5d","digestB":"35cceb833bb0c37a4c74c7c7303a69defef8b3a0e96a3ebb0ea2372824538941","createdEntryId":"85bb8162-59f3-4620-b5df-9743cd47c9fc","addedExistingEntryId":"faq-detached","approvedSelectedImage":{"url":"/approved-alternate.svg","alt":"HTTPで保存した代替テキスト","caption":"承認済みアセットのみ","versionId":"v1","checksum":"75e43e09733ec6c580840e22e0a2368fc4e7098e863f1b5e755f7fe428b5154f"}}
+{"proof":"real-zfb-sg-static","snapshotId":"c21dbf44-ff22-4e61-b7aa-12745a37a9ad","digest":"a4c1d733c372926680448c8c441c799a42a58203feea2a00778182eae0ff11c9","draftRevision":"6fbef7cb-46a5-42a4-abbb-f260de42362e"}
+{"proof":"publication-static-cycle","scenario":"existing-entry","cycle":"A","snapshotId":"6d55c6c7-d1a9-4a36-8324-06bb48aea61d","digest":"356428dafdb622f19fe04ba32b597ab832b0bfd99306187a2422e2c2f7b619cc","exactMappedValue":"講座A"}
+{"proof":"publication-static-cycle","scenario":"existing-entry","cycle":"B","snapshotId":"7eebf4c7-89cf-42f9-b3de-ca3001f1abba","digest":"d2749d7543276b51604debe82cd79bbff62799f857d4049b8689753a1bfbff80","exactMappedValue":"講座B"}
+{"proof":"publication-static-cycle","scenario":"new-entry","cycle":"A","snapshotId":"980f09f9-168f-44ad-87a4-59b9932ca7cd","digest":"cd921046c0bb6f2ae824759a6db6625208b2c8d7df64311baf8ac3e8d2430472","exactMappedValue":"新規の質問A"}
+{"proof":"publication-static-cycle","scenario":"new-entry","cycle":"B","snapshotId":"c770add0-0047-4bc0-a88b-c06ebefd3e40","digest":"c8aea24d56fc67370277cb86202903750fe72258fdc8fe28a8708897e20dffe4","exactMappedValue":"新規の質問B"}
+{"proof":"two-publications-real-static","installedToolSha":"7c55e90da4ce0a1e513b84d418110436234c877d","cycles":4,"publicationAssertions":67,"artifactDirectory":"/workspace/work/919/consumer/work/install-publication-render","browser":"not executed by this Node/static proof; separate real browser acceptance required"}
+{"proof":"public-node-compilation","route":"/","linkedTemplate":"approved-layout","outlet":"main","mappedTitle":"日本語の講座","projectionParity":"byte-identical"}
+{"runtime":"local workerd","report":{"scenarios":["independent-cas","duplicate-create-and-key-reuse","competing-reorder","rollback-before-commit","rollback-receipt-persistence","conditional-commit-atomicity","commit-retry-after-bookkeeping","lost-create-ack-restart","coherent-immutable-capture","two-integrations-existing-entry","two-integrations-new-entry","external-baseline-adoption","definition-change-adoption","external-integration-conflict"],"assertions":126},"projection":{"status":"ready","routes":1,"parity":"byte-identical"},"digest":"0303486393d6e34f3a52119c18884bf1fd834e6fbbe1dbf8aa9bff37cdd2cee1","canonical":"{\"bool\":false,\"text\":\"日本語\",\"zero\":0}"}
+{"proof":"installed-editor-browser-assets-and-declarations","browserExecution":"NOT RUN: this command only builds/inspects browser assets and checks declarations","editorJavascriptBundle":"PASS","explicitPublicEditorCss":"PASS","emittedDependencyMetafile":"PASS","editorHostRendererNodeVirtualLeaks":[],"strictPublicBrowserHostDeclarations":"PASS","actualSourceMarkdownControls":"PASS","assetHashes":{"browser-checkpoint.js":"895b89576ada813fda6934e4464fefd616626cadbe7cb8bd23849502feaf311e","browser-checkpoint.css":"d2a2f45463b5f6273c538254f050a63ec39a91c4a92dc78caa2981edf2f161ec"},"installedToolSpec":"git+https://github.com/Takazudo/zudo-composer.git#7c55e90da4ce0a1e513b84d418110436234c877d","installedToolSha":"7c55e90da4ce0a1e513b84d418110436234c877d","metafileSha256":"942873b96419c079cb566ae358a749e2d6e898afcbc2f9b2e72c08ec42c27759"}
+{"proof":"public-node-compilation","route":"/","linkedTemplate":"approved-layout","outlet":"main","mappedTitle":"日本語の講座","projectionParity":"byte-identical"}
+    "scenarios": [
+    "assertions": 126
+    "scenarios": [
+    "assertions": 126
+    "assertions": 24,
+    "scenarios": [
+      "process-cas",
+      "process-duplicate-create",
+      "process-crash-before-commit",
+      "process-coherent-capture",
+      "process-two-integrations-new-entry"
+  "downstreamD1": "not tested"
+{"proof":"actual-browser-http-provider-transport","node":"v24.19.0","browserExecution":"NOT RUN","checks":["direct forbidden field/Markdown/asset rejected without writes or receipts","developer routes and unapproved assets unavailable","public create/add-existing/reorder","exact Markdown and numeric zero","select different approved image and permitted descriptions","durable B receipt after real backend restart","synthetic remote A integration crash gap","lost-ack exact begin replay recovers original receipt and remote integration once","B preserved during A reconciliation","exact saved snapshot Submit","two integrations B0-B1-B2","late A cannot regress B2"],"snapshotA":"dc834dc1-9619-485e-91d0-18d3dc6341d1","digestA":"48f1d26096d5b0f0b6432715e5d2638c554013d5a8453b3563d40e358200e86e","snapshotB":"3ed76e05-13a2-4085-941a-3bf5e014d0bd","digestB":"1fc5f5c4706857b80f9e049f6830f5bc9a358566a47bcc34c4eda38f15563a7e","createdEntryId":"67ecef4f-60b1-48a1-842a-9b33e7fc98e5","addedExistingEntryId":"faq-detached","approvedSelectedImage":{"url":"/approved-alternate.svg","alt":"HTTPで保存した代替テキスト","caption":"承認済みアセットのみ","versionId":"v1","checksum":"75e43e09733ec6c580840e22e0a2368fc4e7098e863f1b5e755f7fe428b5154f"}}
+{"proof":"real-zfb-sg-static","snapshotId":"b2cc2ed8-62e2-4fa6-88a1-ab8da0faf72f","digest":"da5d726da0de53ea392422f143bea01ec4097d0a55dc1cfb5a11ce656fb1407e","draftRevision":"36a273f3-60ed-426c-9b00-6ee09aaf4633"}
+{"proof":"publication-static-cycle","scenario":"existing-entry","cycle":"A","snapshotId":"48e30346-0e9e-477a-af3f-bf040f033859","digest":"17afc560c0b94535c3f0ef9e222a6e92af285c7dddb1985df869a2d64c53fd66","exactMappedValue":"講座A"}
+{"proof":"publication-static-cycle","scenario":"existing-entry","cycle":"B","snapshotId":"640755b1-c754-49b4-ae8a-222aaf3e6bcc","digest":"505ae8f94d36810162ff5e2dc940a6a8912fce57b38c9aadc15e247baed1f777","exactMappedValue":"講座B"}
+{"proof":"publication-static-cycle","scenario":"new-entry","cycle":"A","snapshotId":"49b44c0b-d1e3-49b1-bb44-4a1c882cdb3a","digest":"a5ceef275679d0f40875b5fd0c82fa9d3d9f2c3a31e05709386a948673f8e40d","exactMappedValue":"新規の質問A"}
+{"proof":"publication-static-cycle","scenario":"new-entry","cycle":"B","snapshotId":"863c778e-c8b0-4f1b-814a-762d9596bcfd","digest":"d26325750bbb2b82ea4ef5728ce277f6d3b053af809b1022a06b251f06a3fee5","exactMappedValue":"新規の質問B"}
+{"proof":"two-publications-real-static","installedToolSha":"7c55e90da4ce0a1e513b84d418110436234c877d","cycles":4,"publicationAssertions":67,"artifactDirectory":"/workspace/work/919/consumer/work/frozen-publication-render","browser":"not executed by this Node/static proof; separate real browser acceptance required"}
+Password: su: Authentication failure
+Failed to install browsers
+Error: Command failed: corepack pnpm exec playwright install --with-deps chromium
+heavy-guard: verdict=FAIL exit=1 secs=110 min_mem_mb=15750 reason=-
