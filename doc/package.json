@@ -19,13 +19,13 @@
     "dev:history": "doc-history-server --port 4322 --content-dir src/content/docs"
   },
   "dependencies": {
-    "@takazudo/zfb": "4.3.1",
-    "@takazudo/zfb-runtime": "4.3.1",
-    "@takazudo/zfb-md-wasm": "4.3.1",
-    "@takazudo/zudo-doc": "^6.0.0",
+    "@takazudo/zfb": "4.3.3",
+    "@takazudo/zfb-runtime": "4.3.3",
+    "@takazudo/zfb-md-wasm": "4.3.3",
+    "@takazudo/zudo-doc": "^6.1.1",
     "zod": "^4.3.6",
     "diff": "^8.0.3",
-    "@takazudo/zudo-doc-history-server": "^6.0.0"
+    "@takazudo/zudo-doc-history-server": "^6.1.1"
   },
   "devDependencies": {
     "typescript": "^5.9.0",
