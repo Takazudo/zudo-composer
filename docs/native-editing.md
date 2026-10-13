@@ -1,6 +1,6 @@
 # Deterministic native draft editing
 
-Phase 0/1 of #890 adds a second trusted adapter to the existing structural
+The Phase 0/1 foundation and Phase 2a page-first UI of #890 provide trusted adapters to the existing structural
 Composer editor. It does not run a model, publish a release, build a website,
 or change the frontend framework. The canonical document remains the selected
 workspace's Composition JSON; JSX is derived through the real component pack.
@@ -49,6 +49,96 @@ uses the public `initializeAuthoringWorkspace` authoring primitive and an
 in-memory `defineSite` project to create a ready workspace and managed image.
 It has no generated SiteProject source file, release or activation. The packed
 proof installs it outside the repository and imports only public package paths.
+
+## Page-first browser editing
+
+Start the configured host with `zudo-composer dev`, open its direct loopback
+URL, then open **Composer → Edit page** (`/composer?native=1`). Choose an actual
+sitemap page in the compact top bar. The page fills most of the desktop and the
+right pane contains the exact insertion and review controls. On narrow screens,
+use **Page / Edit** tabs. **Structure** opens the existing structural editor.
+`/site` and `/website-preview` remain visitor documents.
+
+**Select targets** captures clicks and keyboard Enter/Space without following
+links. **Browse page** permits ordinary page navigation. Only a supported
+standalone native node can become the qualified workspace/sitemap/page/provider/
+composition/node target chip. Markdown sub-blocks and mapped/shared ownership
+never acquire native write authority.
+
+Choose one exact insertion:
+
+- **Exact text:** supply the complete text, including Japanese and line breaks.
+- **Managed image:** choose an existing active image and supply alternative text;
+  select **Intentionally empty alternative text** for an intentional empty alt.
+- **Supplied table:** provide JSON containing only `columns` and rectangular
+  `rows`, for example `{"columns":["項目","値"],"rows":[["数量","3"]]}`.
+
+**Review insertion** creates a detached server plan. **Original / Proposed**
+shows the retained before/candidate records through the actual installed pack,
+checked template context and assets. Neither planning, preview nor **Discard**
+changes canonical draft JSON/JSX. **Apply to draft** is enabled only for the
+current successful Proposed rendering with the matching plan/digest, qualified
+page, render revision, frame session and dependency identity. Iframe boot
+readiness alone cannot authorize Apply. Reviewed candidates have no inline,
+move, drag/drop or history mutation lane.
+
+A pending plan retains its original page and target when navigation or selection
+changes. Return to that page and render Proposed again before approval. Minimal
+per-page input and server plan references survive reload in this tab; this is
+not a conversation platform. No generation provider is connected, and there is
+no natural-language parser or generated copy in this slice.
+
+After Apply, the server invalidates old browser write revisions and clean tabs
+reopen actual records. The retained plan recovers the durable receipt after a
+lost response, reload or server restart. Success is displayed only from that
+receipt. **Guarded Undo** uses the existing journal and refuses to overwrite a
+later structural/browser/CLI edit. **Discard** applies only to pending plans;
+it never undoes a committed operation.
+
+## Browser coordination and recovery
+
+The dev server keeps its lifetime authoring lease. Its own finite native adapter
+executes under a private server-owned scope; it has no request-supplied lock
+bypass and never shells out to the CLI. External CLI mutations remain
+`authoring-busy` while that server runs.
+
+Before plan/apply/undo, every bound authoring tab locks new user input and
+flushes through its existing save registry and real provider path, with provider
+admission still open for those saves. An active inline/prose edit inside
+Structure's iframe blocks preparation until
+you explicitly save or cancel it. A nonce-bound frame reply follows earlier
+inline commit messages before the parent flush; iframe boot is not a clean-state
+acknowledgment. Input stays locked in both parent and preview during preparation.
+The server then freezes admission, drains actual in-flight storage work and
+obtains fresh nonce-bound clean
+acknowledgments from every tab. Dirty/saving/error, unresponsive or disconnected
+clients fail closed with pending input retained. Failed preflight does not
+invalidate a tab's revision. Once a native mutation starts, late requests from
+old epochs are refused, including delayed autosaves and read-repair paths.
+Reconnecting cannot authorize stale in-memory records. Module refresh preserves
+the tab's original client and revision owner; a changed
+server capability requires reopening canonical records, even if its epoch reset
+to zero. Tabs automatically reopen after a commit only while input stayed locked
+through preparation and no pending or inline edits remain. A disconnected tab
+retains its input and shows recovery guidance instead of automatically reloading,
+even when the storage registry reports no pending writes.
+
+If an interrupted tab retains unsaved structural input after another revision
+commits, keep that tab and preserve/copy its pending values before reopening
+current records. Do not blindly retry an old write. Source, pack, template,
+asset or workspace changes invalidate candidate readiness; inspect and review
+a fresh plan. Executed source changes require a real dev-server process restart,
+not a browser reload or a newly constructed service. Missing renderer/pack/
+template/image dependencies keep Apply disabled.
+
+The native operator channel requires direct loopback Host/Origin validation,
+a per-server capability and a bound authoring session. Proposal and explicit
+Apply/Undo capabilities are separate. Browser responses contain projected data,
+not host paths, source graphs, JSX or credentials. Remote dev authoring tabs
+participate in coordination, but the native operator UI remains loopback-only.
+Static sites and disposable hosted editors receive no native write transport.
+Graceful shutdown cancels challenges, closes sockets, drains actual work and
+only then releases the lease.
 
 ## CLI protocol
 
@@ -166,10 +256,15 @@ plans, real writer contention, interrupted JSON/JSX/receipt publication and undo
 
 External Node hosts can use `const service = await createEditingService({ workspaceRoot })`
 from `zudo-composer/editing`; it exposes the same strict operations as the CLI.
-Phase 2 should call this shared boundary and render the
-retained exact candidate through the existing preview protocol. It must replace
-the conservative server-lifetime exclusion only with a tested flush/reconciliation
-and browser revision protocol, preserving pending drafts. Selection chips must
-carry qualified authoring identity, not CSS selectors. Phase 3 may produce strict
+Phase 2a uses this shared boundary and the existing preview protocol while
+preserving conservative external-CLI exclusion. This does not complete all
+Phase 2 or Phase 3 roadmap work. Phase 3 may produce strict
 proposals but must keep conversation/run state, plans, approvals and receipts
 separate. No model calls or provider credentials are part of this implementation.
+
+The installed browser proof additionally exercises the page-first UI, all three
+exact insertions, identical JSON/JSX before approval, Original/Proposed,
+navigation to another page with colliding node ids, receipts across reload,
+guarded undo, Discard, narrow tabs and synthetic composition Enter. Cloud
+synthetic tests do not establish physical Japanese IME, touch or virtual-keyboard
+behavior on Mac/Fold devices; those remain separately labelled manual checks.

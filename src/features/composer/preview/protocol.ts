@@ -214,9 +214,21 @@ export const previewLinkedSourceContextSchema: z.ZodType<PreviewLinkedSourceCont
  * owner-qualified runtime keys. `linked` is present only after the
  * provider-owning app has resolved and validated a Global template.
  */
+export const nativeReviewSchema = z.object({
+  planId: z.string().min(1), digest: z.string().regex(/^[a-f0-9]{64}$/),
+  identity: z.object({ workspaceId: z.string().min(1), sitemapId: z.string().min(1), pageId: z.string().min(1), providerId: z.literal("files"), recordId: z.string().min(1) }).strict(),
+  dependencyDigest: z.string().regex(/^[a-f0-9]{64}$/), frameSession: z.uuid(),
+}).strict();
+export const nativePageSchema = z.object({ identity: nativeReviewSchema.shape.identity, draftRevision: z.string().regex(/^[a-f0-9]{64}$/), frameSession: z.uuid() }).strict();
+export type NativePageIdentity = z.infer<typeof nativePageSchema>;
+export type NativeReviewIdentity = z.infer<typeof nativeReviewSchema>;
+
 export interface ComposerPreviewSnapshot {
   document: CompositionDocument;
   localRecordId: string;
+  nativeReview?: NativeReviewIdentity;
+  nativePage?: NativePageIdentity;
+  selectNative?: boolean;
   linked?: PreviewLinkedSourceContext;
 }
 
@@ -284,8 +296,11 @@ export const renderMessageSchema = z
     /** Optional already-resolved source/outlet context for a linked Global template. */
     linked: previewLinkedSourceContextSchema.optional(),
     session: previewSessionSchema,
+    nativeReview: nativeReviewSchema.optional(),
+    nativePage: nativePageSchema.optional(),
+    selectNative: z.boolean().optional(),
   })
-  .strict();
+  .strict().refine(value => !value.nativeReview || (value.session.mode === "preview" && !value.selectNative), "A reviewed candidate is read-only.");
 
 /**
  * Session-only update (Edit/Preview toggle, theme change, selection move). Sent
@@ -326,6 +341,7 @@ export const PARENT_TO_PREVIEW_MEMBERS = [
   renderMessageSchema,
   modeMessageSchema,
   restoreFocusMessageSchema,
+  z.object({ ...envelope, type: z.literal("authoring-probe"), nonce: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
 ] as const;
 
 export const parentToPreviewSchema = z.discriminatedUnion("type", [...PARENT_TO_PREVIEW_MEMBERS]);
@@ -343,6 +359,11 @@ export type ParentToPreviewMessage = z.infer<typeof parentToPreviewSchema>;
  * newest snapshot (see `bridge.ts`).
  */
 export const readyMessageSchema = z.object({ ...envelope, type: z.literal("ready") }).strict();
+
+export const nativeSelectMessageSchema = z.object({ ...envelope, type: z.literal("native-select"), revision: revisionSchema, nodeId: z.string().min(1), nativePage: nativePageSchema }).strict();
+export type NativeSelectMessage = z.infer<typeof nativeSelectMessageSchema>;
+export const renderedMessageSchema = z.object({ ...envelope, type: z.literal("rendered"), revision: revisionSchema, nativeReview: nativeReviewSchema }).strict();
+export type RenderedMessage = z.infer<typeof renderedMessageSchema>;
 
 /** A node (or empty canvas) was clicked in Edit mode. */
 export const selectMessageSchema = z
@@ -496,6 +517,9 @@ export const requestHistoryMessageSchema = z
 /** Append future preview → parent messages here (see the module header). */
 export const PREVIEW_TO_PARENT_MEMBERS = [
   readyMessageSchema,
+  renderedMessageSchema,
+  z.object({ ...envelope, type: z.literal("authoring-settled"), nonce: z.string().regex(/^[a-f0-9]{64}$/), clean: z.boolean() }).strict(),
+  nativeSelectMessageSchema,
   selectMessageSchema,
   requestAddMessageSchema,
   openSourceMessageSchema,
@@ -555,6 +579,9 @@ export function renderMessage(
     localRecordId: snapshot.localRecordId,
     ...(snapshot.linked ? { linked: snapshot.linked } : {}),
     session,
+    ...(snapshot.nativePage ? { nativePage: snapshot.nativePage } : {}),
+    ...(snapshot.nativeReview ? { nativeReview: snapshot.nativeReview } : {}),
+    ...(snapshot.selectNative === undefined ? {} : { selectNative: snapshot.selectNative }),
   };
 }
 
@@ -643,3 +670,23 @@ export function errorMessage(
   return { ...envelopeValue(pack), type: "error", revision, message, recoverable };
 }
 
+
+export function renderedMessage(pack: PreviewPackIdentity, revision: number, nativeReview: NativeReviewIdentity): RenderedMessage {
+  return { ...envelopeValue(pack), type: "rendered", revision, nativeReview };
+}
+
+export function sameNativeReview(a: NativeReviewIdentity, b: NativeReviewIdentity): boolean {
+  return a.planId === b.planId && a.digest === b.digest && a.dependencyDigest === b.dependencyDigest && a.frameSession === b.frameSession &&
+    a.identity.workspaceId === b.identity.workspaceId && a.identity.sitemapId === b.identity.sitemapId && a.identity.pageId === b.identity.pageId && a.identity.providerId === b.identity.providerId && a.identity.recordId === b.identity.recordId;
+}
+
+export function nativeSelectMessage(pack: PreviewPackIdentity, revision: number, nodeId: string, nativePage: NativePageIdentity): NativeSelectMessage {
+  return { ...envelopeValue(pack), type: "native-select", revision, nodeId, nativePage };
+}
+
+export function authoringProbeMessage(pack: PreviewPackIdentity, nonce: string): ParentToPreviewMessage {
+  return { ...envelopeValue(pack), type: "authoring-probe", nonce };
+}
+export function authoringSettledMessage(pack: PreviewPackIdentity, nonce: string, clean: boolean): PreviewToParentMessage {
+  return { ...envelopeValue(pack), type: "authoring-settled", nonce, clean };
+}

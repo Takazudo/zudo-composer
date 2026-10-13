@@ -19,6 +19,7 @@
 import { h } from "preact";
 import type { JSX } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { diagnoseDocument } from "../../../composer/model/validate";
 import type { InsertionTarget } from "../headless-api";
 import type { ComposerComponentProvider } from "../active-pack";
 import {
@@ -63,6 +64,7 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
   const [error, setError] = useState<string | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [framed] = useState(isFramed);
+  const failedRevision = useRef<number | null>(null);
   const clientRef = useRef<PreviewClient | null>(null);
   // A valid parent snapshot may replace the selected node's DOM ancestry (the
   // linked consumer/source view can revalidate while history is applying), so
@@ -97,6 +99,7 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
         // was in flight, this deliberately records no token and the layout
         // effect below will not pull focus back into the iframe.
         acceptedFocusTokenRef.current = activeFocusToken();
+        failedRevision.current = null;
         setState(next);
         // A valid snapshot means the bridge is healthy again.
         setError(null);
@@ -105,6 +108,7 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
       // closed (issue Takazudo/zudo-sg#256) — restore focus to the exact control that opened
       // it. Not a state transition, so it never touches `setState`.
       onRestoreFocus: (focusToken) => focusByToken(focusToken),
+      isAuthoringClean: () => !document.querySelector('[data-zc-inline-editing], [data-zc-prose-editing], [data-zc-prose-chrome], [contenteditable]:not([contenteditable="false"])'),
       onRejected: (reason: GuardFailure, detail) => {
         // A wrong-source / wrong-origin message is just noise: ANY page in ANY
         // tab can postMessage this window. Reacting to it would raise a false
@@ -139,6 +143,48 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
     acceptedFocusTokenRef.current = null;
     if (focusToken !== null) focusByToken(focusToken);
   }, [state.revision]);
+
+  useEffect(() => {
+    if (!state.selectNative || state.nativeReview) return;
+    const nodes = [...document.querySelectorAll<HTMLElement>('[data-zc-owner="local"][data-zc-node-id]')];
+    for (const node of nodes) { node.tabIndex = 0; node.setAttribute("role", "button"); node.setAttribute("aria-label", `Select native target ${node.dataset.zcNodeId}`); }
+    const select = (event: MouseEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent && !["Enter", " "].includes(event.key)) return;
+      const node = (event.target as Element | null)?.closest<HTMLElement>('[data-zc-owner="local"][data-zc-node-id]');
+      if (!node) {
+        if ((event.target as Element | null)?.closest("a, [data-zc-owner=source]")) {
+          event.preventDefault(); event.stopImmediatePropagation();
+          clientRef.current?.emitError("This target belongs to a source template. Use Structure to edit its owner.");
+        }
+        return;
+      }
+      event.preventDefault(); event.stopImmediatePropagation();
+      clientRef.current?.emitSelect(node.dataset.zcNodeId ?? null);
+    };
+    document.addEventListener("click", select, true); document.addEventListener("keydown", select, true);
+    return () => { for (const node of nodes) { node.removeAttribute("tabindex"); node.removeAttribute("role"); node.removeAttribute("aria-label"); } document.removeEventListener("click", select, true); document.removeEventListener("keydown", select, true); };
+  }, [state.revision, state.selectNative, state.nativeReview]);
+
+  useEffect(() => {
+    if (!state.nativeReview || !state.document || error || fatalError) return;
+    let active = true;
+    const revision = state.revision;
+    const check = async () => {
+      const documents = [state.document!, ...(state.linked ? [state.linked.sourceDocument] : [])];
+      if (documents.some(value => !diagnoseDocument(value, provider.catalog).canExport)) throw new Error("Candidate has unsupported or invalid components.");
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const images = [...document.querySelectorAll<HTMLImageElement>("[data-composer-preview-root] img")];
+      await Promise.all(images.map(image => new Promise<void>((resolve, reject) => {
+        if (image.complete) return image.naturalWidth ? resolve() : reject(new Error("Candidate image dependency is unavailable."));
+        const done = (ok: boolean) => { clearTimeout(timer); image.removeEventListener("load", loaded); image.removeEventListener("error", failed); if (ok) resolve(); else reject(new Error("Candidate image dependency is unavailable.")); };
+        const loaded = () => done(true), failed = () => done(false);
+        const timer = setTimeout(failed, 10_000); image.addEventListener("load", loaded); image.addEventListener("error", failed);
+      })));
+      if (active && failedRevision.current !== revision && clientRef.current?.state.revision === revision) clientRef.current.emitRendered();
+    };
+    void check().catch(cause => { if (active) { failedRevision.current = revision; clientRef.current?.emitError(cause instanceof Error ? cause.message : "Candidate render failed."); } });
+    return () => { active = false; };
+  }, [state.revision, state.nativeReview, state.document, state.linked, provider, error, fatalError]);
 
   // Mirror the host's active theme onto THIS document. `colors.css` keys
   // `color-scheme` off `:root[data-theme]`, which is what makes every
@@ -206,6 +252,7 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
   }, []);
 
   const onNodeError = useCallback((nodeId: string, message: string) => {
+    failedRevision.current = clientRef.current?.state.revision ?? null;
     clientRef.current?.emitError(`Node "${nodeId}" failed to render: ${message}`, true);
   }, []);
 

@@ -1,3 +1,4 @@
+import { authoringFetch } from "../../../shared/authoring-fetch";
 // The browser half of the filesystem Mapping provider.
 //
 // It is the same `MappingStore` the dev server runs, reached over one
@@ -121,7 +122,7 @@ export class FileProviderMappingStore implements MappingFileProviderStore {
     this.client = new DomainFileProviderClient(
       options.config,
       mappingFileProviderErrorAdapter,
-      options.fetchImpl ?? globalThis.fetch.bind(globalThis),
+      options.fetchImpl ?? authoringFetch,
       options.workspace,
     );
   }

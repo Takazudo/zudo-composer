@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath, unlink } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
 //#region src/site-project/authoring.ts
 var COMPOSITION_PROVIDER_ID = "files";
 var CONTENT_PROVIDER_ID = "content-filesystem";
@@ -698,6 +699,9 @@ function compareSitemapSummariesNewestFirst(a, b) {
 }
 //#endregion
 //#region server/edit/authoring-lease.mjs
+var scopeKey = Symbol.for("zudo-composer.authoring-lease-scope.v1");
+var processScopes = globalThis;
+var scopes = processScopes[scopeKey] ??= new AsyncLocalStorage();
 /** An exclusive host session, shared by dev servers and deterministic editors.
 * Never infer crash recovery permission from a PID or timeout.
 * @param {string} hostRoot
@@ -727,15 +731,35 @@ async function acquireAuthoringLease(hostRoot, owner) {
 	}
 	/** @type {Promise<void> | undefined} */
 	let releasing;
-	return { release() {
-		releasing ??= (async () => {
-			await handle.close();
-			const current = await lstat(path);
-			if (current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino) throw new Error("Authoring lease ownership changed; preserved conflicting lock.");
-			await unlink(path);
-		})();
-		return releasing;
-	} };
+	let released = false;
+	/** @type {Promise<unknown>} */
+	let tail = Promise.resolve();
+	return {
+		/** @template T @param {() => Promise<T>} action @returns {Promise<T>} */
+		execute(action) {
+			if (releasing || released) return Promise.reject(/* @__PURE__ */ new Error("Authoring lease is closing."));
+			const pending = tail.then(() => {
+				if (released) throw new Error("Authoring lease is closed.");
+				return scopes.run({
+					root,
+					active: () => !released
+				}, action);
+			});
+			tail = pending.catch(() => {});
+			return pending;
+		},
+		release() {
+			releasing ??= (async () => {
+				await tail;
+				released = true;
+				await handle.close();
+				const current = await lstat(path);
+				if (current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino) throw new Error("Authoring lease ownership changed; preserved conflicting lock.");
+				await unlink(path);
+			})();
+			return releasing;
+		}
+	};
 }
 //#endregion
 //#region src/app/workspace-record.ts

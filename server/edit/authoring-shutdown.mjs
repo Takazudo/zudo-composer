@@ -8,8 +8,9 @@ import { clearInterval, setInterval } from "node:timers";
  * which read Composer snapshots while compiling working previews.
  * @param {import("vite").ViteDevServer} server
  * @param {{release(): Promise<void>}} lease
+ * @param {{isProvider(req: import("node:http").IncomingMessage): boolean, provider(req: import("node:http").IncomingMessage, action: () => unknown): Promise<unknown>, close(): void, drain(): Promise<void> | undefined} | undefined} [coordination]
  */
-export function installAuthoringShutdown(server, lease) {
+export function installAuthoringShutdown(server, lease, coordination) {
   /** @type {Set<Promise<unknown>>} */
   const active = new Set();
   /** @type {Map<import("node:http").IncomingMessage, number>} */
@@ -30,7 +31,17 @@ export function installAuthoringShutdown(server, lease) {
         response.end("Authoring server is shutting down.");
         return;
       }
-      const result = Reflect.apply(handler, receiver, args);
+      const request = /** @type {import("node:http").IncomingMessage} */ (args[responseIndex - 1]);
+      const invokeHandler = () => Reflect.apply(handler, receiver, args);
+      const result = coordination?.isProvider(request)
+        ? coordination.provider(request, invokeHandler).catch(error => {
+          const response = /** @type {import("node:http").ServerResponse} */ (args[responseIndex]);
+          if (response.destroyed || response.writableEnded) return;
+          response.statusCode = 409;
+          response.setHeader("content-type", "application/json");
+          response.end(JSON.stringify({ ok: false, error: { code: error.code ?? "authoring-busy", message: error.message } }));
+        })
+        : invokeHandler();
       if (result && typeof result.then === "function") {
         const pending = Promise.resolve(result);
         active.add(pending);
@@ -81,6 +92,7 @@ export function installAuthoringShutdown(server, lease) {
         // Disconnect operator challenges before waiting for their handlers. A
         // reconciliation challenge deliberately waits for this disconnect;
         // disposing the module evaluator first would interrupt its locked work.
+        await coordination?.close();
         await server.ws.close();
         // Destroy active request streams on HTTP/1 and HTTP/2 alike. This wakes
         // incomplete body readers without disposing the SSR evaluator.
@@ -88,6 +100,7 @@ export function installAuthoringShutdown(server, lease) {
         // Keep the module evaluator available until handlers have completed their
         // storage work and native lock release. No new request may enter a store.
         while (active.size) await Promise.allSettled([...active]);
+        await coordination?.drain();
         // The new UI pack can leave Vite's initial client warmup in flight when
         // the first page request ends. Let those transforms settle before Vite
         // closes its plugin container, or close waits on orphaned requests.

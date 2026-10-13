@@ -96,7 +96,8 @@
     "!**/*.test.*",
     "!src/test",
     "!src/hosted-demo",
-    "docs/hosted-content.md"
+    "docs/hosted-content.md",
+    "docs/native-editing.md"
   ],
   "engines": {
     "node": "^22.13.0 || >=24.0.0",

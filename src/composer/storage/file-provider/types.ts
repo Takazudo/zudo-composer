@@ -13,6 +13,7 @@ export const COMPOSITION_FILE_PROVIDER_CHANNEL = "compositions:files";
 
 /** Injected only into dev client bundles by the Vite file-provider plugin. */
 export interface ComposerFileProviderConfig {
+  nativeEditing?: { endpoint: string; capability: string; approvalCapability: string; pack: { packId: string; packVersion: string } };
   endpoint: string;
   capability: string;
   capabilityHeader: string;

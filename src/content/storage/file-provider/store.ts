@@ -1,3 +1,4 @@
+import { authoringFetch } from "../../../shared/authoring-fetch";
 // The browser half of the filesystem Content provider.
 //
 // It is the same `ContentStore` the dev server runs, reached over one
@@ -148,7 +149,7 @@ export class FileProviderContentStore implements ContentFileProviderStore {
     this.client = new DomainFileProviderClient(
       options.config,
       contentFileProviderErrorAdapter,
-      options.fetchImpl ?? globalThis.fetch.bind(globalThis),
+      options.fetchImpl ?? authoringFetch,
       options.workspace,
     );
   }

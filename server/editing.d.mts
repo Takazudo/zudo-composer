@@ -2210,6 +2210,11 @@ interface NativeTarget {
 declare function resolvePage(capture: HostCapture, request: InspectPageRequest): {
     record: CompositionRecord;
     rootPolicy: RootPolicy;
+    linked: {
+        sourceRecordId: string;
+        sourceDocument: CompositionDocument;
+        outlet: GlobalTemplateOutlet;
+    } | undefined;
     targets: NativeTarget[];
     allTargets: {
         reason?: string | undefined;
@@ -2311,10 +2316,65 @@ interface EditReceipt {
  * The digest binds content; the caller, not this service, supplies human authority.
  */
 declare function createEditingService$1(options: CaptureHostOptions): {
+    inspectBrowserReview(input: unknown): Promise<{
+        plan: EditPlan;
+        page: {
+            record: CompositionRecord;
+            rootPolicy: RootPolicy;
+            linked: {
+                sourceRecordId: string;
+                sourceDocument: CompositionDocument;
+                outlet: GlobalTemplateOutlet;
+            } | undefined;
+            targets: NativeTarget[];
+            allTargets: {
+                reason?: string | undefined;
+                nodeId: string;
+                componentId: string;
+                native: NativeKind | null;
+            }[];
+            consumers: {
+                kind: string;
+                sitemapId: string;
+                pageId: string;
+            }[];
+            linkedConsumers: string[];
+            mappedConsumers: string[];
+            mappedPages: {
+                sitemapId: string;
+                pageId: string;
+            }[];
+            mappedDescendants: {
+                sitemapId: string;
+                pageId: string;
+            }[];
+            writeBlockers: string[];
+            capabilities: Partial<Record<NativeKind, {
+                available: boolean;
+                componentId: string;
+                reason?: string;
+            }>>;
+            sitemapId: string;
+            pageId: string;
+            identity: {
+                workspaceId: string;
+                sitemapId: string;
+                pageId: string;
+                providerId: string;
+                recordId: string;
+            };
+            grammar: Grammar;
+        };
+    }>;
     initializeSourceEpoch(): Promise<void>;
     inspect(input: unknown): Promise<{
         record: CompositionRecord;
         rootPolicy: RootPolicy;
+        linked: {
+            sourceRecordId: string;
+            sourceDocument: CompositionDocument;
+            outlet: GlobalTemplateOutlet;
+        } | undefined;
         targets: NativeTarget[];
         allTargets: {
             reason?: string | undefined;
@@ -2387,7 +2447,7 @@ declare function createEditingService$1(options: CaptureHostOptions): {
 /** Trusted local authoring adapter; never expose apply/undo to a proposal runner. */
 declare function createEditingService(options?: {
     workspaceRoot?: string;
-}): Promise<Omit<ReturnType<typeof createEditingService$1>, "initializeSourceEpoch">>;
+}): Promise<Omit<ReturnType<typeof createEditingService$1>, "initializeSourceEpoch" | "inspectBrowserReview">>;
 
 export { createEditingService };
 export type { EditPlan, EditReceipt, EditRequest };

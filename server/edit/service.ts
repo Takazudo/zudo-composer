@@ -6,7 +6,7 @@ import type { JsonValue } from "@zudo-composer/component-contract";
 import { loadHostContext } from "../host-context.mjs";
 import { captureHost, resolvePage, type CaptureHostOptions, type HostCapture } from "./inspect";
 import { EditError, openPlans } from "./plans";
-import { acquireAuthoringLease } from "./authoring-lease.mjs";
+import { executeAuthoringOperation } from "./authoring-lease.mjs";
 import { canonicalStringifyJson } from "../../src/site-project/model/canonical";
 import { indexDocument } from "../../src/composer/model/index-model";
 import { addNode, updateProps } from "../../src/composer/model/commands";
@@ -153,10 +153,7 @@ export function createEditingService(options: CaptureHostOptions) {
     tokens: state.tokens, workspace: state.workspace, sourceAuthored: state.sourceAuthored,
     config: state.config.nativeEditing ?? null,
   });
-  const leased = async <T>(action: () => Promise<T>) => {
-    const lease = await acquireAuthoringLease(options.config.workspaceRoot, "reviewed-edit");
-    try { return await action(); } finally { await lease.release(); }
-  };
+  const leased = <T>(action: () => Promise<T>) => executeAuthoringOperation(options.config.workspaceRoot, action) as Promise<T>;
   const pin = async (state: HostCapture, request: EditRequest): Promise<AssetVersionPin | null> => {
     if (request.insert.kind !== "image") return null;
     const assetId = request.insert.assetId;
@@ -183,6 +180,19 @@ export function createEditingService(options: CaptureHostOptions) {
     return next(0);
   };
   return {
+    async inspectBrowserReview(input: unknown) {
+      const { planId } = parse(idSchema, input);
+      const { plan } = await loadPlan(planId);
+      const state = await capture();
+      const page = resolvePage(state, plan.request);
+      if (editDigest(page.identity) !== editDigest(plan.identity)) throw new EditError("wrong-target", "The reviewed page owner changed.");
+      const applied = await state.stores.compositions.reviewedEditReceipt<EditReceipt>(planId);
+      if (!applied) {
+        if (editDigest(await revisions(state)) !== editDigest(plan.revisions)) throw new EditError("stale-plan", "Reviewed dependencies changed. Review a fresh plan.");
+        await pending(planId, await openPlans(options.config.paths.data));
+      }
+      return { plan, page };
+    },
     async initializeSourceEpoch() { await checkedSources(options); },
     async inspect(input: unknown) { const request = parse(pageSchema, input); return resolvePage(await capture(), request); },
     async resolve(input: unknown) {
