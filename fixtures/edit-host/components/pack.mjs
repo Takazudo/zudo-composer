@@ -5,6 +5,7 @@ export const Paragraph = ({ text }) => h("p", {}, text);
 export const List = ({ items }) => h("ul", {}, items.map((item, index) => h("li", { key: index }, item)));
 export const Image = ({ src, alt }) => h("img", { src, alt });
 export const Note = ({ text }) => h("aside", {}, text);
+export const NativeProse = ({ markdown }) => h("section", {}, markdown);
 export const Frame = ({ children }) => h("main", {}, [h("header", {}, "Installed template frame"), children]);
 export const Table = ({ columns, rows }) => h("table", {}, [
   h("thead", {}, h("tr", {}, columns.map((column, index) => h("th", { key: index }, column)))),
@@ -21,6 +22,7 @@ export const componentPack = defineComponentPack({
   packId: "native-edit-host", packVersion: "1.0.0", components: [
     defineComponent()(Frame, { id: "native.frame", schemaVersion: 1, title: "Frame", category: "Native editing", description: "Real template context", source: { module: "native-edit-host/components", exportKind: "named", exportName: "Frame" }, defaults: {}, fields: [], slots: [{ id: "body", prop: "children", label: "Page body", cardinality: "many", accepts: ["native.paragraph", "native.list", "native.image", "native.table"] }] }),
     component(Note, "native.note", "Note", { text: "" }, [{ prop: "text", label: "Text", ...string }]),
+    defineComponent()(NativeProse, { id: "native.md", schemaVersion: 1, title: "NativeProse", category: "Native editing", description: "Explicit-save inline draft coordination proof", source: { module: "native-edit-host/components", exportKind: "named", exportName: "NativeProse" }, defaults: { markdown: "" }, fields: [{ prop: "markdown", label: "Markdown", schema: { type: "string" }, editor: { kind: "text", multiline: true, mode: "markdown-source" }, inlineEdit: true }], adapters: { inlineEditor: { field: "markdown", resolveElement: root => root } } }),
     component(Paragraph, "native.paragraph", "Paragraph", { text: "" }, [{ prop: "text", label: "Text", ...string }]),
     component(List, "native.list", "List", { items: [] }, [{ prop: "items", label: "Items", ...strings }]),
     component(Image, "native.image", "Image", { src: "", alt: "" }, [{ prop: "src", label: "Source", ...string }, { prop: "alt", label: "Alternative text", ...string }]),

@@ -33,6 +33,7 @@ import {
   requestHistoryMessage,
   selectMessage,
   nativeSelectMessage,
+  authoringSettledMessage,
 } from "./protocol";
 import { INITIAL_PREVIEW_STATE, applyInbound, type PreviewState } from "./snapshot-store";
 
@@ -57,6 +58,8 @@ export interface PreviewClientOptions {
    * `PreviewState` — see `snapshot-store.ts`'s `applyInbound` comment.
    */
   onRestoreFocus?: (focusToken: string) => void;
+  /** Active inline drafts remain in this document until explicitly finished. */
+  isAuthoringClean?: () => boolean;
   /** A message was DROPPED by the guard. */
   onRejected?: (reason: GuardFailure, detail?: string) => void;
 }
@@ -135,6 +138,12 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
       return;
     }
     const message = result.message;
+    if (message.type === "authoring-probe") {
+      // This reply follows previously emitted inline commits on the same
+      // postMessage channel. Parent flush starts only after those arrive.
+      post(authoringSettledMessage(pack, message.nonce, state.document !== null && options.isAuthoringClean?.() === true));
+      return;
+    }
     // `restore-focus` (Takazudo/zudo-sg#256) is not a document/session snapshot — it never
     // reaches the revision-gated fold below. See `applyInbound`'s comment.
     if (message.type === "restore-focus") {

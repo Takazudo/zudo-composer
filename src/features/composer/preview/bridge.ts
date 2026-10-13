@@ -258,6 +258,9 @@ export function createComposerPreviewBridge(
       case "rendered":
         if (message.revision === retained?.revision && retained.snapshot?.nativeReview && sameNativeReview(message.nativeReview, retained.snapshot.nativeReview)) options.onRendered?.(message);
         return;
+      case "authoring-settled":
+        // Consumed by the tab's nonce-bound authoring preparation owner.
+        return;
       case "native-select":
         if (message.revision === retained?.revision) options.onNativeSelect?.(message);
         return;

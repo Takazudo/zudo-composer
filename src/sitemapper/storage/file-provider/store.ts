@@ -1,4 +1,4 @@
-import { authoringFetch } from "../../../features/native-editing/session";
+import { authoringFetch } from "../../../shared/authoring-fetch";
 // The browser half of the filesystem Sitemapper provider.
 //
 // It is the same `SitemapCollectionStore` the dev server runs, reached over

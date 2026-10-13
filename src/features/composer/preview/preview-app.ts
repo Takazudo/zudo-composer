@@ -108,6 +108,7 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
       // closed (issue Takazudo/zudo-sg#256) — restore focus to the exact control that opened
       // it. Not a state transition, so it never touches `setState`.
       onRestoreFocus: (focusToken) => focusByToken(focusToken),
+      isAuthoringClean: () => !document.querySelector('[data-zc-inline-editing], [data-zc-prose-editing], [data-zc-prose-chrome], [contenteditable]:not([contenteditable="false"])'),
       onRejected: (reason: GuardFailure, detail) => {
         // A wrong-source / wrong-origin message is just noise: ANY page in ANY
         // tab can postMessage this window. Reacting to it would raise a false

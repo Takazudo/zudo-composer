@@ -1,4 +1,4 @@
-import { authoringFetch } from "../native-editing/session";
+import { authoringFetch } from "../../shared/authoring-fetch";
 import config from "virtual:release-config";
 import type { SiteProjectApiRequest, SiteProjectApiResponse } from "../../site-project/api/types";
 

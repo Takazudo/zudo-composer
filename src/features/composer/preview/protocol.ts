@@ -341,6 +341,7 @@ export const PARENT_TO_PREVIEW_MEMBERS = [
   renderMessageSchema,
   modeMessageSchema,
   restoreFocusMessageSchema,
+  z.object({ ...envelope, type: z.literal("authoring-probe"), nonce: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
 ] as const;
 
 export const parentToPreviewSchema = z.discriminatedUnion("type", [...PARENT_TO_PREVIEW_MEMBERS]);
@@ -517,6 +518,7 @@ export const requestHistoryMessageSchema = z
 export const PREVIEW_TO_PARENT_MEMBERS = [
   readyMessageSchema,
   renderedMessageSchema,
+  z.object({ ...envelope, type: z.literal("authoring-settled"), nonce: z.string().regex(/^[a-f0-9]{64}$/), clean: z.boolean() }).strict(),
   nativeSelectMessageSchema,
   selectMessageSchema,
   requestAddMessageSchema,
@@ -680,4 +682,11 @@ export function sameNativeReview(a: NativeReviewIdentity, b: NativeReviewIdentit
 
 export function nativeSelectMessage(pack: PreviewPackIdentity, revision: number, nodeId: string, nativePage: NativePageIdentity): NativeSelectMessage {
   return { ...envelopeValue(pack), type: "native-select", revision, nodeId, nativePage };
+}
+
+export function authoringProbeMessage(pack: PreviewPackIdentity, nonce: string): ParentToPreviewMessage {
+  return { ...envelopeValue(pack), type: "authoring-probe", nonce };
+}
+export function authoringSettledMessage(pack: PreviewPackIdentity, nonce: string, clean: boolean): PreviewToParentMessage {
+  return { ...envelopeValue(pack), type: "authoring-settled", nonce, clean };
 }

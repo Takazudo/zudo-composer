@@ -32,6 +32,11 @@ export async function proveBrowserEdits(page, host, cli, initialized) {
   const second = await page.context().newPage();
   await second.goto("http://127.0.0.1:4175/composer?provider=files&composition=home");
   await expect(second.frameLocator('iframe[title="Composer preview canvas"]').getByText("Before replacement", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await second.locator("#app").evaluate(element => {
+    element.ownerDocument.defaultView?.addEventListener("native-authoring-freeze", () => {
+      if (element.hasAttribute("inert")) element.setAttribute("data-native-prepare-lock", "observed");
+    });
+  });
   // The same public structural save path must retain its dirty input on failure.
   const unchanged = await canonical();
   let blockedSaves = 0;
@@ -49,6 +54,7 @@ export async function proveBrowserEdits(page, host, cli, initialized) {
   await page.getByLabel("Exact text", { exact: true }).fill("Retained exact request");
   await page.getByRole("button", { name: "Review insertion", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Save all authoring tabs");
+  await expect(second.locator("#app")).toHaveAttribute("data-native-prepare-lock", "observed");
   await expect(structuralText).toHaveValue("Unseen unsaved Japanese 日本語");
   await expect(page.getByLabel("Exact text", { exact: true })).toHaveValue("Retained exact request");
   await expect(page.getByRole("button", { name: "Apply to draft", exact: true })).toHaveCount(0);
@@ -59,6 +65,24 @@ export async function proveBrowserEdits(page, host, cli, initialized) {
   await expect(second.getByText("Saved", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Inspect current page", exact: true }).click();
   await expect(frame.getByText("Before replacement", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Review insertion", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Apply to draft", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Discard", exact: true }).click();
+  // Explicit-save prose holds its unsaved value only inside the real iframe.
+  await second.goto("http://127.0.0.1:4175/composer?provider=files&composition=other");
+  const structuralFrame = second.frameLocator('iframe[title="Composer preview canvas"]');
+  await structuralFrame.getByText("Editable Markdown source", { exact: true }).dblclick();
+  const prose = structuralFrame.getByRole("textbox", { name: "Markdown source", exact: true });
+  await prose.fill("未保存の Markdown と日本語");
+  const beforeInline = await canonical();
+  await page.getByRole("button", { name: "Review insertion", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Save all authoring tabs");
+  await expect(prose).toHaveText("未保存の Markdown と日本語");
+  assert.deepEqual(await canonical(), beforeInline, "An iframe-local draft must block native authoring without being consumed");
+  await prose.press("Escape");
+  await structuralFrame.getByRole("button", { name: "Discard changes", exact: true }).click();
+  await second.goto("http://127.0.0.1:4175/composer?provider=files&composition=home");
+  await expect(second.frameLocator('iframe[title="Composer preview canvas"]').getByText("Before replacement", { exact: true })).toBeVisible();
   for (const insertion of [
     { kind: "image", node: "paragraph", label: "Managed image" },
     { kind: "text", node: "list", label: "Exact text" },

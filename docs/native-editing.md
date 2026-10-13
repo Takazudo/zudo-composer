@@ -102,14 +102,23 @@ executes under a private server-owned scope; it has no request-supplied lock
 bypass and never shells out to the CLI. External CLI mutations remain
 `authoring-busy` while that server runs.
 
-Before plan/apply/undo, every bound authoring tab flushes through its existing
-save registry and real provider path. The server then freezes admission,
-drains actual in-flight storage work and obtains fresh nonce-bound clean
+Before plan/apply/undo, every bound authoring tab locks new user input and
+flushes through its existing save registry and real provider path, with provider
+admission still open for those saves. An active inline/prose edit inside
+Structure's iframe blocks preparation until
+you explicitly save or cancel it. A nonce-bound frame reply follows earlier
+inline commit messages before the parent flush; iframe boot is not a clean-state
+acknowledgment. Input stays locked in both parent and preview during preparation.
+The server then freezes admission, drains actual in-flight storage work and
+obtains fresh nonce-bound clean
 acknowledgments from every tab. Dirty/saving/error, unresponsive or disconnected
 clients fail closed with pending input retained. Failed preflight does not
 invalidate a tab's revision. Once a native mutation starts, late requests from
 old epochs are refused, including delayed autosaves and read-repair paths.
-Reconnecting cannot authorize stale in-memory records.
+Reconnecting cannot authorize stale in-memory records. Module refresh preserves
+the tab's original client and revision owner; a changed
+server capability requires reopening canonical records, even if its epoch reset
+to zero. Dirty tabs retain recovery input rather than adopting that new session.
 
 If an interrupted tab retains unsaved structural input after another revision
 commits, keep that tab and preserve/copy its pending values before reopening

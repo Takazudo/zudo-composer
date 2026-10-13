@@ -13,6 +13,8 @@ import { editDigest, createEditingService, type EditPlan, type EditReceipt } fro
 const command = z.object({ operation: z.enum(["inspect", "resolve", "plan", "review", "apply", "receipt", "discard", "supersede", "undo"]), input: z.unknown(), expected: z.object({ revision: z.string().regex(/^[a-f0-9]{64}$/), identity: z.object({ workspaceId: z.string(), sitemapId: z.string(), pageId: z.string(), providerId: z.literal("files"), recordId: z.string() }).strict() }).strict().optional() }).strict();
 const bindSchema = z.object({ clientId: z.uuid(), capability: z.string(), epoch: z.number().int().nonnegative().nullable() }).strict();
 const answerSchema = z.object({ clientId: z.uuid(), challenge: z.uuid(), epoch: z.number().int().nonnegative(), clean: z.boolean() }).strict();
+const unbindSchema = z.object({ clientId: z.uuid(), capability: z.string() }).strict();
+const browserErrorCodes = new Set(["already-applied", "approval-mismatch", "authoring-busy", "browser-dirty", "browser-unavailable", "stale-browser", "component-invalid", "conflict", "effect-invalid", "inactive-plan", "invalid-asset", "invalid-request", "invalid-table", "not-applied", "not-found", "stale-asset", "stale-config", "stale-plan", "tampered-plan", "undo-conflict", "unsupported-capability", "unsupported-scope", "unsupported-source", "unsupported-target", "wrong-host", "wrong-target", "wrong-workspace", "commit-uncertain", "write-failed", "read-failed", "unavailable", "blocked"]);
 const planProjection = (plan: EditPlan) => ({ id: plan.id, digest: plan.digest, request: plan.request, identity: plan.identity, before: plan.before, candidate: plan.candidate, dependencyDigest: editDigest(plan.revisions), createdAt: plan.createdAt });
 const receiptProjection = (receipt: EditReceipt | null) => receipt && ({ schemaVersion: receipt.schemaVersion, operationId: receipt.operationId, planId: receipt.planId, reviewDigest: receipt.reviewDigest, kind: receipt.kind, identity: receipt.identity, beforeDigest: receipt.beforeDigest, afterDigest: receipt.afterDigest, committedAt: receipt.committedAt });
 
@@ -39,7 +41,7 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
   const service = module.createEditingService({ config: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity }) as ReturnType<typeof createEditingService>;
   await service.initializeSourceEpoch();
   for (const event of ["add", "change", "unlink"] as const) server.watcher.on(event, () => server.ws.send("native:invalidated", {}));
-  const peers = new Map<string, { client: WebSocketClient; send(data: unknown): void; resume(data: unknown): void }>();
+  const peers = new Map<string, { client: WebSocketClient; send(data: unknown): void; resume(data: unknown): void; close(): void }>();
   let activeRequests = 0;
   const trusted = new WeakSet<object>();
   server.ws.on("connection", (socket, request) => { if (isSameOriginDevRequest({ headers: { ...Object.fromEntries(Object.entries(request.headers).map(([key, value]) => [key, Array.isArray(value) ? undefined : value])), "sec-fetch-site": "same-origin" }, protocol: server.config.server.https ? "https" : "http" })) trusted.add(socket); });
@@ -48,12 +50,19 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
     if (!parsed.success || parsed.data.capability !== capability || !trusted.has(client.socket)) return;
     const { clientId } = parsed.data;
     if (peers.has(clientId)) return;
-    const peer = { client, send: (value: unknown) => client.send("native:challenge", value), resume: (value: unknown) => client.send("native:resume", value) };
+    const peer = { client, send: (value: unknown) => client.send("native:challenge", value), resume: (value: unknown) => client.send("native:resume", value), close: () => { coordinator.disconnect(clientId, peer); if (peers.get(clientId) === peer) peers.delete(clientId); } };
     try {
       const epoch = coordinator.bind(clientId, peer, parsed.data.epoch); peers.set(clientId, peer);
-      client.socket.once("close", () => { coordinator.disconnect(clientId, peer); peers.delete(clientId); });
+      client.socket.once("close", peer.close);
       client.send("native:bound", { clientId, epoch });
     } catch (error) { client.send("native:unavailable", { clientId, reason: error && typeof error === "object" && "code" in error ? error.code : "authoring-busy" }); }
+  });
+  server.ws.on("native:unbind", (data, client) => {
+    const parsed = unbindSchema.safeParse(data);
+    if (!parsed.success || parsed.data.capability !== capability || !trusted.has(client.socket)) return;
+    const peer = peers.get(parsed.data.clientId);
+    if (peer?.client !== client) return;
+    client.socket.off("close", peer.close); peer.close();
   });
   server.ws.on("native:answer", (data, client) => {
     const parsed = answerSchema.safeParse(data); if (!parsed.success) return;
@@ -112,14 +121,15 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
         : await coordinator.run(clientId, () => lease.execute(execute), ["apply", "undo"].includes(request.operation));
       respond(200, { ok: true, result });
     } catch (error) {
-      const code = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "invalid-request";
+      const internalCode = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "invalid-request";
+      const code = browserErrorCodes.has(internalCode) ? internalCode : "invalid-request";
       // Native/provider diagnostics may name absolute source paths. Project a safe operator message.
-      const known = { "browser-dirty": "Save all authoring tabs and retry. Pending input is retained.", "stale-plan": "Draft or dependencies changed. Review a fresh plan; source changes require a process restart.", "undo-conflict": "A later edit changed this draft; undo cannot overwrite it.", "unsupported-scope": "This page is source-authored, mapped, shared or unsupported. Use Structure or its owning source.", "authoring-busy": "Another authoring operation is active.", "already-applied": "This operation committed. Recover its receipt; use guarded Undo.", "invalid-table": "Supply one cell per column in every row." };
+      const known = { "browser-dirty": "Save all authoring tabs and finish or cancel inline editing before retrying. Pending input is retained.", "stale-plan": "Draft or dependencies changed. Review a fresh plan; source changes require a process restart.", "undo-conflict": "A later edit changed this draft; undo cannot overwrite it.", "unsupported-scope": "This page is source-authored, mapped, shared or unsupported. Use Structure or its owning source.", "authoring-busy": "Another authoring operation is active.", "already-applied": "This operation committed. Recover its receipt; use guarded Undo.", "invalid-table": "Supply one cell per column in every row." };
       respond(409, { ok: false, error: { code, message: known[code as keyof typeof known] ?? "Native editing refused this operation. Inspect the page, retained plan and receipt before retrying; restart the server if source changed." } });
     } finally { clearTimeout(timer); activeRequests--; }
   });
   return {
-    config: { endpoint: "/__zudo-native-edit", capability, approvalCapability },
+    config: { endpoint: "/__zudo-native-edit", capability, approvalCapability, pack: { packId: context.pack.manifest.packId, packVersion: context.pack.manifest.packVersion } },
     isProvider: (req: { url?: string }) => /^\/__zudo_composer_[a-z_]*provider$/.test(req.url ?? "") || req.url === "/__zudo-release",
     provider: (req: { headers: Record<string, unknown> }, action: () => unknown) => coordinator.provider(String(req.headers["x-zudo-native-client"] ?? ""), Number(req.headers["x-zudo-native-epoch"]), action),
     close: () => { for (const watcher of watchers) watcher.close(); coordinator.close(); },

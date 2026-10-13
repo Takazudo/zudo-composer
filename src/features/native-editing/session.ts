@@ -1,28 +1,43 @@
 import { fileProviderConfig } from "virtual:composer-file-provider-config";
+import { createFrameInputGuard } from "./frame-input-guard";
+import { installAuthoringFetch } from "../../shared/authoring-fetch";
+import { nativeBrowserOwner, type NativeBrowserOwner } from "./session-owner";
 
 const config = fileProviderConfig?.nativeEditing;
 const hot = import.meta.hot;
 const coordinated = !!(import.meta.env.DEV && config && hot && typeof window !== "undefined");
 export const nativeEditingAvailable = coordinated && ["/", "/composer", "/content", "/mapping", "/sitemapper", "/assets", "/review"].includes(window.location.pathname) && ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
-const clientId = coordinated ? "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (value) =>
-  (Number(value) ^ (crypto.getRandomValues(new Uint8Array(1))[0]! & (15 >> (Number(value) / 4)))).toString(16)) : "";
-let epoch = -1, connected = false, frozen = false, enrolled = false;
+const ownership = coordinated ? nativeBrowserOwner(globalThis as typeof globalThis & { [key: symbol]: NativeBrowserOwner | undefined }, config!.capability, () => "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (value) =>
+  (Number(value) ^ (crypto.getRandomValues(new Uint8Array(1))[0]! & (15 >> (Number(value) / 4)))).toString(16))) : null;
+const clientId = ownership?.owner.clientId ?? "";
+let epoch = ownership?.owner.epoch ?? -1, connected = false, frozen = false, enrolled = false;
 let isPending = () => true;
 let flushPending = async () => false;
 const waiting = new Set<(ready: boolean) => void>();
+const frameInput = coordinated ? createFrameInputGuard(() => document.getElementById("app"), window, config!.pack) : null;
 const settle = (ready: boolean) => { for (const finish of waiting) finish(ready); waiting.clear(); };
-const freeze = (value: boolean) => {
-  frozen = value;
+const freeze = (value: boolean, blockRequests = value) => {
+  frozen = blockRequests;
   const route = document.getElementById("app");
   if (route) route.inert = value;
+  frameInput?.lock(value);
   window.dispatchEvent(new CustomEvent("native-authoring-freeze", { detail: value }));
 };
-const bind = () => { if (enrolled) hot?.send("native:bind", { clientId, capability: config!.capability, epoch: epoch < 0 ? null : epoch }); };
+const bind = () => {
+  if (!enrolled) return;
+  if (ownership?.changedServer) {
+    connected = false; settle(false);
+    if (!isPending()) window.location.reload();
+    else window.dispatchEvent(new CustomEvent("native-authoring-stale"));
+    return;
+  }
+  hot?.send("native:bind", { clientId, capability: config!.capability, epoch: epoch < 0 ? null : epoch });
+};
 if (coordinated) {
   hot!.on("native:bound", (message: { clientId: string; epoch: number }) => {
-    if (message.clientId !== clientId || !Number.isSafeInteger(message.epoch)) return;
+    if (ownership?.changedServer || message.clientId !== clientId || !Number.isSafeInteger(message.epoch)) return;
     if (epoch >= 0 && epoch !== message.epoch) { connected = false; settle(false); window.dispatchEvent(new CustomEvent("native-authoring-stale")); return; }
-    epoch = message.epoch; connected = true; settle(true);
+    epoch = message.epoch; ownership!.owner.epoch = epoch; connected = true; settle(true);
   });
   hot!.on("native:unavailable", (message: { clientId: string; reason?: string }) => {
     if (message.clientId !== clientId) return;
@@ -36,8 +51,16 @@ if (coordinated) {
   hot!.on("native:challenge", async (message: { challenge: string; epoch: number; phase: "prepare" | "freeze" }) => {
     if (!connected || message.epoch !== epoch || !/^[a-f0-9-]{36}$/.test(message.challenge)) return;
     let clean = false;
-    if (message.phase === "prepare") { try { clean = await flushPending() && !isPending(); } catch { clean = false; } }
-    else if (message.phase === "freeze") { freeze(true); clean = !isPending(); }
+    if (message.phase === "prepare") {
+      // Stop new keystrokes before flushing debounced props. Provider admission
+      // stays open until every tab has flushed; the server then drains/freezes it.
+      // Do not blur an explicit-save inline editor or discard its DOM draft.
+      if (!frameInput?.busy()) {
+        freeze(true, false);
+        try { clean = await frameInput!.settled() && await flushPending() && !isPending(); } catch { clean = false; }
+      }
+    }
+    else if (message.phase === "freeze") { freeze(true); clean = await frameInput!.settled() && !isPending(); }
     if (connected && epoch === message.epoch) hot!.send("native:answer", { clientId, challenge: message.challenge, epoch, clean });
   });
   hot!.on("native:resume", (message: { epoch: number }) => {
@@ -51,7 +74,7 @@ if (coordinated) {
       else { freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-stale")); }
     } else freeze(false);
   });
-  hot!.on("vite:ws:disconnect", () => { connected = false; settle(false); if (frozen) freeze(false); });
+  hot!.on("vite:ws:disconnect", () => { connected = false; settle(false); freeze(false); });
   hot!.on("native:invalidated", () => window.dispatchEvent(new CustomEvent("native-authoring-invalidated")));
   hot!.on("vite:ws:connect", bind);
 }
@@ -69,13 +92,17 @@ async function ready() {
   });
   if (!online) throw new Error("Authoring coordination is disconnected. No write was sent.");
 }
-export const authoringFetch: typeof fetch = async (input, init) => {
+const authoringFetch: typeof fetch = async (input, init) => {
   if (!coordinated) return globalThis.fetch(input, init);
   await ready();
   const headers = new Headers(init?.headers);
   headers.set("x-zudo-native-client", clientId); headers.set("x-zudo-native-epoch", String(epoch));
   return globalThis.fetch(input, { ...init, headers });
 };
+if (coordinated) {
+  const reset = installAuthoringFetch(authoringFetch);
+  hot!.dispose(() => { hot!.send("native:unbind", { clientId, capability: config!.capability }); connected = false; settle(false); reset(); freeze(false); frameInput?.dispose(); });
+}
 export async function nativeEditRequest<T>(operation: string, input: unknown, approved = false, expected?: unknown): Promise<T> {
   if (!nativeEditingAvailable) throw new Error("Native editing is unavailable in static or hosted editors.");
   await ready();

@@ -1,4 +1,4 @@
-import { authoringFetch } from "../../../features/native-editing/session";
+import { authoringFetch } from "../../../shared/authoring-fetch";
 import { fileProviderConfig } from "virtual:composer-file-provider-config";
 import { notifyPersistenceChange } from "../../../shared/persistence-generation";
 import {

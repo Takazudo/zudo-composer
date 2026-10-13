@@ -19,6 +19,7 @@ const other = site.page({ id: "other", name: "Other native page", root: [
   node("native.list", { items: ["Other item"] }, {}, "list"),
   node("native.table", { columns: ["Other"], rows: [["Untouched"]] }, {}, "table"),
   node("native.note", { text: "Unsupported owner copy" }, {}, "note"),
+  node("native.md", { markdown: "Editable Markdown source" }, {}, "prose"),
 ] });
 site.sitemap({ id: "main", name: "Native sitemap", root: { id: "home", title: "Home", page: home, children: [{ id: "other", title: "Other", slug: "other", page: other }] } });
 await initializeAuthoringWorkspace({ composerConfig, pack, project: site.toSiteProject(), workspaceId: "native-proof" });

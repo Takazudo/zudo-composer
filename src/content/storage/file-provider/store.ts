@@ -1,4 +1,4 @@
-import { authoringFetch } from "../../../features/native-editing/session";
+import { authoringFetch } from "../../../shared/authoring-fetch";
 // The browser half of the filesystem Content provider.
 //
 // It is the same `ContentStore` the dev server runs, reached over one
