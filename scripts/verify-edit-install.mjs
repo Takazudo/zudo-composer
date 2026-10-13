@@ -89,6 +89,20 @@ try {
     await server.stop(); server = undefined;
     console.log(`Installed native editing Composer ${pass}: passed.`);
   }
+} catch (error) {
+  // Retain runner-only browser state before disposable host cleanup. These are
+  // fixture pages, never installed operator capabilities or request headers.
+  const diagnostics = join(root, "test-results/native-edit-install");
+  await mkdir(diagnostics, { recursive: true });
+  let index = 0;
+  for (const context of browser?.contexts() ?? []) for (const page of context.pages()) {
+    const name = `page-${index++}`;
+    await page.screenshot({ path: join(diagnostics, `${name}.png`), fullPage: true }).catch(() => {});
+    for (const [frameIndex, frame] of page.frames().entries()) {
+      await frame.content().then(html => writeFile(join(diagnostics, `${name}-frame-${frameIndex}.html`), html)).catch(() => {});
+    }
+  }
+  throw error;
 } finally {
   await browser?.close();
   await server?.stop();

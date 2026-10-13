@@ -68,6 +68,7 @@ export async function proveBrowserEdits(page, host, cli, initialized) {
   await page.getByRole("button", { name: "Review insertion", exact: true }).click();
   await expect(page.getByRole("button", { name: "Apply to draft", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Review insertion", exact: true })).toBeVisible();
   // Explicit-save prose holds its unsaved value only inside the real iframe.
   await second.goto("http://127.0.0.1:4175/composer?provider=files&composition=other");
   const structuralFrame = second.frameLocator('iframe[title="Composer preview canvas"]');
@@ -201,6 +202,7 @@ export async function proveBrowserEdits(page, host, cli, initialized) {
   assert.deepEqual(await canonical(), files, "Missing dependencies cannot approve a candidate");
   await page.unroute("**/uploaded-assets/**");
   await page.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Review insertion", exact: true })).toBeVisible();
   await page.locator('iframe[title="Native page preview"]').evaluate(element => { const frame = /** @type {HTMLIFrameElement} */ (element); frame.contentWindow?.location.reload(); });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("tab", { name: "Page", exact: true })).toBeVisible();
