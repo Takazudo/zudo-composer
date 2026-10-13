@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "0038091d5cfd3225289fc2f5be311ddff556b889",
-  "payloadSha256": "efed44c8a3070932afc297230a9ca0719920c90ea0f3940d7bd1ff60ab02edfa",
-  "rawPackageJsonSha256": "dbf43ce6d38720775b6dcd17a69cc40468f3b47f2dbea721f114a0152a462d41",
+  "packageOutputSha": "6884f0af20178967c957a57eb4a8a48f3c5c6fbc",
+  "payloadSha256": "7356289cd4347800bb89a2153f41b7a077477bd08ffd64326fa8c1eb9bbcb197",
+  "rawPackageJsonSha256": "4b530f57333b98b2e01d83bc2f29efe0161aca6391cfbef99217ceaeb1b06844",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -2982,9 +2982,9 @@
     },
     {
       "path": "src/features/native-editing/page-route.tsx",
-      "bytes": 15344,
+      "bytes": 15403,
       "mode": 420,
-      "sha256": "b4890a757503398faf068de177c40ba0a96f6ccda1f51de596a03057e49c54f0"
+      "sha256": "098d1e2eb50f0df3112b93c928826bc1cbea465eb52d995d6fe0ae48ff09bd6a"
     },
     {
       "path": "src/features/native-editing/request.ts",
