@@ -99,7 +99,7 @@ jobs:
       - name: Verify retained package-output payload
         run: node scripts/check-hosted-payload.mjs --check verification/hosted-content/current-payload.json
       - name: Verify exact retained package-output commit
-        run: pnpm hosted:installed "$(node -p 'require("./verification/hosted-content/current-payload.json").packageOutputSha')" .artifacts/hosted-consumer
+        run: node scripts/verify-retained-hosted-consumer.mjs .artifacts/hosted-consumer
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
