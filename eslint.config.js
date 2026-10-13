@@ -15,7 +15,9 @@ export default tseslint.config(
       '**/dist',
       'coverage',
       'worktrees/**',
+      'work/**',
       'server/generated/**',
+      'server/hosted-content/**',
       'server/authoring.mjs',
       'server/authoring.d.mts',
       'server/editing.d.mts',
@@ -47,6 +49,22 @@ export default tseslint.config(
   },
   eslint.configs.recommended,
   tseslint.configs.recommended,
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [{ name: 'preact/hooks', importNames: ['useId'], message: 'Use useDomId from src/components/use-dom-id; Preact useId ids collide across this app.' }],
+      }],
+    },
+  },
+  {
+    files: ['fixtures/hosted-content-consumer/**/*.mjs'],
+    languageOptions: { globals: { URL: 'readonly', console: 'readonly', process: 'readonly', Buffer: 'readonly', fetch: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly', structuredClone: 'readonly' } },
+  },
+  {
+    files: ['fixtures/hosted-content-consumer/browser-proof.mjs'],
+    languageOptions: { globals: { window: 'readonly', localStorage: 'readonly' } },
+  },
   {
     // These are the only files that import the two virtual modules declared in
     // `src/features/composer/pack-config.d.ts`; each carries an explicit

@@ -1,0 +1,18 @@
+{
+  "installedToolSha": "93487e318c04f1e8487f14ff86a4d72a67986b1b",
+  "node": "v24.19.0",
+  "payloadSha256": "1f330b8568312bd896f1d5423c67d11a7f858fe97d2fc6919e4e3664a9ff7d75",
+  "lockDigests": {
+    "package.json": "a78f397a7e997fabeab69ce63eae8d991eddac25125dac789619e8aca8e45016",
+    "pnpm-lock.yaml": "a747e72560c37fd9a52f8b87482763e37dded8b61f3af18df4fb7a1cb4081df1",
+    "renderer/package.json": "c680559a5230e22d45488cebaa3c5888fbe51e9db97edbabc318b9129bd3e5c7",
+    "renderer/pnpm-lock.yaml": "a14092b072723eec009594f6708c0dc41b9ce29738583c41bb9f47c622652c91"
+  },
+  "independentInstall": "passed",
+  "frozenReinstall": "passed",
+  "worker": "passed",
+  "nodeBoundary": "passed",
+  "sqlite": "passed",
+  "staticRenderer": "passed",
+  "browser": "not run; P4 remains blocked"
+}

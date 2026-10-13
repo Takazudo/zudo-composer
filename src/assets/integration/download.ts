@@ -1,4 +1,4 @@
-import { commonmarkLanguage } from "@codemirror/lang-markdown";
+import { parser as commonmarkParser } from "@lezer/markdown";
 import { isContentAssetUse, type ContentAssetUse } from "../../content/model";
 import { ASSET_CHECKSUM_URL_PATTERN, assetDownloadFileName, assetByteLabel, assetTypeLabel, assetVersionUrl, isValidAssetFileName, isValidAssetByteLength, assetKindForMime, type AssetType } from "../model";
 import type { ComponentManifest } from "@zudo-composer/component-contract";
@@ -30,7 +30,7 @@ export function parseAssetDownloadBlock(source: string): AssetDownloadBlock | un
 export function assetDownloadBlocks(source: string): { from: number; to: number; block: AssetDownloadBlock | undefined }[] {
   const blocks: ReturnType<typeof assetDownloadBlocks> = [];
   if (!source.includes(PREFIX)) return blocks;
-  commonmarkLanguage.parser.parse(source).iterate({ enter(node) {
+  commonmarkParser.parse(source).iterate({ enter(node) {
     if (node.name !== "CommentBlock" || node.node.parent?.name !== "Document") return;
     const raw = source.slice(node.from, node.to).trimEnd();
     if (raw.startsWith(PREFIX)) blocks.push({ from: node.from, to: node.from + raw.length, block: parseAssetDownloadBlock(raw) });
@@ -48,7 +48,7 @@ export function splitAssetDownloadMarkdown(source: string): AssetDownloadPart[] 
   if (offset < source.length || !parts.length) parts.push({ markdown: source.slice(offset) });
   if (parts.some((part) => "block" in part)) {
     const definitions: string[] = [];
-    commonmarkLanguage.parser.parse(source).iterate({ enter(node) {
+    commonmarkParser.parse(source).iterate({ enter(node) {
       if (node.name === "LinkReference") definitions.push(source.slice(node.from, node.to));
     } });
     if (definitions.length) for (const part of parts) if ("markdown" in part && part.markdown.trim()) part.markdown = `${definitions.join("\n")}\n\n${part.markdown}`;

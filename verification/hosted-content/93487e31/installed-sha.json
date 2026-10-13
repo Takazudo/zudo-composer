@@ -1,0 +1,30 @@
+{
+  "toolSha": "93487e318c04f1e8487f14ff86a4d72a67986b1b",
+  "contractSha": "c0b452da075b66757c60bd0d721a47062d4354d0",
+  "node": "v24.19.0",
+  "manifest": {
+    "name": "composer-hosted-public-consumer",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@11.5.2",
+    "dependencies": {
+      "zudo-composer": "git+https://github.com/Takazudo/zudo-composer.git#93487e318c04f1e8487f14ff86a4d72a67986b1b",
+      "@zudo-composer/component-contract": "git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
+      "preact": "10.29.8",
+      "@takazudo/zfb": "4.3.1",
+      "@takazudo/zfb-runtime": "4.3.1",
+      "@takazudo/zudo-sg": "0.5.0",
+      "@takazudo/zdtp": "0.8.6",
+      "@takazudo/zudo-doc": "6.0.0"
+    },
+    "devDependencies": {
+      "esbuild": "0.28.2",
+      "@playwright/test": "1.62.1",
+      "@cloudflare/workers-types": "5.20261012.1",
+      "tsx": "4.23.12",
+      "typescript": "6.0.3",
+      "miniflare": "5.20261006.1-alpha"
+    }
+  }
+}

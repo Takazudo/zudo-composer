@@ -1,5 +1,5 @@
 import type { JSX } from "preact";
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, ErrorIcon, InfoIcon, PlusIcon, TrashIcon } from "../../components/icons";
 import { formatLibraryTimestampFull } from "../../components/library-page";
 import { Menu, MenuItem, MenuSeparator, useMenu } from "../../components/overlay";
@@ -10,6 +10,7 @@ import { FieldKindPicker, contentFieldKindPresentation } from "./field-kind-pick
 import { MarkdownEditor } from "./markdown-editor";
 import { deriveSlug } from "./slug";
 import { StructuredValueEditor, type ContentAssetPickerRenderer } from "./structured-field-editor";
+import { useDomId } from "../../components/use-dom-id";
 
 /** The route's reporter: it runs an action and shows what it failed with. */
 export type ContentAuthorRun = (action: () => void | Promise<void>) => void;
@@ -52,7 +53,7 @@ interface SchemaTextCellProps {
  * state the author cannot read from the toolbar.
  */
 function SchemaTextCell({ label, value, mono = false, validate, onCommit }: SchemaTextCellProps): JSX.Element {
-  const errorId = `sg-content-cell-error-${useId()}`;
+  const errorId = `sg-content-cell-error-${useDomId()}`;
   const [draft, setDraft] = useState(value);
   // Adjusted during render, not in an effect: an effect runs after paint, so a
   // value replaced from outside (a reload after Remove) would show for a frame.

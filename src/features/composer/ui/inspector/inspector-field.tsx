@@ -9,7 +9,7 @@
 // list/group structure changes carry a structural marker so the controller can
 // make them standalone history checkpoints.
 
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { ComponentChildren, JSX } from "preact";
 import type {
   ArrayValueDefinition,
@@ -27,6 +27,7 @@ import { Button, Checkbox, Field, Input, Select, Textarea } from "../../../../co
 import type { PropPath } from "../../chrome/history-model";
 import { useNumericField } from "./use-numeric-field";
 import { useTextField } from "./use-text-field";
+import { useDomId } from "../../../../components/use-dom-id";
 
 type InspectorDefinition = FieldDefinition | ValueDefinition | ObjectFieldDefinition | TupleItemDefinition;
 type InspectorValue = JsonValue | undefined;
@@ -293,8 +294,8 @@ function ValueEditor({
 }: ValueEditorProps): JSX.Element {
   // Allocate control ids for every editor invocation before branching. This
   // keeps hook order stable even if a caller replaces a definition at runtime.
-  const inputId = useId();
-  const errorId = useId();
+  const inputId = useDomId();
+  const errorId = useDomId();
   const label = labelOverride ?? labelFor(definition);
   switch (definition.editor.kind) {
     case "text":

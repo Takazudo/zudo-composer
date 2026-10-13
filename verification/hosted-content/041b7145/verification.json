@@ -1,0 +1,288 @@
+{
+  "installedToolSha": "041b71456f76618e3f8a3f1fa505d5e4e1fc2bab",
+  "node": "v24.13.0",
+  "packageManager": "pnpm@11.5.2",
+  "contractSha": "c0b452da075b66757c60bd0d721a47062d4354d0",
+  "contractProtocol": 2,
+  "peerPreact": "10.29.8",
+  "commands": [
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "/Users/takazudo/repos/zp/zudo-composer/worktrees/review-fix/scripts/install-hosted-consumer.mjs",
+        "041b71456f76618e3f8a3f1fa505d5e4e1fc2bab",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer"
+      ],
+      "cwd": "/Users/takazudo/repos/zp/zudo-composer/worktrees/review-fix",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/work/install-browser-bundle"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/work/install-browser-transport.sqlite",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/work/install-browser-transport"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/work/install-render.sqlite"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/work/install-publication-render"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/renderer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/work/frozen-browser-bundle"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/work/frozen-browser-transport.sqlite",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/work/frozen-browser-transport"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/work/frozen-render.sqlite"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/work/frozen-publication-render"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "playwright",
+        "install",
+        "--with-deps",
+        "chromium"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "browser-proof.mjs",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/work/browser.sqlite"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/Users/takazudo/.anyenv/envs/nodenv/versions/24.13.0/bin/node",
+      "args": [
+        "browser-broad-proof.mjs",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/work/browser-broad.sqlite",
+        "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer/work/browser-broad"
+      ],
+      "cwd": "/private/tmp/claude-501/-Users-takazudo-repos-zp-zudo-composer/e005acda-af64-4cd1-803b-ded5df476fb2/scratchpad/consumer",
+      "outcome": "passed"
+    }
+  ],
+  "payloadSha256": "fbc483a99aa089c968b910264d891eda65299871ff37f4c8750a956cb3686371",
+  "lockDigests": {
+    "package.json": "6a9a830be60e25e2c622d5388e0fdf1150236f8295a06250f51ae29a05a85e76",
+    "pnpm-lock.yaml": "a960f0fb66e4e5c9136ce86dd9a529f31d5fde422ca09e57dbc1a7b5c41013b8",
+    "renderer/package.json": "2aa5fe6ba134d681d63a0c807540ee2baa0eb1b0f0535506ee213f7cb7c825cd",
+    "renderer/pnpm-lock.yaml": "3db3416114abaac7d1212513f81c915fb525ecc4212e5d30d7f294ca19f1082f"
+  },
+  "independentInstall": "passed",
+  "frozenReinstall": "passed",
+  "worker": "passed",
+  "browserBundle": "passed",
+  "nodeBoundary": "passed",
+  "sqlite": "passed",
+  "httpTransport": "passed",
+  "staticRenderer": "passed",
+  "browser": "passed"
+}

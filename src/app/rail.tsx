@@ -1,5 +1,5 @@
 import type { ComponentChildren, JSX } from "preact";
-import { useId, useRef, useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import {
   ComposerIcon,
   ContentIcon,
@@ -16,6 +16,7 @@ import { Dialog, Menu, MenuItem, useMenu } from "../components/overlay";
 import { formatIntent } from "./route-intents";
 import { pinAvailable, type NavigationModel, type NavigationPin } from "./navigation-preferences";
 import type { WorkspaceCounts } from "./workspace-summary";
+import { useDomId } from "../components/use-dom-id";
 
 // The workspace rail (issue #161): the dark graphite sidebar that replaced the
 // top navigation header, and the bottom tab strip the same markup becomes below
@@ -168,7 +169,7 @@ export interface RailProps {
 }
 export function Rail({ path, collapsed, onToggleCollapsed, counts = {}, models = [], modelError, pins = [], onPinsChange, onBrowse, onNavigate, hideToggle, hostedDemo = false, onBeforeNewTab }: RailProps): JSX.Element {
   const current = currentRailItem(path);
-  const navId = `cms-rail-nav-${useId()}`;
+  const navId = `cms-rail-nav-${useDomId()}`;
   const [contentOpen, setContentOpen] = useState(true);
   const [rename, setRename] = useState<NavigationPin | null>(null);
   const [label, setLabel] = useState("");

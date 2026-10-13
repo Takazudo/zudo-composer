@@ -166,8 +166,24 @@ JSON-stdin API, CAS revisions, immutable builds, diagnostics, local editing
 flow, and guarded browser acceptance commands are documented in
 [`docs/site-project.md`](./docs/site-project.md). Production
 uses the bundled sample; local project state is disposable and ignored.
-Hosted persistence, a hosted API, and authentication are future adapter work;
-nothing in this repository claims them.
+Restricted hosted Content adapters are documented in
+[the host integration guide](./docs/hosted-content.md). Authentication, actual D1
+persistence and production providers remain host-owned.
+
+### Hosted Content entries
+
+| Import | Use |
+| --- | --- |
+| `zudo-composer/hosted-content` | Worker or Node service, storage and projection types, `createHostedSiteProjector` |
+| `zudo-composer/hosted-content/editor` and `/editor.css` | Browser editor (Preact peer), English and Japanese label sets |
+| `zudo-composer/hosted-content/preview` | Framework-free iframe controller and receiver |
+| `zudo-composer/hosted-content/testing` | Storage conformance runner for a host's adapter |
+
+The service exposes six finite commands, opaque draft revisions, keyed storage
+reads with one conditional commit (mappable to a D1 `batch()`), and
+`adoptCanonicalBaseline` for external Git changes. Unsupported features and the
+"Migrating from the #904 reference API" section are in the guide. Repinning,
+D1 changes and Gate-1 revalidation are host work.
 
 ## Demo assets in this repository
 

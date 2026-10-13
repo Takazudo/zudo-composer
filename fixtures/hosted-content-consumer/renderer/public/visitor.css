@@ -1,0 +1,6 @@
+body { margin: 0; color: #172b36; background: #f8f5ed; font-family: sans-serif; }
+header, footer { padding: 1rem; background: #172b36; color: white; }
+header a { color: inherit; }
+main { max-width: 48rem; padding: 2rem; margin: auto; }
+figure { margin: 1rem 0; } img { object-fit: cover; max-width: 100%; }
+[data-faq-id] { border-top: 1px solid #ddd; padding-block: 1rem; }
