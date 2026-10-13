@@ -33,8 +33,8 @@ importers:
         specifier: 10.29.8
         version: 10.29.8
       zudo-composer:
-        specifier: git+https://github.com/Takazudo/zudo-composer.git#0038091d5cfd3225289fc2f5be311ddff556b889
-        version: https://codeload.github.com/Takazudo/zudo-composer/tar.gz/0038091d5cfd3225289fc2f5be311ddff556b889(@babel/core@7.29.7)(@zudo-composer/component-contract@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/c0b452da075b66757c60bd0d721a47062d4354d0)(esbuild@0.28.2)(jiti@2.7.0)(preact@10.29.8)(tsx@4.23.12)(yaml@2.9.1)
+        specifier: git+https://github.com/Takazudo/zudo-composer.git#6884f0af20178967c957a57eb4a8a48f3c5c6fbc
+        version: https://codeload.github.com/Takazudo/zudo-composer/tar.gz/6884f0af20178967c957a57eb4a8a48f3c5c6fbc(@babel/core@7.29.7)(@zudo-composer/component-contract@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/c0b452da075b66757c60bd0d721a47062d4354d0)(esbuild@0.28.2)(jiti@2.7.0)(preact@10.29.8)(tsx@4.23.12)(yaml@2.9.1)
     devDependencies:
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
@@ -1660,8 +1660,8 @@ packages:
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
-  zudo-composer@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/0038091d5cfd3225289fc2f5be311ddff556b889:
-    resolution: {gitHosted: true, integrity: sha512-N9Nq4C3lPnftoRi/OxqWuYJ/nymaeJcnLAXSzVvXkBeLZeHiz3wLKkTVhUJY0KHPq9wu8R14tbBzJIKe1e0chw==, tarball: https://codeload.github.com/Takazudo/zudo-composer/tar.gz/0038091d5cfd3225289fc2f5be311ddff556b889}
+  zudo-composer@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/6884f0af20178967c957a57eb4a8a48f3c5c6fbc:
+    resolution: {gitHosted: true, integrity: sha512-LJcjVSCG0RpWF5NbTiD/wjLiM15RuFnm58YMaA313FqQRb0lUDqgHgN6uv8N6CLe+6ebfmn8xF/vFQhFXja6Cg==, tarball: https://codeload.github.com/Takazudo/zudo-composer/tar.gz/6884f0af20178967c957a57eb4a8a48f3c5c6fbc}
     version: 0.0.0
     engines: {node: ^22.13.0 || >=24.0.0, pnpm: 11.5.2}
     hasBin: true
@@ -3016,7 +3016,7 @@ snapshots:
 
   zod@4.6.7: {}
 
-  zudo-composer@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/0038091d5cfd3225289fc2f5be311ddff556b889(@babel/core@7.29.7)(@zudo-composer/component-contract@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/c0b452da075b66757c60bd0d721a47062d4354d0)(esbuild@0.28.2)(jiti@2.7.0)(preact@10.29.8)(tsx@4.23.12)(yaml@2.9.1):
+  zudo-composer@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/6884f0af20178967c957a57eb4a8a48f3c5c6fbc(@babel/core@7.29.7)(@zudo-composer/component-contract@https://codeload.github.com/Takazudo/zudo-composer/tar.gz/c0b452da075b66757c60bd0d721a47062d4354d0)(esbuild@0.28.2)(jiti@2.7.0)(preact@10.29.8)(tsx@4.23.12)(yaml@2.9.1):
     dependencies:
       '@codemirror/commands': 6.11.1
       '@codemirror/lang-markdown': 6.5.2

@@ -16,11 +16,11 @@
     "two integrations B0-B1-B2",
     "late A cannot regress B2"
   ],
-  "snapshotA": "53e757da-be4f-41cb-8e76-872e881cd494",
-  "digestA": "bceb4ebb82b8978dbf9c38594a53dee6cc7b4a0e5da1ead6a9f0a7170cfabcfe",
-  "snapshotB": "f4ad8e27-3d67-4b92-aca4-70a832e07e9d",
-  "digestB": "cd712321a76541431f1ad44ac65f743c5be08d24f61b52a226d6d8feb430022a",
-  "createdEntryId": "c7e77dfe-4355-4a9e-94fc-ca22d17357be",
+  "snapshotA": "b7b58816-ebb1-4bfb-9f69-fb6adcfda706",
+  "digestA": "c0088782077400c766679102f56ff9df5570e5f142ecfecdcff0666b8a92c92b",
+  "snapshotB": "65279dea-993d-4941-9385-7cc0329e2caa",
+  "digestB": "c1e90b85f2d097613c4246d8f8d44d1f72849834bf1efda82f5cc2b8d31756a9",
+  "createdEntryId": "c62ae843-8016-4b7c-a79f-ee38190f65c1",
   "addedExistingEntryId": "faq-detached",
   "approvedSelectedImage": {
     "url": "/approved-alternate.svg",

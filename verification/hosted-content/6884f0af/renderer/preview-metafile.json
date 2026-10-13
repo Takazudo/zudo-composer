@@ -1938,7 +1938,7 @@
       ],
       "format": "esm"
     },
-    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs": {
+    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs": {
       "bytes": 7551,
       "imports": [
         {
@@ -1949,11 +1949,11 @@
       ],
       "format": "esm"
     },
-    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/preview.mjs": {
+    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/preview.mjs": {
       "bytes": 10305,
       "imports": [
         {
-          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs",
+          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs",
           "kind": "import-statement",
           "original": "./chunks/preview-D3orPTyN.mjs"
         }
@@ -2063,7 +2063,7 @@
           "original": "@takazudo/zfb/zudo-react/client"
         },
         {
-          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/preview.mjs",
+          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/preview.mjs",
           "kind": "import-statement",
           "original": "zudo-composer/hosted-content/preview"
         },
@@ -2098,7 +2098,7 @@
       "bytes": 1535,
       "imports": [
         {
-          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/preview.mjs",
+          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/preview.mjs",
           "kind": "import-statement",
           "original": "zudo-composer/hosted-content/preview"
         },
@@ -2446,10 +2446,10 @@
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/index.js": {
           "bytesInOutput": 0
         },
-        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs": {
+        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs": {
           "bytesInOutput": 6302
         },
-        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/preview.mjs": {
+        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/preview.mjs": {
           "bytesInOutput": 2824
         },
         "node_modules/.pnpm/marked@16.3.0/node_modules/marked/lib/marked.esm.js": {
@@ -2769,10 +2769,10 @@
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/index.js": {
           "bytesInOutput": 0
         },
-        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs": {
+        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs": {
           "bytesInOutput": 6383
         },
-        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/preview.mjs": {
+        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/preview.mjs": {
           "bytesInOutput": 7673
         },
         "src/identity.ts": {

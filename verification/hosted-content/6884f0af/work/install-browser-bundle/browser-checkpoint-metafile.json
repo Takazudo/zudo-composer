@@ -1768,7 +1768,7 @@
       ],
       "format": "esm"
     },
-    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/chunks/service-C7HjhuDT.mjs": {
+    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/chunks/service-C7HjhuDT.mjs": {
       "bytes": 64077,
       "imports": [
         {
@@ -1784,18 +1784,7 @@
       ],
       "format": "esm"
     },
-    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/testing.mjs": {
-      "bytes": 34240,
-      "imports": [
-        {
-          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/chunks/service-C7HjhuDT.mjs",
-          "kind": "import-statement",
-          "original": "./chunks/service-C7HjhuDT.mjs"
-        }
-      ],
-      "format": "esm"
-    },
-    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs": {
+    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs": {
       "bytes": 7551,
       "imports": [
         {
@@ -1848,16 +1837,16 @@
       ],
       "format": "esm"
     },
-    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/index.mjs": {
+    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/index.mjs": {
       "bytes": 212765,
       "imports": [
         {
-          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/chunks/service-C7HjhuDT.mjs",
+          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/chunks/service-C7HjhuDT.mjs",
           "kind": "import-statement",
           "original": "./chunks/service-C7HjhuDT.mjs"
         },
         {
-          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs",
+          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs",
           "kind": "import-statement",
           "original": "./chunks/preview-D3orPTyN.mjs"
         },
@@ -1874,39 +1863,494 @@
       ],
       "format": "esm"
     },
-    "hosted-worker-entry.js": {
-      "bytes": 5819,
+    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/preview.mjs": {
+      "bytes": 10305,
       "imports": [
         {
-          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/testing.mjs",
+          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs",
           "kind": "import-statement",
-          "original": "zudo-composer/hosted-content/testing"
+          "original": "./chunks/preview-D3orPTyN.mjs"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/preact@10.29.8/node_modules/preact/dist/preact.module.js": {
+      "bytes": 11693,
+      "imports": [],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/preact@10.29.8/node_modules/preact/hooks/dist/hooks.module.js": {
+      "bytes": 3647,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/preact@10.29.8/node_modules/preact/dist/preact.module.js",
+          "kind": "import-statement",
+          "original": "preact"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/preact@10.29.8/node_modules/preact/jsx-runtime/dist/jsxRuntime.module.js": {
+      "bytes": 1826,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/preact@10.29.8/node_modules/preact/dist/preact.module.js",
+          "kind": "import-statement",
+          "original": "preact"
         },
         {
-          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/index.mjs",
+          "path": "node_modules/.pnpm/preact@10.29.8/node_modules/preact/dist/preact.module.js",
+          "kind": "import-statement",
+          "original": "preact"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@marijn+find-cluster-break@1.0.4/node_modules/@marijn/find-cluster-break/src/index.js": {
+      "bytes": 4270,
+      "imports": [],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@codemirror+state@6.7.6/node_modules/@codemirror/state/dist/index.js": {
+      "bytes": 147400,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/@marijn+find-cluster-break@1.0.4/node_modules/@marijn/find-cluster-break/src/index.js",
+          "kind": "import-statement",
+          "original": "@marijn/find-cluster-break"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/style-mod@4.1.4/node_modules/style-mod/src/style-mod.js": {
+      "bytes": 7042,
+      "imports": [],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/w3c-keyname@2.2.8/node_modules/w3c-keyname/index.js": {
+      "bytes": 2630,
+      "imports": [],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/crelt@1.0.7/node_modules/crelt/index.js": {
+      "bytes": 951,
+      "imports": [],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@codemirror+view@6.43.14/node_modules/@codemirror/view/dist/index.js": {
+      "bytes": 494341,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/@codemirror+state@6.7.6/node_modules/@codemirror/state/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/state"
+        },
+        {
+          "path": "node_modules/.pnpm/style-mod@4.1.4/node_modules/style-mod/src/style-mod.js",
+          "kind": "import-statement",
+          "original": "style-mod"
+        },
+        {
+          "path": "node_modules/.pnpm/w3c-keyname@2.2.8/node_modules/w3c-keyname/index.js",
+          "kind": "import-statement",
+          "original": "w3c-keyname"
+        },
+        {
+          "path": "node_modules/.pnpm/crelt@1.0.7/node_modules/crelt/index.js",
+          "kind": "import-statement",
+          "original": "crelt"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@codemirror+streamparser@6.0.0/node_modules/@codemirror/streamparser/dist/index.js": {
+      "bytes": 5120,
+      "imports": [],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@codemirror+language@6.13.1/node_modules/@codemirror/language/dist/index.js": {
+      "bytes": 97134,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/@lezer+common@1.5.3/node_modules/@lezer/common/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/common"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+state@6.7.6/node_modules/@codemirror/state/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/state"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+view@6.43.14/node_modules/@codemirror/view/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/view"
+        },
+        {
+          "path": "node_modules/.pnpm/@lezer+highlight@1.2.5/node_modules/@lezer/highlight/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/highlight"
+        },
+        {
+          "path": "node_modules/.pnpm/style-mod@4.1.4/node_modules/style-mod/src/style-mod.js",
+          "kind": "import-statement",
+          "original": "style-mod"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+streamparser@6.0.0/node_modules/@codemirror/streamparser/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/streamparser"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+streamparser@6.0.0/node_modules/@codemirror/streamparser/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/streamparser"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@codemirror+commands@6.11.1/node_modules/@codemirror/commands/dist/index.js": {
+      "bytes": 84624,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/@codemirror+state@6.7.6/node_modules/@codemirror/state/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/state"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+view@6.43.14/node_modules/@codemirror/view/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/view"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+language@6.13.1/node_modules/@codemirror/language/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/language"
+        },
+        {
+          "path": "node_modules/.pnpm/@lezer+common@1.5.3/node_modules/@lezer/common/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/common"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@codemirror+autocomplete@6.20.3/node_modules/@codemirror/autocomplete/dist/index.js": {
+      "bytes": 90042,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/@codemirror+state@6.7.6/node_modules/@codemirror/state/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/state"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+view@6.43.14/node_modules/@codemirror/view/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/view"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+language@6.13.1/node_modules/@codemirror/language/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/language"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@lezer+lr@1.4.11/node_modules/@lezer/lr/dist/index.js": {
+      "bytes": 73085,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/@lezer+common@1.5.3/node_modules/@lezer/common/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/common"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@lezer+html@1.3.13/node_modules/@lezer/html/dist/index.js": {
+      "bytes": 20875,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/@lezer+lr@1.4.11/node_modules/@lezer/lr/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/lr"
+        },
+        {
+          "path": "node_modules/.pnpm/@lezer+highlight@1.2.5/node_modules/@lezer/highlight/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/highlight"
+        },
+        {
+          "path": "node_modules/.pnpm/@lezer+common@1.5.3/node_modules/@lezer/common/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/common"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@lezer+css@1.3.9/node_modules/@lezer/css/dist/index.js": {
+      "bytes": 19834,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/@lezer+lr@1.4.11/node_modules/@lezer/lr/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/lr"
+        },
+        {
+          "path": "node_modules/.pnpm/@lezer+highlight@1.2.5/node_modules/@lezer/highlight/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/highlight"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@codemirror+lang-css@6.3.1/node_modules/@codemirror/lang-css/dist/index.js": {
+      "bytes": 15969,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/@lezer+css@1.3.9/node_modules/@lezer/css/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/css"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+language@6.13.1/node_modules/@codemirror/language/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/language"
+        },
+        {
+          "path": "node_modules/.pnpm/@lezer+common@1.5.3/node_modules/@lezer/common/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/common"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@lezer+javascript@1.5.6/node_modules/@lezer/javascript/dist/index.js": {
+      "bytes": 80799,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/@lezer+lr@1.4.11/node_modules/@lezer/lr/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/lr"
+        },
+        {
+          "path": "node_modules/.pnpm/@lezer+highlight@1.2.5/node_modules/@lezer/highlight/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/highlight"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@codemirror+lang-javascript@6.2.5/node_modules/@codemirror/lang-javascript/dist/index.js": {
+      "bytes": 20788,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/@lezer+javascript@1.5.6/node_modules/@lezer/javascript/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/javascript"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+language@6.13.1/node_modules/@codemirror/language/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/language"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+state@6.7.6/node_modules/@codemirror/state/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/state"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+view@6.43.14/node_modules/@codemirror/view/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/view"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+autocomplete@6.20.3/node_modules/@codemirror/autocomplete/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/autocomplete"
+        },
+        {
+          "path": "node_modules/.pnpm/@lezer+common@1.5.3/node_modules/@lezer/common/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/common"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@codemirror+lang-html@6.4.12/node_modules/@codemirror/lang-html/dist/index.js": {
+      "bytes": 26142,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/@lezer+html@1.3.13/node_modules/@lezer/html/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/html"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+lang-css@6.3.1/node_modules/@codemirror/lang-css/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/lang-css"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+lang-javascript@6.2.5/node_modules/@codemirror/lang-javascript/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/lang-javascript"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+view@6.43.14/node_modules/@codemirror/view/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/view"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+state@6.7.6/node_modules/@codemirror/state/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/state"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+language@6.13.1/node_modules/@codemirror/language/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/language"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/@codemirror+lang-markdown@6.5.2/node_modules/@codemirror/lang-markdown/dist/index.js": {
+      "bytes": 21741,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/@codemirror+state@6.7.6/node_modules/@codemirror/state/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/state"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+view@6.43.14/node_modules/@codemirror/view/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/view"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+language@6.13.1/node_modules/@codemirror/language/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/language"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+autocomplete@6.20.3/node_modules/@codemirror/autocomplete/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/autocomplete"
+        },
+        {
+          "path": "node_modules/.pnpm/@lezer+markdown@1.8.0/node_modules/@lezer/markdown/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/markdown"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+lang-html@6.4.12/node_modules/@codemirror/lang-html/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/lang-html"
+        },
+        {
+          "path": "node_modules/.pnpm/@lezer+common@1.5.3/node_modules/@lezer/common/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/common"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/editor.mjs": {
+      "bytes": 92104,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/preview.mjs",
+          "kind": "import-statement",
+          "original": "./preview.mjs"
+        },
+        {
+          "path": "node_modules/.pnpm/preact@10.29.8/node_modules/preact/dist/preact.module.js",
+          "kind": "import-statement",
+          "original": "preact"
+        },
+        {
+          "path": "node_modules/.pnpm/preact@10.29.8/node_modules/preact/hooks/dist/hooks.module.js",
+          "kind": "import-statement",
+          "original": "preact/hooks"
+        },
+        {
+          "path": "node_modules/.pnpm/preact@10.29.8/node_modules/preact/jsx-runtime/dist/jsxRuntime.module.js",
+          "kind": "import-statement",
+          "original": "preact/jsx-runtime"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+commands@6.11.1/node_modules/@codemirror/commands/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/commands"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+lang-markdown@6.5.2/node_modules/@codemirror/lang-markdown/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/lang-markdown"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+language@6.13.1/node_modules/@codemirror/language/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/language"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+state@6.7.6/node_modules/@codemirror/state/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/state"
+        },
+        {
+          "path": "node_modules/.pnpm/@codemirror+view@6.43.14/node_modules/@codemirror/view/dist/index.js",
+          "kind": "import-statement",
+          "original": "@codemirror/view"
+        },
+        {
+          "path": "node_modules/.pnpm/@lezer+highlight@1.2.5/node_modules/@lezer/highlight/dist/index.js",
+          "kind": "import-statement",
+          "original": "@lezer/highlight"
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/editor.css": {
+      "bytes": 4670,
+      "imports": []
+    },
+    "browser-checkpoint.ts": {
+      "bytes": 3838,
+      "imports": [
+        {
+          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/index.mjs",
           "kind": "import-statement",
           "original": "zudo-composer/hosted-content"
+        },
+        {
+          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/editor.mjs",
+          "kind": "import-statement",
+          "original": "zudo-composer/hosted-content/editor"
+        },
+        {
+          "path": "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/editor.css",
+          "kind": "import-statement",
+          "original": "zudo-composer/hosted-content/editor.css"
         }
       ],
       "format": "esm"
     }
   },
   "outputs": {
-    "stdin.js": {
+    "renderer/dist/browser-checkpoint.js": {
       "imports": [],
-      "exports": [
-        "default"
-      ],
-      "entryPoint": "hosted-worker-entry.js",
+      "exports": [],
+      "entryPoint": "browser-checkpoint.ts",
+      "cssBundle": "renderer/dist/browser-checkpoint.css",
       "inputs": {
         "node_modules/.pnpm/@lezer+common@1.5.3/node_modules/@lezer/common/dist/index.js": {
-          "bytesInOutput": 47134
+          "bytesInOutput": 65242
         },
         "node_modules/.pnpm/@lezer+highlight@1.2.5/node_modules/@lezer/highlight/dist/index.js": {
-          "bytesInOutput": 16352
+          "bytesInOutput": 19903
         },
         "node_modules/.pnpm/@lezer+markdown@1.8.0/node_modules/@lezer/markdown/dist/index.js": {
-          "bytesInOutput": 66136
+          "bytesInOutput": 70245
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/classic/external.js": {
           "bytesInOutput": 7565
@@ -1915,34 +2359,34 @@
           "bytesInOutput": 10314
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/util.js": {
-          "bytesInOutput": 25265
+          "bytesInOutput": 25399
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/core.js": {
-          "bytesInOutput": 3360
+          "bytesInOutput": 3377
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/errors.js": {
-          "bytesInOutput": 6414
+          "bytesInOutput": 6409
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/parse.js": {
-          "bytesInOutput": 6071
+          "bytesInOutput": 6000
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/regexes.js": {
           "bytesInOutput": 9217
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/checks.js": {
-          "bytesInOutput": 14730
+          "bytesInOutput": 14737
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/doc.js": {
-          "bytesInOutput": 1150
+          "bytesInOutput": 1159
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/versions.js": {
           "bytesInOutput": 54
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.js": {
-          "bytesInOutput": 79515
+          "bytesInOutput": 79818
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/memoizer.js": {
-          "bytesInOutput": 7549
+          "bytesInOutput": 7540
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/index.js": {
           "bytesInOutput": 1593
@@ -1954,19 +2398,19 @@
           "bytesInOutput": 4532
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/be.js": {
-          "bytesInOutput": 9259
+          "bytesInOutput": 9261
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/bg.js": {
           "bytesInOutput": 8263
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/bn.js": {
-          "bytesInOutput": 6797
+          "bytesInOutput": 6799
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/ca.js": {
           "bytesInOutput": 4340
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/ckb.js": {
-          "bytesInOutput": 7788
+          "bytesInOutput": 7792
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/cs.js": {
           "bytesInOutput": 4649
@@ -1981,7 +2425,7 @@
           "bytesInOutput": 8292
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/en.js": {
-          "bytesInOutput": 4523
+          "bytesInOutput": 4525
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/eo.js": {
           "bytesInOutput": 4206
@@ -2002,13 +2446,13 @@
           "bytesInOutput": 4184
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/gu.js": {
-          "bytesInOutput": 7140
+          "bytesInOutput": 7142
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/he.js": {
-          "bytesInOutput": 13538
+          "bytesInOutput": 13545
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/hi.js": {
-          "bytesInOutput": 7250
+          "bytesInOutput": 7252
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/hr.js": {
           "bytesInOutput": 4547
@@ -2017,7 +2461,7 @@
           "bytesInOutput": 4446
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/hy.js": {
-          "bytesInOutput": 8732
+          "bytesInOutput": 8734
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/id.js": {
           "bytesInOutput": 4128
@@ -2041,13 +2485,13 @@
           "bytesInOutput": 49
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/kn.js": {
-          "bytesInOutput": 7973
+          "bytesInOutput": 7975
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/ko.js": {
           "bytesInOutput": 5346
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/lt.js": {
-          "bytesInOutput": 7329
+          "bytesInOutput": 7338
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/mk.js": {
           "bytesInOutput": 7432
@@ -2056,7 +2500,7 @@
           "bytesInOutput": 4038
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/ne.js": {
-          "bytesInOutput": 6964
+          "bytesInOutput": 6966
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/nl.js": {
           "bytesInOutput": 4288
@@ -2077,16 +2521,16 @@
           "bytesInOutput": 4827
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/pt.js": {
-          "bytesInOutput": 6362
+          "bytesInOutput": 6364
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/pt-BR.js": {
-          "bytesInOutput": 6357
+          "bytesInOutput": 6359
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/ro.js": {
           "bytesInOutput": 4469
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/ru.js": {
-          "bytesInOutput": 9551
+          "bytesInOutput": 9553
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/sk.js": {
           "bytesInOutput": 4609
@@ -2101,7 +2545,7 @@
           "bytesInOutput": 8656
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/tg.js": {
-          "bytesInOutput": 7826
+          "bytesInOutput": 7828
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/locales/th.js": {
           "bytesInOutput": 8503
@@ -2137,34 +2581,34 @@
           "bytesInOutput": 4968
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/registries.js": {
-          "bytesInOutput": 1342
+          "bytesInOutput": 1348
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/compile.js": {
-          "bytesInOutput": 59155
+          "bytesInOutput": 59610
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/api.js": {
-          "bytesInOutput": 23791
+          "bytesInOutput": 23764
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/to-json-schema.js": {
-          "bytesInOutput": 17431
+          "bytesInOutput": 17514
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/json-schema-processors.js": {
-          "bytesInOutput": 25584
+          "bytesInOutput": 25646
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/json-schema-generator.js": {
-          "bytesInOutput": 2319
+          "bytesInOutput": 2318
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/json-schema.js": {
           "bytesInOutput": 30
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/classic/schemas.js": {
-          "bytesInOutput": 48570
+          "bytesInOutput": 48574
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/classic/checks.js": {
           "bytesInOutput": 891
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/classic/errors.js": {
-          "bytesInOutput": 1581
+          "bytesInOutput": 1566
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/classic/parse.js": {
           "bytesInOutput": 736
@@ -2176,16 +2620,16 @@
           "bytesInOutput": 581
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/classic/from-json-schema.js": {
-          "bytesInOutput": 25508
+          "bytesInOutput": 25559
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/visit.js": {
-          "bytesInOutput": 4808
+          "bytesInOutput": 4852
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/classic/deep-partial.js": {
-          "bytesInOutput": 322
+          "bytesInOutput": 327
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/classic/in-out.js": {
-          "bytesInOutput": 1246
+          "bytesInOutput": 1259
         },
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/classic/coerce.js": {
           "bytesInOutput": 540
@@ -2193,32 +2637,104 @@
         "node_modules/.pnpm/zod@4.6.7/node_modules/zod/index.js": {
           "bytesInOutput": 0
         },
-        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/chunks/service-C7HjhuDT.mjs": {
-          "bytesInOutput": 65423
+        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/chunks/service-C7HjhuDT.mjs": {
+          "bytesInOutput": 2562
         },
-        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/testing.mjs": {
-          "bytesInOutput": 36100
-        },
-        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs": {
-          "bytesInOutput": 4244
+        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/chunks/preview-D3orPTyN.mjs": {
+          "bytesInOutput": 6445
         },
         "node_modules/.pnpm/@zudo-composer+component-contract@https+++codeload.github.com+Takazudo+zudo-composer+ta_462f0a5c89a5169cfad7f76bbc7c3c96/node_modules/@zudo-composer/component-contract/dist/types.js": {
           "bytesInOutput": 411
         },
+        "node_modules/.pnpm/@zudo-composer+component-contract@https+++codeload.github.com+Takazudo+zudo-composer+ta_462f0a5c89a5169cfad7f76bbc7c3c96/node_modules/@zudo-composer/component-contract/dist/validation.js": {
+          "bytesInOutput": 31660
+        },
         "node_modules/.pnpm/@zudo-composer+component-contract@https+++codeload.github.com+Takazudo+zudo-composer+ta_462f0a5c89a5169cfad7f76bbc7c3c96/node_modules/@zudo-composer/component-contract/dist/index.js": {
           "bytesInOutput": 0
         },
-        "node_modules/.pnpm/@zudo-composer+component-contract@https+++codeload.github.com+Takazudo+zudo-composer+ta_462f0a5c89a5169cfad7f76bbc7c3c96/node_modules/@zudo-composer/component-contract/dist/validation.js": {
-          "bytesInOutput": 31899
+        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/index.mjs": {
+          "bytesInOutput": 3177
         },
-        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+0038091d5cfd322_639febeb6931680ad43866e93ece1cef/node_modules/zudo-composer/server/hosted-content/index.mjs": {
-          "bytesInOutput": 215672
+        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/preview.mjs": {
+          "bytesInOutput": 7674
         },
-        "hosted-worker-entry.js": {
-          "bytesInOutput": 6075
+        "node_modules/.pnpm/preact@10.29.8/node_modules/preact/dist/preact.module.js": {
+          "bytesInOutput": 16065
+        },
+        "node_modules/.pnpm/preact@10.29.8/node_modules/preact/hooks/dist/hooks.module.js": {
+          "bytesInOutput": 4145
+        },
+        "node_modules/.pnpm/preact@10.29.8/node_modules/preact/jsx-runtime/dist/jsxRuntime.module.js": {
+          "bytesInOutput": 511
+        },
+        "node_modules/.pnpm/@marijn+find-cluster-break@1.0.4/node_modules/@marijn/find-cluster-break/src/index.js": {
+          "bytesInOutput": 3594
+        },
+        "node_modules/.pnpm/@codemirror+state@6.7.6/node_modules/@codemirror/state/dist/index.js": {
+          "bytesInOutput": 114332
+        },
+        "node_modules/.pnpm/style-mod@4.1.4/node_modules/style-mod/src/style-mod.js": {
+          "bytesInOutput": 5304
+        },
+        "node_modules/.pnpm/w3c-keyname@2.2.8/node_modules/w3c-keyname/index.js": {
+          "bytesInOutput": 2231
+        },
+        "node_modules/.pnpm/@codemirror+view@6.43.14/node_modules/@codemirror/view/dist/index.js": {
+          "bytesInOutput": 307460
+        },
+        "node_modules/.pnpm/@codemirror+language@6.13.1/node_modules/@codemirror/language/dist/index.js": {
+          "bytesInOutput": 41036
+        },
+        "node_modules/.pnpm/@codemirror+commands@6.11.1/node_modules/@codemirror/commands/dist/index.js": {
+          "bytesInOutput": 47999
+        },
+        "node_modules/.pnpm/@codemirror+autocomplete@6.20.3/node_modules/@codemirror/autocomplete/dist/index.js": {
+          "bytesInOutput": 15987
+        },
+        "node_modules/.pnpm/@lezer+lr@1.4.11/node_modules/@lezer/lr/dist/index.js": {
+          "bytesInOutput": 56220
+        },
+        "node_modules/.pnpm/@lezer+html@1.3.13/node_modules/@lezer/html/dist/index.js": {
+          "bytesInOutput": 20426
+        },
+        "node_modules/.pnpm/@lezer+css@1.3.9/node_modules/@lezer/css/dist/index.js": {
+          "bytesInOutput": 19679
+        },
+        "node_modules/.pnpm/@codemirror+lang-css@6.3.1/node_modules/@codemirror/lang-css/dist/index.js": {
+          "bytesInOutput": 15882
+        },
+        "node_modules/.pnpm/@lezer+javascript@1.5.6/node_modules/@lezer/javascript/dist/index.js": {
+          "bytesInOutput": 80670
+        },
+        "node_modules/.pnpm/@codemirror+lang-javascript@6.2.5/node_modules/@codemirror/lang-javascript/dist/index.js": {
+          "bytesInOutput": 11734
+        },
+        "node_modules/.pnpm/@codemirror+lang-html@6.4.12/node_modules/@codemirror/lang-html/dist/index.js": {
+          "bytesInOutput": 23481
+        },
+        "node_modules/.pnpm/@codemirror+lang-markdown@6.5.2/node_modules/@codemirror/lang-markdown/dist/index.js": {
+          "bytesInOutput": 16895
+        },
+        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/editor.mjs": {
+          "bytesInOutput": 86293
+        },
+        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/editor.css": {
+          "bytesInOutput": 0
+        },
+        "browser-checkpoint.ts": {
+          "bytesInOutput": 2987
         }
       },
-      "bytes": 1250237
+      "bytes": 1864060
+    },
+    "renderer/dist/browser-checkpoint.css": {
+      "imports": [],
+      "inputs": {
+        "node_modules/.pnpm/zudo-composer@https+++codeload.github.com+Takazudo+zudo-composer+tar.gz+6884f0af2017896_605229738894d464dc797189648a8562/node_modules/zudo-composer/server/hosted-content/editor.css": {
+          "bytesInOutput": 4731
+        }
+      },
+      "bytes": 4937
     }
   }
 }

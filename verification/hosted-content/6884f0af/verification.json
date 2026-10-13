@@ -1,5 +1,5 @@
 {
-  "installedToolSha": "0038091d5cfd3225289fc2f5be311ddff556b889",
+  "installedToolSha": "6884f0af20178967c957a57eb4a8a48f3c5c6fbc",
   "node": "v24.21.0",
   "packageManager": "pnpm@11.5.2",
   "contractSha": "c0b452da075b66757c60bd0d721a47062d4354d0",
@@ -10,7 +10,7 @@
       "command": "/opt/hostedtoolcache/node/24.21.0/x64/bin/node",
       "args": [
         "/home/runner/work/zudo-composer/zudo-composer/scripts/install-hosted-consumer.mjs",
-        "0038091d5cfd3225289fc2f5be311ddff556b889",
+        "6884f0af20178967c957a57eb4a8a48f3c5c6fbc",
         "/home/runner/work/zudo-composer/zudo-composer/.artifacts/hosted-consumer"
       ],
       "cwd": "/home/runner/work/zudo-composer/zudo-composer",
@@ -269,12 +269,12 @@
       "outcome": "passed"
     }
   ],
-  "payloadSha256": "b320da08f684334727d1cfe0e37044334cf244170d3e12dc4b6f2b5b9ecdbed8",
+  "payloadSha256": "428d9acd199e4741bd87e56fb4c45d2ece865faf09bc9ca7fc49a7b4bc082581",
   "lockDigests": {
-    "package.json": "533cda18ec544cbbba48f8b8671bf6d5800f75c5961be6bdcafbb59f5aa2be33",
-    "pnpm-lock.yaml": "e7af87f497572662db1d6ea6768e5401e5ed2623cebed23cace3243aafddfd90",
-    "renderer/package.json": "0dba1184460d3d14360b8985b6ffeb1066e1a4392531a47b18064724cb0037a7",
-    "renderer/pnpm-lock.yaml": "734003253fe04f471294867953fdbe098c07ae6c849e749d54698c6ea8f9c1ff"
+    "package.json": "cabcae60ef69c1dc6925f0c8d9e5b05bbf687860e5c6f2a259cda1e59bd1239f",
+    "pnpm-lock.yaml": "2d01478541a229431f92c25111fb4f81c459e0421d2a66306e02d891cf849391",
+    "renderer/package.json": "c40237b3782af241dc33d9a98a97a311f68062147c6e47afc628b3603428b455",
+    "renderer/pnpm-lock.yaml": "b4d459dfa721ea96a9a405ccef57a8712486bd93255b2061c383d65efe346180"
   },
   "independentInstall": "passed",
   "frozenReinstall": "passed",
