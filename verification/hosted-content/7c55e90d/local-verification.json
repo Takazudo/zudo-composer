@@ -1,0 +1,17 @@
+{
+  "installedToolSha": "7c55e90da4ce0a1e513b84d418110436234c877d",
+  "node": "v24.19.0",
+  "packageManager": "pnpm@11.5.2",
+  "contractSha": "c0b452da075b66757c60bd0d721a47062d4354d0",
+  "exactGitInstall": "passed",
+  "frozenReinstall": "passed: identical complete installed payload inventory",
+  "workerNodeTypesBrowserGraphDurabilityHttpStaticPublication": "passed after fresh and frozen installation",
+  "originalHostedInstalledCommand": "stopped at playwright install --with-deps chromium: su authentication unavailable. No --no-browser argument was used.",
+  "resumedBrowserAssertions": "passed: unchanged browser-proof.mjs and browser-broad-proof.mjs against the same exact-B frozen install, with executable-only override via system-chromium-override.cjs",
+  "browser": "preinstalled /usr/bin/chromium 154.0.8037.57; supplemental local evidence. Repository-pinned Chromium 151 acceptance is separately passed in ci-consumer.json",
+  "browserGuard": "verdict=PASS exit=0 secs=49 min_mem_mb=16204 reason=-",
+  "fullUnitSuite": "402 files, 4956 tests passed under umask 022",
+  "aggregate": "attempted, NOT PASSED locally: final packed-host Blog route assertion saw Chromium 154 automatic /favicon.ico 404. All preceding stages passed. Six pinned-Chromium packed-host CI matrix jobs passed; canonical CI supplies that command coverage.",
+  "aggregateGuard": "verdict=FAIL exit=1 secs=943 min_mem_mb=14030 reason=-",
+  "earlierModeFailures": "umask 077 produced three UI pack mode/parity failures and noncanonical CMS tokens. Normalized Git/build modes and umask 022 restored the existing CMS fixtures. Four mode-parity tests passed; the subsequent full suite passed. No assertion, timeout or worker setting was changed."
+}

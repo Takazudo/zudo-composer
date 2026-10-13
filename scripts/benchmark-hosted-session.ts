@@ -9,6 +9,7 @@ const { HostedContentSession } = await import(pathToFileURL(resolve(source)).hre
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]!;
 const results = [];
+let observed = 0;
 for (const entries of [10, 100, 1000]) {
   const stamp = "2026-01-01T00:00:00.000Z";
   const content: HostedState = { draftRevision: "r0", baseline: { gitSha: "g0", contentDigest: "c0" }, definition: "d0", integrationFence: 0,
@@ -21,14 +22,14 @@ for (const entries of [10, 100, 1000]) {
     let coldTime = 0;
     for (let i = 0; i < 30; i++) {
       const session = new HostedContentSession({ transport, createOperationKey: () => "cold", recovery: checkpoint });
-      const start = performance.now(); void session.state; coldTime += performance.now() - start;
+      const start = performance.now(); observed += session.state.content!.providers[0]!.entries.length; coldTime += performance.now() - start;
     }
     cold.push(coldTime / 30);
     let written = () => {};
     const session = new HostedContentSession({ transport, createOperationKey: () => "snapshot", preview: { render: async () => undefined }, persistRecovery: () => { written(); } });
     await session.initialize(); await session.captureAndPreview("home");
-    for (let i = 0; i < 20; i++) void session.state;
-    const start = performance.now(); for (let i = 0; i < 200; i++) void session.state;
+    for (let i = 0; i < 20; i++) observed += session.state.content!.providers[0]!.entries.length;
+    const start = performance.now(); for (let i = 0; i < 200; i++) observed += session.state.content!.providers[0]!.entries.length;
     warm.push((performance.now() - start) / 200);
     const editStart = performance.now();
     for (let i = 0; i < 40; i++) {
@@ -41,4 +42,4 @@ for (const entries of [10, 100, 1000]) {
   }
   results.push({ entries, contentBytes: Buffer.byteLength(JSON.stringify(content)), coldMs: median(cold), warmWithReviewedSnapshotMs: median(warm), editWithCheckpointMs: median(editing), samples: { cold, warm, editing } });
 }
-console.log(JSON.stringify({ node: process.version, platform: process.platform, arch: process.arch, source, method: "5 samples, median milliseconds per operation; cold: 30 first getters after detached recovery construction (construction excluded); warm: 200 unchanged getters with full reviewed snapshot after 20 warmups; editing: 40 distinct edits, including emit/projection and awaited no-op checkpoint writer; checkpoint copying remains included. No transport save or durable I/O timing.", results }, null, 2));
+console.log(JSON.stringify({ node: process.version, platform: process.platform, arch: process.arch, source, observed, method: "5 samples, median milliseconds per operation; cold: 30 first getters after detached recovery construction (construction excluded); warm: 200 unchanged getters with full reviewed snapshot after 20 warmups; editing: 40 distinct edits, including emit/projection and awaited no-op checkpoint writer; checkpoint copying remains included. No transport save or durable I/O timing.", results }, null, 2));
