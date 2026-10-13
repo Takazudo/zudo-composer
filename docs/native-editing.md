@@ -118,7 +118,10 @@ old epochs are refused, including delayed autosaves and read-repair paths.
 Reconnecting cannot authorize stale in-memory records. Module refresh preserves
 the tab's original client and revision owner; a changed
 server capability requires reopening canonical records, even if its epoch reset
-to zero. Dirty tabs retain recovery input rather than adopting that new session.
+to zero. Tabs automatically reopen after a commit only while input stayed locked
+through preparation and no pending or inline edits remain. A disconnected tab
+retains its input and shows recovery guidance instead of automatically reloading,
+even when the storage registry reports no pending writes.
 
 If an interrupted tab retains unsaved structural input after another revision
 commits, keep that tab and preserve/copy its pending values before reopening

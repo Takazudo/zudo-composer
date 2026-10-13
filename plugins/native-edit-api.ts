@@ -61,7 +61,7 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
     const parsed = unbindSchema.safeParse(data);
     if (!parsed.success || parsed.data.capability !== capability || !trusted.has(client.socket)) return;
     const peer = peers.get(parsed.data.clientId);
-    if (peer?.client !== client) return;
+    if (!peer || peer.client !== client) return;
     client.socket.off("close", peer.close); peer.close();
   });
   server.ws.on("native:answer", (data, client) => {

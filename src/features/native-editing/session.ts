@@ -10,13 +10,14 @@ export const nativeEditingAvailable = coordinated && ["/", "/composer", "/conten
 const ownership = coordinated ? nativeBrowserOwner(globalThis as typeof globalThis & { [key: symbol]: NativeBrowserOwner | undefined }, config!.capability, () => "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (value) =>
   (Number(value) ^ (crypto.getRandomValues(new Uint8Array(1))[0]! & (15 >> (Number(value) / 4)))).toString(16))) : null;
 const clientId = ownership?.owner.clientId ?? "";
-let epoch = ownership?.owner.epoch ?? -1, connected = false, frozen = false, enrolled = false;
+let epoch = ownership?.owner.epoch ?? -1, connected = false, frozen = false, inputLocked = false, enrolled = false;
 let isPending = () => true;
 let flushPending = async () => false;
 const waiting = new Set<(ready: boolean) => void>();
 const frameInput = coordinated ? createFrameInputGuard(() => document.getElementById("app"), window, config!.pack) : null;
 const settle = (ready: boolean) => { for (const finish of waiting) finish(ready); waiting.clear(); };
 const freeze = (value: boolean, blockRequests = value) => {
+  inputLocked = value;
   frozen = blockRequests;
   const route = document.getElementById("app");
   if (route) route.inert = value;
@@ -27,8 +28,7 @@ const bind = () => {
   if (!enrolled) return;
   if (ownership?.changedServer) {
     connected = false; settle(false);
-    if (!isPending()) window.location.reload();
-    else window.dispatchEvent(new CustomEvent("native-authoring-stale"));
+    window.dispatchEvent(new CustomEvent("native-authoring-stale"));
     return;
   }
   hot?.send("native:bind", { clientId, capability: config!.capability, epoch: epoch < 0 ? null : epoch });
@@ -44,8 +44,7 @@ if (coordinated) {
     settle(false);
     if (message.reason === "stale-browser") {
       connected = false; freeze(false);
-      if (!isPending()) window.location.reload();
-      else window.dispatchEvent(new CustomEvent("native-authoring-stale"));
+      window.dispatchEvent(new CustomEvent("native-authoring-stale"));
     } else setTimeout(bind, 1000);
   });
   hot!.on("native:challenge", async (message: { challenge: string; epoch: number; phase: "prepare" | "freeze" }) => {
@@ -70,7 +69,9 @@ if (coordinated) {
       // The server invalidates old write epochs. Reopen actual records, never
       // stamp a stale structural draft with a fresh epoch. Pending native input
       // and server plan references are retained separately in sessionStorage.
-      if (!isPending()) window.location.reload();
+      // Only a continuously locked tab can prove no new DOM/debounced input
+      // appeared after preparation. Disconnects unlock input and lose that proof.
+      if (inputLocked && !isPending() && !frameInput?.busy()) window.location.reload();
       else { freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-stale")); }
     } else freeze(false);
   });
