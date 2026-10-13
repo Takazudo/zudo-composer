@@ -346,6 +346,7 @@ declare class HostedContentSession {
     private options;
     private acknowledged;
     private edits;
+    private projection;
     private invalidInputs;
     private presentationRevision;
     private revision;
@@ -366,6 +367,7 @@ declare class HostedContentSession {
     private checkpointWrites;
     constructor(options: HostedSessionOptions);
     get state(): HostedEditorSessionState;
+    private projectContent;
     private hasCurrentPreview;
     /** Error objects are kept separately from JSON checkpoint data. */
     get currentError(): unknown;

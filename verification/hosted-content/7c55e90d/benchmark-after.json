@@ -1,0 +1,100 @@
+{
+  "node": "v24.19.0",
+  "platform": "linux",
+  "arch": "x64",
+  "source": "src/hosted-content/session.ts",
+  "observed": 1387500,
+  "method": "5 samples, median milliseconds per operation; cold: 30 first getters after detached recovery construction (construction excluded); warm: 200 unchanged getters with full reviewed snapshot after 20 warmups; editing: 40 distinct edits, including emit/projection and awaited no-op checkpoint writer; checkpoint copying remains included. No transport save or durable I/O timing.",
+  "results": [
+    {
+      "entries": 10,
+      "contentBytes": 12905,
+      "coldMs": 0.039078233333332456,
+      "warmWithReviewedSnapshotMs": 0.00041344999999999745,
+      "editWithCheckpointMs": 0.08563402499999988,
+      "samples": {
+        "cold": [
+          0.07784050000000159,
+          0.05615596666666581,
+          0.03803360000000282,
+          0.039078233333332456,
+          0.03609226666666719
+        ],
+        "warm": [
+          0.000697100000000006,
+          0.00041344999999999745,
+          0.000538295000000062,
+          0.00018098000000009052,
+          0.00018034000000000106
+        ],
+        "editing": [
+          0.10403434999999987,
+          0.11194537499999982,
+          0.08563402499999988,
+          0.08560562499999946,
+          0.0734447750000001
+        ]
+      }
+    },
+    {
+      "entries": 100,
+      "contentBytes": 125045,
+      "coldMs": 0.2480398333333312,
+      "warmWithReviewedSnapshotMs": 0.00013838499999991428,
+      "editWithCheckpointMs": 0.49957369999999984,
+      "samples": {
+        "cold": [
+          0.27011766666666875,
+          0.2875302333333309,
+          0.2391693999999963,
+          0.2480398333333312,
+          0.24640786666666942
+        ],
+        "warm": [
+          0.00017481000000003634,
+          0.0001365749999999366,
+          0.00013838499999991428,
+          0.00013685000000009494,
+          0.00015822999999983266
+        ],
+        "editing": [
+          0.6174150250000003,
+          0.49957369999999984,
+          0.48569712500000006,
+          0.47706117500000006,
+          0.5736547999999999
+        ]
+      }
+    },
+    {
+      "entries": 1000,
+      "contentBytes": 1247345,
+      "coldMs": 3.2772690333333383,
+      "warmWithReviewedSnapshotMs": 0.0001799199999999246,
+      "editWithCheckpointMs": 5.977563950000001,
+      "samples": {
+        "cold": [
+          4.0372376999999915,
+          3.2923395999999987,
+          3.2772690333333383,
+          3.263887433333351,
+          3.0886639333332977
+        ],
+        "warm": [
+          0.0001799199999999246,
+          0.00016297000000008665,
+          0.00014932499999986248,
+          0.0005975100000000566,
+          0.0002569549999998344
+        ],
+        "editing": [
+          6.013572325000001,
+          6.157860499999998,
+          5.977563950000001,
+          5.940662049999998,
+          5.801363500000003
+        ]
+      }
+    }
+  ]
+}

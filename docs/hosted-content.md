@@ -219,6 +219,14 @@ preview and navigation until corrected. That transient invalid text is not a
 typed Content value or a durable recovery checkpoint; valid edits, staged new
 Entries and immutable pending operations are checkpointed.
 
+Session state reads return a fresh metadata envelope and reuse one detached,
+deeply frozen content projection until acknowledged content or local field edits
+change. Pending operations and reviewed snapshots are immutable and reused;
+preview eligibility is checked against the adapter's live state on every read.
+Previous projections remain unchanged. Public command results and recovery
+checkpoints are detached from session-owned data. A real edit still projects the
+content and copies a full recovery checkpoint; persistence is not batched.
+
 ## Transaction adapter and recovery
 
 `HostedStorage` is four keyed reads plus one conditional write; no transaction stays

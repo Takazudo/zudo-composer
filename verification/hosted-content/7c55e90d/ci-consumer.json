@@ -1,0 +1,16 @@
+{
+  "packageOutputSha": "7c55e90da4ce0a1e513b84d418110436234c877d",
+  "verifiedCiInstalledSha": "2c278d309ab85ec228f154ab4b207007eb331be7",
+  "testedPrHead": "b7ac04a6aeead52105f4d552115618ba4cfd22e1",
+  "completePayloadFiles": 667,
+  "completePayloadSha256": "b0836326848f0801d94d27a11d1db92082c6621f4ca644c787ad259b100d3df0",
+  "runUrl": "https://github.com/Takazudo/zudo-composer/actions/runs/38336125234",
+  "jobUrl": "https://github.com/Takazudo/zudo-composer/actions/runs/38336125234/job/115096507032",
+  "artifactUrl": "https://github.com/Takazudo/zudo-composer/actions/runs/38336125234/artifacts/11785166976",
+  "artifactName": "hosted-consumer-evidence-2c278d309ab85ec228f154ab4b207007eb331be7",
+  "artifactDigest": "sha256:a26224750bf4f8db2cd0d47d330cf09f5bb058de8db249800e53d9a7ad094112",
+  "node": "v24.21.0",
+  "packageManager": "pnpm@11.5.2",
+  "result": "passed: complete B payload equivalence, exact CI Git install, frozen reinstall, Worker, browser graph/types/CSS, Node, durability, HTTP transport, shared static renderer, publication cycles, pinned Playwright Chromium thin and broad browser acceptance",
+  "download": "Connector produced the artifact reference; cloud retrieval of its signed URL returned HTTP 403. Selected proof lines are retained in ci-consumer-proof.log. The full original artifact remains linked above (GitHub retention expiry 2026-10-20). This file does not claim the artifact ZIP was locally inspected."
+}

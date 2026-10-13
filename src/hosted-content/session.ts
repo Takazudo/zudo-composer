@@ -52,6 +52,7 @@ function rejectionCode(error: unknown): HostedErrorCode | null {
 export class HostedContentSession {
   private acknowledged: HostedState | null = null;
   private edits: HostedLocalEdit[] = [];
+  private projection: { acknowledged: HostedState | null; edits: HostedLocalEdit[]; content: HostedState | null } | null = null;
   private invalidInputs = new Set<string>();
   private presentationRevision = 0;
   private revision = 0;
@@ -84,13 +85,19 @@ export class HostedContentSession {
     this.unsubscribePreview = options.preview?.subscribe?.(() => this.emit());
   }
   get state(): HostedEditorSessionState {
+    const content = this.projectContent();
+    return { phase: this.phase, invalidInputs: Object.freeze([...this.invalidInputs]), presentationRevision: this.presentationRevision, content, localRevision: this.revision, dirty: this.edits.length > 0 || !!this.creationDraft || this.invalidInputs.size > 0, pending: this.pending, reviewedSnapshot: this.hasCurrentPreview() ? this.reviewed : null, publication: this.publication ? immutable(this.publication) : null, publicationStale: this.publicationStale, creationDraft: this.creationDraft ? immutable(this.creationDraft) : null, lastCreatedEntry: this.lastCreatedEntry ? immutable(this.lastCreatedEntry) : null, publicationError: this.publicationError, error: this.error };
+  }
+  private projectContent(): HostedState | null {
+    if (this.projection?.acknowledged === this.acknowledged && this.projection.edits === this.edits) return this.projection.content;
     const content = this.acknowledged ? copy(this.acknowledged) : null;
     if (content) for (const edit of this.edits) {
       const entry = content.providers.find((p) => p.providerId === edit.entry.providerId)?.entries.find((e) => e.id === edit.entry.recordId && e.modelId === edit.entry.modelId);
       if (!entry) continue;
       if (edit.value === undefined) delete entry.values[edit.fieldId]; else entry.values[edit.fieldId] = copy(edit.value);
     }
-    return { ...immutable({ phase: this.phase, invalidInputs: [...this.invalidInputs], presentationRevision: this.presentationRevision, content, localRevision: this.revision, dirty: this.edits.length > 0 || !!this.creationDraft || this.invalidInputs.size > 0, pending: this.pending, reviewedSnapshot: this.hasCurrentPreview() ? this.reviewed : null, publication: this.publication, publicationStale: this.publicationStale, creationDraft: this.creationDraft, lastCreatedEntry: this.lastCreatedEntry }), publicationError: this.publicationError, error: this.error };
+    this.projection = { acknowledged: this.acknowledged, edits: this.edits, content: freeze(content) };
+    return this.projection.content;
   }
   private hasCurrentPreview(): boolean {
     if (!this.reviewed) return false;
@@ -197,7 +204,7 @@ export class HostedContentSession {
         }
       }
       this.phase = this.edits.length || this.creationDraft || this.invalidInputs.size ? "dirty" : "saved";
-      await this.persist(); this.emit(); return result;
+      await this.persist(); this.emit(); return copy(result);
     } catch (error) {
       // A checkpoint failure after acknowledgement also retains the exact operation.
       if (!this.pending) this.pending = active;

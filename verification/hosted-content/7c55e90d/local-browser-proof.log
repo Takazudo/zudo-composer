@@ -1,0 +1,22 @@
+info no SDK Island boundary targets found; skipping islands bundle (no islands asset will be emitted)
+✓ 2 pages built in 3.15s
+Real ZFB static HTML and registered zudo-sg story share exact component, image and FAQ order.
+Real host Markdown renders headings/bold/safe links and rejects executable HTML/URLs and unapproved images.
+JavaScript-disabled ZFB visitor, real registered SG story and acknowledged zudo-react iframe match exactly.
+{"checkpoint":"P4-durable-existing-field","revision":"2ff87cfe-600f-498c-a8af-0b9b7c7e5f29","snapshotId":"30ec68b5-5fb6-4cea-80bd-47dee2f5d632","digest":"bfe1b76df2d004834a2ff69f9e7621839c1c9286136e749a6254b76550c0f06c","independentBrowserContexts":2,"sqliteBackendRestarted":true}
+info no SDK Island boundary targets found; skipping islands bundle (no islands asset will be emitted)
+✓ 2 pages built in 2.98s
+Real ZFB static HTML and registered zudo-sg story share exact component, image and FAQ order.
+Real host Markdown renders headings/bold/safe links and rejects executable HTML/URLs and unapproved images.
+info no SDK Island boundary targets found; skipping islands bundle (no islands asset will be emitted)
+✓ 2 pages built in 2.75s
+Real ZFB static HTML and registered zudo-sg story share exact component, image and FAQ order.
+Real host Markdown renders headings/bold/safe links and rejects executable HTML/URLs and unapproved images.
+JavaScript-disabled ZFB visitor, real registered SG story and acknowledged zudo-react iframe match exactly.
+info no SDK Island boundary targets found; skipping islands bundle (no islands asset will be emitted)
+✓ 2 pages built in 2.82s
+Real ZFB static HTML and registered zudo-sg story share exact component, image and FAQ order.
+Real host Markdown renders headings/bold/safe links and rejects executable HTML/URLs and unapproved images.
+JavaScript-disabled ZFB visitor, real registered SG story and acknowledged zudo-react iframe match exactly.
+{"proof":"actual-broad-editor-browser","browserExecution":"PASS","create":"10fed921-f144-4eab-854c-a1a87bfe7166","addExisting":"faq-detached","snapshotA":"5055dccf-d9ba-49ba-b4a9-9daefcaee72e","digestA":"4ac62a60bcec6a3e1d42af1e69a7f6f7638d3dc746b3a7b480bc4ec95dd14b0f","snapshotB":"9518099e-c524-408d-a852-36ecd8fd99e6","digestB":"c5f2cddf1885f8e8ddba9619e067b7cd517ed5bf37740c2602f384c0341e5ef8","independentBrowserContexts":2,"checks":["real Markdown source/numeric/asset controls","real create/add/reorder","exact saved preview and Submit","durable B during A with backend restart","two baseline integrations","UI snapshots A/B no-JS ZFB/SG/iframe parity"]}
+heavy-guard: verdict=PASS exit=0 secs=50 min_mem_mb=16235 reason=-

@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "041b71456f76618e3f8a3f1fa505d5e4e1fc2bab",
-  "payloadSha256": "9c06d7d82305dc200f718a490b0facdafa97e1b5569a01813b6bab3703343f5d",
-  "rawPackageJsonSha256": "a47cdec52f84e7be09a22daddf2dfba7e909ed277862b8b6bfee53cc17488d7c",
+  "packageOutputSha": "7c55e90da4ce0a1e513b84d418110436234c877d",
+  "payloadSha256": "b0836326848f0801d94d27a11d1db92082c6621f4ca644c787ad259b100d3df0",
+  "rawPackageJsonSha256": "700ff9b517823b653d053fd7c1354d303aebb0ecc7d8ca49d9495fb94336441a",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -30,9 +30,9 @@
     },
     {
       "path": "docs/hosted-content.md",
-      "bytes": 33979,
+      "bytes": 34524,
       "mode": 420,
-      "sha256": "d4ad8a688fb4d669cb018d5547fbb85faf293df8eab71591709f6f8ce6d0e8dc"
+      "sha256": "9014034b073246002bcf6012319668fa6cb235d5b01d61bf246b5ac1a8b15392"
     },
     {
       "path": "index.html",
@@ -702,15 +702,15 @@
     },
     {
       "path": "server/hosted-content/editor.d.mts",
-      "bytes": 23815,
+      "bytes": 23867,
       "mode": 420,
-      "sha256": "104e1e28d876e5dda6f378d4f4e7aea5ab961cedf76e15bba6f3fa6109cf32fb"
+      "sha256": "5d7b6e7cbe66e15c0c6713dc9333c49fbe398a9c06b8f0e71f419c0c8e5ae9b2"
     },
     {
       "path": "server/hosted-content/editor.mjs",
-      "bytes": 91639,
+      "bytes": 92104,
       "mode": 420,
-      "sha256": "82b8f5cf8a4d58b32cc318bceff9610068b72e8fb09313a39399efd416381d8d"
+      "sha256": "e37209c2de67aee19778bbc8ec2a018d48e076b15df683dbbd352deec4870978"
     },
     {
       "path": "server/hosted-content/index.d.mts",
@@ -3252,9 +3252,9 @@
     },
     {
       "path": "src/hosted-content/session.ts",
-      "bytes": 22632,
+      "bytes": 23251,
       "mode": 420,
-      "sha256": "0b195c477dade3d6342f6a32c9252b6129072710e083e830119de5e63198eb74"
+      "sha256": "6b279aab2acf7aa7a4765e89b5f7d2bd4d9effe0bde309ff17f9a6fdea239b25"
     },
     {
       "path": "src/hosted-content/testing.ts",
