@@ -1,12 +1,12 @@
 {
   "proof": "actual-broad-editor-browser",
   "browserExecution": "PASS",
-  "create": "4a7cf705-c274-4b1c-8bbc-b036f84a8c05",
+  "create": "10fed921-f144-4eab-854c-a1a87bfe7166",
   "addExisting": "faq-detached",
-  "snapshotA": "e2297b62-05ba-418e-aaac-132749468805",
-  "digestA": "df8e8e23db3dab883b0a38efe333f62751dc3faac8f38d585f06bbea8fbf3fa3",
-  "snapshotB": "5174059a-1368-42ff-9641-8f16f5159e7f",
-  "digestB": "3eb6f6cc3759648d064b36cf6991a339ef5400c18341ecaa00fa2efe362ede40",
+  "snapshotA": "5055dccf-d9ba-49ba-b4a9-9daefcaee72e",
+  "digestA": "4ac62a60bcec6a3e1d42af1e69a7f6f7638d3dc746b3a7b480bc4ec95dd14b0f",
+  "snapshotB": "9518099e-c524-408d-a852-36ecd8fd99e6",
+  "digestB": "c5f2cddf1885f8e8ddba9619e067b7cd517ed5bf37740c2602f384c0341e5ef8",
   "independentBrowserContexts": 2,
   "checks": [
     "real Markdown source/numeric/asset controls",
