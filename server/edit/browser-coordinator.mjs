@@ -1,4 +1,5 @@
 // @ts-check
+import { clearTimeout, setTimeout } from "node:timers";
 import { randomUUID } from "node:crypto";
 
 /** @param {string} code @param {string} message */
@@ -19,7 +20,8 @@ export function createBrowserCoordinator({ challengeMs = 10_000 } = {}) {
     get epoch() { return epoch; },
     /** @param {string} id @param {Peer} peer @param {number | null} [previousEpoch] */
     bind(id, peer, previousEpoch = null) {
-      if (closing || exclusive || preparing || (previousEpoch !== null && previousEpoch !== epoch) || clients.size >= 16 || clients.has(id)) throw refusal("authoring-busy", "Authoring coordination is busy. Reconnect after it settles.");
+      if (previousEpoch !== null && previousEpoch !== epoch) throw refusal("stale-browser", "Reconnect cannot authorize an old draft revision.");
+      if (closing || exclusive || preparing || clients.size >= 16 || clients.has(id)) throw refusal("authoring-busy", "Authoring coordination is busy. Reconnect after it settles.");
       clients.set(id, { peer, epoch });
       return epoch;
     },
@@ -77,15 +79,8 @@ export function createBrowserCoordinator({ challengeMs = 10_000 } = {}) {
         // Invalidates delayed requests even when an operation failed or lost its ack.
         if (mutates && attempted) epoch++;
         exclusive = false; preparing = false;
-        for (const [, { peer }] of clients) peer.resume({ epoch });
+        for (const [, { peer }] of clients) { try { peer.resume({ epoch }); } catch { /* A lost response cannot change the durable operation result. */ } }
       }
-    },
-    /** @param {string} id @param {unknown} peer @param {number} revision */
-    reconcile(id, peer, revision) {
-      const client = clients.get(id);
-      if (closing || exclusive || !client || client.peer !== peer || revision !== epoch) return false;
-      client.epoch = epoch;
-      return true;
     },
     close() { closing = true; invalidate(); },
     async drain() { await Promise.allSettled([...work]); },

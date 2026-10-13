@@ -1,3 +1,4 @@
+import { authoringFetch } from "../../../features/native-editing/session";
 // The browser half of the filesystem Sitemapper provider.
 //
 // It is the same `SitemapCollectionStore` the dev server runs, reached over
@@ -120,7 +121,7 @@ export class FileProviderSitemapStore implements SitemapFileProviderStore {
     this.client = new DomainFileProviderClient(
       options.config,
       sitemapFileProviderErrorAdapter,
-      options.fetchImpl ?? globalThis.fetch.bind(globalThis),
+      options.fetchImpl ?? authoringFetch,
       options.workspace,
     );
   }

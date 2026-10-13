@@ -46,6 +46,7 @@ import type {
 } from "./protocol";
 import {
   modeMessage,
+  sameNativeReview,
   readPreviewToParent,
   renderMessage,
   restoreFocusMessage,
@@ -127,6 +128,8 @@ export interface ComposerPreviewBridgeOptions {
   expectedOrigin?: string;
 
   onReady?: () => void;
+  onNativeSelect?: (message: import("./protocol").NativeSelectMessage) => void;
+  onRendered?: (message: import("./protocol").RenderedMessage) => void;
   onSelect?: (nodeId: string | null, revision: number) => void;
   onRequestAdd?: (target: InsertionTarget, revision: number, rect?: SerializedRect) => void;
   /** Linked-source navigation request; source nodes never route through local selection. */
@@ -251,6 +254,12 @@ export function createComposerPreviewBridge(
         ready = true;
         options.onReady?.();
         replay();
+        return;
+      case "rendered":
+        if (message.revision === retained?.revision && retained.snapshot?.nativeReview && sameNativeReview(message.nativeReview, retained.snapshot.nativeReview)) options.onRendered?.(message);
+        return;
+      case "native-select":
+        if (message.revision === retained?.revision) options.onNativeSelect?.(message);
         return;
       case "select":
         options.onSelect?.(message.nodeId, message.revision);

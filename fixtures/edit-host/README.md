@@ -17,3 +17,8 @@ The proof also imports the installed `zudo-composer/editing` public service.
 Playwright Chromium is used by default. Environments with a provisioned system
 Chromium may set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its absolute executable
 path; the same browser assertions still run.
+
+The packed proof also opens `/composer?native=1&sitemap=main&page=home` and
+uses the installed page-first UI for the three exact insertions. The `other`
+page deliberately reuses paragraph/list/table node ids, proving that page
+navigation cannot retarget a retained home plan. The original CLI proof remains.

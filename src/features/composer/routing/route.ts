@@ -16,6 +16,7 @@ export function parseComposerRoute(location: ComposerRouteLocation, config: Comp
   if (outcome.status === "invalid") return error("invalid-route", outcome.message);
   if (outcome.status === "none" || (outcome.intent.route === "composer" && "action" in outcome.intent)) return { status: "matched", route: { kind: "index" } };
   if (outcome.intent.route !== "composer") return error("invalid-route", "This is not a Composition target.");
+  if ("mode" in outcome.intent) return error("invalid-route", "Page-first editing uses its own authoring host.");
   if (!config.isKnownProvider(outcome.intent.providerId)) return error("unknown-provider", `The composition provider "${outcome.intent.providerId}" is not available.`);
   return { status: "matched", route: { kind: "detail", providerId: outcome.intent.providerId as CompositionProviderId, recordId: outcome.intent.compositionId } };
 }

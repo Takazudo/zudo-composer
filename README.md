@@ -493,7 +493,11 @@ the package and runs its bin.
 The installed `zudo-composer edit` CLI supports reviewed, exact native image,
 text and table insertions on explicitly configured workspace-authored hosts.
 See [the protocol, supported scopes and recovery guide](docs/native-editing.md).
-The existing structural editor remains available.
+In a configured local dev server, open **Composer → Edit page**
+(`/composer?native=1`) to select a real native target, supply exact content,
+review Original/Proposed, explicitly Apply to draft, recover its durable receipt
+and use guarded Undo. The existing structural editor remains available through
+**Structure**; no generation provider is connected.
 
 ## Development and validation
 

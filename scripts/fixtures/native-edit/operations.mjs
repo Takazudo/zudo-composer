@@ -11,6 +11,17 @@ export const tableRows = [["供給された行", "そのまま保持"], ["Second
  */
 export async function proveEdits(cli, initialized) {
   const page = { workspaceId: initialized.workspaceId, page: "/" };
+  const temporaryRequest = { ...page, after: { nodeId: "list" }, insert: { kind: "text", text: "Temporary conflict proof" } };
+  const stale = await cli(["edit", "plan", "--stdin"], temporaryRequest);
+  const current = await cli(["edit", "plan", "--stdin"], temporaryRequest);
+  await cli(["edit", "apply", "--stdin"], { planId: current.id, approve: current.digest });
+  await assert.rejects(cli(["edit", "apply", "--stdin"], { planId: stale.id, approve: stale.digest }), /stale-plan/);
+  assert.deepEqual((await cli(["edit", "inspect", "--stdin"], page)).record, current.candidate);
+  await cli(["edit", "undo", "--stdin"], { planId: current.id, approve: current.digest });
+  assert.deepEqual((await cli(["edit", "inspect", "--stdin"], page)).record, current.before);
+  await assert.rejects(cli(["edit", "plan", "--stdin"], { workspaceId: initialized.workspaceId, page: "/other", after: { nodeId: "note" }, insert: { kind: "text", text: "Must be refused" } }), /unsupported/);
+  await assert.rejects(cli(["edit", "plan", "--stdin"], { ...temporaryRequest, insert: { kind: "table", columns: ["A", "B"], rows: [["one"]] } }), /invalid-table/);
+  let firstPlan;
   let lastPlan;
   for (const request of [
     { ...page, after: { kind: "paragraph", ordinal: 1 }, insert: { kind: "image", assetId: initialized.assetId, alt: "Native managed image" } },
@@ -40,6 +51,8 @@ export async function proveEdits(cli, initialized) {
       assert.match(added.props.src, /^\/uploaded-assets\//);
     }
     const applied = await cli(["edit", "apply", "--stdin"], { planId: plan.id, approve: plan.digest });
+    if (!firstPlan) firstPlan = plan;
+    else await assert.rejects(cli(["edit", "undo", "--stdin"], { planId: firstPlan.id, approve: firstPlan.digest }), /undo-conflict/);
     assert.equal(applied.kind, "applied");
     const receipt = await cli(["edit", "receipt", "--stdin"], { planId: plan.id });
     assert.deepEqual(receipt.applied, applied);

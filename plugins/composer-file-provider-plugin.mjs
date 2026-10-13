@@ -648,7 +648,7 @@ const VIRTUAL_CONFIG_ID = "virtual:composer-file-provider-config";
 const RESOLVED_VIRTUAL_CONFIG_ID = `\0${VIRTUAL_CONFIG_ID}`;
 
 /** Vite plugin. Each dev server closure receives an independent capability.
- * @param {{assetsStoreRoot?: string, compositionsRoot?: string, workspaceRoot?: string}} options
+ * @param {{assetsStoreRoot?: string, compositionsRoot?: string, workspaceRoot?: string, nativeEditing?: boolean}} options
  */
 export default function composerFileProviderPlugin(options = {}) {
   const explicitAssetRoot = validateAssetStoreRoot(options.assetsStoreRoot);
@@ -658,6 +658,7 @@ export default function composerFileProviderPlugin(options = {}) {
   const compositionsRoot = resolveCompositionsRoot(workspaceRoot, options.compositionsRoot);
   let command = "build";
   let capability;
+  let nativeEditing;
   return {
     name: "composer-file-provider",
     configResolved(config) {
@@ -680,6 +681,7 @@ export default function composerFileProviderPlugin(options = {}) {
         workspaceHeader: COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER,
         maxBodyBytes: COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES,
         assetMaxBodyBytes: ASSET_UPLOAD_MAX_BYTES,
+        ...(nativeEditing ? { nativeEditing } : {}),
         assetOperationHeader: ASSET_FILE_PROVIDER_OPERATION_HEADER,
         assetFileNameHeader: ASSET_FILE_PROVIDER_FILE_NAME_HEADER,
         assetRecordIdHeader: ASSET_FILE_PROVIDER_RECORD_ID_HEADER,
@@ -692,8 +694,21 @@ export default function composerFileProviderPlugin(options = {}) {
       // Also covers host-authored Vite configurations using this public plugin.
       // Acquire before any store initializes or any read-repair can run.
       const lease = await acquireAuthoringLease(workspaceRoot, "dev-server");
-      installAuthoringShutdown(server, lease);
+      /** @type {any} */
+      let nativeApi;
+      const coordination = {
+        isProvider: (/** @type {import("node:http").IncomingMessage} */ req) => nativeApi?.isProvider(req) ?? false,
+        provider: (/** @type {import("node:http").IncomingMessage} */ req, /** @type {() => unknown} */ action) => nativeApi ? nativeApi.provider(req, action) : Promise.resolve(action()),
+        close: () => nativeApi?.close(),
+        drain: () => nativeApi?.drain(),
+      };
+      installAuthoringShutdown(server, lease, coordination);
       try {
+        if (options.nativeEditing === true) {
+          const module = await server.ssrLoadModule(appModuleId("plugins/native-edit-api.ts"));
+          nativeApi = await module.installNativeEditApi(server, lease, workspaceRoot);
+          nativeEditing = nativeApi.config;
+        }
         const {
           createWorkspaceScopedCompositionStore,
           validateCompositionRecord,

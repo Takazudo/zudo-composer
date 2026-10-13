@@ -1,3 +1,4 @@
+import { authoringFetch } from "../native-editing/session";
 import config from "virtual:release-config";
 import type { SiteProjectApiRequest, SiteProjectApiResponse } from "../../site-project/api/types";
 
@@ -40,7 +41,7 @@ export function createReleaseTransport(): ReleaseTransport {
       const requestId = crypto.randomUUID(); requests.set(requestId, { operation: request.operation, guard, seen: new Set(), controllers: new Map(), finished: false });
       try {
         bind();
-        const response = await fetch(config!.endpoint, { method: "POST", credentials: "same-origin", redirect: "error", headers: { "Content-Type": "application/json", "X-Zudo-Release-Capability": config!.capability, "X-Zudo-Release-Client": clientId, "X-Zudo-Release-Request": requestId }, body: JSON.stringify({ requestId, clientId, request }) });
+        const response = await authoringFetch(config!.endpoint, { method: "POST", credentials: "same-origin", redirect: "error", headers: { "Content-Type": "application/json", "X-Zudo-Release-Capability": config!.capability, "X-Zudo-Release-Client": clientId, "X-Zudo-Release-Request": requestId }, body: JSON.stringify({ requestId, clientId, request }) });
         const result = await response.json();
         if (!response.ok || typeof result?.ok !== "boolean" || (result.ok ? !("result" in result) : typeof result.error?.code !== "string")) throw new Error("Invalid release response.");
         return result as SiteProjectApiResponse;

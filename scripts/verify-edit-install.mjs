@@ -75,6 +75,16 @@ try {
     await expect(image).toBeVisible();
     await expect.poll(() => image.evaluate(element => element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0)).toBe(true);
     assert.deepEqual(errors, [], `${pass}: browser runtime errors`);
+    if (pass === "first open") {
+      const { proveBrowserEdits } = await import("./fixtures/native-edit/browser.mjs");
+      await proveBrowserEdits(page, host, cli, initialized);
+    } else {
+      await page.goto("http://127.0.0.1:4175/composer?native=1&sitemap=main&page=home");
+      const native = page.frameLocator('iframe[title="Native page preview"]');
+      const { browserText } = await import("./fixtures/native-edit/browser.mjs");
+      await expect(native.getByText(browserText, { exact: true })).toBeVisible({ timeout: 60_000 });
+      await expect(native.getByRole("img", { name: "Browser managed image", exact: true })).toBeVisible();
+    }
     await context.close();
     await server.stop(); server = undefined;
     console.log(`Installed native editing Composer ${pass}: passed.`);

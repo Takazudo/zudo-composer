@@ -180,6 +180,19 @@ export function createEditingService(options: CaptureHostOptions) {
     return next(0);
   };
   return {
+    async inspectBrowserReview(input: unknown) {
+      const { planId } = parse(idSchema, input);
+      const { plan } = await loadPlan(planId);
+      const state = await capture();
+      const page = resolvePage(state, plan.request);
+      if (editDigest(page.identity) !== editDigest(plan.identity)) throw new EditError("wrong-target", "The reviewed page owner changed.");
+      const applied = await state.stores.compositions.reviewedEditReceipt<EditReceipt>(planId);
+      if (!applied) {
+        if (editDigest(await revisions(state)) !== editDigest(plan.revisions)) throw new EditError("stale-plan", "Reviewed dependencies changed. Review a fresh plan.");
+        await pending(planId, await openPlans(options.config.paths.data));
+      }
+      return { plan, page };
+    },
     async initializeSourceEpoch() { await checkedSources(options); },
     async inspect(input: unknown) { const request = parse(pageSchema, input); return resolvePage(await capture(), request); },
     async resolve(input: unknown) {

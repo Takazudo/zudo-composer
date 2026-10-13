@@ -130,12 +130,13 @@ export function resolvePage(capture: HostCapture, request: InspectPageRequest) {
   if (!capture.config.nativeEditing) writeBlockers.push("Host must explicitly declare nativeEditing with source: workspace.");
   if (capture.sourceAuthored) writeBlockers.push("Source-authored/generated host: edit site-project.ts or site-project.json and regenerate instead.");
   if (consumers.length !== 1 || linkedConsumers.length || mappedConsumers.length || mappedDescendants.length || attached || record.document.publication) writeBlockers.push("Composition is shared, mapped, attached, or published; edit its owning source instead.");
+  let linked: { sourceRecordId: string; sourceDocument: typeof record.document; outlet: import("../../src/composer/model/types").GlobalTemplateOutlet } | undefined;
   let rootPolicy: RootPolicy = { kind: "unrestricted" };
   if (record.document.binding) {
     const source = capture.records.compositions.find((candidate) => candidate.id === record.document.binding!.sourceRecordId);
     const resolution = source ? resolveGlobalTemplate({ consumer: record, source, manifest: capture.manifest }) : undefined;
     if (!resolution || resolution.status !== "resolved") { rootPolicy = { kind: "unresolved" }; writeBlockers.push(`Global template binding is unavailable (${resolution?.status ?? "missing-template"}).`); }
-    else rootPolicy = resolution.rootPolicy;
+    else { rootPolicy = resolution.rootPolicy; linked = { sourceRecordId: resolution.source.id, sourceDocument: resolution.source.document, outlet: resolution.outlet }; }
   }
   const capabilities = nativeCapabilities(capture.config, capture.manifest);
   const targets: NativeTarget[] = [];
@@ -150,7 +151,7 @@ export function resolvePage(capture: HostCapture, request: InspectPageRequest) {
     const node = index.byId.get(nodeId)!.node;
     for (const kind of Object.keys(capabilities) as NativeKind[]) if (capabilities[kind]?.available && capabilities[kind]?.componentId === node.componentId) targets.push({ nodeId, kind, ordinal: ++counts[kind], componentId: node.componentId, props: node.props });
   }
-  return { record, rootPolicy, targets, allTargets, consumers, linkedConsumers, mappedConsumers, mappedPages, mappedDescendants, writeBlockers, capabilities,
+  return { record, rootPolicy, linked, targets, allTargets, consumers, linkedConsumers, mappedConsumers, mappedPages, mappedDescendants, writeBlockers, capabilities,
     sitemapId, pageId: page.id,
     identity: { workspaceId: capture.workspaceId, sitemapId, pageId: page.id, providerId: "files", recordId: record.id },
     grammar: buildGrammar({ manifest: capture.manifest, templates: capture.records.compositions.map((record) => record.document) }),

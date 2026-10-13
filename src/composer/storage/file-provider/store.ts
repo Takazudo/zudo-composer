@@ -1,3 +1,4 @@
+import { authoringFetch } from "../../../features/native-editing/session";
 import { fileProviderConfig } from "virtual:composer-file-provider-config";
 import { notifyPersistenceChange } from "../../../shared/persistence-generation";
 import {
@@ -440,7 +441,7 @@ export function createFileProviderCompositionStore(
   return new BrowserFileProviderCompositionStore(
     config,
     options.catalog,
-    options.fetch ?? globalThis.fetch.bind(globalThis),
+    options.fetch ?? authoringFetch,
     options.workspace,
   );
 }

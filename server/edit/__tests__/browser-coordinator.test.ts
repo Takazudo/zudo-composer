@@ -28,7 +28,8 @@ describe("browser authoring exclusion", () => {
     await expect(gate.provider("a", 0, async () => {})).rejects.toMatchObject({ code: "stale-browser" });
     // Knowing the new epoch alone never re-authorizes a stale client's state.
     await expect(gate.provider("a", 1, async () => {})).rejects.toMatchObject({ code: "stale-browser" });
-    expect(gate.reconcile("a", {}, 1)).toBe(false);
+    gate.disconnect("a", a);
+    expect(() => gate.bind("a", a, 0)).toThrow("Reconnect cannot authorize");
   });
   it("fails closed for a wrong peer, stale challenge, unresponsive client and joining tab", async () => {
     const gate = createBrowserCoordinator({ challengeMs: 10 });

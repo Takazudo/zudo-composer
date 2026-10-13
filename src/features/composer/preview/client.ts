@@ -26,11 +26,13 @@ import {
   openSourceMessage,
   readParentToPreview,
   readyMessage,
+  renderedMessage,
   requestAddMessage,
   requestInsertMenuMessage,
   requestNodeMenuMessage,
   requestHistoryMessage,
   selectMessage,
+  nativeSelectMessage,
 } from "./protocol";
 import { INITIAL_PREVIEW_STATE, applyInbound, type PreviewState } from "./snapshot-store";
 
@@ -62,6 +64,7 @@ export interface PreviewClientOptions {
 export interface PreviewClient {
   /** Announce readiness. Called on every load — including after a reload. */
   emitReady(): void;
+  emitRendered(): void;
   emitSelect(nodeId: string | null): void;
   emitRequestAdd(target: InsertionTarget, rect?: SerializedRect): void;
   /** Navigate to the linked source; this never selects or mutates source nodes. */
@@ -150,7 +153,12 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
     emitReady() {
       post(readyMessage(pack));
     },
+    emitRendered() {
+      if (state.nativeReview) post(renderedMessage(pack, state.revision, state.nativeReview));
+    },
     emitSelect(nodeId) {
+      if (state.nativeReview) return;
+      if (state.nativePage) { if (state.selectNative && nodeId) post(nativeSelectMessage(pack, outboundRevision(), nodeId, state.nativePage)); return; }
       post(selectMessage(pack, outboundRevision(), nodeId));
     },
     emitRequestAdd(target, rect) {
@@ -166,17 +174,21 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
       post(requestInsertMenuMessage(pack, outboundRevision(), target, rect, focusToken));
     },
     emitCommitInlineEdit(nodeId, fieldKey, value, documentRevision) {
+      if (state.nativeReview || state.selectNative) return;
       // `Math.max(0, ...)` mirrors `outboundRevision()`'s own guard — defence
       // against a rogue caller producing a schema-invalid negative revision.
       post(commitInlineEditMessage(pack, nodeId, fieldKey, value, Math.max(0, documentRevision)));
     },
     emitDropNode(sourceNodeId, target, copy) {
+      if (state.nativeReview || state.selectNative) return;
       post(dropNodeMessage(pack, sourceNodeId, target, copy, outboundRevision()));
     },
     emitRequestUndo() {
+      if (state.nativeReview || state.selectNative) return;
       post(requestHistoryMessage(pack, "undo"));
     },
     emitRequestRedo() {
+      if (state.nativeReview || state.selectNative) return;
       post(requestHistoryMessage(pack, "redo"));
     },
     emitError(message, recoverable = true) {
