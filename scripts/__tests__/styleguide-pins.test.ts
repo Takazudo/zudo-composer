@@ -28,7 +28,7 @@ describe("standalone styleguide dependency contracts", () => {
   it("matches Sample's two pins and each demo host's contract pin to the root handoffs", () => {
     expect(checkStyleguidePins({ root: repositoryRoot })).toEqual({
       pins: [
-        "@zudo-composer/ui=git+https://github.com/Takazudo/zudo-composer.git#5af34a703ea840db22261a0acf8ee09f69c0ae8e",
+        "@zudo-composer/ui=git+https://github.com/Takazudo/zudo-composer.git#005f0cf756a71186afc05f63f2a8f33a58cbef98",
         "@zudo-composer/component-contract=git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
         "shop:@zudo-composer/component-contract=git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
         "landing:@zudo-composer/component-contract=git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
