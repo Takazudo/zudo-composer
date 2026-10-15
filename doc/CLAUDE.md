@@ -2,7 +2,7 @@
 
 The `doc/` directory is the English developer documentation site for
 `zudo-composer`, built with [zudo-doc](https://github.com/zudolab/zudo-doc)
-6.1.1 on the aligned zfb 4.3.3 family, using zudo-react and Wind. The Drift theme, layout, chrome, routes, and interactive islands
+6.2.0 on the aligned zfb 4.5.2 family, using zudo-react and Wind. The Drift theme, layout, chrome, routes, and interactive islands
 come from the package; this workspace owns the config and MDX content.
 
 ## Structure
