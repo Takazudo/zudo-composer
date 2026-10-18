@@ -40,7 +40,7 @@ export function pageOutline(capture: HostCapture, resolved: ReturnType<typeof re
       editable: writable && !opaque && !!entry,
       ...(opaque ? { readOnlyReason: "This block no longer matches its component definition; edit it in Structure." } : {}),
       fields: Object.fromEntries((entry?.fields ?? []).map(field => [field.prop, { label: field.label, value: clip((node.props[field.prop] ?? null) as JsonValue) }])),
-      slots: (entry?.slots ?? []).map(slot => ({ id: slot.id, accepts: slot.accepts ?? "any", cardinality: slot.cardinality, count: node.slots[slot.id]?.length ?? 0, ...(slot.max ? { max: slot.max } : {}) })),
+      slots: (entry?.slots ?? []).map(slot => ({ id: slot.id, accepts: slot.accepts ?? "any", cardinality: slot.cardinality, count: node.slots[slot.id]?.length ?? 0, ...(slot.max ? { max: slot.max } : {}), ...(resolved.attachedSlots.some(attached => attached.nodeId === node.id && attached.slotId === slot.id) ? { mappingOwned: "Items come from Content through Mapping; not editable here." } : {}) })),
     };
   });
   return {

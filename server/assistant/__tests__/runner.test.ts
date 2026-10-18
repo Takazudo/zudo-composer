@@ -194,14 +194,14 @@ describe("restricted Assistant runner", () => {
   });
 
   it("uses attached exact materials only through references and refuses materials from other turns", async () => {
-    let payloadId: string | undefined;
+    const attached = { id: "" };
     const { runner, store, scope, service } = await fixture((request, call) => {
       if (call === 1) return tool("inspect_page", {});
-      if (call === 2) return tool("propose_changes", { operations: [{ kind: "insertExact", page: { sitemapId: "main", pageId: "home" }, at: { after: "paragraph" }, payloadId: payloadId! }] });
+      if (call === 2) return tool("propose_changes", { operations: [{ kind: "insertExact", page: { sitemapId: "main", pageId: "home" }, at: { after: "paragraph" }, payloadId: attached.id }] });
       return text("Inserted your exact paragraph for review.");
     });
     const payload = await store.putPayload(scope, { kind: "text", text: "正確な日本語。\n改行も保持。", conversationId: null });
-    payloadId = payload.id;
+    attached.id = payload.id;
     const conversation = await store.createConversation(scope);
     const started = await runner.start("proof", { conversationId: conversation.id, clientTurnId: turn(), text: "Insert my paragraph after the first paragraph.", context: { ...context, payloadIds: [payload.id] } });
     await complete(runner, started.runId);

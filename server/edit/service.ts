@@ -73,6 +73,7 @@ function candidate(capture: HostCapture, request: EditRequest, generatedId: stri
     : target.kind === request.after.kind && target.ordinal === request.after.ordinal);
   if (matching.length !== 1) throw new EditError("unsupported-target", "Select exactly one standalone native node from inspect.targets. Markdown sub-blocks, opaque components, and guessed positions are unsupported.");
   const anchor = indexDocument(page.record.document, capture.manifest).byId.get(matching[0]!.nodeId)!;
+  if (page.attachedSlots.some(slot => slot.nodeId === anchor.parentId && slot.slotId === anchor.slotId)) throw new EditError("unsupported-scope", "That position is inside a Mapping-owned collection slot. Edit the collection through Mapping.");
   const insert = request.insert;
   const kind = insert.kind === "text" ? "paragraph" : insert.kind;
   const capability = page.capabilities[kind];

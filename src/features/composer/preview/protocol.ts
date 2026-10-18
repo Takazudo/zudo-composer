@@ -221,6 +221,19 @@ export const nativeReviewSchema = z.object({
 }).strict();
 export const nativePageSchema = z.object({ identity: nativeReviewSchema.shape.identity, draftRevision: z.string().regex(/^[a-f0-9]{64}$/), frameSession: z.uuid() }).strict();
 export type NativePageIdentity = z.infer<typeof nativePageSchema>;
+/**
+ * Editor-owned review decoration for one node of an Assistant candidate. Text
+ * ranges are offsets into the exact field strings; the preview maps them only
+ * inside that node's own rendered element, never by a document-wide search.
+ */
+export const reviewAnnotationSchema = z.object({
+  id: z.string().min(1).max(300), kind: z.enum(["added", "changed", "removed"]), nodeId: z.string().min(1).max(256),
+  label: z.string().min(1).max(80), ordinal: z.number().int().positive(), total: z.number().int().positive(),
+  texts: z.array(z.object({ text: z.string().max(100_000), ranges: z.array(z.tuple([z.number().int().nonnegative(), z.number().int().nonnegative()])).max(1000), tone: z.enum(["insert", "delete"]) }).strict()).max(500),
+}).strict();
+export const reviewAnnotationsSchema = z.object({ key: z.string().min(1).max(400), view: z.enum(["current", "draft"]), items: z.array(reviewAnnotationSchema).max(300) }).strict();
+export type ReviewAnnotation = z.infer<typeof reviewAnnotationSchema>;
+export type ReviewAnnotations = z.infer<typeof reviewAnnotationsSchema>;
 export type NativeReviewIdentity = z.infer<typeof nativeReviewSchema>;
 
 export interface ComposerPreviewSnapshot {
@@ -230,6 +243,7 @@ export interface ComposerPreviewSnapshot {
   nativePage?: NativePageIdentity;
   selectNative?: boolean;
   linked?: PreviewLinkedSourceContext;
+  review?: ReviewAnnotations;
 }
 
 export function localPreviewSnapshot(
@@ -299,6 +313,7 @@ export const renderMessageSchema = z
     nativeReview: nativeReviewSchema.optional(),
     nativePage: nativePageSchema.optional(),
     selectNative: z.boolean().optional(),
+    review: reviewAnnotationsSchema.optional(),
   })
   .strict().refine(value => !value.nativeReview || (value.session.mode === "preview" && !value.selectNative), "A reviewed candidate is read-only.");
 
@@ -342,6 +357,7 @@ export const PARENT_TO_PREVIEW_MEMBERS = [
   modeMessageSchema,
   restoreFocusMessageSchema,
   z.object({ ...envelope, type: z.literal("authoring-probe"), nonce: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+  z.object({ ...envelope, type: z.literal("focus-annotation"), key: z.string().min(1).max(400), id: z.string().min(1).max(300) }).strict(),
 ] as const;
 
 export const parentToPreviewSchema = z.discriminatedUnion("type", [...PARENT_TO_PREVIEW_MEMBERS]);
@@ -364,6 +380,9 @@ export const nativeSelectMessageSchema = z.object({ ...envelope, type: z.literal
 export type NativeSelectMessage = z.infer<typeof nativeSelectMessageSchema>;
 export const renderedMessageSchema = z.object({ ...envelope, type: z.literal("rendered"), revision: revisionSchema, nativeReview: nativeReviewSchema }).strict();
 export type RenderedMessage = z.infer<typeof renderedMessageSchema>;
+/** Which annotations got word-level highlights and which fell back to an explicit block marker. */
+export const reviewAnnotatedMessageSchema = z.object({ ...envelope, type: z.literal("review-annotated"), revision: revisionSchema, key: z.string().min(1).max(400), results: z.array(z.object({ id: z.string().min(1).max(300), words: z.enum(["mapped", "fallback", "none"]), located: z.boolean() }).strict()).max(300) }).strict();
+export type ReviewAnnotatedMessage = z.infer<typeof reviewAnnotatedMessageSchema>;
 
 /** A node (or empty canvas) was clicked in Edit mode. */
 export const selectMessageSchema = z
@@ -518,6 +537,7 @@ export const requestHistoryMessageSchema = z
 export const PREVIEW_TO_PARENT_MEMBERS = [
   readyMessageSchema,
   renderedMessageSchema,
+  reviewAnnotatedMessageSchema,
   z.object({ ...envelope, type: z.literal("authoring-settled"), nonce: z.string().regex(/^[a-f0-9]{64}$/), clean: z.boolean() }).strict(),
   nativeSelectMessageSchema,
   selectMessageSchema,
@@ -582,6 +602,7 @@ export function renderMessage(
     ...(snapshot.nativePage ? { nativePage: snapshot.nativePage } : {}),
     ...(snapshot.nativeReview ? { nativeReview: snapshot.nativeReview } : {}),
     ...(snapshot.selectNative === undefined ? {} : { selectNative: snapshot.selectNative }),
+    ...(snapshot.review ? { review: snapshot.review } : {}),
   };
 }
 
@@ -671,6 +692,12 @@ export function errorMessage(
 }
 
 
+export function reviewAnnotatedMessage(pack: PreviewPackIdentity, revision: number, key: string, results: ReviewAnnotatedMessage["results"]): ReviewAnnotatedMessage {
+  return { ...envelopeValue(pack), type: "review-annotated", revision, key, results };
+}
+export function focusAnnotationMessage(pack: PreviewPackIdentity, key: string, id: string) {
+  return { ...envelopeValue(pack), type: "focus-annotation" as const, key, id };
+}
 export function renderedMessage(pack: PreviewPackIdentity, revision: number, nativeReview: NativeReviewIdentity): RenderedMessage {
   return { ...envelopeValue(pack), type: "rendered", revision, nativeReview };
 }

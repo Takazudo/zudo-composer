@@ -3,7 +3,7 @@ import { isSafeRecordId, type RecordId } from "../shared";
 type ProviderTarget = { readonly providerId: string };
 export type RouteIntent =
   | { readonly route: "composer"; readonly action: "new" }
-  | { readonly route: "composer"; readonly mode: "page"; readonly sitemapId?: string; readonly pageId?: string }
+  | { readonly route: "composer"; readonly mode: "page" | "assistant"; readonly sitemapId?: string; readonly pageId?: string }
   | (ProviderTarget & { readonly route: "composer"; readonly compositionId: RecordId })
   | (ProviderTarget & { readonly route: "content"; readonly modelId: RecordId; readonly entryId?: RecordId; readonly viewId?: string; readonly fieldId?: RecordId; readonly valuePath?: readonly (RecordId | number)[] })
   | (ProviderTarget & { readonly route: "mapping"; readonly mappingId: RecordId })
@@ -14,7 +14,7 @@ export type RouteIntentRoute = RouteIntent["route"];
 export type RouteIntentParseOutcome = { readonly status: "none" } | { readonly status: "matched"; readonly intent: RouteIntent } | { readonly status: "invalid"; readonly message: string };
 export interface RouteIntentLocation { readonly pathname: string; readonly search: string; readonly hash?: string }
 const PATHS: Record<string, RouteIntentRoute> = { "/composer": "composer", "/content": "content", "/mapping": "mapping", "/sitemapper": "sitemapper", "/assets": "assets", "/review": "review" };
-const PARAMS: Record<RouteIntentRoute, readonly string[]> = { composer: ["provider", "composition", "new", "native", "sitemap", "page"], content: ["provider", "model", "entry", "view", "field", "path"], mapping: ["provider", "mapping"], sitemapper: ["provider", "sitemap", "page"], assets: ["provider", "asset"], review: [] };
+const PARAMS: Record<RouteIntentRoute, readonly string[]> = { composer: ["provider", "composition", "new", "native", "assistant", "sitemap", "page"], content: ["provider", "model", "entry", "view", "field", "path"], mapping: ["provider", "mapping"], sitemapper: ["provider", "sitemap", "page"], assets: ["provider", "asset"], review: [] };
 export const isIntentProviderId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$/.test(value);
 
 /** Typed RFC6901 pointer segments: `f:` is a stable nested field id, `i:` a list index. */
@@ -72,13 +72,14 @@ export function parseIntent(input?: RouteIntentLocation | URL | string): RouteIn
       if (params.size !== 1 || params.get("new") !== "1") throw new Error("The new-Composition flag must be 1 and cannot be combined with a target.");
       return { status: "matched", intent: { route, action: "new" } };
     }
-    if (route === "composer" && params.has("native")) {
-      if (params.getAll("native").length !== 1 || params.get("native") !== "1" || [...params.keys()].some(key => !["native", "sitemap", "page"].includes(key))) throw new Error("Native page links require native=1 and qualified sitemap/page ids.");
+    for (const [flag, mode] of [["native", "page"], ["assistant", "assistant"]] as const) {
+      if (route !== "composer" || !params.has(flag)) continue;
+      if (params.getAll(flag).length !== 1 || params.get(flag) !== "1" || [...params.keys()].some(key => ![flag, "sitemap", "page"].includes(key))) throw new Error(`${mode === "page" ? "Native page" : "Assistant"} links require ${flag}=1 and qualified sitemap/page ids.`);
       const sitemapId = read("sitemap", true), pageId = read("page", true);
-      if ((sitemapId === undefined) !== (pageId === undefined)) throw new Error("A native page target requires both sitemap and page ids.");
-      return { status: "matched", intent: { route, mode: "page", ...(sitemapId ? { sitemapId, pageId } : {}) } };
+      if ((sitemapId === undefined) !== (pageId === undefined)) throw new Error("A page target requires both sitemap and page ids.");
+      return { status: "matched", intent: { route, mode, ...(sitemapId ? { sitemapId, pageId } : {}) } };
     }
-    if (route === "composer" && (params.has("sitemap") || params.has("page"))) throw new Error("Native page identities require native=1.");
+    if (route === "composer" && (params.has("sitemap") || params.has("page"))) throw new Error("Page identities require native=1 or assistant=1.");
     const providerId = read("provider")!;
     let intent: RouteIntent;
     switch (route) {
@@ -108,7 +109,7 @@ export function formatIntent(intent: RouteIntent): string {
   if ("providerId" in intent) params.set("provider", intent.providerId);
   switch (intent.route) {
     case "review": break;
-    case "composer": if ("mode" in intent) { params.set("native", "1"); if (intent.sitemapId) params.set("sitemap", intent.sitemapId); if (intent.pageId) params.set("page", intent.pageId); } else if ("action" in intent) params.set("new", "1"); else params.set("composition", intent.compositionId); break;
+    case "composer": if ("mode" in intent) { params.set(intent.mode === "assistant" ? "assistant" : "native", "1"); if (intent.sitemapId) params.set("sitemap", intent.sitemapId); if (intent.pageId) params.set("page", intent.pageId); } else if ("action" in intent) params.set("new", "1"); else params.set("composition", intent.compositionId); break;
     case "mapping": params.set("mapping", intent.mappingId); break;
     case "assets": params.set("asset", intent.assetId); break;
     case "sitemapper": params.set("sitemap", intent.sitemapId); if (intent.pageId !== undefined) params.set("page", intent.pageId); break;

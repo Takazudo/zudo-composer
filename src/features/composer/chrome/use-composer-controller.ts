@@ -249,6 +249,7 @@ export function useComposerController(options: UseComposerControllerOptions): Co
     stateRef.current = createInitialControllerState({
       document,
       manifest,
+      selectedId: consumeReturnSelection(record.id),
       rootPolicy: options.rootPolicy,
       saveStatus: saveStatusFromQueue(options.saveQueue.state),
       derivedOutput: derivedOutputFromQueue(options.saveQueue.state),
@@ -612,4 +613,15 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       redo,
     ],
   );
+}
+
+/** One-shot handoff written by the AI Assistant's "← Composer" link; ignored for any other record. */
+function consumeReturnSelection(recordId: string): string | null {
+  try {
+    const raw = globalThis.sessionStorage?.getItem("zudo-composer-return-selection");
+    if (!raw) return null;
+    globalThis.sessionStorage.removeItem("zudo-composer-return-selection");
+    const value = JSON.parse(raw) as { recordId?: unknown; nodeId?: unknown };
+    return value.recordId === recordId && typeof value.nodeId === "string" ? value.nodeId : null;
+  } catch { return null; }
 }

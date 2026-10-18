@@ -112,3 +112,36 @@ export async function nativeEditRequest<T>(operation: string, input: unknown, ap
   if (!response.ok || body?.ok !== true) throw Object.assign(new Error(body?.error?.message ?? "Native operation response unavailable. Recover the retained receipt before retrying."), { code: body?.error?.code ?? "commit-uncertain" });
   return body.result as T;
 }
+
+/** The AI Assistant shares this coordinated loopback session; it has no other browser channel. */
+export const assistantConfig: { endpoint: string; name: string } | null = nativeEditingAvailable ? config?.assistant ?? null : null;
+const assistantHeaders = (approved: boolean) => ({ "content-type": "application/json", "x-zudo-native-client": clientId, "x-zudo-native-capability": config!.capability, ...(approved ? { "x-zudo-native-approval": config!.approvalCapability } : {}) });
+export async function assistantRequest<T>(operation: string, workspaceId: string, input: Record<string, unknown> = {}, approved = false): Promise<T> {
+  if (!assistantConfig) throw Object.assign(new Error("The AI Assistant is not configured for this host."), { code: "not-configured" });
+  await ready();
+  let response: Response;
+  try { response = await globalThis.fetch(assistantConfig.endpoint, { method: "POST", credentials: "same-origin", redirect: "error", headers: assistantHeaders(approved), body: JSON.stringify({ operation, workspaceId, input }) }); }
+  catch { throw Object.assign(new Error("The authoring server could not be reached. Your input is retained."), { code: "unavailable" }); }
+  const body = await response.json().catch(() => null);
+  if (!response.ok || body?.ok !== true) throw Object.assign(new Error(body?.error?.message ?? "The Assistant response was lost. Reload to recover the current state."), { code: body?.error?.code ?? "unavailable" });
+  return body.result as T;
+}
+/** Sequence-based event stream for one run; resolves when the server closes it. */
+export async function assistantEvents(workspaceId: string, runId: string, afterSeq: number, onEvent: (event: { seq: number; type: string; data: Record<string, unknown> }) => void, signal: AbortSignal): Promise<void> {
+  if (!assistantConfig) return;
+  await ready();
+  const response = await globalThis.fetch(assistantConfig.endpoint, { method: "POST", credentials: "same-origin", redirect: "error", signal, headers: assistantHeaders(false), body: JSON.stringify({ operation: "events", workspaceId, input: { runId, afterSeq } }) });
+  if (!response.ok || !response.body) throw Object.assign(new Error("The reply stream is unavailable."), { code: "unavailable" });
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    let newline: number;
+    while ((newline = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, newline); buffer = buffer.slice(newline + 1);
+      if (line.trim()) onEvent(JSON.parse(line));
+    }
+  }
+}

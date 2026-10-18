@@ -50,6 +50,7 @@ import {
   readPreviewToParent,
   renderMessage,
   restoreFocusMessage,
+  focusAnnotationMessage,
   type ComposerPreviewSnapshot,
 } from "./protocol";
 
@@ -130,6 +131,7 @@ export interface ComposerPreviewBridgeOptions {
   onReady?: () => void;
   onNativeSelect?: (message: import("./protocol").NativeSelectMessage) => void;
   onRendered?: (message: import("./protocol").RenderedMessage) => void;
+  onReviewAnnotated?: (message: import("./protocol").ReviewAnnotatedMessage) => void;
   onSelect?: (nodeId: string | null, revision: number) => void;
   onRequestAdd?: (target: InsertionTarget, revision: number, rect?: SerializedRect) => void;
   /** Linked-source navigation request; source nodes never route through local selection. */
@@ -174,6 +176,8 @@ export interface ComposerPreviewBridge {
    * no-op (silently dropped by the iframe's own guard) if not yet ready.
    */
   restoreFocus(focusToken: string): void;
+  /** Ask the preview to bring one review annotation of the retained snapshot into view. */
+  focusAnnotation?(id: string): void;
   /** True once the iframe has announced `ready` at least once. */
   readonly ready: boolean;
   /** A trusted peer announced a different pack; this bridge can never revive. */
@@ -255,6 +259,9 @@ export function createComposerPreviewBridge(
         options.onReady?.();
         replay();
         return;
+      case "review-annotated":
+        if (message.revision === retained?.revision && retained.snapshot?.review?.key === message.key) options.onReviewAnnotated?.(message);
+        break;
       case "rendered":
         if (message.revision === retained?.revision && retained.snapshot?.nativeReview && sameNativeReview(message.nativeReview, retained.snapshot.nativeReview)) options.onRendered?.(message);
         return;
@@ -337,6 +344,10 @@ export function createComposerPreviewBridge(
       // iframe that already announced `ready`, and if it reloads mid-menu the
       // control the token pointed at is gone anyway — nothing to replay.
       if (ready) post(restoreFocusMessage(pack, focusToken));
+    },
+    focusAnnotation(id) {
+      const key = retained?.snapshot?.review?.key;
+      if (ready && key) post(focusAnnotationMessage(pack, key, id));
     },
     get ready() {
       return ready;

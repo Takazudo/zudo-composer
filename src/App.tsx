@@ -1,5 +1,6 @@
 import { NativePageRoute } from "./features/native-editing/page-route";
-import { nativeEditingAvailable } from "./features/native-editing/session";
+import { assistantConfig, nativeEditingAvailable } from "./features/native-editing/session";
+import { AssistantRoute } from "./features/assistant/assistant-route";
 import { attachNativeAuthoringState } from "./features/native-editing/session";
 import type { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
@@ -272,7 +273,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     }} />}
   </main>;
   else if (intent.status === "invalid" || !providerKnown) content = <main class="route-placeholder"><h1>Invalid workspace link</h1><p role="alert">{intent.status === "invalid" ? intent.message : "The requested provider is unavailable. No other record was selected."}</p></main>;
-  else if (path === "/composer") content = target?.route === "composer" && "mode" in target ? <NativePageRoute /> : <>{nativeEditingAvailable && <a href="/composer?native=1">Edit page</a>}<ComposerApp componentProvider={providers.componentProvider} providers={providers.compositionProviders} /></>;
+  else if (path === "/composer") content = target?.route === "composer" && "mode" in target ? target.mode === "assistant" ? <AssistantRoute /> : <NativePageRoute /> : <>{nativeEditingAvailable && <nav class="cms-composer-entries" aria-label="Page editing entrances"><a href="/composer?native=1">Edit page</a>{assistantConfig && <a href="/composer?assistant=1">{assistantConfig.name}</a>}</nav>}<ComposerApp componentProvider={providers.componentProvider} providers={providers.compositionProviders} /></>;
   else if (path === "/content") content = <ContentRouteContent provider={target?.route === "content" ? providers.contentProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} renderAssetPicker={(request) => <AssetFieldPicker provider={providers.assetProvider} {...request} />} assetPickerCapabilities={assetPickerCapabilities} />;
   else if (path === "/mapping") content = <MappingRouteContent provider={target?.route === "mapping" ? providers.mappingProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentEntries={providers.mappingContentEntries} componentProvider={providers.componentProvider} attachmentCallbacks={mappingAttachmentService} />;
   else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;

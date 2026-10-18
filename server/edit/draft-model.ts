@@ -45,7 +45,7 @@ export type DraftOperation = { id: string; createdAt: string; provenance: Proven
 );
 export interface DraftPage { page: PageRef; identity: ReturnType<typeof resolvePage>["identity"]; before: CompositionRecord; contextDigest: string }
 /** Template/outlet context a candidate renders inside; a changed template makes the page stale. */
-export const pageContextDigest = (resolved: Pick<ReturnType<typeof resolvePage>, "linked" | "rootPolicy">) => createHash("sha256").update(JSON.stringify({ linked: resolved.linked ?? null, rootPolicy: resolved.rootPolicy })).digest("hex");
+export const pageContextDigest = (resolved: Pick<ReturnType<typeof resolvePage>, "linked" | "rootPolicy" | "attachedSlots">) => createHash("sha256").update(JSON.stringify({ linked: resolved.linked ?? null, rootPolicy: resolved.rootPolicy, attachedSlots: resolved.attachedSlots })).digest("hex");
 export type DraftStatus = "open" | "applied" | "discarded" | "undone";
 export interface SharedDraft {
   schemaVersion: 1; kind: "assistant-shared-draft"; id: string; host: string; workspaceId: string;
@@ -80,7 +80,8 @@ export function resolvePlacement(document: CompositionDocument, capture: HostCap
   return { parentId: anchor.parentId, slotId: anchor.slotId, index: anchor.index + ("after" in at ? 1 : 0) };
 }
 
-function applyOperation(document: CompositionDocument, capture: HostCapture, operation: DraftOperation, rootPolicy: ReturnType<typeof resolvePage>["rootPolicy"]): CompositionDocument {
+type PageRules = Pick<ReturnType<typeof resolvePage>, "rootPolicy" | "attachedSlots">;
+function applyOperation(document: CompositionDocument, capture: HostCapture, operation: DraftOperation, rules: PageRules): CompositionDocument {
   if (operation.kind === "updateField") {
     const located = indexDocument(document, capture.manifest).byId.get(operation.nodeId);
     if (!located) throw new EditError("unsupported-target", `Node "${operation.nodeId}" is not on this page.`);
@@ -92,7 +93,8 @@ function applyOperation(document: CompositionDocument, capture: HostCapture, ope
     return updated.document;
   }
   const target = resolvePlacement(document, capture, operation.at);
-  const inserted = insertSubtree(document, capture.manifest, target, operation.node, rootPolicy);
+  if (rules.attachedSlots.some(slot => slot.nodeId === target.parentId && slot.slotId === target.slotId)) throw new EditError("unsupported-scope", "That position is a Mapping-owned collection slot; its items come from Content through Mapping.");
+  const inserted = insertSubtree(document, capture.manifest, target, operation.node, rules.rootPolicy);
   if (!inserted.ok) throw new EditError("component-invalid", inserted.error);
   return inserted.document;
 }
@@ -134,7 +136,7 @@ export function buildDraft(capture: HostCapture, draft: Pick<SharedDraft, "pages
   for (const operation of draft.operations) {
     const entry = working.get(operation.recordId);
     if (!entry) throw new EditError("tampered-draft", "Draft operation names a page outside the draft.");
-    entry.document = applyOperation(entry.document, capture, operation, entry.resolved.rootPolicy);
+    entry.document = applyOperation(entry.document, capture, operation, entry.resolved);
   }
   const candidates = new Map([...working.values()].map(entry => [entry.page.before.id, { ...entry.page.before, document: entry.document }]));
   const records = capture.records.compositions.map(record => candidates.get(record.id) ?? record);
@@ -195,12 +197,12 @@ export function withdrawOperations(capture: HostCapture, draft: Pick<SharedDraft
   const remaining: DraftOperation[] = [], dependents: DraftOperation[] = [];
   const working = new Map(draft.pages.map(page => {
     const resolved = resolvePage(capture, { workspaceId: capture.workspaceId, sitemapId: page.page.sitemapId, page: page.page.pageId });
-    return [page.before.id, { document: structuredClone(page.before.document), rootPolicy: resolved.rootPolicy }];
+    return [page.before.id, { document: structuredClone(page.before.document), rules: resolved as PageRules }];
   }));
   for (const operation of draft.operations) {
     if (direct.has(operation.id)) continue;
     const entry = working.get(operation.recordId)!;
-    try { entry.document = applyOperation(entry.document, capture, operation, entry.rootPolicy); remaining.push(operation); }
+    try { entry.document = applyOperation(entry.document, capture, operation, entry.rules); remaining.push(operation); }
     catch { dependents.push(operation); }
   }
   return { remaining, removed: draft.operations.filter(operation => direct.has(operation.id)), dependents };

@@ -41,7 +41,8 @@ export interface RunRecord {
   startedAt: string; endedAt?: string; error?: { code: string; message: string }; events: RunEvent[];
   draft: { generation: number; draftId: string | null }; memory: UsedMemory | null; model: string;
 }
-export type ExactPayloadRecord = { id: string; conversationId: string | null; createdAt: string } & ({ kind: "text"; text: string } | { kind: "table"; columns: string[]; rows: string[][] } | { kind: "image"; assetId: string; alt: string });
+export type ExactPayloadInput = { conversationId: string | null } & ({ kind: "text"; text: string } | { kind: "table"; columns: string[]; rows: string[][] } | { kind: "image"; assetId: string; alt: string });
+export type ExactPayloadRecord = ExactPayloadInput & { id: string; createdAt: string };
 
 export const MEMORY_MAX_CHARACTERS = 20_000;
 const AUTO_CHANGE_MAX = 500;
@@ -282,8 +283,8 @@ export async function openAssistantStore(dataRoot: string) {
       });
     },
     // ── exact payloads ───────────────────────────────────────────────────
-    async putPayload(scope: AssistantScope, payload: Omit<ExactPayloadRecord, "id" | "createdAt">) {
-      const record = { ...payload, id: `payload-${randomUUID()}`, createdAt: now() } as ExactPayloadRecord;
+    async putPayload(scope: AssistantScope, payload: ExactPayloadInput) {
+      const record: ExactPayloadRecord = { ...payload, id: `payload-${randomUUID()}`, createdAt: now() };
       await serial(() => write(scope, record.id, { schemaVersion: 1, scope, payload: record }));
       return record;
     },

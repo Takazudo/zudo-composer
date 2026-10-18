@@ -125,11 +125,12 @@ export function resolvePage(capture: HostCapture, request: InspectPageRequest) {
   const linkedConsumers = capture.records.compositions.filter((candidate) => candidate.document.binding?.sourceRecordId === record.id).map((candidate) => candidate.id);
   const mappedConsumers = capture.records.mappings.filter((candidate) => candidate.document.composition.providerId === "files" && candidate.document.composition.recordId === record.id).map((candidate) => candidate.id);
   const mappedPages = capture.records.sitemaps.flatMap((site) => flatten(site.document.root).filter((node) => node.source.kind === "mapping" && node.source.ref.providerId === "mapping-filesystem" && mappedConsumers.includes(node.source.ref.recordId)).map((node) => ({ sitemapId: site.id, pageId: node.id })));
-  const attached = capture.workspace.metadata.collectionAttachments.some((attachment) => attachment.composition.providerId === "files" && attachment.composition.recordId === record.id);
+  // Collection attachments make only their target slots Mapping-owned; the page's own blocks stay local.
+  const attachedSlots = capture.workspace.metadata.collectionAttachments.filter((attachment) => attachment.composition.providerId === "files" && attachment.composition.recordId === record.id).map((attachment) => ({ nodeId: attachment.target.nodeId, slotId: attachment.target.slotId }));
   const writeBlockers: string[] = [];
   if (!capture.config.nativeEditing) writeBlockers.push("Host must explicitly declare nativeEditing with source: workspace.");
   if (capture.sourceAuthored) writeBlockers.push("Source-authored/generated host: edit site-project.ts or site-project.json and regenerate instead.");
-  if (consumers.length !== 1 || linkedConsumers.length || mappedConsumers.length || mappedDescendants.length || attached || record.document.publication) writeBlockers.push("Composition is shared, mapped, attached, or published; edit its owning source instead.");
+  if (consumers.length !== 1 || linkedConsumers.length || mappedConsumers.length || mappedDescendants.length || record.document.publication) writeBlockers.push("Composition is shared, mapped, or published; edit its owning source instead.");
   let linked: { sourceRecordId: string; sourceDocument: typeof record.document; outlet: import("../../src/composer/model/types").GlobalTemplateOutlet } | undefined;
   let rootPolicy: RootPolicy = { kind: "unrestricted" };
   if (record.document.binding) {
@@ -151,7 +152,7 @@ export function resolvePage(capture: HostCapture, request: InspectPageRequest) {
     const node = index.byId.get(nodeId)!.node;
     for (const kind of Object.keys(capabilities) as NativeKind[]) if (capabilities[kind]?.available && capabilities[kind]?.componentId === node.componentId) targets.push({ nodeId, kind, ordinal: ++counts[kind], componentId: node.componentId, props: node.props });
   }
-  return { record, rootPolicy, linked, targets, allTargets, consumers, linkedConsumers, mappedConsumers, mappedPages, mappedDescendants, writeBlockers, capabilities,
+  return { record, rootPolicy, linked, targets, allTargets, consumers, linkedConsumers, mappedConsumers, mappedPages, mappedDescendants, attachedSlots, writeBlockers, capabilities,
     sitemapId, pageId: page.id,
     identity: { workspaceId: capture.workspaceId, sitemapId, pageId: page.id, providerId: "files", recordId: record.id },
     grammar: buildGrammar({ manifest: capture.manifest, templates: capture.records.compositions.map((record) => record.document) }),

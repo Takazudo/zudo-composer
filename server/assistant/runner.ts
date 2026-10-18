@@ -148,7 +148,7 @@ export function createAssistantRunner(options: RunnerOptions) {
     const context = message.context!;
     const lines = [message.text, "", "<turn_context>"];
     if (context.page) {
-      let writable = "unknown";
+      let writable: string;
       try { writable = resolvePage(capture, { workspaceId: capture.workspaceId, sitemapId: context.page.sitemapId, page: context.page.pageId }).writeBlockers.length ? "read-only" : "editable"; } catch { writable = "unavailable"; }
       lines.push(`Current page: ${context.page.title ?? context.page.pageId} (sitemapId "${context.page.sitemapId}", pageId "${context.page.pageId}", ${writable}).`);
     } else lines.push("The user chose not to share a current page.");
@@ -331,9 +331,9 @@ export function createAssistantRunner(options: RunnerOptions) {
 
   return {
     async status(workspaceId: string) {
-      const { scope } = await scopeFor(workspaceId);
+      const { scope, capture } = await scopeFor(workspaceId);
       const settings = await options.store.settings(scope);
-      return { provider: options.provider.status(), botName: settings.botName ?? options.config.name, defaultName: options.config.name, permission: options.config.permission, memory: settings.memory, destination: { provider: "Anthropic Messages API", model: options.config.model, sends: ["your message and recent conversation", "current page/selection ids and the blocks you ask it to inspect", "site Memory", "attached exact materials", "component definitions"] } };
+      return { siteName: options.siteName(capture), provider: options.provider.status(), botName: settings.botName ?? options.config.name, defaultName: options.config.name, permission: options.config.permission, memory: settings.memory, destination: { provider: options.config.baseUrl === "https://api.anthropic.com" ? "Anthropic Messages API" : `Anthropic Messages API via ${new URL(options.config.baseUrl).host}`, model: options.config.model, sends: ["your message and recent conversation", "current page/selection ids and the blocks you ask it to inspect", "site Memory", "attached exact materials", "component definitions"] } };
     },
     async start(workspaceId: string, input: unknown) {
       const request = startSchema.parse(input);

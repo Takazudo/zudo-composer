@@ -16,5 +16,5 @@
     "strict": true,
     "skipLibCheck": true
   },
-  "include": ["plugins/native-edit-api.ts", "vite.config.ts", "vite.demo-editor.config.ts", "vite.site-static.config.ts", "vitest.config.ts", "eslint.config.js"]
+  "include": ["plugins/native-edit-api.ts", "plugins/assistant-api.ts", "server/assistant/**/*.ts", "vite.config.ts", "vite.demo-editor.config.ts", "vite.site-static.config.ts", "vitest.config.ts", "eslint.config.js"]
 }

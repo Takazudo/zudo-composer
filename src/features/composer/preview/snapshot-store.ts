@@ -33,6 +33,7 @@ export interface PreviewState {
   nativePage?: import("./protocol").NativePageIdentity;
   nativeReview?: import("./protocol").NativeReviewIdentity;
   selectNative?: boolean;
+  review?: import("./protocol").ReviewAnnotations;
 }
 
 /**
@@ -80,6 +81,7 @@ export function applyInbound(
         nativeReview: message.nativeReview,
         nativePage: message.nativePage,
         selectNative: message.selectNative,
+        review: message.review,
       };
     case "mode":
       if (state.nativeReview || state.nativePage) return null;

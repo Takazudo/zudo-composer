@@ -27,6 +27,7 @@ import {
   readParentToPreview,
   readyMessage,
   renderedMessage,
+  reviewAnnotatedMessage,
   requestAddMessage,
   requestInsertMenuMessage,
   requestNodeMenuMessage,
@@ -58,6 +59,8 @@ export interface PreviewClientOptions {
    * `PreviewState` — see `snapshot-store.ts`'s `applyInbound` comment.
    */
   onRestoreFocus?: (focusToken: string) => void;
+  /** Scroll/pulse one review annotation of the current review key. */
+  onFocusAnnotation?: (key: string, id: string) => void;
   /** Active inline drafts remain in this document until explicitly finished. */
   isAuthoringClean?: () => boolean;
   /** A message was DROPPED by the guard. */
@@ -98,6 +101,8 @@ export interface PreviewClient {
   /** Ask the host controller to redo; only called for guarded canvas chrome keys. */
   emitRequestRedo(): void;
   emitError(message: string, recoverable?: boolean): void;
+  /** Reports, for the review key on screen, which annotations mapped to words. */
+  emitReviewAnnotated(key: string, results: import("./protocol").ReviewAnnotatedMessage["results"]): void;
   /** The newest applied state. */
   readonly state: PreviewState;
   readonly terminal: boolean;
@@ -146,6 +151,10 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
     }
     // `restore-focus` (Takazudo/zudo-sg#256) is not a document/session snapshot — it never
     // reaches the revision-gated fold below. See `applyInbound`'s comment.
+    if (message.type === "focus-annotation") {
+      if (state.review?.key === message.key) options.onFocusAnnotation?.(message.key, message.id);
+      return;
+    }
     if (message.type === "restore-focus") {
       options.onRestoreFocus?.(message.focusToken);
       return;
@@ -199,6 +208,9 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
     emitRequestRedo() {
       if (state.nativeReview || state.selectNative) return;
       post(requestHistoryMessage(pack, "redo"));
+    },
+    emitReviewAnnotated(key, results) {
+      if (state.review?.key === key) post(reviewAnnotatedMessage(pack, state.revision, key, results));
     },
     emitError(message, recoverable = true) {
       post(errorMessage(pack, state.revision < 0 ? null : state.revision, message, recoverable));

@@ -15,8 +15,8 @@ export function createAnthropicProvider(config: AssistantConfig, env: NodeJS.Pro
   const connect = () => {
     const key = credential();
     if (!key) throw new ProviderError("auth", `Set ${config.apiKeyEnv} for the authoring server process to enable the Assistant.`, false);
-    // The SDK would otherwise also consult ANTHROPIC_BASE_URL/AUTH_TOKEN; this adapter uses only the configured key.
-    if (!client || clientKey !== key) { client = new Anthropic({ apiKey: key, authToken: null, baseURL: "https://api.anthropic.com", maxRetries: 2, timeout: REQUEST_TIMEOUT_MS }); clientKey = key; }
+    // The SDK would otherwise also consult ANTHROPIC_BASE_URL/AUTH_TOKEN; this adapter uses only the configured key and origin.
+    if (!client || clientKey !== key) { client = new Anthropic({ apiKey: key, authToken: null, baseURL: config.baseUrl, maxRetries: 2, timeout: REQUEST_TIMEOUT_MS }); clientKey = key; }
     return client;
   };
   const toParam = (block: ProviderBlock): Anthropic.Beta.BetaContentBlockParam => {

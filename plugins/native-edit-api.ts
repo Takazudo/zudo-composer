@@ -40,6 +40,9 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
   const module = await server.ssrLoadModule(appModuleId("server/edit/service.ts"));
   const service = module.createEditingService({ config: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity }) as ReturnType<typeof createEditingService>;
   await service.initializeSourceEpoch();
+  const assistantConfig = context.composerConfig.assistant;
+  let assistant: { endpoint: string; name: string } | undefined;
+  let assistantRunner: { stopAll(): Promise<void> } | undefined;
   for (const event of ["add", "change", "unlink"] as const) server.watcher.on(event, () => server.ws.send("native:invalidated", {}));
   const peers = new Map<string, { client: WebSocketClient; send(data: unknown): void; resume(data: unknown): void; close(): void }>();
   let activeRequests = 0;
@@ -69,6 +72,19 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
     const peer = peers.get(parsed.data.clientId); if (peer?.client !== client) return;
     coordinator.answer(parsed.data.clientId, peer, parsed.data.challenge, parsed.data.epoch, parsed.data.clean);
   });
+  if (assistantConfig) {
+    const [storeModule, runnerModule, providerModule, apiModule, inspectModule] = await Promise.all([
+      server.ssrLoadModule(appModuleId("server/assistant/store.ts")), server.ssrLoadModule(appModuleId("server/assistant/runner.ts")),
+      server.ssrLoadModule(appModuleId("server/assistant/anthropic-provider.ts")), server.ssrLoadModule(appModuleId("plugins/assistant-api.ts")),
+      server.ssrLoadModule(appModuleId("server/edit/inspect.ts")),
+    ]);
+    const capture = () => inspectModule.captureHost({ config: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity });
+    const store = await storeModule.openAssistantStore(context.composerConfig.paths.data);
+    const runner = runnerModule.createAssistantRunner({ store, service, provider: providerModule.createAnthropicProvider(assistantConfig), config: assistantConfig, lease, capture, siteName: (state: { workspace: { metadata: { name: string } } }) => state.workspace.metadata.name });
+    assistantRunner = runner;
+    const installed = apiModule.installAssistantApi(server, { service, store, runner, config: assistantConfig, lease, coordinator, capability, approvalCapability, peers, capture });
+    assistant = { endpoint: installed.endpoint, name: assistantConfig.name };
+  }
   server.middlewares.use(async (req, res, next) => {
     if (req.url !== "/__zudo-native-edit") return next();
     const respond = (status: number, value: unknown) => { if (res.destroyed || res.writableEnded) return; res.statusCode = status; res.setHeader("Content-Type", "application/json"); res.setHeader("Cache-Control", "no-store"); res.end(JSON.stringify(value)); };
@@ -129,10 +145,10 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
     } finally { clearTimeout(timer); activeRequests--; }
   });
   return {
-    config: { endpoint: "/__zudo-native-edit", capability, approvalCapability, pack: { packId: context.pack.manifest.packId, packVersion: context.pack.manifest.packVersion } },
+    config: { endpoint: "/__zudo-native-edit", capability, approvalCapability, pack: { packId: context.pack.manifest.packId, packVersion: context.pack.manifest.packVersion }, ...(assistant ? { assistant } : {}) },
     isProvider: (req: { url?: string }) => /^\/__zudo_composer_[a-z_]*provider$/.test(req.url ?? "") || req.url === "/__zudo-release",
     provider: (req: { headers: Record<string, unknown> }, action: () => unknown) => coordinator.provider(String(req.headers["x-zudo-native-client"] ?? ""), Number(req.headers["x-zudo-native-epoch"]), action),
-    close: () => { for (const watcher of watchers) watcher.close(); coordinator.close(); },
+    close: () => { for (const watcher of watchers) watcher.close(); coordinator.close(); void assistantRunner?.stopAll(); },
     drain: () => coordinator.drain(),
   };
 }

@@ -27,6 +27,7 @@ import {
   matchesUndoRedoShortcut,
 } from "../keyboard-shortcuts";
 import { createPreviewClient, type PreviewClient } from "./client";
+import { createReviewAnnotator } from "./review-annotations";
 import { INLINE_EDITING_ATTR } from "./inline-edit-dom";
 import type { GuardFailure, MessagePoster, MessageTarget, SerializedRect } from "./protocol";
 import { activeFocusToken, CompositionCanvas, focusByToken } from "./renderer";
@@ -66,6 +67,7 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
   const [framed] = useState(isFramed);
   const failedRevision = useRef<number | null>(null);
   const clientRef = useRef<PreviewClient | null>(null);
+  const annotatorRef = useRef<ReturnType<typeof createReviewAnnotator> | null>(null);
   // A valid parent snapshot may replace the selected node's DOM ancestry (the
   // linked consumer/source view can revalidate while history is applying), so
   // keyed chrome alone cannot guarantee that the focused control survives.
@@ -108,6 +110,7 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
       // closed (issue Takazudo/zudo-sg#256) — restore focus to the exact control that opened
       // it. Not a state transition, so it never touches `setState`.
       onRestoreFocus: (focusToken) => focusByToken(focusToken),
+      onFocusAnnotation: (_key, id) => annotatorRef.current?.focus(id),
       isAuthoringClean: () => !document.querySelector('[data-zc-inline-editing], [data-zc-prose-editing], [data-zc-prose-chrome], [contenteditable]:not([contenteditable="false"])'),
       onRejected: (reason: GuardFailure, detail) => {
         // A wrong-source / wrong-origin message is just noise: ANY page in ANY
@@ -129,12 +132,15 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
       },
     });
     clientRef.current = client;
+    annotatorRef.current = createReviewAnnotator(window, () => document.querySelector("[data-composer-preview-root]"), (key, results) => client.emitReviewAnnotated(key, results));
 
     client.emitReady();
 
     return () => {
       client.dispose();
       clientRef.current = null;
+      annotatorRef.current?.dispose();
+      annotatorRef.current = null;
     };
   }, [framed, provider.manifest.packId, provider.manifest.packVersion]);
 
@@ -180,11 +186,24 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
         const loaded = () => done(true), failed = () => done(false);
         const timer = setTimeout(failed, 10_000); image.addEventListener("load", loaded); image.addEventListener("error", failed);
       })));
+      // Host fonts are part of the reviewed rendering; a failed face is not a successful render.
+      const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
+      if (fonts) {
+        await Promise.race([fonts.ready, new Promise(resolve => setTimeout(resolve, 10_000))]);
+        if ([...fonts].some(face => face.status === "error")) throw new Error("A page font failed to load.");
+      }
       if (active && failedRevision.current !== revision && clientRef.current?.state.revision === revision) clientRef.current.emitRendered();
     };
     void check().catch(cause => { if (active) { failedRevision.current = revision; clientRef.current?.emitError(cause instanceof Error ? cause.message : "Candidate render failed."); } });
     return () => { active = false; };
   }, [state.revision, state.nativeReview, state.document, state.linked, provider, error, fatalError]);
+
+  // Review annotations follow the committed DOM of exactly this revision; stale marks are cleared first.
+  useEffect(() => {
+    let active = true;
+    requestAnimationFrame(() => requestAnimationFrame(() => { if (active) annotatorRef.current?.apply(state.review); }));
+    return () => { active = false; };
+  }, [state.revision, state.review]);
 
   // Mirror the host's active theme onto THIS document. `colors.css` keys
   // `color-scheme` off `:root[data-theme]`, which is what makes every

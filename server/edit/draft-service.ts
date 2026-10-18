@@ -105,7 +105,7 @@ export function createDraftOperations(context: DraftContext) {
       generation, permission: context.permission,
       draft: {
         id: draft.id, revision: draft.revision, status: draft.status, createdAt: draft.createdAt, updatedAt: draft.updatedAt,
-        applied: draft.applied ?? null, undone: draft.undone ?? null, dependenciesCurrent,
+        applied: draft.applied ?? null, undone: draft.undone ?? null, dependenciesCurrent, dependencyDigest: draft.dependencyDigest,
         operations: draft.operations.map(operation => ({ id: operation.id, kind: operation.kind, page: operation.page, provenance: operation.provenance, reason: operation.reason ?? null, createdAt: operation.createdAt })),
         pages: (build?.pages ?? draft.pages.map(page => ({ ...page, candidate: page.before, jsx: "", changed: false }))).map(page => ({ page: page.page, identity: page.identity, before: page.before, candidate: page.candidate, changed: page.changed, linked: linked(page.page) })),
         changes: build?.changes ?? [], stale: build?.stale ?? [], buildError,
