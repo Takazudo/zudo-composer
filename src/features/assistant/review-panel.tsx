@@ -49,7 +49,7 @@ export interface ReviewPanelProps {
 /** Validated Unstaged Changes and receipt-backed results; never derived from message text. */
 export function ReviewPanel(props: ReviewPanelProps) {
   const draft = props.view?.draft;
-  if (!draft || draft.status === "discarded") return <section class="cms-assistant-review" aria-label="Unstaged changes"><h2>Unstaged changes</h2><p class="cms-assistant-hint">No pending AI changes. Proposals appear here for review before anything is saved.</p></section>;
+  if (!draft || draft.status === "discarded" || (draft.status === "open" && !draft.changes.length && !draft.stale.length && !draft.buildError)) return <section class="cms-assistant-review" aria-label="Unstaged changes"><h2>Unstaged changes</h2><p class="cms-assistant-hint">No pending AI changes. Proposals appear here for review before anything is saved.</p></section>;
   if (draft.status === "applied" || draft.status === "undone") return <section class="cms-assistant-review" aria-label="Applied changes">
     <h2>{draft.status === "applied" ? "Applied to Composer" : "Undo committed"}</h2>
     <p role="status">Receipt {draft.status === "applied" ? draft.applied?.operationId : draft.undone?.operationId} · {new Date((draft.status === "applied" ? draft.applied?.committedAt : draft.undone?.committedAt) ?? "").toLocaleString("en")}</p>
@@ -81,7 +81,7 @@ export function ReviewPanel(props: ReviewPanelProps) {
           {pages.length > 1 && <span class="cms-assistant-hint">{change.page.pageId}</span>}
         </div>
         {change.kind === "added" ? <AddedDetail change={change} /> : <FieldDetail change={change} />}
-        {props.fallback.has(annotationId(change)) && props.currentPage === key && <p class="cms-assistant-hint">This block's renderer doesn't map the field text reliably, so it is outlined as a whole; the exact change is shown above.</p>}
+        {props.fallback.has(annotationId(change)) && props.currentPage === key && <p class="cms-assistant-hint">Word highlights aren't available for this block's rendering, so the preview marks the whole block; the exact field change is listed here.</p>}
         {change.reasons[0] && <p class="cms-assistant-hint">Requested: “{change.reasons[0]}”</p>}
         <button type="button" class="cms-assistant-link" disabled={props.busy} onClick={() => props.onWithdraw(change)}>Withdraw</button>
       </li>;

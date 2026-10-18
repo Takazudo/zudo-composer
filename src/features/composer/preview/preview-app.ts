@@ -182,6 +182,13 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
       const images = [...document.querySelectorAll<HTMLImageElement>("[data-composer-preview-root] img")];
       await Promise.all(images.map(image => new Promise<void>((resolve, reject) => {
         if (image.complete) return image.naturalWidth ? resolve() : reject(new Error("Candidate image dependency is unavailable."));
+        // A lazy image outside the viewport never starts loading; verify its exact source off-DOM instead of altering page markup.
+        if (image.loading === "lazy") {
+          const probe = new Image();
+          if (image.srcset) { probe.srcset = image.srcset; probe.sizes = image.sizes; }
+          probe.src = image.currentSrc || image.src;
+          return void probe.decode().then(() => resolve(), () => reject(new Error("Candidate image dependency is unavailable.")));
+        }
         const done = (ok: boolean) => { clearTimeout(timer); image.removeEventListener("load", loaded); image.removeEventListener("error", failed); if (ok) resolve(); else reject(new Error("Candidate image dependency is unavailable.")); };
         const loaded = () => done(true), failed = () => done(false);
         const timer = setTimeout(failed, 10_000); image.addEventListener("load", loaded); image.addEventListener("error", failed);

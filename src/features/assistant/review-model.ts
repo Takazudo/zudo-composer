@@ -4,7 +4,8 @@ import type { DraftChange } from "./types";
 type Span = [number, number];
 interface Token { text: string; start: number; end: number; space: boolean }
 // Han/Kana have no spaces between words, so each character is its own token.
-const TOKEN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]|[^\s\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+|\s+/gu;
+// Punctuation is its own token so "copy" and "copy," still compare equal as words.
+const TOKEN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]|[\p{L}\p{N}\p{M}_'’-]+|\s+|[^\s\p{L}\p{N}\p{M}]/gu;
 export function tokenize(text: string): Token[] {
   return [...text.matchAll(TOKEN)].map(match => ({ text: match[0], start: match.index!, end: match.index! + match[0].length, space: /^\s+$/.test(match[0]) }));
 }

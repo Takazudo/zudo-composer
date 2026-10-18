@@ -10,6 +10,7 @@ describe("Assistant review model", () => {
     const before = "Plan your week in minutes.", after = "Plan your whole week in a few minutes.";
     const diff = wordDiff(before, after);
     expect(slice(after, diff.insert)).toEqual(["whole", "a few"]);
+    expect(slice("Other page copy, now clearer", wordDiff("Other page copy", "Other page copy, now clearer").insert)).toEqual([", now clearer"]);
     expect(diff.remove).toEqual([]);
     expect(wordDiff("Start  free", "Start free")).toEqual({ insert: [], remove: [] });
     const shortened = wordDiff("Drag a block into next month and everyone sees it move.", "Drag a block to any day.");

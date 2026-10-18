@@ -131,8 +131,10 @@ export function createReviewAnnotator(win: Window, canvas: () => Element | null,
       let mapped = 0, wanted = 0;
       for (const entry of annotation.texts) {
         if (!entry.ranges.length) continue;
-        wanted++;
         const map = locate(index, entry.text);
+        // Alternative text and titles are real field values but not visible words; the block marker covers them.
+        if (!map && [...componentRoot.querySelectorAll("[alt], [title], [aria-label]")].some(element => ["alt", "title", "aria-label"].some(name => element.getAttribute(name) === entry.text))) continue;
+        wanted++;
         if (!map) continue;
         let ok = true;
         for (const [start, end] of entry.ranges) {

@@ -185,7 +185,9 @@ export function diffPage(capture: HostCapture, page: DraftPage, after: Compositi
       changes.push({ id: `field:${page.before.id}:${nodeId}:${prop}`, kind: "field", page: page.page, recordId: page.before.id, nodeId, componentId: current.componentId, componentTitle: title(current.componentId), prop, fieldLabel: entry?.fields.find(field => field.prop === prop)?.label ?? prop, ...(old.props[prop] === undefined ? {} : { before: old.props[prop] }), ...(current.props[prop] === undefined ? {} : { after: current.props[prop] }), operationIds: related.map(operation => operation.id), reasons: related.flatMap(operation => operation.reason ? [operation.reason] : []) });
     }
   }
-  return changes;
+  // Page order, so change navigation and labels walk the page top to bottom.
+  const position = (change: DraftChange) => next.order.indexOf(change.nodeId) >= 0 ? next.order.indexOf(change.nodeId) : before.order.indexOf(change.nodeId) - 0.5;
+  return changes.map((change, index) => ({ change, index })).sort((a, b) => position(a.change) - position(b.change) || a.index - b.index).map(entry => entry.change);
 }
 
 /** Operations that disappear with a withdrawn change, including dependents that no longer apply. */

@@ -57,7 +57,12 @@ export function AssistantRoute() {
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
   const siteName = status?.siteName ?? "this site";
-  const saveInput = (value: typeof input) => { setInput(value); write(`${prefix}:input`, value); };
+  type InputState = typeof input;
+  const saveInput = (value: InputState | ((current: InputState) => InputState)) => setInput(current => {
+    const next = typeof value === "function" ? value(current) : value;
+    write(`${prefix}:input`, next);
+    return next;
+  });
 
   // ── loading ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -93,7 +98,8 @@ export function AssistantRoute() {
     const value = await assistantRequest<Conversation>("conversation", workspaceId, { conversationId: id });
     if (mounted.current && id === conversationRef.current) setConversation(value);
   }, [workspaceId]);
-  const conversationRef = useRef(conversationId); conversationRef.current = conversationId;
+  // Only selectConversation moves this; it never lags behind a switch the way captured state can.
+  const conversationRef = useRef(conversationId);
   useEffect(() => { void refreshStatus(); void refreshDraft(); }, [refreshStatus, refreshDraft]);
   useEffect(() => {
     void refreshConversations().then(async list => {
@@ -178,26 +184,29 @@ export function AssistantRoute() {
   });
   const send = async () => {
     // A shared page must be resolved before sending; never silently send "no page".
-    if (!conversationId || !input.text.trim() || chatBusy || live || (sharePage && !page)) return;
+    // The ref is the authoritative selection; render-captured state can lag a conversation switch.
+    const target = conversationRef.current;
+    if (!target || !input.text.trim() || chatBusy || live || (sharePage && !page)) return;
     setChatBusy(true); setChatError(null);
     // A retried submit after a lost response reuses its turn id; the server returns the original run.
     const turnId = input.turnId ?? crypto.randomUUID();
     saveInput({ ...input, turnId });
     try {
       const turnContext = context();
-      const started = await assistantRequest<{ runId: string; conversationId: string }>("start", workspaceId, { conversationId, clientTurnId: turnId, text: input.text, context: turnContext });
+      const started = await assistantRequest<{ runId: string; conversationId: string }>("start", workspaceId, { conversationId: target, clientTurnId: turnId, text: input.text, context: turnContext });
       saveInput({ text: "", attachments: [] });
-      void loadConversation(conversationId);
+      void loadConversation(target);
       void follow(started.runId, started.conversationId);
     } catch (cause) { setChatError(cause instanceof Error ? cause.message : "The message was not sent. It is kept here."); }
     finally { setChatBusy(false); }
   };
   const retry = async (message: ChatMessage) => {
     const user = conversation?.messages.find(candidate => candidate.role === "user" && candidate.turnId === message.turnId);
-    if (!user || !conversationId) return;
+    const target = conversationRef.current;
+    if (!user || !target || user.id && conversation?.id !== target) return;
     setChatBusy(true); setChatError(null);
     try {
-      const started = await assistantRequest<{ runId: string; conversationId: string }>("start", workspaceId, { conversationId, clientTurnId: user.turnId, text: user.text, context: user.context ?? { page: null, selection: null, payloadIds: [] }, retryOfRunId: message.runId });
+      const started = await assistantRequest<{ runId: string; conversationId: string }>("start", workspaceId, { conversationId: target, clientTurnId: user.turnId, text: user.text, context: user.context ?? { page: null, selection: null, payloadIds: [] }, retryOfRunId: message.runId });
       void follow(started.runId, started.conversationId);
     } catch (cause) { setChatError(cause instanceof Error ? cause.message : "Retry failed."); }
     finally { setChatBusy(false); }
@@ -302,19 +311,24 @@ export function AssistantRoute() {
     <aside class="cms-assistant-left">
       <ChatPanel status={status} statusError={statusError} siteName={siteName} conversations={conversations} conversationId={conversationId} messages={conversation?.messages ?? []} live={live}
         input={input.text} attachments={input.attachments} context={context()} sharePage={sharePage} busy={chatBusy || (sharePage && !page)} error={chatError} images={images}
-        onInput={text => saveInput({ ...input, text, turnId: undefined })} onSend={() => void send()} onStop={() => { if (live) void assistantRequest("stop", workspaceId, { runId: live.runId }).catch(cause => setChatError(cause.message)); }}
+        onInput={text => saveInput(current => ({ ...current, text, turnId: undefined }))} onSend={() => void send()} onStop={() => { if (live) void assistantRequest("stop", workspaceId, { runId: live.runId }).catch(cause => setChatError(cause.message)); }}
         onRetry={message => void retry(message)} onConversation={selectConversation}
-        onNewConversation={() => void assistantRequest<Conversation>("createConversation", workspaceId).then(created => { void refreshConversations(); selectConversation(created.id); }, cause => setChatError(cause.message))}
+        onNewConversation={() => {
+          // Sending stays disabled until the new conversation is selected.
+          setChatBusy(true);
+          void assistantRequest<Conversation>("createConversation", workspaceId).then(created => { void refreshConversations(); selectConversation(created.id); }, cause => setChatError(cause.message)).finally(() => setChatBusy(false));
+        }}
         onSharePage={setSharePage} onClearSelection={() => { setSelection(null); write(`${prefix}:selection:${pageKey}`, null); }}
-        onAttach={async (payload, label) => { const record = await assistantRequest<{ id: string }>("putPayload", workspaceId, { payload }); saveInput({ ...input, attachments: [...input.attachments, { id: record.id, label }], turnId: undefined }); }}
-        onRemoveAttachment={id => saveInput({ ...input, attachments: input.attachments.filter(attachment => attachment.id !== id), turnId: undefined })}
+        onAttach={async (payload, label) => { const record = await assistantRequest<{ id: string }>("putPayload", workspaceId, { payload }); saveInput(current => ({ ...current, attachments: [...current.attachments, { id: record.id, label }], turnId: undefined })); }}
+        onRemoveAttachment={id => saveInput(current => ({ ...current, attachments: current.attachments.filter(attachment => attachment.id !== id), turnId: undefined }))}
         onOpenMemory={() => setMemoryOpen(true)} onRename={name => void assistantRequest("rename", workspaceId, { botName: name }).then(() => refreshStatus(), cause => setChatError(cause.message))}
         onMemoryProposal={(_message, proposalId, accept) => void (async () => {
           const memory = await assistantRequest<{ revision: number }>("memory", workspaceId);
-          await assistantRequest(accept ? "acceptMemoryProposal" : "rejectMemoryProposal", workspaceId, accept ? { conversationId: conversationId!, proposalId, expectedRevision: memory.revision } : { conversationId: conversationId!, proposalId });
-          void refreshStatus(); void loadConversation(conversationId!);
+          const target = conversationRef.current!;
+          await assistantRequest(accept ? "acceptMemoryProposal" : "rejectMemoryProposal", workspaceId, accept ? { conversationId: target, proposalId, expectedRevision: memory.revision } : { conversationId: target, proposalId });
+          void refreshStatus(); void loadConversation(target);
         })().catch(cause => setChatError(cause.message))}
-        onStageSuggestion={(_message, suggestionId) => void assistantRequest("stageSuggestion", workspaceId, { conversationId: conversationId!, suggestionId, generation: draft?.generation ?? 0, draftId: open?.id ?? null }).then(() => { void refreshDraft(); void loadConversation(conversationId!); }, cause => setChatError(cause.message))}
+        onStageSuggestion={(_message, suggestionId) => { const target = conversationRef.current!; void assistantRequest("stageSuggestion", workspaceId, { conversationId: target, suggestionId, generation: draft?.generation ?? 0, draftId: open?.id ?? null }).then(() => { void refreshDraft(); void loadConversation(target); }, cause => setChatError(cause.message)); }}
         onShowChanges={() => { setTab("page"); setView("draft"); if (allChanges[0]) openChange(allChanges[0]); }} />
     </aside>
     <section class="cms-assistant-right" aria-label="Page preview and review">

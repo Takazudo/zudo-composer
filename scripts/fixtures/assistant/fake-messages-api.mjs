@@ -4,7 +4,7 @@
 // Evidence produced through it is fake-provider evidence, never live-model proof.
 import { createServer } from "node:http";
 
-/** @typedef {{ text?: string, tools?: { name: string, input: unknown }[], status?: number, error?: string, delayMs?: number, holdUntilAbort?: boolean }} Turn */
+/** @typedef {{ text?: string, tools?: { name: string, input: unknown | ((request: any) => unknown) }[], status?: number, error?: string, delayMs?: number, holdUntilAbort?: boolean }} Turn */
 
 /** @param {{ port?: number }} [options] */
 export async function startFakeMessagesApi(options = {}) {
@@ -41,7 +41,8 @@ export async function startFakeMessagesApi(options = {}) {
     }
     for (const [offset, tool] of (turn.tools ?? []).entries()) {
       send("content_block_start", { type: "content_block_start", index, content_block: { type: "tool_use", id: `toolu_fake_${sequence}_${offset}`, name: tool.name, input: {} } });
-      send("content_block_delta", { type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: JSON.stringify(tool.input) } });
+      const input = typeof tool.input === "function" ? tool.input(body) : tool.input;
+      send("content_block_delta", { type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: JSON.stringify(input) } });
       send("content_block_stop", { type: "content_block_stop", index }); index++;
     }
     send("message_delta", { type: "message_delta", delta: { stop_reason: turn.tools?.length ? "tool_use" : "end_turn", stop_sequence: null }, usage: { output_tokens: 10 } });
