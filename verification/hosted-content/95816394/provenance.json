@@ -1,0 +1,5 @@
+{
+  "packageOutputSha": "958163948e2d28c1ff757a542568f3f6cf4d6d9f",
+  "source": "Unmodified local run of node scripts/verify-hosted-consumer.mjs <C> .artifacts/hosted-consumer in the Claude Code cloud container (Node 22.22.0, pnpm 11.5.2); its own playwright install and real browser acceptance ran and passed. packed-payload-inventory.json is a copy of the checked verification/hosted-content/current-payload.json written at C.",
+  "browser": "passed"
+}

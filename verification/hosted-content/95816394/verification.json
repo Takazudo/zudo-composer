@@ -1,0 +1,288 @@
+{
+  "installedToolSha": "958163948e2d28c1ff757a542568f3f6cf4d6d9f",
+  "node": "v22.22.0",
+  "packageManager": "pnpm@11.5.2",
+  "contractSha": "c0b452da075b66757c60bd0d721a47062d4354d0",
+  "contractProtocol": 2,
+  "peerPreact": "10.29.8",
+  "commands": [
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "/home/user/zudo-composer/scripts/install-hosted-consumer.mjs",
+        "958163948e2d28c1ff757a542568f3f6cf4d6d9f",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer"
+      ],
+      "cwd": "/home/user/zudo-composer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer/work/install-browser-bundle"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer/work/install-browser-transport.sqlite",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer/work/install-browser-transport"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer/work/install-render.sqlite"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer/work/install-publication-render"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer/renderer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer/work/frozen-browser-bundle"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer/work/frozen-browser-transport.sqlite",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer/work/frozen-browser-transport"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer/work/frozen-render.sqlite"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer/work/frozen-publication-render"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "playwright",
+        "install",
+        "--with-deps",
+        "chromium"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer/work/browser.sqlite"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-broad-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer/work/browser-broad.sqlite",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer/work/browser-broad"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer",
+      "outcome": "passed"
+    }
+  ],
+  "payloadSha256": "2d37ba279f83265617f1d698b5d2f5c2b4ec2ac15b22ed94c85a3f5d2313bfd3",
+  "lockDigests": {
+    "package.json": "4b73c63897826ceaf44b15d60c234ca8923b1f01c7c99208704d99fe521e56ec",
+    "pnpm-lock.yaml": "a0295840c33447cffd455ba4f4c06ec4ce5d19745fd68cc08eaab59b1c1454c5",
+    "renderer/package.json": "4b422bbd6902858bce5c48b5cefd32e346949c125f7c1b0d5bb69232ddc88d29",
+    "renderer/pnpm-lock.yaml": "718ac0e274768ac40fcf6712d0aa5d88097b00b82073fe1103fc898bc64bf726"
+  },
+  "independentInstall": "passed",
+  "frozenReinstall": "passed",
+  "worker": "passed",
+  "browserBundle": "passed",
+  "nodeBoundary": "passed",
+  "sqlite": "passed",
+  "httpTransport": "passed",
+  "staticRenderer": "passed",
+  "browser": "passed"
+}

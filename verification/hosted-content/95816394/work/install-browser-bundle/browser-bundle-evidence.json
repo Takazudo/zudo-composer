@@ -1,0 +1,17 @@
+{
+  "proof": "installed-editor-browser-assets-and-declarations",
+  "browserExecution": "NOT RUN: this command only builds/inspects browser assets and checks declarations",
+  "editorJavascriptBundle": "PASS",
+  "explicitPublicEditorCss": "PASS",
+  "emittedDependencyMetafile": "PASS",
+  "editorHostRendererNodeVirtualLeaks": [],
+  "strictPublicBrowserHostDeclarations": "PASS",
+  "actualSourceMarkdownControls": "PASS",
+  "assetHashes": {
+    "browser-checkpoint.js": "84fed00ca05a2e4c602f4f4fe7b1af769f2b8ee16d0a1795111bf0feef6d29c0",
+    "browser-checkpoint.css": "bce19332145b46f52ba3a44080b98b432257313fd172a432ed923bbe79baf4cd"
+  },
+  "installedToolSpec": "git+https://github.com/Takazudo/zudo-composer.git#958163948e2d28c1ff757a542568f3f6cf4d6d9f",
+  "installedToolSha": "958163948e2d28c1ff757a542568f3f6cf4d6d9f",
+  "metafileSha256": "e02aa99630955e8860e622b10193ed92d0f85fdc70c9055ec131a44f70df8f2e"
+}
