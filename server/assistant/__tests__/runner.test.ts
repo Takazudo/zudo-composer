@@ -257,6 +257,30 @@ describe("restricted Assistant runner", () => {
     expect((await runner.run("proof", run.runId)).memory).toMatchObject({ revision: 2 });
   });
 
+  it("a mode change or Clear after a reply started fences that reply's automatic Memory updates", async () => {
+    const remember = { change: { kind: "append", text: "Prefer metric units." } };
+    let shared: Awaited<ReturnType<typeof fixture>> | undefined;
+    let action: (() => Promise<unknown>) | undefined;
+    const { runner, store, scope } = shared = await fixture(async (request, call) => {
+      if (call % 3 === 1) { await action!(); return tool("inspect_page", {}); }
+      if (call % 3 === 2) return tool("remember", remember);
+      return text("Done.");
+    });
+    const conversation = await store.createConversation(scope);
+    // Read only when the reply started, switched to Auto while it runs: no unapproved save.
+    action = () => shared!.store.setMemoryMode(shared!.scope, { mode: "auto", expectedModeRevision: 0 });
+    const switched = await runner.start("proof", { conversationId: conversation.id, clientTurnId: turn(), text: "Remember metric units.", context });
+    await complete(runner, switched.runId);
+    expect((await store.recall(scope)).used.revision).toBe(0);
+    expect((await runner.run("proof", switched.runId)).events).toContainEqual(expect.objectContaining({ type: "tool", data: expect.objectContaining({ name: "remember", status: "refused", code: "memory-fenced" }) }));
+    // Auto when the reply started, cleared while it runs: the earlier reply cannot write after the Clear.
+    await store.saveMemory(scope, { body: "Audience: experts.", expectedRevision: 0 });
+    action = () => shared!.store.clearMemory(shared!.scope, { expectedRevision: 1 });
+    const cleared = await runner.start("proof", { conversationId: conversation.id, clientTurnId: turn(), text: "Remember metric units.", context });
+    await complete(runner, cleared.runId);
+    expect((await store.recall(scope)).body).toBe("");
+  });
+
   it("never runs tool calls from a turn that did not stop for tool use", async () => {
     const { runner, store, scope, homeJson } = await fixture(() => ({ content: [{ type: "tool_use", id: "cut", name: "propose_changes", input: { operations: [{ kind: "updateField", page: context.page, nodeId: "paragraph", prop: "text", value: "Half" }] } }], stopReason: "other" }));
     const before = await readFile(homeJson, "utf8");

@@ -314,7 +314,7 @@ export function createAssistantRunner(options: RunnerOptions) {
       const transcript: ProviderMessage[] = [];
       // System prompt and tools stay byte-identical for the whole run: the model's thinking blocks are bound to
       // that prefix, so later Memory changes are appended to the transcript instead of rebuilding it.
-      let frame: { system: string; tools: ToolSpec[]; memory: UsedMemory } | undefined;
+      let frame: { system: string; tools: ToolSpec[]; memory: UsedMemory; fence: { modeRevision: number; clearGeneration: number } } | undefined;
       for (let call = 0; call < MAX_MODEL_CALLS; call++) {
         if (!run.active) return;
         // Scope and the latest committed Memory are re-read before every model call.
@@ -324,7 +324,7 @@ export function createAssistantRunner(options: RunnerOptions) {
         run.memory = memory.used; run.record.memory = memory.used;
         emit(run, "status", { phase: "calling-model", call: call + 1, memory: memory.used });
         if (call === 0) transcript.push({ role: "user", content: [{ type: "text", text: turnText(userMessage, capture) }] });
-        if (!frame) frame = { system: systemPrompt(await botName(scope), options.siteName(capture), memory), tools: toolSpecs(memory.used.mode), memory: memory.used };
+        if (!frame) frame = { system: systemPrompt(await botName(scope), options.siteName(capture), memory), tools: toolSpecs(memory.used.mode), memory: memory.used, fence: { modeRevision: memory.fence.modeRevision, clearGeneration: memory.fence.clearGeneration } };
         else if (!sameMemory(frame.memory, memory.used)) {
           transcript.at(-1)!.content.push({ type: "text", text: `[Site Memory changed during this reply. It replaces the Memory given at the start.]\n${memoryText(memory)}` });
           frame.memory = memory.used;
@@ -348,9 +348,11 @@ export function createAssistantRunner(options: RunnerOptions) {
         if (run.text && !/\s$/.test(run.text)) { run.text += "\n\n"; }
         const results: ProviderBlock[] = [];
         let endTurn = false;
+        // A mode change or Clear after the reply started fences its automatic updates; only the revision may advance.
+        const fence = { ...memory.fence, ...frame.fence };
         for (const use of uses) {
           if (++toolCalls > MAX_TOOL_CALLS) { results.push({ type: "tool_result", toolUseId: use.id, content: "Tool budget exhausted for this reply.", isError: true }); continue; }
-          const result = await execute(run, capture, use.name, use.input, memory.fence);
+          const result = await execute(run, capture, use.name, use.input, fence);
           endTurn ||= !!result.endTurn;
           results.push({ type: "tool_result", toolUseId: use.id, content: result.content.length > TOOL_RESULT_CHARACTERS ? `${result.content.slice(0, TOOL_RESULT_CHARACTERS)}… [truncated]` : result.content, ...(result.isError ? { isError: true } : {}) });
         }
