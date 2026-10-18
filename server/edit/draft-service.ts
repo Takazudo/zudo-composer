@@ -9,8 +9,9 @@ import type { AssetVersionPin } from "../../src/assets/model/types";
 import { nativeCapabilities, resolvePage, type HostCapture } from "./inspect";
 import { EditError } from "./plans";
 import { openDraftStore, type DraftStore } from "./draft-store";
+import { MAX_REVIEWED_CHANGES } from "../../src/composer/storage/filesystem/reviewed-edit";
 import {
-  buildDraft, componentNode, pageContextDigest, operationRequestSchema, pageKey, pageRefSchema, withdrawOperations,
+  buildDraft, componentNode, insideAttachedSlot, pageContextDigest, operationRequestSchema, pageKey, pageRefSchema, withdrawOperations,
   type DraftBuild, type DraftOperation, type DraftPage, type DraftValue, type OperationRequest, type PageRef, type Provenance, type SharedDraft,
 } from "./draft-model";
 
@@ -59,6 +60,11 @@ export function createDraftOperations(context: DraftContext) {
   const dependencies = async (state: HostCapture) => {
     const value = await context.revisions(state) as { tokens?: Record<string, string> };
     return context.digest({ ...value, tokens: { ...value.tokens, compositions: null } });
+  };
+  // A moved or renamed host cannot adopt the old location's draft.
+  const currentForHost = async (drafts: DraftStore, workspaceId: string) => {
+    const current = await drafts.current(workspaceId);
+    return current && current.host === await context.host() ? current : null;
   };
   const applyOperationId = (draft: SharedDraft) => `draft-${draft.id.slice(6)}-r${draft.revision}`;
   const undoOperationId = (draft: SharedDraft) => `undo-${applyOperationId(draft)}`;
@@ -152,6 +158,8 @@ export function createDraftOperations(context: DraftContext) {
       const working = draft.pages.some(entry => pageKey(entry.page) === pageKey(sourcePage)) ? buildDraft(state, draft).pages.find(entry => pageKey(entry.page) === pageKey(sourcePage))!.candidate.document : sourceEntry.before.document;
       const source = indexDocument(working, state.manifest).byId.get(request.sourceNodeId);
       if (!source) throw new EditError("unsupported-target", `Node "${request.sourceNodeId}" is not on ${sourcePage.pageId}.`);
+      const sourceRules = resolvePage(state, { workspaceId: state.workspaceId, sitemapId: sourcePage.sitemapId, page: sourcePage.pageId });
+      if (insideAttachedSlot(working, state, request.sourceNodeId, sourceRules)) throw new EditError("unsupported-scope", "That block comes from a Mapping-owned collection slot and cannot be copied as page content.");
       return { ...base, kind: "insertNode", at: request.at, node: cloneSubtreeWithNewIds(source.node, () => newId()), origin: { kind: "copy", sourceRecordId: sourceEntry.before.id, sourceNodeId: request.sourceNodeId } };
     }
     const payload = await payloads(request.payloadId);
@@ -188,10 +196,14 @@ export function createDraftOperations(context: DraftContext) {
   return {
     async draft(input: unknown) {
       const { workspaceId } = parse(workspaceSchema, input);
-      const state = await selected(workspaceId);
-      return view(state, await reconcile(state, await (await store()).current(workspaceId)));
+      const drafts = await store();
+      return drafts.serial(async () => {
+        const state = await selected(workspaceId);
+        return view(state, await reconcile(state, await currentForHost(drafts, workspaceId)));
+      });
     },
-    async propose(input: unknown, payloads: PayloadResolver = async () => { throw new EditError("invalid-payload", "No exact payload store is attached."); }) {
+    /** `active` lets a caller (a model run) cancel a proposal that is still queued or building. */
+    async propose(input: unknown, payloads: PayloadResolver = async () => { throw new EditError("invalid-payload", "No exact payload store is attached."); }, active: () => boolean = () => true) {
       const request = parse(proposeSchema, input);
       return context.leased(async () => {
         const drafts = await store();
@@ -199,8 +211,9 @@ export function createDraftOperations(context: DraftContext) {
           const state = await selected(request.workspaceId);
           const workspaceState = await drafts.state(state.workspaceId);
           // Late runs carry the generation they observed; discard/apply/undo fence them out.
-          if (workspaceState.generation !== request.expected.generation) throw new EditError("stale-draft", "The shared draft was discarded, applied or replaced after this request began.");
-          let draft = await reconcile(state, workspaceState.currentDraftId ? await drafts.read(workspaceState.currentDraftId) : null);
+          let draft = await reconcile(state, await currentForHost(drafts, state.workspaceId));
+          // Re-read after reconcile: a recovered Apply bumps the generation and must fence this request too.
+          if ((await drafts.state(state.workspaceId)).generation !== request.expected.generation) throw new EditError("stale-draft", "The shared draft was discarded, applied or replaced after this request began.");
           if (draft && draft.status !== "open") draft = null;
           // A request that saw no draft may join one another conversation opened since (same generation).
           if (request.expected.draftId !== null && draft?.id !== request.expected.draftId) throw new EditError("stale-draft", "The shared draft changed identity after this request began.");
@@ -218,6 +231,7 @@ export function createDraftOperations(context: DraftContext) {
           const build = working.pages.length ? buildDraft(state, working) : null;
           if (build?.stale.length) throw new EditError("stale-draft", `Revalidate the draft first: ${build.stale.map(entry => entry.reason).join(" ")}`);
           if (working.operations.length + request.operations.length > MAX_DRAFT_OPERATIONS) throw new EditError("draft-full", "The shared draft has too many operations. Apply or discard it first.");
+          if (new Set([...working.pages.map(entry => pageKey(entry.page)), ...request.operations.map(operation => pageKey(operation.page))]).size > MAX_REVIEWED_CHANGES) throw new EditError("draft-full", `One draft can change at most ${MAX_REVIEWED_CHANGES} pages. Apply or discard it first.`);
           const added: DraftOperation[] = [];
           for (const operation of request.operations) {
             if (!working.pages.some(entry => pageKey(entry.page) === pageKey(operation.page))) working.pages.push(resolvePageEntry(state, operation.page));
@@ -228,6 +242,7 @@ export function createDraftOperations(context: DraftContext) {
             if (next.stale.length) throw new EditError("unsupported-scope", next.stale.map(entry => entry.reason).join(" "));
           }
           working.revision += 1; working.updatedAt = now;
+          if (!active()) throw new EditError("run-inactive", "The reply was stopped; its proposal was not added to the draft.");
           await drafts.write(working);
           if (!draft) await drafts.select(state.workspaceId, working.id, false);
           return { ...await view(state, working), added: added.map(operation => operation.id) };
@@ -284,6 +299,10 @@ export function createDraftOperations(context: DraftContext) {
             const page = pages.find(entry => pageKey(entry.page) === pageKey(operation.page));
             if (!page) continue;
             const moved = { ...operation, recordId: page.before.id };
+            const pins = moved.kind === "updateField" ? (moved.source?.assetPin ? [moved.source.assetPin] : []) : moved.assetPins ?? [];
+            let pinsCurrent = true;
+            for (const pin of pins) { try { pinsCurrent &&= sameJson(await context.pinAsset(state, pin.assetId), pin); } catch { pinsCurrent = false; } }
+            if (!pinsCurrent) { dropped.push({ id: operation.id, reason: "A referenced image changed or is no longer available; propose it again." }); continue; }
             try { buildDraft(state, { pages, operations: [...operations, moved] }); operations.push(moved); }
             catch (error) { dropped.push({ id: operation.id, reason: error instanceof Error ? error.message : "No longer applies." }); }
           }
@@ -334,14 +353,17 @@ export function createDraftOperations(context: DraftContext) {
     },
     async receipt(input: unknown) {
       const { workspaceId, draftId } = parse(workspaceSchema.extend({ draftId: name }).strict(), input);
+      const drafts = await store();
+      return drafts.serial(async () => {
       const state = await selected(workspaceId);
-      const draft = await reconcile(state, await (await store()).read(draftId));
-      if (!draft || draft.workspaceId !== state.workspaceId) throw new EditError("wrong-workspace", "Draft belongs to another site.");
+      const draft = await reconcile(state, await drafts.read(draftId));
+      if (!draft || draft.workspaceId !== state.workspaceId || draft.host !== await context.host()) throw new EditError("wrong-workspace", "Draft belongs to another site.");
       return {
         status: draft.status,
         applied: draft.applied ? await state.stores.compositions.reviewedEditReceipt<DraftReceipt>(draft.applied.operationId) ?? null : null,
         undone: draft.undone ? await state.stores.compositions.reviewedEditReceipt<DraftReceipt>(draft.undone.operationId) ?? null : null,
       };
+      });
     },
     async undo(input: unknown): Promise<DraftReceipt> {
       const request = parse(workspaceSchema.extend({ draftId: name, approve: z.string().regex(/^[a-f0-9]{64}$/) }).strict(), input);
@@ -390,7 +412,9 @@ export function createDraftOperations(context: DraftContext) {
       const request = parse(workspaceSchema.extend({ page: pageRefSchema, draftId: name.nullable().optional() }).strict(), input);
       const state = await selected(request.workspaceId);
       const resolved = resolvePage(state, { workspaceId: state.workspaceId, sitemapId: request.page.sitemapId, page: request.page.pageId });
-      const draft = request.draftId ? await reconcile(state, await (await store()).read(request.draftId)) : null;
+      // Read-only: the draft is not reconciled here, only an open draft of this host contributes its candidate.
+      const stored = request.draftId ? await (await store()).read(request.draftId) : null;
+      const draft = stored && stored.host === await context.host() && stored.workspaceId === state.workspaceId ? stored : null;
       const candidate = draft?.status === "open" && draft.pages.some(entry => pageKey(entry.page) === pageKey(request.page)) ? buildDraft(state, draft).pages.find(entry => pageKey(entry.page) === pageKey(request.page))?.candidate.document : undefined;
       return { resolved, document: candidate ?? resolved.record.document, inDraft: !!candidate };
     },

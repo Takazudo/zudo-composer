@@ -81,6 +81,17 @@ export function resolvePlacement(document: CompositionDocument, capture: HostCap
 }
 
 type PageRules = Pick<ReturnType<typeof resolvePage>, "rootPolicy" | "attachedSlots">;
+/** True when the node or any ancestor lives in a collection-attached (Mapping-owned) slot. */
+export function insideAttachedSlot(document: CompositionDocument, capture: HostCapture, nodeId: string, rules: Pick<PageRules, "attachedSlots">): boolean {
+  const index = indexDocument(document, capture.manifest);
+  for (let cursor = index.byId.get(nodeId); cursor?.parentId; cursor = index.byId.get(cursor.parentId)) {
+    const parentId = cursor.parentId, slotId = cursor.slotId;
+    if (rules.attachedSlots.some(slot => slot.nodeId === parentId && slot.slotId === slotId)) return true;
+  }
+  return false;
+}
+/** Author defaults count as copy when any nested string is non-empty. */
+export const carriesCopy = (value: unknown): boolean => typeof value === "string" ? value.trim() !== "" : Array.isArray(value) ? value.some(carriesCopy) : !!value && typeof value === "object" && Object.values(value).some(carriesCopy);
 function applyOperation(document: CompositionDocument, capture: HostCapture, operation: DraftOperation, rules: PageRules): CompositionDocument {
   if (operation.kind === "updateField") {
     const located = indexDocument(document, capture.manifest).byId.get(operation.nodeId);
@@ -88,6 +99,7 @@ function applyOperation(document: CompositionDocument, capture: HostCapture, ope
     const entry = capture.manifest.get(located.node.componentId);
     const field = entry?.fields.find(candidate => candidate.prop === operation.prop);
     if (!entry || !field) throw new EditError("component-invalid", `"${operation.prop}" is not an editable field of ${located.node.componentId}.`);
+    if (insideAttachedSlot(document, capture, operation.nodeId, rules)) throw new EditError("unsupported-scope", "That block sits in a Mapping-owned collection slot; edit it through Mapping.");
     const updated = updateProps(document, capture.manifest, operation.nodeId, { [operation.prop]: operation.value } as JsonObject);
     if (!updated.ok) throw new EditError("component-invalid", updated.error);
     return updated.document;
@@ -105,7 +117,7 @@ export function componentNode(capture: HostCapture, componentId: string, id: str
   if (!entry) throw new EditError("component-invalid", `"${componentId}" is not a registered component in this host's pack.`);
   for (const prop of Object.keys(props)) if (!entry.fields.some(field => field.prop === prop)) throw new EditError("component-invalid", `"${prop}" is not an editable field of ${componentId}.`);
   // Author defaults that carry copy would insert words the request never supplied.
-  const implicitCopy = Object.entries(entry.defaults ?? {}).filter(([prop, value]) => !Object.hasOwn(props, prop) && (typeof value === "string" ? value.trim() !== "" : Array.isArray(value) && value.length > 0));
+  const implicitCopy = Object.entries(entry.defaults ?? {}).filter(([prop, value]) => !Object.hasOwn(props, prop) && carriesCopy(value));
   if (implicitCopy.length) throw new EditError("unrequested-content", `${componentId} would add default content (${implicitCopy.map(([prop]) => prop).join(", ")}). Supply each value explicitly from the request, or choose another component.`);
   if (entry.slots.some(slot => (slot.min ?? 0) > 0)) throw new EditError("unrequested-content", `${componentId} requires child blocks; inserting it would add a wrapper the request did not supply.`);
   const scratch: CompositionDocument = { schemaVersion: 2, id: "scratch", name: "scratch", root: [] };

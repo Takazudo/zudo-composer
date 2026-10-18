@@ -35,14 +35,16 @@ export function installAssistantApi(server: ViteDevServer, deps: {
     return { host: await realpath(capture.config.workspaceRoot), workspaceId };
   };
   const draftOps = deps.service.drafts;
+  // Records carry their owning host's real path for isolation; the browser never needs it.
+  const unscoped = <T extends { scope?: unknown }>(record: T) => { const { scope: _scope, ...rest } = record; void _scope; return rest; };
   const operations: Record<string, (workspaceId: string, input: Record<string, unknown>, clientId: string) => Promise<unknown>> = {
     status: async workspaceId => deps.runner.status(workspaceId),
     conversations: async workspaceId => deps.store.conversations(await scopeOf(workspaceId)),
-    conversation: async (workspaceId, input) => deps.store.conversation(await scopeOf(workspaceId), name.parse(input.conversationId)),
-    createConversation: async workspaceId => deps.store.createConversation(await scopeOf(workspaceId)),
+    conversation: async (workspaceId, input) => unscoped(await deps.store.conversation(await scopeOf(workspaceId), name.parse(input.conversationId))),
+    createConversation: async workspaceId => unscoped(await deps.store.createConversation(await scopeOf(workspaceId))),
     start: async (workspaceId, input) => deps.runner.start(workspaceId, input),
     stop: async (workspaceId, input) => deps.runner.stop(workspaceId, name.parse(input.runId)),
-    run: async (workspaceId, input) => deps.runner.run(workspaceId, name.parse(input.runId)),
+    run: async (workspaceId, input) => unscoped(await deps.runner.run(workspaceId, name.parse(input.runId))),
     rename: async (workspaceId, input) => ({ botName: await deps.store.rename(await scopeOf(workspaceId), z.string().max(40).nullable().parse(input.botName)) }),
     memory: async workspaceId => (await deps.store.settings(await scopeOf(workspaceId))).memory,
     saveMemory: async (workspaceId, input) => deps.store.saveMemory(await scopeOf(workspaceId), z.object({ body: z.string().max(100_000), expectedRevision: z.number().int().nonnegative() }).strict().parse(input)),
@@ -50,7 +52,7 @@ export function installAssistantApi(server: ViteDevServer, deps: {
     restoreMemory: async (workspaceId, input) => deps.store.restoreMemory(await scopeOf(workspaceId), z.object({ revision: z.number().int().positive(), expectedRevision: z.number().int().nonnegative() }).strict().parse(input)),
     setMemoryMode: async (workspaceId, input) => deps.store.setMemoryMode(await scopeOf(workspaceId), z.object({ mode: z.enum(["off", "read-only", "auto"]), expectedModeRevision: z.number().int().nonnegative() }).strict().parse(input)),
     acceptMemoryProposal: async (workspaceId, input) => deps.store.acceptMemoryProposal(await scopeOf(workspaceId), z.object({ conversationId: name, proposalId: name, expectedRevision: z.number().int().nonnegative() }).strict().parse(input)),
-    rejectMemoryProposal: async (workspaceId, input) => deps.store.rejectMemoryProposal(await scopeOf(workspaceId), z.object({ conversationId: name, proposalId: name }).strict().parse(input)),
+    rejectMemoryProposal: async (workspaceId, input) => unscoped(await deps.store.rejectMemoryProposal(await scopeOf(workspaceId), z.object({ conversationId: name, proposalId: name }).strict().parse(input))),
     putPayload: async (workspaceId, input) => {
       const payload = z.discriminatedUnion("kind", [
         z.object({ kind: z.literal("text"), text: z.string().min(1).max(100_000) }).strict(),
@@ -105,12 +107,13 @@ export function installAssistantApi(server: ViteDevServer, deps: {
         const input = z.object({ runId: name, afterSeq: z.number().int().min(0) }).strict().parse(parsed.input);
         res.statusCode = 200; res.setHeader("Content-Type", "application/x-ndjson"); res.setHeader("Cache-Control", "no-store"); res.setHeader("X-Accel-Buffering", "no");
         res.flushHeaders();
-        unsubscribe = await deps.runner.subscribe(parsed.workspaceId, input.runId, input.afterSeq, (event: RunEvent) => {
+        const subscribed = await deps.runner.subscribe(parsed.workspaceId, input.runId, input.afterSeq, (event: RunEvent) => {
           if (res.writableEnded) return;
           if (event.seq === -1) { close(); return; }
           res.write(`${JSON.stringify(event)}\n`);
         });
-        if (res.writableEnded) unsubscribe();
+        // The client may have left while subscribe was pending; never leave a listener on a live run.
+        if (res.writableEnded || res.destroyed) subscribed(); else unsubscribe = subscribed;
       } catch (error) { if (!res.headersSent) respond(res, 409, failure(error)); else close(); }
       return;
     }

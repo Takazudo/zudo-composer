@@ -184,10 +184,18 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
         if (image.complete) return image.naturalWidth ? resolve() : reject(new Error("Candidate image dependency is unavailable."));
         // A lazy image outside the viewport never starts loading; verify its exact source off-DOM instead of altering page markup.
         if (image.loading === "lazy") {
+          const unavailable = () => reject(new Error("Candidate image dependency is unavailable."));
+          const deadline = new Promise<never>((_, fail) => setTimeout(() => fail(new Error("timeout")), 10_000));
+          const picture = image.parentElement?.tagName === "PICTURE" ? image.parentElement : null;
+          if (picture) {
+            // The rendered candidate depends on the browser's source choice; every declared source must be reachable.
+            const urls = [...picture.querySelectorAll("source[srcset]"), image].flatMap(element => (element.getAttribute("srcset") ?? element.getAttribute("src") ?? "").split(",").map(candidate => candidate.trim().split(/\s+/)[0]).filter((url): url is string => !!url).slice(0, 1));
+            return void Promise.race([Promise.all(urls.map(url => fetch(new URL(url, document.baseURI), { credentials: "same-origin" }).then(response => { if (!response.ok) throw new Error(String(response.status)); }))), deadline]).then(() => resolve(), unavailable);
+          }
           const probe = new Image();
           if (image.srcset) { probe.srcset = image.srcset; probe.sizes = image.sizes; }
           probe.src = image.currentSrc || image.src;
-          return void probe.decode().then(() => resolve(), () => reject(new Error("Candidate image dependency is unavailable.")));
+          return void Promise.race([probe.decode(), deadline]).then(() => resolve(), unavailable);
         }
         const done = (ok: boolean) => { clearTimeout(timer); image.removeEventListener("load", loaded); image.removeEventListener("error", failed); if (ok) resolve(); else reject(new Error("Candidate image dependency is unavailable.")); };
         const loaded = () => done(true), failed = () => done(false);

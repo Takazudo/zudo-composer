@@ -184,6 +184,22 @@ describe("shared Assistant drafts", () => {
     expect(await bytes()).toEqual(committed);
   });
 
+  it("a stopped run's proposal is refused at the write, and revalidate drops operations whose image changed", async () => {
+    const { drafts, asset, options } = await fixture();
+    await expect(drafts.propose({ workspaceId: "proof", expected: { generation: 0, draftId: null }, provenance: assistant, operations: [{ kind: "updateField", page: home, nodeId: "paragraph", prop: "text", value: "Late" }] }, undefined, () => false)).rejects.toMatchObject({ code: "run-inactive" });
+    expect((await drafts.draft({ workspaceId: "proof" })).draft).toBeNull();
+    const view = await drafts.propose({ workspaceId: "proof", expected: { generation: 0, draftId: null }, provenance: assistant, operations: [{ kind: "insertExact", page: home, at: { after: "paragraph" }, payloadId: "img" }, { kind: "updateField", page: home, nodeId: "paragraph", prop: "text", value: "Kept" }] }, payloads({ img: { kind: "image", assetId: asset.id, alt: "Pixel" } }));
+    const assets = await createFilesystemAssetStore({ assetsStoreRoot: options.config.paths.assets });
+    const record = await assets.get(asset.id);
+    if (record.status !== "loaded") throw new Error("asset missing");
+    await assets.replace(asset.id, { bytes: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMwy9rwHwAEegJQ3vho/gAAAABJRU5ErkJggg==", "base64"), declaredMimeType: "image/png" }, { expectedRevision: record.record.revision });
+    expect((await drafts.draft({ workspaceId: "proof" })).draft?.candidateDigest).toBeNull();
+    const rebased = await drafts.revalidate({ workspaceId: "proof", draftId: view.draft!.id, revision: view.draft!.revision });
+    expect(rebased.dropped).toHaveLength(1);
+    expect(rebased.draft?.changes.map(change => change.kind)).toEqual(["field"]);
+    expect(rebased.draft?.candidateDigest).toBeTruthy();
+  });
+
   it("propose-only hosts review drafts but refuse Apply", async () => {
     const { drafts } = await fixture(`export default { pack: "native-edit-host/components", nativeEditing: { source: "workspace" }, assistant: { permission: "propose" } };\n`);
     const view = await drafts.propose({ workspaceId: "proof", expected: { generation: 0, draftId: null }, provenance: assistant, operations: [{ kind: "updateField", page: home, nodeId: "paragraph", prop: "text", value: "Review only" }] });

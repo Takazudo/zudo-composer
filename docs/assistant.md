@@ -151,6 +151,10 @@ approve page changes. History keeps the last 100 revisions.
   `nativeEditing` paragraph/table/image components (see
   [native editing](./native-editing.md)).
 
+Long values are shown to the model shortened; it must read the exact value
+(`read_field`) before proposing an edit to such a field, and a value carrying
+the shortened-display marker is refused.
+
 Not supported, and explained when relevant: source-authored hosts
 (`site-project.ts`/`.json`), Mapping/Content-owned pages and values,
 collection slots filled through Mapping, shared or published templates,

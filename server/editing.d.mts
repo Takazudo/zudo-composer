@@ -2481,7 +2481,7 @@ declare function createEditingService$1(options: CaptureHostOptions): {
                 candidateDigest: string | null;
             };
         }>;
-        propose(input: unknown, payloads?: PayloadResolver): Promise<{
+        propose(input: unknown, payloads?: PayloadResolver, active?: () => boolean): Promise<{
             added: string[];
             generation: number;
             draft: null;
