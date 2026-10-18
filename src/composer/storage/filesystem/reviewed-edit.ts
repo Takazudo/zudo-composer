@@ -2,14 +2,16 @@ import { createHash } from "node:crypto";
 import { CompositionPersistenceError, isSafeCompositionRecordId, validateCompositionRecord, type CompositionPersistenceOperation, type CompositionRecord } from "../../library";
 import { COMMIT_UNCERTAIN, commitDocument, syncDirectory, type DurableExtraErrorCode, type SafeRootFilesystem } from "../../../shared/node-fs";
 
+export interface ReviewedCompositionChange { candidate: CompositionRecord; jsx: string }
+/** One reviewed operation may publish several Composition pairs; all share one journal. */
 export interface ReviewedCompositionEdit<T extends object> {
   operationId: string;
   planDigest: string;
   expectedSnapshotToken: string;
-  candidate: CompositionRecord;
-  jsx: string;
+  changes: ReviewedCompositionChange[];
   receipt: T;
 }
+export const MAX_REVIEWED_CHANGES = 64;
 interface Entry { name: string; before: string | null; after: string }
 interface Journal { schemaVersion: 1; operationId: string; planDigest: string; entries: Entry[]; receipt: string }
 interface ReceiptEnvelope { schemaVersion: 1; operationId: string; planDigest: string; value: object }
@@ -43,11 +45,12 @@ export class ReviewedEditJournal {
   }
   async commit<T extends object>(operation: CompositionPersistenceOperation, edit: ReviewedCompositionEdit<T>): Promise<T> {
     this.receiptName(edit.operationId);
-    if (!validDigest(edit.planDigest) || !validDigest(edit.expectedSnapshotToken) || typeof edit.jsx !== "string" || !edit.receipt || typeof edit.receipt !== "object" || Array.isArray(edit.receipt)) throw new CompositionPersistenceError(operation, "validation", "Invalid reviewed edit identity, output, or receipt.", false);
+    const ids = Array.isArray(edit.changes) ? edit.changes.map(change => change?.candidate?.id) : [];
+    if (!validDigest(edit.planDigest) || !validDigest(edit.expectedSnapshotToken) || !ids.length || ids.length > MAX_REVIEWED_CHANGES || new Set(ids).size !== ids.length || edit.changes.some(change => typeof change.jsx !== "string" || !isSafeCompositionRecordId(change.candidate.id)) || !edit.receipt || typeof edit.receipt !== "object" || Array.isArray(edit.receipt)) throw new CompositionPersistenceError(operation, "validation", "Invalid reviewed edit identity, output, or receipt.", false);
     const entries: Entry[] = [];
-    for (const [name, after] of [
-      [`composition-${edit.candidate.id}.composition.json`, `${JSON.stringify(edit.candidate, null, 2)}\n`],
-      [`composition-${edit.candidate.id}.tsx`, edit.jsx],
+    for (const change of edit.changes) for (const [name, after] of [
+      [`composition-${change.candidate.id}.composition.json`, `${JSON.stringify(change.candidate, null, 2)}\n`],
+      [`composition-${change.candidate.id}.tsx`, change.jsx],
     ]) {
       const before = await this.fs.readFileNoFollow(operation, this.fs.ownedPath(name!));
       entries.push({ name: name!, before: before ? digest(before.text) : null, after: after! });
@@ -73,14 +76,20 @@ export class ReviewedEditJournal {
     await this.rollForward(operation, journal);
   }
   private validate(operation: CompositionPersistenceOperation, journal: Journal): void {
-    if (!journal || journal.schemaVersion !== 1 || !isSafeCompositionRecordId(journal.operationId) || !validDigest(journal.planDigest) || !Array.isArray(journal.entries) || journal.entries.length !== 2 || typeof journal.receipt !== "string") fail(operation, "Invalid reviewed edit journal; explicit recovery is required.");
-    const [canonical, jsx] = journal.entries;
-    if (!canonical || !jsx || typeof canonical.after !== "string" || typeof jsx.after !== "string") fail(operation, "Invalid reviewed edit entries.");
-    let record: unknown;
+    if (!journal || journal.schemaVersion !== 1 || !isSafeCompositionRecordId(journal.operationId) || !validDigest(journal.planDigest) || !Array.isArray(journal.entries) || journal.entries.length < 2 || journal.entries.length % 2 || journal.entries.length > MAX_REVIEWED_CHANGES * 2 || typeof journal.receipt !== "string") fail(operation, "Invalid reviewed edit journal; explicit recovery is required.");
     let receipt: ReceiptEnvelope;
-    try { record = JSON.parse(canonical!.after); receipt = JSON.parse(journal.receipt); } catch { return fail(operation, "Invalid reviewed edit journal payload."); }
-    const validation = validateCompositionRecord(record);
-    if (!validation.ok || canonical!.name !== `composition-${validation.record.id}.composition.json` || jsx!.name !== `composition-${validation.record.id}.tsx` || journal.entries.some(entry => entry.before !== null && !validDigest(entry.before)) || !receipt! || receipt!.schemaVersion !== 1 || receipt!.operationId !== journal.operationId || receipt!.planDigest !== journal.planDigest || !receipt!.value || typeof receipt!.value !== "object" || Array.isArray(receipt!.value)) fail(operation, "Reviewed edit journal identity or payload mismatch.");
+    try { receipt = JSON.parse(journal.receipt); } catch { return fail(operation, "Invalid reviewed edit journal payload."); }
+    const ids = new Set<string>();
+    for (let index = 0; index < journal.entries.length; index += 2) {
+      const canonical = journal.entries[index], jsx = journal.entries[index + 1];
+      if (!canonical || !jsx || typeof canonical.after !== "string" || typeof jsx.after !== "string") fail(operation, "Invalid reviewed edit entries.");
+      let record: unknown;
+      try { record = JSON.parse(canonical!.after); } catch { return fail(operation, "Invalid reviewed edit journal payload."); }
+      const validation = validateCompositionRecord(record);
+      if (!validation.ok || ids.has(validation.record.id) || canonical!.name !== `composition-${validation.record.id}.composition.json` || jsx!.name !== `composition-${validation.record.id}.tsx`) fail(operation, "Reviewed edit journal identity or payload mismatch.");
+      if (validation.ok) ids.add(validation.record.id);
+    }
+    if (journal.entries.some(entry => entry.before !== null && !validDigest(entry.before)) || !receipt! || receipt!.schemaVersion !== 1 || receipt!.operationId !== journal.operationId || receipt!.planDigest !== journal.planDigest || !receipt!.value || typeof receipt!.value !== "object" || Array.isArray(receipt!.value)) fail(operation, "Reviewed edit journal identity or payload mismatch.");
   }
   private async rollForward(operation: CompositionPersistenceOperation, journal: Journal): Promise<void> {
     try {

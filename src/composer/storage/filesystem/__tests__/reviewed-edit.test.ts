@@ -16,15 +16,15 @@ async function setup(operations?: FilesystemCompositionStoreOptions["operations"
   const store = await createFilesystemCompositionStore({ compositionsRoot: root, provideJsx: () => "old JSX", operations });
   await store.put(record(), "old JSX");
   const candidate = record(); candidate.updatedAt = "2026-01-03T03:04:05.000Z";
-  const input = { operationId: "edit-one", planDigest: "a".repeat(64), expectedSnapshotToken: await store.mutationToken(), candidate, jsx: "new JSX", receipt: { changed: "a", operationId: "edit-one" } };
+  const input = { operationId: "edit-one", planDigest: "a".repeat(64), expectedSnapshotToken: await store.mutationToken(), changes: [{ candidate, jsx: "new JSX" }], receipt: { changed: "a", operationId: "edit-one" } };
   return { root, store, input };
 }
 describe("reviewed Composition transactions", () => {
   it("commits exact pair and durable receipt, retries idempotently and rejects reused identity", async () => {
     const { root, store, input } = await setup();
     expect(await store.commitReviewedEdit(input)).toEqual(input.receipt);
-    expect(JSON.parse(await readFile(join(root, "composition-a.composition.json"), "utf8"))).toEqual(input.candidate);
-    expect(await readFile(join(root, "composition-a.tsx"), "utf8")).toBe(input.jsx);
+    expect(JSON.parse(await readFile(join(root, "composition-a.composition.json"), "utf8"))).toEqual(input.changes[0]!.candidate);
+    expect(await readFile(join(root, "composition-a.tsx"), "utf8")).toBe(input.changes[0]!.jsx);
     expect(await store.reviewedEditReceipt(input.operationId)).toEqual(input.receipt);
     expect(await store.commitReviewedEdit(input, async () => { throw new Error("must not repeat checks after commit"); })).toEqual(input.receipt);
     await expect(store.commitReviewedEdit({ ...input, planDigest: "b".repeat(64) })).rejects.toMatchObject({ code: "conflict" });
@@ -49,8 +49,8 @@ describe("reviewed Composition transactions", () => {
     armed = false;
     // Explicit operator recovery, after this test has proved no writer remains.
     await unlink(join(root, ".mutation.lock"));
-    expect((await store.snapshot()).records).toEqual([input.candidate]);
-    expect(await readFile(join(root, "composition-a.tsx"), "utf8")).toBe(input.jsx);
+    expect((await store.snapshot()).records).toEqual([input.changes[0]!.candidate]);
+    expect(await readFile(join(root, "composition-a.tsx"), "utf8")).toBe(input.changes[0]!.jsx);
     expect(await store.reviewedEditReceipt(input.operationId)).toEqual(input.receipt);
     await expect(readFile(join(root, ".reviewed-edit-journal.json"))).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -66,7 +66,7 @@ describe("reviewed Composition transactions", () => {
     expect(await store.reviewedEditReceipt(input.operationId)).toBeUndefined();
     failedDestination = ".receipt.json";
     await expect(store.commitReviewedEdit(input)).rejects.toMatchObject({ code: "commit-uncertain" });
-    expect(await readFile(join(root, "composition-a.tsx"), "utf8")).toBe(input.jsx);
+    expect(await readFile(join(root, "composition-a.tsx"), "utf8")).toBe(input.changes[0]!.jsx);
     failedDestination = "";
     await unlink(join(root, ".mutation.lock"));
     expect(await store.reviewedEditReceipt(input.operationId)).toEqual(input.receipt);
@@ -95,9 +95,39 @@ describe("reviewed Composition transactions", () => {
     armed = false;
     await unlink(join(root, ".mutation.lock"));
     expect(await store.reviewedEditReceipt(input.operationId)).toEqual(input.receipt);
-    expect(await readFile(join(root, "composition-a.tsx"), "utf8")).toBe(input.jsx);
+    expect(await readFile(join(root, "composition-a.tsx"), "utf8")).toBe(input.changes[0]!.jsx);
   });
 
+  it("publishes several pages under one journal: interruption between pages rolls every page forward or none", async () => {
+    let armed = false;
+    const root = await mkdtemp(join(tmpdir(), "reviewed-multi-")); roots.push(root);
+    const store = await createFilesystemCompositionStore({ compositionsRoot: root, provideJsx: () => "old JSX", operations: { rename: async (from, to) => {
+      if (armed && to.endsWith("composition-b.composition.json")) throw new Error("crash between pages");
+      return rename(from, to);
+    } } });
+    const b = { ...record(), id: "b", document: { ...createFixtureDocument(), id: "b" } };
+    await store.put(record(), "old JSX"); await store.put(b, "old JSX b");
+    const nextA = { ...record(), updatedAt: "2026-02-01T00:00:00.000Z" }, nextB = { ...b, updatedAt: "2026-02-01T00:00:00.000Z" };
+    const input = { operationId: "draft-apply", planDigest: "c".repeat(64), expectedSnapshotToken: await store.mutationToken(), changes: [{ candidate: nextA, jsx: "new A" }, { candidate: nextB, jsx: "new B" }], receipt: { pages: ["a", "b"] } };
+    armed = true;
+    await expect(store.commitReviewedEdit(input)).rejects.toMatchObject({ code: "commit-uncertain", operationId: "draft-apply" });
+    // Page A is already published, page B is not: readers must not observe this split.
+    expect(await readFile(join(root, "composition-a.tsx"), "utf8")).toBe("new A");
+    expect(await readFile(join(root, "composition-b.tsx"), "utf8")).toBe("old JSX b");
+    await expect(store.snapshot()).rejects.toMatchObject({ code: "conflict" });
+    armed = false;
+    await unlink(join(root, ".mutation.lock"));
+    expect((await store.snapshot()).records).toEqual([nextA, nextB]);
+    expect(await readFile(join(root, "composition-b.tsx"), "utf8")).toBe("new B");
+    expect(await store.reviewedEditReceipt("draft-apply")).toEqual({ pages: ["a", "b"] });
+    expect(await store.commitReviewedEdit(input)).toEqual({ pages: ["a", "b"] });
+  });
+  it("rejects duplicate or empty multi-page change sets before preparing intent", async () => {
+    const { root, store, input } = await setup();
+    await expect(store.commitReviewedEdit({ ...input, changes: [] })).rejects.toMatchObject({ code: "validation" });
+    await expect(store.commitReviewedEdit({ ...input, changes: [input.changes[0]!, input.changes[0]!] })).rejects.toMatchObject({ code: "validation" });
+    await expect(readFile(join(root, ".reviewed-edit-journal.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
   it("preserves unexpected destination edits during recovery", async () => {
     let armed = false;
     const { root, store, input } = await setup({ rename: async (from, to) => {
@@ -117,7 +147,7 @@ describe("reviewed Composition transactions", () => {
     try {
       await new Promise<void>((resolve, reject) => { child.once("message", () => resolve()); child.once("error", reject); child.once("exit", code => reject(new Error(`child exited ${code}`))); });
       await expect(store.commitReviewedEdit(input)).rejects.toMatchObject({ code: "conflict" });
-      await expect(store.put(input.candidate)).rejects.toMatchObject({ code: "conflict" });
+      await expect(store.put(input.changes[0]!.candidate)).rejects.toMatchObject({ code: "conflict" });
       expect(await readFile(join(root, ".mutation.lock"), "utf8")).toBe("held");
     } finally { child.send("release"); await new Promise<void>(resolve => child.once("exit", () => resolve())); }
   });

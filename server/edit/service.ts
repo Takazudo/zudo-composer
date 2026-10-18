@@ -18,6 +18,7 @@ import { collectPackSourceGraph } from "../site-project-local/pack-source-graph"
 import { workspaceDomainRoots } from "../../src/shared/workspace-scope";
 import { withMutationBarrier } from "../../src/shared/node-fs";
 import type { AssetVersionPin } from "../../src/assets/model/types";
+import { createDraftOperations } from "./draft-service";
 
 const name = z.string().min(1).max(256);
 const pageSchema = z.object({ workspaceId: name, page: name, sitemapId: name.optional() }).strict();
@@ -154,9 +155,8 @@ export function createEditingService(options: CaptureHostOptions) {
     config: state.config.nativeEditing ?? null,
   });
   const leased = <T>(action: () => Promise<T>) => executeAuthoringOperation(options.config.workspaceRoot, action) as Promise<T>;
-  const pin = async (state: HostCapture, request: EditRequest): Promise<AssetVersionPin | null> => {
-    if (request.insert.kind !== "image") return null;
-    const assetId = request.insert.assetId;
+  const pin = async (state: HostCapture, request: EditRequest): Promise<AssetVersionPin | null> => request.insert.kind === "image" ? pinAsset(state, request.insert.assetId) : null;
+  const pinAsset = async (state: HostCapture, assetId: string): Promise<AssetVersionPin> => {
     const asset = state.assets.records.find(record => record.id === assetId);
     if (!asset || asset.document.state !== "active") throw new EditError("invalid-asset", "Select an active managed image from this host.");
     const value = await state.stores.assets.resolveVersion({ providerId: "asset-files", assetId, versionId: asset.document.currentVersionId });
@@ -179,7 +179,13 @@ export function createEditingService(options: CaptureHostOptions) {
     const next = (index: number): Promise<T> => index === all.length ? action() : withMutationBarrier(all[index]!, () => next(index + 1));
     return next(0);
   };
+  const drafts = createDraftOperations({
+    host: identity, dataRoot: options.config.paths.data, digest: editDigest, capture, revisions, leased, barriers,
+    pinAsset,
+    permission: options.config.assistant?.permission ?? "apply",
+  });
   return {
+    drafts,
     async inspectBrowserReview(input: unknown) {
       const { planId } = parse(idSchema, input);
       const { plan } = await loadPlan(planId);
@@ -234,7 +240,7 @@ export function createEditingService(options: CaptureHostOptions) {
           const rebuilt = candidate(state, plan.request, plan.generatedId, plan.createdAt, assetPin);
           if (editDigest(rebuilt.page.record) !== editDigest(plan.before) || editDigest(rebuilt.page.identity) !== editDigest(plan.identity) || editDigest(rebuilt.record) !== editDigest(plan.candidate) || rebuilt.jsx !== plan.jsx) throw new EditError("tampered-plan", "Candidate does not equal the one exact requested insertion.");
           const receipt: EditReceipt = { schemaVersion: 1, operationId: planId, planId, reviewDigest: plan.digest, kind: "applied", identity: plan.identity, beforeDigest: editDigest(plan.before), afterDigest: editDigest(plan.candidate), jsxDigest: editDigest(plan.jsx), committedAt: new Date().toISOString() };
-          return state.stores.compositions.commitReviewedEdit({ operationId: planId, planDigest: plan.digest, expectedSnapshotToken: state.tokens.compositions, candidate: plan.candidate, jsx: plan.jsx, receipt }, async () => {
+          return state.stores.compositions.commitReviewedEdit({ operationId: planId, planDigest: plan.digest, expectedSnapshotToken: state.tokens.compositions, changes: [{ candidate: plan.candidate, jsx: plan.jsx }], receipt }, async () => {
             // Catalog/source bytes can change independently of CMS writers.
             if (editDigest(await revisions(state)) !== editDigest(plan.revisions)) throw new EditError("stale-plan", "Pack or source changed at the writer boundary.");
           });
@@ -294,7 +300,7 @@ export function createEditingService(options: CaptureHostOptions) {
           if (!output || output.status !== "generated") throw new EditError("undo-conflict", "Current pack/template cannot safely render the prior draft.");
           const undoRevisions = await revisions(state);
           const receipt: EditReceipt = { ...applied, operationId, kind: "undone", beforeDigest: applied.afterDigest, afterDigest: applied.beforeDigest, jsxDigest: editDigest(output.code), committedAt: new Date().toISOString() };
-          return state.stores.compositions.commitReviewedEdit({ operationId, planDigest: approve, expectedSnapshotToken: state.tokens.compositions, candidate: plan.before, jsx: output.code, receipt }, async () => {
+          return state.stores.compositions.commitReviewedEdit({ operationId, planDigest: approve, expectedSnapshotToken: state.tokens.compositions, changes: [{ candidate: plan.before, jsx: output.code }], receipt }, async () => {
             if (editDigest(await revisions(state)) !== editDigest(undoRevisions)) throw new EditError("undo-conflict", "Pack or source changed at the undo writer boundary.");
           });
         });

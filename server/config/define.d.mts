@@ -10,5 +10,6 @@ export type {
   ComposerRuntime,
   ResolvedComposerConfig,
   NativeEditingConfig,
+  AssistantConfig,
 } from "./config";
 export type { ComposerSettingDefaults, ComposerSettings } from "./settings";

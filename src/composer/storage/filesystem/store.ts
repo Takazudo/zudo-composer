@@ -750,9 +750,11 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
       const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, canonical(child)])) : value;
       const mutationToken = createHash("sha256").update(JSON.stringify(canonical(records))).digest("hex");
       if (mutationToken !== edit.expectedSnapshotToken) throw operationError("put", "conflict", "Composition snapshot changed after review.");
-      const valid = validateCompositionRecord(edit.candidate);
-      if (!valid.ok) throw operationError("put", "validation", valid.issue.message);
-      await this.assertBindingTransition(edit.candidate);
+      for (const { candidate } of edit.changes ?? []) {
+        const valid = validateCompositionRecord(candidate);
+        if (!valid.ok) throw operationError("put", "validation", valid.issue.message);
+        await this.assertBindingTransition(candidate);
+      }
       await recheck?.({ mutationToken, records: cloneJson(records) });
       return journal.commit("put", edit);
     });
