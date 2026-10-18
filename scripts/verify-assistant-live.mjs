@@ -383,14 +383,17 @@ async function orrery() {
     const mapped = await turn(page, host, "F3");
     check("F", "mapped-refused", "A Mapping-owned collection is not changed", { reply: mapped.reply, tools: mapped.tools, draft: effective((await draftState(host)).draft) }, JSON.stringify(effective((await draftState(host)).draft)) === draftBefore);
     check("F", "canonical-unchanged", "Refusals saved nothing", null, JSON.stringify(withoutTimestamps(await canonical(host))) === JSON.stringify(withoutTimestamps(pristine)));
-    const conversations = (await assistantState(host)).conversations.length;
+    const conversations = (await assistantState(host)).site?.conversations?.length ?? 0;
     await page.close();
     await stop();
     await start(host);
     const again = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     await again.goto(`${origin}/composer?assistant=1&sitemap=${ORRERY.sitemapId}&page=${ORRERY.home}`);
     await expect(again.getByRole("combobox", { name: "Conversation" })).toBeVisible({ timeout: 90_000 });
-    const options = await again.getByRole("combobox", { name: "Conversation" }).locator("option").count();
+    // The list loads after the control renders; wait for it rather than reading the placeholder.
+    const listed = again.getByRole("combobox", { name: "Conversation" }).locator("option:not([value=''])");
+    await expect.poll(() => listed.count(), { timeout: 30_000 }).toBeGreaterThanOrEqual(conversations).catch(() => {});
+    const options = await listed.count();
     check("F", "restart-keeps-state", "After a server restart, conversations and Memory are still there", { conversations, options }, options >= conversations);
     await again.close();
   }, page);
