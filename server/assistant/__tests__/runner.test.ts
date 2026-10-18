@@ -229,6 +229,44 @@ describe("restricted Assistant runner", () => {
     expect(String(change.after).length).toBeGreaterThan(3000);
   });
 
+  it("keeps the system prompt and tools identical within a run and appends Memory changes made during it", async () => {
+    const remember = { change: { kind: "append", text: "Prefer metric units." } };
+    let fixtureStore: Awaited<ReturnType<typeof fixture>> | undefined;
+    const { runner, store, scope, fake } = fixtureStore = await fixture(async (request, call) => {
+      if (call === 1) return tool("remember", remember);
+      // A human edit lands while the same reply is still running.
+      if (call === 2) { await fixtureStore!.store.saveMemory(fixtureStore!.scope, { body: "Prefer metric units.\nAudience: beginners.", expectedRevision: 1 }); return tool("inspect_page", {}); }
+      return text("Done.");
+    });
+    await store.setMemoryMode(scope, { mode: "auto", expectedModeRevision: 0 });
+    const conversation = await store.createConversation(scope);
+    const run = await runner.start("proof", { conversationId: conversation.id, clientTurnId: turn(), text: "Remember metric units, then look at the page.", context });
+    expect((await complete(runner, run.runId)).status).toBe("completed");
+    expect(fake.requests).toHaveLength(3);
+    for (const request of fake.requests.slice(1)) {
+      expect(request.system).toBe(fake.requests[0]!.system);
+      expect(request.tools).toEqual(fake.requests[0]!.tools);
+    }
+    // Every earlier message is replayed unchanged; only the newest user turn carries the update.
+    expect(fake.requests[2]!.messages.slice(0, fake.requests[1]!.messages.length - 1)).toEqual(fake.requests[1]!.messages.slice(0, -1));
+    const appended = (index: number) => JSON.stringify(fake.requests[index]!.messages.at(-1)!.content.filter(block => block.type === "text"));
+    expect(appended(1)).toContain("revision 1");
+    expect(appended(1)).toContain("Prefer metric units.");
+    expect(appended(2)).toContain("revision 2");
+    expect(appended(2)).toContain("Audience: beginners.");
+    expect((await runner.run("proof", run.runId)).memory).toMatchObject({ revision: 2 });
+  });
+
+  it("never runs tool calls from a turn that did not stop for tool use", async () => {
+    const { runner, store, scope, homeJson } = await fixture(() => ({ content: [{ type: "tool_use", id: "cut", name: "propose_changes", input: { operations: [{ kind: "updateField", page: context.page, nodeId: "paragraph", prop: "text", value: "Half" }] } }], stopReason: "other" }));
+    const before = await readFile(homeJson, "utf8");
+    const conversation = await store.createConversation(scope);
+    const run = await runner.start("proof", { conversationId: conversation.id, clientTurnId: turn(), text: "Change the intro.", context });
+    expect(await complete(runner, run.runId)).toMatchObject({ status: "failed", error: { code: "malformed-output" } });
+    expect(await readFile(homeJson, "utf8")).toBe(before);
+    expect((await runner.run("proof", run.runId)).events.some(event => event.type === "tool")).toBe(false);
+  });
+
   it("Auto remember keys updates by turn, so retrying a failed turn cannot append the same fact twice", async () => {
     let fail = true;
     const remember = { change: { kind: "append", text: "Prefer metric units." } };

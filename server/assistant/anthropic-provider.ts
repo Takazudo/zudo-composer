@@ -61,7 +61,12 @@ export function createAnthropicProvider(config: AssistantConfig, env: NodeJS.Pro
         }, { signal: request.signal });
         stream.on("text", delta => request.onText(delta));
         const message = await stream.finalMessage();
-        const content: ProviderBlock[] = message.content.flatMap((block): ProviderBlock[] => {
+        // After a mid-output fallback, the declining model's thinking and client tool calls before the final
+        // boundary are never run or echoed; text and the boundary itself stay (docs: refusals-and-fallback, "Continuing the conversation").
+        let boundary = -1;
+        message.content.forEach((block, index) => { if (block.type === "fallback") boundary = index; });
+        const served = message.content.filter((block, index) => index >= boundary || block.type === "text" || block.type === "fallback");
+        const content: ProviderBlock[] = served.flatMap((block): ProviderBlock[] => {
           if (block.type === "text") return [{ type: "text", text: block.text }];
           if (block.type === "tool_use") return [{ type: "tool_use", id: block.id, name: block.name, input: block.input }];
           // Thinking and fallback blocks are replayed unchanged within this run only.
