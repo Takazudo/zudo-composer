@@ -60,6 +60,9 @@ jobs:
       - run: pnpm test:browser:dev
         env:
           CI: true
+      # Real dev server, pack renderers and Assistant adapter against a loopback
+      # scripted Messages API (fake model replies; not live inference).
+      - run: pnpm test:browser:assistant
       # The site-project and demo browser lanes verify artifacts prepared here
       # and never rebuild them.
       - run: pnpm demo:build-sites

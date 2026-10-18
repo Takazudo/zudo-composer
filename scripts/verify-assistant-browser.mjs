@@ -170,6 +170,17 @@ async function landingJourneys() {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("tab", { name: "Conversation" }).click().catch(() => {});
 
+  // Synthetic IME check (not physical-device evidence): Enter that confirms a composition must not send.
+  const userMessages = page.locator('.cms-assistant-message[data-role="user"]');
+  const sent = await userMessages.count();
+  await page.locator("#assistant-input").fill("にほんご");
+  await page.locator("#assistant-input").dispatchEvent("keydown", { key: "Enter", isComposing: true, keyCode: 229, bubbles: true, cancelable: true });
+  await page.waitForTimeout(500);
+  await expect(userMessages).toHaveCount(sent);
+  await expect(page.locator("#assistant-input")).toHaveValue("にほんご");
+  await page.locator("#assistant-input").fill("");
+  log("synthetic composition Enter did not send (physical IME not covered)");
+
   // Stop, quota failure with Retry, malformed tool input.
   api.script([{ holdUntilAbort: true }]);
   await page.locator("#assistant-input").fill("Write a long essay.");

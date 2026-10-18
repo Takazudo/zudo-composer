@@ -169,6 +169,21 @@ describe("shared Assistant drafts", () => {
     await expect(drafts.undo({ workspaceId: "proof", draftId: third.draft!.id, approve: third.draft!.candidateDigest! })).rejects.toMatchObject({ code: "undo-conflict" });
   });
 
+  it("reconciles a draft from its durable receipt when the process died before the draft status write", async () => {
+    const { drafts, root, bytes } = await fixture();
+    const view = await drafts.propose({ workspaceId: "proof", expected: { generation: 0, draftId: null }, provenance: assistant, operations: [{ kind: "updateField", page: home, nodeId: "paragraph", prop: "text", value: "Committed" }] });
+    const approve = view.draft!.candidateDigest!;
+    const draftFile = join(root, "cms/edit-drafts", `${view.draft!.id}.draft.json`);
+    const pending = await readFile(draftFile, "utf8");
+    const receipt = await drafts.apply({ workspaceId: "proof", draftId: view.draft!.id, revision: view.draft!.revision, approve });
+    const committed = await bytes();
+    // Simulate the crash window: canonical files and receipt are durable, the draft record still says "open".
+    await writeFile(draftFile, pending);
+    expect((await drafts.draft({ workspaceId: "proof" })).draft).toMatchObject({ status: "applied", applied: { operationId: receipt.operationId } });
+    expect(await drafts.apply({ workspaceId: "proof", draftId: view.draft!.id, revision: view.draft!.revision, approve })).toEqual(receipt);
+    expect(await bytes()).toEqual(committed);
+  });
+
   it("propose-only hosts review drafts but refuse Apply", async () => {
     const { drafts } = await fixture(`export default { pack: "native-edit-host/components", nativeEditing: { source: "workspace" }, assistant: { permission: "propose" } };\n`);
     const view = await drafts.propose({ workspaceId: "proof", expected: { generation: 0, draftId: null }, provenance: assistant, operations: [{ kind: "updateField", page: home, nodeId: "paragraph", prop: "text", value: "Review only" }] });
