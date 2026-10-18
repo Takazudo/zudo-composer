@@ -49,7 +49,13 @@ async function fixture(prose = false, variant?: "bound" | "defaults" | "wrapper"
     }
     if (variant === "source") await writeFile(join(root, "site-project.ts"), "export default {};\n");
     if (variant === "bound") source = source.replace('export const Paragraph', 'export const Shell = ({ children }) => h("main", {}, children);\nexport const Paragraph').replace('components: [', 'components: [defineComponent()(Shell, { id: "native.shell", schemaVersion: 1, title: "Shell", category: "Test", description: "Restricted page root", source: { module: "native-edit-host/components", exportKind: "named", exportName: "Shell" }, defaults: {}, fields: [], slots: [{ id: "body", prop: "children", label: "Body", cardinality: "many", accepts: ["native.paragraph", "native.list", "native.table"] }] }),');
-    if (variant === "defaults") source = source.replace('{ text: "" }, [{ prop: "text", label: "Text", ...string }]', '{ text: "", caption: "Unrequested caption" }, [{ prop: "text", label: "Text", ...string }, { prop: "caption", label: "Caption", ...string }]');
+    if (variant === "defaults") {
+      // Other fixture components also have a text field. Mutate the declared
+      // insertion component, never whichever matching defaults appear first.
+      const original = 'component(Paragraph, "native.paragraph", "Paragraph", { text: "" }, [{ prop: "text", label: "Text", ...string }])';
+      expect(source).toContain(original);
+      source = source.replace(original, 'component(Paragraph, "native.paragraph", "Paragraph", { text: "", caption: "Unrequested caption" }, [{ prop: "text", label: "Text", ...string }, { prop: "caption", label: "Caption", ...string }])');
+    }
     if (variant === "wrapper") source = source.replace('defaults, fields,', 'defaults, fields, ...(id === "native.paragraph" ? { slots: [{ id: "children", prop: "children", label: "Children", cardinality: "many" }] } : {}),');
     await writeFile(packPath, source);
   }

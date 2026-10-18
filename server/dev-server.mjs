@@ -95,7 +95,7 @@ export async function resolveComposerDevConfig(options = {}) {
         hostStylesPlugin({ stylesPath: paths.styles, styles: settings.styles, configPath: composerConfig.configPath }),
         releaseApiPlugin({ assetsStoreRoot: paths.assets, workspaceRoot, packIdentity: componentPack.identity, stylesPath: paths.styles }),
         siteProjectSourcePlugin({ workspaceRoot, packIdentity: componentPack.identity, stylesPath: paths.styles }),
-        composerFileProviderPlugin({ workspaceRoot, compositionsRoot: paths.compositions, assetsStoreRoot: paths.assets }),
+        composerFileProviderPlugin({ workspaceRoot, compositionsRoot: paths.compositions, assetsStoreRoot: paths.assets, nativeEditing: !!composerConfig.nativeEditing }),
         domainFileProviderPlugin({
           workspaceRoot,
           descriptors: [

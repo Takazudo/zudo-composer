@@ -45,6 +45,14 @@ html[data-composer-preview-doc] {
   --zc-preview-z-popover: 40;
   --zc-preview-z-modal-backdrop: 50;
   --zc-preview-z-modal: 60;
+  /* Review annotations sit above page content but below Composer dialogs. */
+  --zc-preview-z-review: 55;
+  /* Composer review marker: amber, deliberately unlike the blue selection accent. */
+  --zc-preview-review: oklch(0.555 0.150 55);
+  --zc-preview-review-ink: oklch(0.99 0 0);
+  --zc-preview-review-word: oklch(0.93 0.170 100);
+  --zc-preview-review-word-ink: oklch(0.20 0 0);
+  --zc-preview-review-removed: oklch(0.90 0.070 20);
 }
 
 /* preview-app.ts mirrors the host's resolved theme onto this document's
@@ -64,6 +72,8 @@ html[data-composer-preview-doc][data-theme="dark"] {
   --zc-preview-warning: oklch(0.700 0.160 75);
   --zc-preview-info: oklch(0.680 0.130 245);
   --zc-preview-guide: oklch(0.550 0.020 255);
+  --zc-preview-review: oklch(0.780 0.150 70);
+  --zc-preview-review-ink: oklch(0.180 0 0);
 }
 
 /* ── Canvas ───────────────────────────────────────────────────────────────── */
@@ -638,3 +648,62 @@ html[data-composer-preview-doc][data-theme="dark"] {
   font-size: var(--zc-preview-text-caption);
   text-align: center;
 }
+
+/* ── Assistant review annotations ─────────────────────────────────────────────
+   Editor chrome, never authored content: a body-level non-interactive layer
+   (outside every page stacking context) draws block outlines with external
+   labels; changed words use the CSS Custom Highlight API so page markup,
+   layout, links, selection and focus are untouched. */
+.zc-review-layer {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: var(--zc-preview-z-review);
+}
+.zc-review-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 3px solid var(--zc-preview-review);
+  border-radius: 6px;
+  /* A light halo keeps the outline legible on dark and busy sections. */
+  box-shadow: 0 0 0 2px oklch(1 0 0 / 0.85), 0 0 0 6px color-mix(in srgb, var(--zc-preview-review) 22%, transparent);
+}
+.zc-review-box[data-kind="removed"] { border-style: dashed; }
+.zc-review-badge {
+  position: absolute;
+  left: -3px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--zc-preview-review);
+  color: var(--zc-preview-review-ink);
+  font: 700 12px/1.4 system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.zc-review-badge[data-placement="above"] { bottom: calc(100% + 3px); }
+.zc-review-badge[data-placement="below"] { top: calc(100% + 3px); }
+.zc-review-box[data-focus] { border-width: 4px; }
+@media (prefers-reduced-motion: no-preference) {
+  .zc-review-box[data-focus] { animation: zc-review-pulse 0.8s ease-out 2; }
+}
+@keyframes zc-review-pulse {
+  50% { box-shadow: 0 0 0 2px oklch(1 0 0 / 0.85), 0 0 0 12px color-mix(in srgb, var(--zc-preview-review) 35%, transparent); }
+}
+::highlight(zc-review-insert) {
+  background-color: var(--zc-preview-review-word);
+  color: var(--zc-preview-review-word-ink);
+}
+::highlight(zc-review-delete) {
+  background-color: var(--zc-preview-review-removed);
+  color: var(--zc-preview-review-word-ink);
+  text-decoration: line-through;
+}
+/* Fallback when the Highlight API is unavailable: rectangles behind the words. */
+.zc-review-word {
+  position: absolute;
+  background: var(--zc-preview-review-word);
+  mix-blend-mode: multiply;
+}
+.zc-review-word[data-tone="delete"] { background: var(--zc-preview-review-removed); }

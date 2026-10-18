@@ -810,6 +810,26 @@ interface NativeEditingConfig {
     };
 }
 
+/**
+ * Host opt-in for the AI Assistant. The config names a provider/model and the
+ * server-side environment variable that holds the credential; it never holds
+ * a secret itself and is never serialized to the browser.
+ */
+interface AssistantConfig {
+    provider: "anthropic";
+    /** Messages API model id. */
+    model: string;
+    /** Environment variable read by the local authoring server only. */
+    apiKeyEnv: string;
+    effort: "low" | "medium" | "high";
+    /** Default display name; a site-scoped stored name may replace it. */
+    name: string;
+    /** `propose` permits conversation, drafts and review but never Apply. */
+    permission: "apply" | "propose";
+    /** Messages API origin: HTTPS (e.g. an organization gateway) or loopback HTTP for local proxies and tests. */
+    baseUrl: string;
+}
+
 /** Absolute paths derived from the settings. Node-side only, never serialized. */
 interface ComposerPaths {
     workspaceRoot: string;
@@ -824,6 +844,7 @@ interface ComposerPaths {
 }
 interface ResolvedComposerConfig {
     nativeEditing: NativeEditingConfig | undefined;
+    assistant: AssistantConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */
     workspaceRoot: string;
     /** Absolute path of the host config file, whether or not it exists. */

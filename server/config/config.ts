@@ -16,7 +16,9 @@ import { isAbsolute, posix, resolve } from "node:path";
 import { resolveWorkspaceRoot } from "../../plugins/roots.mjs";
 import { defineComposerConfig } from "./define.mjs";
 import { parseNativeEditing, type NativeEditingConfig } from "./native-editing";
+import { parseAssistant, type AssistantConfig } from "./assistant";
 export type { NativeEditingConfig } from "./native-editing";
+export type { AssistantConfig } from "./assistant";
 import {
   DATA_DOMAIN_SEGMENTS,
   DEFAULT_SETTINGS,
@@ -47,6 +49,8 @@ const PACK_SPECIFIER_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|
  */
 export interface ComposerConfigOverrides {
   nativeEditing?: NativeEditingConfig;
+  /** Explicit AI Assistant opt-in; requires `nativeEditing` for writable pages. */
+  assistant?: Partial<AssistantConfig>;
   /** Absolute host project root. Defaults to `process.cwd()`. */
   workspaceRoot?: string;
   /** Absolute path of the config file, used in resolution error messages. */
@@ -83,6 +87,7 @@ export interface ComposerPaths {
 
 export interface ResolvedComposerConfig {
   nativeEditing: NativeEditingConfig | undefined;
+  assistant: AssistantConfig | undefined;
   /** Absolute host project root. Every relative setting resolves against it. */
   workspaceRoot: string;
   /** Absolute path of the host config file, whether or not it exists. */
@@ -206,6 +211,7 @@ export function composer(user: ComposerConfigInput = {}, runtime: ComposerRuntim
     workspaceRoot,
     configPath,
     nativeEditing: parseNativeEditing(user.nativeEditing),
+    assistant: parseAssistant(user.assistant),
     settings,
     paths: {
       workspaceRoot,

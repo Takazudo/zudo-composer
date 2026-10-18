@@ -1,4 +1,5 @@
 /// <reference path="../composer/pack-config.d.ts" />
+import { attachNativeAuthoringState } from "../native-editing/session";
 import { h, render } from "preact";
 import type { SiteBuildPlan } from "../../site-project/compiler";
 import { SiteDelivery } from "./site-delivery";
@@ -19,6 +20,7 @@ export interface SitePreviewOptions {
  * `light-dark()`.
  */
 export function mountSitePreview(root: Element, source: DeliverySourceContract, { hostedDemo = false }: SitePreviewOptions = {}): void {
+  if (source.kind === "working-preview") attachNativeAuthoringState(() => source.providers.sessions.hasPending, async () => (await source.providers.sessions.flush()).status === "ready");
   document.documentElement.setAttribute("data-site-preview-doc", "");
   const basePath = deliveryBasePath(source);
   let uninstall: (() => void) | undefined;

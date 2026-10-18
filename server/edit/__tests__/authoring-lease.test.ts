@@ -16,3 +16,21 @@ it("excludes another process owner and joins concurrent shutdown before unlockin
     await reopened.release();
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+it("executes service work only inside the live owner's scope and drains it before release", async () => {
+  const { executeAuthoringOperation } = await import("../authoring-lease.mjs");
+  const root = await mkdtemp(join(tmpdir(), "authoring-owned-operation-"));
+  try {
+    const lease = await acquireAuthoringLease(root, "dev-server");
+    await expect(executeAuthoringOperation(root, async () => "external")).rejects.toMatchObject({ code: "authoring-busy" });
+    let finish!: () => void, entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const work = lease.execute(() => executeAuthoringOperation(root, async () => { entered(); await new Promise<void>(resolve => { finish = resolve; }); return "owned"; }));
+    await started;
+    const release = lease.release();
+    await expect(lstat(join(root, ".zudo-authoring.lock"))).resolves.toBeDefined();
+    finish(); expect(await work).toBe("owned"); await release;
+    await expect(lease.execute(async () => "closed")).rejects.toThrow("closing");
+    const next = await acquireAuthoringLease(root, "cli"); await next.release();
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

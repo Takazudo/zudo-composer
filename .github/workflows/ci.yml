@@ -60,6 +60,9 @@ jobs:
       - run: pnpm test:browser:dev
         env:
           CI: true
+      # Real dev server, pack renderers and Assistant adapter against a loopback
+      # scripted Messages API (fake model replies; not live inference).
+      - run: pnpm test:browser:assistant
       # The site-project and demo browser lanes verify artifacts prepared here
       # and never rebuild them.
       - run: pnpm demo:build-sites
@@ -98,7 +101,8 @@ jobs:
       - run: pnpm public:check
       - name: Verify retained package-output payload
         run: node scripts/check-hosted-payload.mjs --check verification/hosted-content/current-payload.json
-      - run: pnpm hosted:installed "${{ github.sha }}" .artifacts/hosted-consumer
+      - name: Verify exact retained package-output commit
+        run: node scripts/verify-retained-hosted-consumer.mjs .artifacts/hosted-consumer
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

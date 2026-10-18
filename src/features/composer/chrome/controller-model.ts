@@ -290,11 +290,13 @@ export function createInitialControllerState(options: {
   rootPolicy?: RootPolicy;
   saveStatus: ComposerSaveStatus;
   derivedOutput?: CompositionDerivedOutputOutcome | null;
+  /** A requested initial selection (e.g. returning from the Assistant); repaired if absent. */
+  selectedId?: string | null;
 }): ComposerControllerState {
-  const { document, manifest, rootPolicy, saveStatus, derivedOutput = null } = options;
+  const { document, manifest, rootPolicy, saveStatus, derivedOutput = null, selectedId = null } = options;
   return {
     document,
-    selectedId: repairSelection(document, manifest, null),
+    selectedId: repairSelection(document, manifest, selectedId),
     expandedIds: new Set<string>(),
     mode: "edit",
     viewport: "fluid",

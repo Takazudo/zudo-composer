@@ -1,3 +1,7 @@
+import { NativePageRoute } from "./features/native-editing/page-route";
+import { assistantConfig, nativeEditingAvailable } from "./features/native-editing/session";
+import { AssistantRoute } from "./features/assistant/assistant-route";
+import { attachNativeAuthoringState } from "./features/native-editing/session";
 import type { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Dashboard } from "./app/dashboard";
@@ -208,6 +212,13 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [providers, release]);
+  useEffect(() => attachNativeAuthoringState(() => providers.sessions.hasPending || operationGate.busy || release.getSnapshot().busy, async () => !operationGate.busy && !release.getSnapshot().busy && (await providers.sessions.flush()).status === "ready"), [providers, operationGate, release]);
+  const [nativeStale, setNativeStale] = useState(false);
+  useEffect(() => {
+    const stale = () => setNativeStale(true);
+    window.addEventListener("native-authoring-stale", stale);
+    return () => window.removeEventListener("native-authoring-stale", stale);
+  }, []);
   // Hint other tabs (the working preview) whether this editor has unflushed
   // writes. Editor documents only — the visitor documents mounted by
   // src/main.tsx never publish.
@@ -262,7 +273,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     }} />}
   </main>;
   else if (intent.status === "invalid" || !providerKnown) content = <main class="route-placeholder"><h1>Invalid workspace link</h1><p role="alert">{intent.status === "invalid" ? intent.message : "The requested provider is unavailable. No other record was selected."}</p></main>;
-  else if (path === "/composer") content = <ComposerApp componentProvider={providers.componentProvider} providers={providers.compositionProviders} />;
+  else if (path === "/composer") content = target?.route === "composer" && "mode" in target ? target.mode === "assistant" ? <AssistantRoute /> : <NativePageRoute /> : <>{nativeEditingAvailable && <nav class="cms-composer-entries" aria-label="Page editing entrances"><a href="/composer?native=1">Edit page</a>{assistantConfig && <a href="/composer?assistant=1">{assistantConfig.name}</a>}</nav>}<ComposerApp componentProvider={providers.componentProvider} providers={providers.compositionProviders} /></>;
   else if (path === "/content") content = <ContentRouteContent provider={target?.route === "content" ? providers.contentProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} renderAssetPicker={(request) => <AssetFieldPicker provider={providers.assetProvider} {...request} />} assetPickerCapabilities={assetPickerCapabilities} />;
   else if (path === "/mapping") content = <MappingRouteContent provider={target?.route === "mapping" ? providers.mappingProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentEntries={providers.mappingContentEntries} componentProvider={providers.componentProvider} attachmentCallbacks={mappingAttachmentService} />;
   else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
@@ -276,5 +287,5 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     return item.domain === "assets" ? "/assets" : item.domain === "mappings" ? "/mapping" : item.domain === "sitemaps" ? "/sitemapper" : null;
   }} />;
   else content = <NotFound />;
-  return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell hostedDemo={hostedDemo} path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary} onBeforeNewTab={flushOnPreviewActivation}>{hostedDemo && <HostedDemoNotice includeExport />}<div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;
+  return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell hostedDemo={hostedDemo} path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary} onBeforeNewTab={flushOnPreviewActivation}>{nativeStale && <p role="alert">This tab retains edits from an older draft revision. Keep and copy/export pending values before reopening current records. Old writes are blocked; reconnecting cannot overwrite the newer draft.</p>}{hostedDemo && <HostedDemoNotice includeExport />}<div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;
 }

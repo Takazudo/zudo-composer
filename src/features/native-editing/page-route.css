@@ -1,0 +1,43 @@
+.cms-native-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem);
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 32rem;
+  gap: 1rem;
+  padding: 1rem;
+}
+.cms-native-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.cms-native-header label { flex: 1; min-width: 10rem; }
+.cms-native-header select { max-width: 100%; }
+.cms-native-canvas { min-width: 0; min-height: 0; background: var(--color-bg); }
+.cms-native-canvas iframe { width: 100%; height: 100%; min-height: 28rem; border: 1px solid var(--color-border); border-radius: .5rem; }
+.cms-native-edit { min-width: 0; overflow-y: auto; padding: .5rem; }
+.cms-native-edit h1 { font-size: 1.25rem; }
+.cms-native-edit h2 { font-size: 1rem; }
+.cms-native-edit p { overflow-wrap: anywhere; margin-block: .75rem; }
+.cms-native-edit label { display: grid; gap: .375rem; margin-block: .75rem; }
+.cms-native-edit textarea { min-height: 8rem; resize: vertical; }
+.cms-native-edit input, .cms-native-edit textarea, .cms-native-edit select { width: 100%; max-width: 100%; border: 1px solid var(--color-border); padding: .5rem; color: var(--color-fg); background: var(--color-bg); }
+.cms-native-edit fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.cms-native-page button, .cms-native-page a { padding: .5rem .75rem; min-height: 2.75rem; }
+.cms-native-page button { border: 1px solid var(--color-border); border-radius: .375rem; background: var(--color-bg); color: var(--color-fg); cursor: pointer; }
+.cms-native-page button:disabled { opacity: .5; cursor: default; }
+.cms-native-page button[aria-pressed="true"], .cms-native-page button[aria-selected="true"] { font-weight: 700; outline: 2px solid currentColor; outline-offset: -2px; }
+.cms-native-target, .cms-native-review { padding: .75rem; border: 1px solid var(--color-border); border-radius: .5rem; }
+.cms-native-review button { margin: .25rem; }
+.cms-native-tabs { display: none; }
+@media (max-width: 48rem) {
+  .cms-native-page { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; padding: .5rem; gap: .5rem; }
+  .cms-native-tabs { display: flex; gap: .5rem; }
+  .cms-native-canvas iframe { min-height: 24rem; }
+  .cms-native-page[data-mobile-tab="page"] .cms-native-edit, .cms-native-page[data-mobile-tab="edit"] .cms-native-canvas { display: none; }
+}
+
+.cms-native-edit input[type="checkbox"] { width: auto; }

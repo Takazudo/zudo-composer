@@ -1,0 +1,32 @@
+{
+  "proof": "actual-browser-http-provider-transport",
+  "node": "v24.21.0",
+  "browserExecution": "NOT RUN",
+  "checks": [
+    "direct forbidden field/Markdown/asset rejected without writes or receipts",
+    "developer routes and unapproved assets unavailable",
+    "public create/add-existing/reorder",
+    "exact Markdown and numeric zero",
+    "select different approved image and permitted descriptions",
+    "durable B receipt after real backend restart",
+    "synthetic remote A integration crash gap",
+    "lost-ack exact begin replay recovers original receipt and remote integration once",
+    "B preserved during A reconciliation",
+    "exact saved snapshot Submit",
+    "two integrations B0-B1-B2",
+    "late A cannot regress B2"
+  ],
+  "snapshotA": "b7b58816-ebb1-4bfb-9f69-fb6adcfda706",
+  "digestA": "c0088782077400c766679102f56ff9df5570e5f142ecfecdcff0666b8a92c92b",
+  "snapshotB": "65279dea-993d-4941-9385-7cc0329e2caa",
+  "digestB": "c1e90b85f2d097613c4246d8f8d44d1f72849834bf1efda82f5cc2b8d31756a9",
+  "createdEntryId": "c62ae843-8016-4b7c-a79f-ee38190f65c1",
+  "addedExistingEntryId": "faq-detached",
+  "approvedSelectedImage": {
+    "url": "/approved-alternate.svg",
+    "alt": "HTTPで保存した代替テキスト",
+    "caption": "承認済みアセットのみ",
+    "versionId": "v1",
+    "checksum": "75e43e09733ec6c580840e22e0a2368fc4e7098e863f1b5e755f7fe428b5154f"
+  }
+}

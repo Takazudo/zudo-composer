@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath, unlink } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
 //#region src/site-project/authoring.ts
 var COMPOSITION_PROVIDER_ID = "files";
 var CONTENT_PROVIDER_ID = "content-filesystem";
@@ -698,6 +699,9 @@ function compareSitemapSummariesNewestFirst(a, b) {
 }
 //#endregion
 //#region server/edit/authoring-lease.mjs
+var scopeKey = Symbol.for("zudo-composer.authoring-lease-scope.v1");
+var processScopes = globalThis;
+var scopes = processScopes[scopeKey] ??= new AsyncLocalStorage();
 /** An exclusive host session, shared by dev servers and deterministic editors.
 * Never infer crash recovery permission from a PID or timeout.
 * @param {string} hostRoot
@@ -727,15 +731,35 @@ async function acquireAuthoringLease(hostRoot, owner) {
 	}
 	/** @type {Promise<void> | undefined} */
 	let releasing;
-	return { release() {
-		releasing ??= (async () => {
-			await handle.close();
-			const current = await lstat(path);
-			if (current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino) throw new Error("Authoring lease ownership changed; preserved conflicting lock.");
-			await unlink(path);
-		})();
-		return releasing;
-	} };
+	let released = false;
+	/** @type {Promise<unknown>} */
+	let tail = Promise.resolve();
+	return {
+		/** @template T @param {() => Promise<T>} action @returns {Promise<T>} */
+		execute(action) {
+			if (releasing || released) return Promise.reject(/* @__PURE__ */ new Error("Authoring lease is closing."));
+			const pending = tail.then(() => {
+				if (released) throw new Error("Authoring lease is closed.");
+				return scopes.run({
+					root,
+					active: () => !released
+				}, action);
+			});
+			tail = pending.catch(() => {});
+			return pending;
+		},
+		release() {
+			releasing ??= (async () => {
+				await tail;
+				released = true;
+				await handle.close();
+				const current = await lstat(path);
+				if (current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino) throw new Error("Authoring lease ownership changed; preserved conflicting lock.");
+				await unlink(path);
+			})();
+			return releasing;
+		}
+	};
 }
 //#endregion
 //#region src/app/workspace-record.ts
@@ -1157,8 +1181,6 @@ var FilesystemWorkspaceRegistry = class FilesystemWorkspaceRegistry {
 function createFilesystemWorkspaceRegistry(options) {
 	return FilesystemWorkspaceRegistry.create(options);
 }
-//#endregion
-//#region src/composer/storage/filesystem/reviewed-edit.ts
 var JOURNAL = ".reviewed-edit-journal.json";
 var digest = (text) => createHash("sha256").update(text).digest("hex");
 var validDigest = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
@@ -1197,9 +1219,10 @@ var ReviewedEditJournal = class {
 	}
 	async commit(operation, edit) {
 		this.receiptName(edit.operationId);
-		if (!validDigest(edit.planDigest) || !validDigest(edit.expectedSnapshotToken) || typeof edit.jsx !== "string" || !edit.receipt || typeof edit.receipt !== "object" || Array.isArray(edit.receipt)) throw new CompositionPersistenceError(operation, "validation", "Invalid reviewed edit identity, output, or receipt.", false);
+		const ids = Array.isArray(edit.changes) ? edit.changes.map((change) => change?.candidate?.id) : [];
+		if (!validDigest(edit.planDigest) || !validDigest(edit.expectedSnapshotToken) || !ids.length || ids.length > 64 || new Set(ids).size !== ids.length || edit.changes.some((change) => typeof change.jsx !== "string" || !isSafeRecordId(change.candidate.id)) || !edit.receipt || typeof edit.receipt !== "object" || Array.isArray(edit.receipt)) throw new CompositionPersistenceError(operation, "validation", "Invalid reviewed edit identity, output, or receipt.", false);
 		const entries = [];
-		for (const [name, after] of [[`composition-${edit.candidate.id}.composition.json`, `${JSON.stringify(edit.candidate, null, 2)}\n`], [`composition-${edit.candidate.id}.tsx`, edit.jsx]]) {
+		for (const change of edit.changes) for (const [name, after] of [[`composition-${change.candidate.id}.composition.json`, `${JSON.stringify(change.candidate, null, 2)}\n`], [`composition-${change.candidate.id}.tsx`, change.jsx]]) {
 			const before = await this.fs.readFileNoFollow(operation, this.fs.ownedPath(name));
 			entries.push({
 				name,
@@ -1242,19 +1265,28 @@ var ReviewedEditJournal = class {
 		await this.rollForward(operation, journal);
 	}
 	validate(operation, journal) {
-		if (!journal || journal.schemaVersion !== 1 || !isSafeRecordId(journal.operationId) || !validDigest(journal.planDigest) || !Array.isArray(journal.entries) || journal.entries.length !== 2 || typeof journal.receipt !== "string") fail(operation, "Invalid reviewed edit journal; explicit recovery is required.");
-		const [canonical, jsx] = journal.entries;
-		if (!canonical || !jsx || typeof canonical.after !== "string" || typeof jsx.after !== "string") fail(operation, "Invalid reviewed edit entries.");
-		let record;
+		if (!journal || journal.schemaVersion !== 1 || !isSafeRecordId(journal.operationId) || !validDigest(journal.planDigest) || !Array.isArray(journal.entries) || journal.entries.length < 2 || journal.entries.length % 2 || journal.entries.length > 128 || typeof journal.receipt !== "string") fail(operation, "Invalid reviewed edit journal; explicit recovery is required.");
 		let receipt;
 		try {
-			record = JSON.parse(canonical.after);
 			receipt = JSON.parse(journal.receipt);
 		} catch {
 			return fail(operation, "Invalid reviewed edit journal payload.");
 		}
-		const validation = validateCompositionRecord(record);
-		if (!validation.ok || canonical.name !== `composition-${validation.record.id}.composition.json` || jsx.name !== `composition-${validation.record.id}.tsx` || journal.entries.some((entry) => entry.before !== null && !validDigest(entry.before)) || !receipt || receipt.schemaVersion !== 1 || receipt.operationId !== journal.operationId || receipt.planDigest !== journal.planDigest || !receipt.value || typeof receipt.value !== "object" || Array.isArray(receipt.value)) fail(operation, "Reviewed edit journal identity or payload mismatch.");
+		const ids = /* @__PURE__ */ new Set();
+		for (let index = 0; index < journal.entries.length; index += 2) {
+			const canonical = journal.entries[index], jsx = journal.entries[index + 1];
+			if (!canonical || !jsx || typeof canonical.after !== "string" || typeof jsx.after !== "string") fail(operation, "Invalid reviewed edit entries.");
+			let record;
+			try {
+				record = JSON.parse(canonical.after);
+			} catch {
+				return fail(operation, "Invalid reviewed edit journal payload.");
+			}
+			const validation = validateCompositionRecord(record);
+			if (!validation.ok || ids.has(validation.record.id) || canonical.name !== `composition-${validation.record.id}.composition.json` || jsx.name !== `composition-${validation.record.id}.tsx`) fail(operation, "Reviewed edit journal identity or payload mismatch.");
+			if (validation.ok) ids.add(validation.record.id);
+		}
+		if (journal.entries.some((entry) => entry.before !== null && !validDigest(entry.before)) || !receipt || receipt.schemaVersion !== 1 || receipt.operationId !== journal.operationId || receipt.planDigest !== journal.planDigest || !receipt.value || typeof receipt.value !== "object" || Array.isArray(receipt.value)) fail(operation, "Reviewed edit journal identity or payload mismatch.");
 	}
 	async rollForward(operation, journal) {
 		try {
@@ -1798,9 +1830,11 @@ var FilesystemCompositionStore = class FilesystemCompositionStore {
 			const canonical = (value) => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, canonical(child)])) : value;
 			const mutationToken = createHash("sha256").update(JSON.stringify(canonical(records))).digest("hex");
 			if (mutationToken !== edit.expectedSnapshotToken) throw operationError("put", "conflict", "Composition snapshot changed after review.");
-			const valid = validateCompositionRecord(edit.candidate);
-			if (!valid.ok) throw operationError("put", "validation", valid.issue.message);
-			await this.assertBindingTransition(edit.candidate);
+			for (const { candidate } of edit.changes ?? []) {
+				const valid = validateCompositionRecord(candidate);
+				if (!valid.ok) throw operationError("put", "validation", valid.issue.message);
+				await this.assertBindingTransition(candidate);
+			}
 			await recheck?.({
 				mutationToken,
 				records: cloneJson(records)

@@ -1,0 +1,11 @@
+{
+  "packageOutputSha": "6884f0af20178967c957a57eb4a8a48f3c5c6fbc",
+  "ciHeadSha": "07cb8c301fd48aeff88c684071c4642fb43d22d2",
+  "ciMergeSha": "818ed53f7709b9c050bb7c1265ef4cfb01fe4034",
+  "runUrl": "https://github.com/Takazudo/zudo-composer/actions/runs/38448135916",
+  "job": "hosted-content-consumer",
+  "jobConclusion": "success",
+  "artifactId": 11839332061,
+  "artifactZipSha256": "44334fff4fab71b9067522905fd6109554ef45a3418a78c37402fc045c7ed62d",
+  "source": "Unmodified successful CI artifact; packed-payload-inventory.json copied from the checked retained output inventory. Local browser installation was blocked; CI performed the full pinned proof."
+}

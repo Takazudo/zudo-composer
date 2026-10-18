@@ -42,3 +42,11 @@ describe("strict workspace intents", () => {
     expect(() => formatIntent({ route: "content", providerId: "one", modelId: "../wrong" })).toThrow();
   });
 });
+
+it("qualifies native page links without introducing a visitor or preview route", () => {
+  expect(parseIntent("/composer?native=1&sitemap=site&page=home")).toEqual({ status: "matched", intent: { route: "composer", mode: "page", sitemapId: "site", pageId: "home" } });
+  expect(parseIntent("/composer?native=1&page=home").status).toBe("invalid");
+  expect(parseIntent("/composer?native=1&provider=files&composition=home").status).toBe("invalid");
+  expect(parseIntent("/composer?native=1&native=1").status).toBe("invalid");
+  expect(formatIntent({ route: "composer", mode: "page", sitemapId: "site", pageId: "home" })).toBe("/composer?native=1&sitemap=site&page=home");
+});
