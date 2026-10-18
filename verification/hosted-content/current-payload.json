@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "958163948e2d28c1ff757a542568f3f6cf4d6d9f",
-  "payloadSha256": "ffdd33f6b020d867ff0f7199a163b53cb50f44ddb187871fd137cfb8294c682c",
-  "rawPackageJsonSha256": "6398f944053c44d4425a398e76ad5d58bccdffd24d801a9498698f45eceb9462",
+  "packageOutputSha": "a76b59f83181417f4eb07cb6362dab0a64d63edf",
+  "payloadSha256": "63aa359da130a48efa1d117dfa83f6e60085c0586dc1183302d1fa31bb31bdb0",
+  "rawPackageJsonSha256": "4a109e24575ac59c783c2a1ab7809ae27ea5c628317e9ea4d71c45c972362d91",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -30,9 +30,9 @@
     },
     {
       "path": "docs/assistant.md",
-      "bytes": 9972,
+      "bytes": 10268,
       "mode": 420,
-      "sha256": "8aa614a797e44c37edff565d3e2f0941f81253b13ff61862132c4357cdc287b2"
+      "sha256": "3ce5ac992ea024968e10dd2b54856f2914bcd5eba29c79de5403bc7fcf6b7797"
     },
     {
       "path": "docs/hosted-content.md",
@@ -54,9 +54,9 @@
     },
     {
       "path": "package.json",
-      "bytes": 8697,
+      "bytes": 8768,
       "mode": 420,
-      "sha256": "81229d4b13130722ab4d6e563052de6bb994fde03c094cf18a310468e12d7591"
+      "sha256": "7536d5968465fef47379d687f173f2144ed344439843a4b976288ff96036d762"
     },
     {
       "path": "packages/image-editor/src/core/encode.ts",
@@ -444,9 +444,9 @@
     },
     {
       "path": "server/assistant/anthropic-provider.ts",
-      "bytes": 5568,
+      "bytes": 6080,
       "mode": 420,
-      "sha256": "8b8b2086b022f18fae8f03f7744499f7589bcfe2f8cbf8fc38001bdcc3776b99"
+      "sha256": "fc9755403543d758719f1bda03331b0ea8bb29ed3f19d430623d55d34ca80e01"
     },
     {
       "path": "server/assistant/context.ts",
@@ -462,9 +462,9 @@
     },
     {
       "path": "server/assistant/runner.ts",
-      "bytes": 38677,
+      "bytes": 40101,
       "mode": 420,
-      "sha256": "993b3a234f0298112b4c87626f94f9ccc07517be0461c3b74864b2708167572c"
+      "sha256": "01180f2b370ebfd9b63b45226010ff43e41f8695eb88e4acdc6d36a90440bfb2"
     },
     {
       "path": "server/assistant/store.ts",
