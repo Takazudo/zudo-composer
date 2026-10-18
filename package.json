@@ -153,6 +153,7 @@
     "test:browser:demo-editor": "node scripts/run-demo-editor-browser.mjs",
     "test:browser:demos": "node scripts/run-demos-browser.mjs",
     "test:browser:assistant": "node scripts/verify-assistant-browser.mjs",
+    "test:browser:assistant:live": "node scripts/verify-assistant-live.mjs",
     "hosted-demo:verify": "node scripts/check-hosted-demo.mjs",
     "hosted-demo:live-check": "node scripts/hosted-demo/live-check.mjs",
     "hosted-demo:workflow-guard": "node scripts/hosted-demo/workflow-guard.mjs",

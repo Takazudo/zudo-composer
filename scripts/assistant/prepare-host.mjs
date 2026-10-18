@@ -15,14 +15,14 @@ const repo = fileURLToPath(new URL("../..", import.meta.url));
 export const DEMOS = /** @type {const} */ ({ landing: "demo-landing", blog: "demo-blog", webshop: "demo-webshop" });
 
 /**
- * @param {{ kind: keyof typeof DEMOS | "edit-host", dir: string, baseUrl?: string, workspaceId?: string, name?: string }} options
+ * @param {{ kind: keyof typeof DEMOS | "edit-host", dir: string, baseUrl?: string, apiKeyEnv?: string, workspaceId?: string, name?: string }} options
  * @returns {Promise<{ dir: string, workspaceId: string, pages: { sitemapId: string, pageId: string }[] }>}
  */
-export async function prepareAssistantHost({ kind, dir, baseUrl, workspaceId, name }) {
+export async function prepareAssistantHost({ kind, dir, baseUrl, apiKeyEnv = "ZUDO_ASSISTANT_TEST_KEY", workspaceId, name }) {
   const target = resolve(dir);
   if (existsSync(target) && (await readdir(target)).length) throw new Error(`Refusing to seed into a non-empty directory: ${target}`);
   await mkdir(target, { recursive: true });
-  const assistant = { name: name ?? "AI Assistant", ...(baseUrl ? { baseUrl, apiKeyEnv: "ZUDO_ASSISTANT_TEST_KEY" } : {}) };
+  const assistant = { name: name ?? "AI Assistant", ...(baseUrl ? { baseUrl, apiKeyEnv } : {}) };
   if (kind === "edit-host") {
     await cp(join(repo, "fixtures/edit-host"), target, { recursive: true });
     const config = await readFile(join(target, "zudo-composer.config.ts"), "utf8");

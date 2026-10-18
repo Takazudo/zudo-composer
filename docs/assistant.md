@@ -188,5 +188,9 @@ undone draft cannot be revived by a late reply.
   real dev server, renderers and adapter against a loopback **scripted**
   Messages API. It is real-browser evidence with fake model replies, not live
   inference.
-- Live-provider behavior needs a real credential and is recorded separately.
-  Synthetic IME tests are not physical-device evidence.
+- `pnpm test:browser:assistant:live` is the separate, opt-in live-model lane.
+  It drives the same disposable hosts and UI against the real Messages API
+  through a loopback meter that only forwards, records the request/response
+  contract and enforces an approved spend cap. It needs a dedicated
+  credential and cap, never runs in CI, and records `blocked` without them.
+- Synthetic IME tests are not physical-device evidence.

@@ -12,6 +12,7 @@ import { chromium, expect } from "@playwright/test";
 import { startHostServer } from "./packed-host-helpers.mjs";
 import { prepareAssistantHost } from "./assistant/prepare-host.mjs";
 import { startFakeMessagesApi } from "./fixtures/assistant/fake-messages-api.mjs";
+import { count, frame, highlighted, idle, lastReply, send } from "./assistant/browser-helpers.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const port = 4177, origin = `http://127.0.0.1:${port}`;
@@ -32,32 +33,6 @@ async function start(host, options = {}) {
   server = await startHostServer(host, { port, env, command: process.execPath, args: [join(root, "bin/zudo-composer.mjs"), "dev", "--host", "127.0.0.1", "--port", String(port), "--strict-port"] });
 }
 async function stop() { await server?.stop(); server = undefined; }
-/** @param {import('@playwright/test').Page} page */
-async function idle(page) {
-  await expect(page.locator('.cms-assistant-message[aria-busy="true"]')).toHaveCount(0, { timeout: 60_000 });
-  await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
-}
-/** @param {import('@playwright/test').Page} page @param {string} text */
-async function send(page, text) {
-  const replies = page.locator('.cms-assistant-message[data-role="assistant"]:not([aria-busy])');
-  const before = await replies.count();
-  await page.locator("#assistant-input").fill(text);
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(replies).toHaveCount(before + 1, { timeout: 60_000 });
-  await idle(page);
-}
-/** @param {import('@playwright/test').Page} page */
-const lastReply = page => page.locator('.cms-assistant-message[data-role="assistant"]').last();
-/** @param {import('@playwright/test').Page} page */
-const count = page => page.locator(".cms-assistant-review .cms-assistant-count").first();
-/** @param {import('@playwright/test').Page} page @param {"Draft" | "Current"} kind */
-const frame = (page, kind) => page.frameLocator(`iframe[title="${kind} page preview"]`);
-/** @param {import('@playwright/test').FrameLocator} preview */
-const highlighted = preview => preview.locator("body").evaluate(() => {
-  const value = /** @type {any} */ (CSS).highlights?.get("zc-review-insert");
-  return value ? [...value].map((/** @type {Range} */ range) => range.toString()) : [];
-});
 /** @param {import('@playwright/test').Page} page @param {string} name */
 const shot = (page, name) => page.screenshot({ path: join(evidence, `${name}.png`) });
 const lastRequest = () => api.requests().at(-1);
