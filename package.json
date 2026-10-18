@@ -175,6 +175,7 @@
     "preact": "^10.29.8"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
     "@codemirror/commands": "^6.11.0",
     "@codemirror/lang-markdown": "^6.5.2",
     "@codemirror/language": "^6.12.4",
