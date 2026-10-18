@@ -32,7 +32,9 @@ const KEY_ENV = "ZUDO_ASSISTANT_LIVE_API_KEY";
 const MODEL = "claude-opus-5-5";
 const HARD_CEILING_USD = 50;
 const REPLY_TIMEOUT = 300_000;
-const upstream = process.env.ZUDO_ASSISTANT_LIVE_UPSTREAM ?? "https://api.anthropic.com";
+const LIVE_UPSTREAM = "https://api.anthropic.com";
+const upstream = process.env.ZUDO_ASSISTANT_LIVE_UPSTREAM ?? LIVE_UPSTREAM;
+const loopbackUpstream = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(upstream);
 const maxRequests = Number(process.env.ZUDO_ASSISTANT_LIVE_MAX_REQUESTS ?? 90);
 const maxUsd = Number(process.env.ZUDO_ASSISTANT_LIVE_MAX_USD);
 const evidence = resolve(process.env.ZUDO_ASSISTANT_LIVE_EVIDENCE_DIR ?? join(root, "test-results/assistant-live"));
@@ -69,7 +71,7 @@ const TURNS = {
 
 const plan = {
   lane: "assistant-live",
-  evidenceClass: /^https:/.test(upstream) ? "live inference (real Anthropic Messages API through the product adapter)" : "HARNESS SMOKE against a loopback upstream: not live inference",
+  evidenceClass: upstream === LIVE_UPSTREAM ? "live inference (real Anthropic Messages API through the product adapter)" : "HARNESS SMOKE against a loopback upstream: not live inference",
   provider: "anthropic", model: MODEL, adapter: "@anthropic-ai/sdk 0.131.0 (pinned), streaming, adaptive thinking, effort medium, fallbacks: \"default\"",
   upstream, credentialEnv: KEY_ENV, limits: { maxRequests, maxUsd: Number.isFinite(maxUsd) ? maxUsd : null, hardCeilingUsd: HARD_CEILING_USD, replyTimeoutMs: REPLY_TIMEOUT },
   data: "Public demo definitions seeded into new disposable hosts, plus the synthetic texts listed here. No private data.",
@@ -92,6 +94,7 @@ if (process.argv.includes("--plan")) { console.log(JSON.stringify(plan, null, 2)
 const blockers = [
   ...(process.env[KEY_ENV]?.trim() ? [] : [`${KEY_ENV} is not set (no credential provisioned for live Assistant verification)`]),
   ...(Number.isFinite(maxUsd) && maxUsd > 0 && maxUsd <= HARD_CEILING_USD ? [] : [`ZUDO_ASSISTANT_LIVE_MAX_USD must be an approved spend cap between 0 and ${HARD_CEILING_USD}`]),
+  ...(upstream === LIVE_UPSTREAM || loopbackUpstream ? [] : [`ZUDO_ASSISTANT_LIVE_UPSTREAM must be ${LIVE_UPSTREAM} (live) or a loopback URL (harness smoke); the key is never sent elsewhere`]),
   ...(process.env.CI && process.env.ZUDO_ASSISTANT_LIVE_ALLOW_CI !== "1" ? ["CI is set; the live lane never runs in CI unless ZUDO_ASSISTANT_LIVE_ALLOW_CI=1"] : []),
 ];
 if (blockers.length) {
@@ -148,7 +151,8 @@ async function draftState(/** @type {string} */ dir) {
 }
 async function assistantState(/** @type {string} */ dir) {
   const all = await records(dir, "assistant");
-  return { site: all.find(record => record.memory), conversations: all.filter(record => Array.isArray(record.messages)), runs: all.filter(record => Array.isArray(record.events)) };
+  // Run records also carry a `memory` (the revision they used); the site record is the one with history.
+  return { site: all.find(record => record.memory && Array.isArray(record.history)), conversations: all.filter(record => Array.isArray(record.messages)), runs: all.filter(record => Array.isArray(record.events)) };
 }
 /** Canonical composition documents of the host: file name -> text. */
 async function canonical(/** @type {string} */ dir) {
@@ -209,8 +213,19 @@ async function turn(/** @type {import('@playwright/test').Page} */ page, /** @ty
   return { reply: reply?.text ?? "", outcome: reply?.outcome, memory: reply?.memory, proposals: reply?.memoryProposals ?? [], remembered: reply?.remembered ?? [], clarification: (run?.events ?? []).some((/** @type {any} */ event) => event.type === "clarification"), tools, requests, conversationId: conversation?.id, run };
 }
 /** Runs one journey; any harness or model failure is recorded and the lane continues. */
-async function journey(/** @type {string} */ name, /** @type {() => Promise<void>} */ body) {
-  try { await body(); } catch (error) { check(name, "completed", "journey ran to the end", error instanceof Error ? error.message.split("\n")[0] : String(error), false); }
+async function journey(/** @type {string} */ name, /** @type {() => Promise<void>} */ body, /** @type {import('@playwright/test').Page} */ page) {
+  try { await body(); } catch (error) {
+    check(name, "completed", "journey ran to the end", error instanceof Error ? error.message.split("\n")[0] : String(error), false);
+    // A failed journey may leave a modal open; the next journey starts from a fresh load of the same page.
+    await shot(page, `failure-${name}`);
+    await page.reload().catch(() => {});
+    await expect(page.locator('iframe[title="Current page preview"]')).toBeVisible({ timeout: 90_000 }).catch(() => {});
+  }
+}
+/** Starts an empty conversation and waits until the previous messages are gone. */
+async function newConversation(/** @type {import('@playwright/test').Page} */ page) {
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await expect(page.locator(".cms-assistant-message")).toHaveCount(0, { timeout: 30_000 });
 }
 const shot = (/** @type {import('@playwright/test').Page} */ page, /** @type {string} */ name) => page.screenshot({ path: join(evidence, `${name}.png`) }).catch(() => {});
 const openMemory = async (/** @type {import('@playwright/test').Page} */ page) => { await page.getByRole("button", { name: /^Memory/ }).click(); return page.getByRole("dialog", { name: /Site Memory/ }); };
@@ -235,16 +250,16 @@ async function orrery() {
     await expect(lastReply(page).getByText(/Saved as r\d+/)).toBeVisible({ timeout: 30_000 });
     const approved = (await assistantState(host)).site?.memory;
     check("A", "human-approval", "Only the human approval saves the proposal", { revision: approved?.revision, body: approved?.body }, approved?.revision === 1 && /team lead/i.test(approved?.body ?? ""));
-    await page.getByRole("button", { name: "New", exact: true }).click();
+    await newConversation(page);
     const a2 = await turn(page, host, "A2");
     const first = /** @type {any} */ (a2.requests[0]);
     check("A", "other-conversation-uses-memory", "A new conversation's actual model input carries the saved Memory revision and no earlier history", { usedMemory: a2.memory, messagesInRequest: first?.messages, memoryInSystem: first?.system?.includes(approved?.body ?? "\u0000"), reply: a2.reply }, /** @type {any} */ (a2.memory)?.revision === 1 && first?.messages === 1 && first?.system?.includes(approved?.body ?? "\u0000"));
     check("A", "answer-reflects-memory", "The answer names the audience and tone from Memory (meaning, not wording)", a2.reply, /lead/i.test(a2.reply) && /(warm|plain)/i.test(a2.reply));
     await expect(lastReply(page).getByText(/Used Memory r1/)).toBeVisible();
-  });
+  }, page);
 
   await journey("B", async () => {
-    await page.getByRole("button", { name: "New", exact: true }).click();
+    await newConversation(page);
     await frame(page, "Current").getByText("Connect your calendars").click();
     await expect(page.getByText(/Selected:/)).toBeVisible();
     const b1 = await turn(page, host, "B1");
@@ -260,7 +275,7 @@ async function orrery() {
     const insert = changes.inserts[0];
     check("B", "registered-component-insert", "One registered land.feature-item is added after the last card with the requested title", { inserts: changes.inserts, tools: b3.tools }, changes.inserts.length === 1 && insert.componentId === "land.feature-item" && /shared agendas/i.test(String(insert.props?.title)) && (insert.at?.after === "home-land-feature-item-7" || (insert.at?.parentId === "home-land-feature-grid-4" && insert.at?.index === 3)));
     check("B", "canonical-unchanged-before-apply", "Proposals never write canonical JSON/JSX", diff(pristine, await canonical(host)), JSON.stringify(await canonical(host)) === JSON.stringify(pristine));
-  });
+  }, page);
 
   await journey("C", async () => {
     await page.getByRole("button", { name: /^Draft/ }).click();
@@ -289,7 +304,7 @@ async function orrery() {
     const after = effective((await draftState(host)).draft);
     check("C", "zero-diff", "Returning the step title to its saved value removes that change", after.fields, !after.fields.some(field => field.nodeId === "home-land-step-11") && after.fields.length === 2);
     check("C", "canonical-unchanged", "Nothing was saved before Apply", null, JSON.stringify(await canonical(host)) === JSON.stringify(pristine));
-  });
+  }, page);
 
   await journey("D", async () => {
     const expected = effective((await draftState(host)).draft).fields;
@@ -312,7 +327,7 @@ async function orrery() {
     check("D", "undo", "Undo restores both pages", diff(pristine, await canonical(host)), JSON.stringify(withoutTimestamps(await canonical(host))) === JSON.stringify(withoutTimestamps(pristine)));
     deterministicOnly("D", "lost-response-retry", "A lost Apply response is reconciled from the receipt and retry is idempotent", "server/edit/__tests__/draft-service.test.ts (receipt reconciliation) and test:browser:assistant");
     deterministicOnly("D", "undo-refused-after-edit", "Undo is refused after a later ordinary edit", "server/edit/__tests__/draft-service.test.ts (guarded Undo)");
-  });
+  }, page);
 
   await journey("E", async () => {
     let dialog = await openMemory(page);
@@ -325,7 +340,7 @@ async function orrery() {
     const sameConversation = await turn(page, host, "E1");
     const sent = /** @type {any} */ (sameConversation.requests[0]);
     check("E", "correction-same-conversation", "The next call in the same conversation carries the corrected Memory and not the old text", { revision: memory?.revision, used: sameConversation.memory, reply: sameConversation.reply }, sent?.system?.includes("experienced operations managers") && !/first-time team leads/i.test(sent?.system ?? "") && /** @type {any} */ (sameConversation.memory)?.revision === memory?.revision && /operations/i.test(sameConversation.reply));
-    await page.getByRole("button", { name: "New", exact: true }).click();
+    await newConversation(page);
     const fresh = await turn(page, host, "E1");
     check("E", "correction-new-conversation", "A new conversation (no history) answers from the corrected Memory", { messages: /** @type {any} */ (fresh.requests[0])?.messages, reply: fresh.reply }, /** @type {any} */ (fresh.requests[0])?.messages === 1 && /operations/i.test(fresh.reply));
     dialog = await openMemory(page);
@@ -347,7 +362,7 @@ async function orrery() {
     await dialog.getByRole("button", { name: "Clear" }).click();
     await expect(dialog.getByText(/Memory cleared/)).toBeVisible();
     await dialog.getByRole("button", { name: "Close" }).click();
-    await page.getByRole("button", { name: "New", exact: true }).click();
+    await newConversation(page);
     const cleared = await turn(page, host, "E5");
     check("E", "clear", "After Clear the model input says Memory is empty and earlier conversations are kept", { system: /Site Memory is empty/.test(/** @type {any} */ (cleared.requests[0])?.system ?? ""), conversations: (await assistantState(host)).conversations.length, reply: cleared.reply }, /Site Memory is empty/.test(/** @type {any} */ (cleared.requests[0])?.system ?? "") && (await assistantState(host)).conversations.length >= 4);
     deterministicOnly("E", "late-run-fence", "Clear/mode change fences replies that started earlier", "server/assistant/__tests__/store.test.ts and runner.test.ts");
@@ -355,11 +370,11 @@ async function orrery() {
     dialog = await openMemory(page);
     await dialog.getByRole("radio", { name: /Read only/ }).check();
     await dialog.getByRole("button", { name: "Close" }).click();
-  });
+  }, page);
 
   await journey("F", async () => {
     const draftBefore = JSON.stringify(effective((await draftState(host)).draft));
-    await page.getByRole("button", { name: "New", exact: true }).click();
+    await newConversation(page);
     const ambiguous = await turn(page, host, "F1");
     check("F", "ambiguous-clarifies", "An ambiguous request asks a question and changes nothing", { clarification: ambiguous.clarification, reply: ambiguous.reply, tools: ambiguous.tools }, JSON.stringify(effective((await draftState(host)).draft)) === draftBefore && (ambiguous.clarification || /\?/.test(ambiguous.reply)));
     const unsupported = await turn(page, host, "F2");
@@ -378,7 +393,7 @@ async function orrery() {
     const options = await again.getByRole("combobox", { name: "Conversation" }).locator("option").count();
     check("F", "restart-keeps-state", "After a server restart, conversations and Memory are still there", { conversations, options }, options >= conversations);
     await again.close();
-  });
+  }, page);
   await stop();
   return host;
 }
@@ -396,8 +411,10 @@ async function marginNotes(/** @type {string} */ orreryHost) {
     const body = await dialog.getByRole("textbox").inputValue();
     await dialog.getByRole("button", { name: "Close" }).click();
     const own = await assistantState(host), other = await assistantState(orreryHost);
-    check("F", "workspace-isolation", "A different host with the same workspace id shares no Memory, conversations or draft", { memoryBody: body, conversations: own.conversations.length, draft: (await draftState(host)).draft?.id ?? null, otherConversations: other.conversations.length }, body === "" && own.conversations.length === 0 && !(await draftState(host)).draft);
-  });
+    const ownMessages = own.conversations.flatMap(conversation => conversation.messages);
+    const otherIds = new Set(other.conversations.map(conversation => conversation.id));
+    check("F", "workspace-isolation", "A different host with the same workspace id shares no Memory, messages, conversations or draft", { memoryBody: body, messages: ownMessages.length, sharedConversationIds: own.conversations.filter(conversation => otherIds.has(conversation.id)).length, draft: (await draftState(host)).draft?.id ?? null, otherMessages: other.conversations.flatMap(conversation => conversation.messages).length }, body === "" && ownMessages.length === 0 && own.conversations.every(conversation => !otherIds.has(conversation.id)) && !(await draftState(host)).draft);
+  }, page);
   await journey("G", async () => {
     await page.locator(".cms-assistant-compose > .cms-assistant-row").getByRole("button", { name: "Attach", exact: true }).click();
     await page.getByRole("combobox", { name: "Kind" }).selectOption("text");
@@ -411,7 +428,7 @@ async function marginNotes(/** @type {string} */ orreryHost) {
     await page.getByRole("button", { name: "Apply to Composer" }).click();
     await expect(page.getByRole("heading", { name: "Applied to Composer" })).toBeVisible({ timeout: 60_000 });
     const withLong = await canonical(host);
-    await page.getByRole("button", { name: "New", exact: true }).click();
+    await newConversation(page);
     const g2 = await turn(page, host, "G2");
     changes = effective((await draftState(host)).draft);
     const fixed = LONG_TEXT.replace("recieve", "receive");
@@ -430,7 +447,7 @@ async function marginNotes(/** @type {string} */ orreryHost) {
     const changed = diff(withLong, await canonical(host));
     check("G", "blog-apply", "Apply saved only that field", changed, changed.props.length === 1 && changed.props[0].nodeId === "newsletter-heading" && changed.added.length === 0 && changed.removed.length === 0);
     await shot(page, "margin-notes-applied");
-  });
+  }, page);
   await page.close();
   await stop();
 }
@@ -456,7 +473,7 @@ async function nightjar() {
     const changed = diff(pristine, await canonical(host));
     check("H", "shop-apply", "Apply saved only that field", changed, changed.props.length === 1 && changed.props[0].nodeId === "home-shop-newsletter-4" && changed.added.length === 0 && changed.removed.length === 0);
     await shot(page, "nightjar-applied");
-  });
+  }, page);
   await page.close();
   await stop();
 }

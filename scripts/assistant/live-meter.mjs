@@ -28,6 +28,11 @@ const price = model => (model && model in PRICES ? PRICES[/** @type {keyof typeo
 /** @param {Record<string, any> | undefined} usage @param {string | undefined} model */
 export function costOf(usage, model) {
   if (!usage) return 0;
+  // A fallback bills every attempt; price each iteration at its own model and never below the top-level total.
+  if (Array.isArray(usage.iterations) && usage.iterations.length) {
+    const { iterations, ...total } = usage;
+    return Math.max(iterations.reduce((sum, entry) => sum + costOf(entry, entry.model ?? model), 0), costOf(total, model));
+  }
   const rate = price(model);
   const input = (usage.input_tokens ?? 0) + 1.25 * (usage.cache_creation_input_tokens ?? 0) + 0.05 * (usage.cache_read_input_tokens ?? 0);
   return (input * rate.input + (usage.output_tokens ?? 0) * rate.output) / 1_000_000;

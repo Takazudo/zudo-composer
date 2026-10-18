@@ -45,6 +45,11 @@ describe("live lane meter", () => {
     expect(limited.meter.records()[1]).toMatchObject({ refused: "request-limit" });
   });
 
+  it("prices every fallback iteration at its own model, never below the top-level usage", () => {
+    const usage = { input_tokens: 100, output_tokens: 10, iterations: [{ type: "message", model: "claude-opus-5-5", input_tokens: 1_000, output_tokens: 500 }, { type: "fallback_message", model: "claude-opus-5", input_tokens: 100, output_tokens: 10 }] };
+    expect(costOf(usage, "claude-opus-5")).toBeCloseTo((1_000 * 4 + 500 * 20 + 100 * 5 + 10 * 25) / 1_000_000);
+  });
+
   it("refuses non-https upstreams other than loopback", async () => {
     await expect(startLiveMeter({ upstream: "http://api.example.com", maxUsd: 1, maxRequests: 1 })).rejects.toThrow(/https/);
   });
