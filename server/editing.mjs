@@ -9,8 +9,9 @@ import { createModuleEvaluator } from "./module-evaluator.mjs";
 export async function createEditingService(options = {}) {
   const { composerConfig: config, pack, packIdentity } = await loadHostContext(options);
   const module = /** @type {typeof import("./edit/service.js")} */ (await createModuleEvaluator(APP_ROOT)(resolve(APP_ROOT, "server/edit/service.ts")));
-  const { initializeSourceEpoch: _initializeSourceEpoch, inspectBrowserReview: _inspectBrowserReview, ...service } = module.createEditingService({ config, pack, packIdentity });
+  const { initializeSourceEpoch: _initializeSourceEpoch, inspectBrowserReview: _inspectBrowserReview, drafts: _drafts, ...service } = module.createEditingService({ config, pack, packIdentity });
   void _inspectBrowserReview;
+  void _drafts; // Shared Assistant drafts are served only by the authoring server's operator channel.
   void _initializeSourceEpoch; // Internal context-loader hook, not a public editing verb.
   return service;
 }

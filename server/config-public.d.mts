@@ -23,6 +23,26 @@ interface NativeEditingConfig {
 }
 
 /**
+ * Host opt-in for the AI Assistant. The config names a provider/model and the
+ * server-side environment variable that holds the credential; it never holds
+ * a secret itself and is never serialized to the browser.
+ */
+interface AssistantConfig {
+    provider: "anthropic";
+    /** Messages API model id. */
+    model: string;
+    /** Environment variable read by the local authoring server only. */
+    apiKeyEnv: string;
+    effort: "low" | "medium" | "high";
+    /** Default display name; a site-scoped stored name may replace it. */
+    name: string;
+    /** `propose` permits conversation, drafts and review but never Apply. */
+    permission: "apply" | "propose";
+    /** Messages API origin: HTTPS (e.g. an organization gateway) or loopback HTTP for local proxies and tests. */
+    baseUrl: string;
+}
+
+/**
  * Every setting a host may declare. Path settings are relative to the host
  * project root; `pack` is a module specifier.
  *
@@ -102,6 +122,8 @@ type ComposerSettingDefaults = Omit<ComposerSettings, "pack">;
  */
 interface ComposerConfigOverrides {
     nativeEditing?: NativeEditingConfig;
+    /** Explicit AI Assistant opt-in; requires `nativeEditing` for writable pages. */
+    assistant?: Partial<AssistantConfig>;
     /** Absolute host project root. Defaults to `process.cwd()`. */
     workspaceRoot?: string;
     /** Absolute path of the config file, used in resolution error messages. */
@@ -132,6 +154,7 @@ interface ComposerPaths {
 }
 interface ResolvedComposerConfig {
     nativeEditing: NativeEditingConfig | undefined;
+    assistant: AssistantConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */
     workspaceRoot: string;
     /** Absolute path of the host config file, whether or not it exists. */
@@ -150,4 +173,4 @@ interface ComposerRuntime {
 declare function defineComposerConfig(config: ComposerConfig): ComposerConfig;
 
 export { defineComposerConfig };
-export type { ComposerConfig, ComposerConfigInput, ComposerConfigOverrides, ComposerPaths, ComposerRuntime, ComposerSettingDefaults, ComposerSettings, NativeEditingConfig, ResolvedComposerConfig };
+export type { AssistantConfig, ComposerConfig, ComposerConfigInput, ComposerConfigOverrides, ComposerPaths, ComposerRuntime, ComposerSettingDefaults, ComposerSettings, NativeEditingConfig, ResolvedComposerConfig };

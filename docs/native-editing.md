@@ -39,6 +39,8 @@ are accepted, with explicit sitemap selection when needed.
 Refused scopes include generated/source-authored hosts (`site-project.ts` or
 `site-project.json`), Mapping/Content-owned pages or values, shared/published
 Compositions, targets under dynamic Mapping routes, and unsupported providers.
+A page that hosts a Mapping collection attachment stays writable, but the
+attached slot itself is Mapping-owned: nothing may be inserted into it.
 A bound page may insert into its own validated template outlet; the shared
 source template is never modified. A paragraph inside `ProseMd.markdown` is
 not a standalone node: there is no Markdown source-range adapter in this slice.
@@ -85,8 +87,8 @@ move, drag/drop or history mutation lane.
 A pending plan retains its original page and target when navigation or selection
 changes. Return to that page and render Proposed again before approval. Minimal
 per-page input and server plan references survive reload in this tab; this is
-not a conversation platform. No generation provider is connected, and there is
-no natural-language parser or generated copy in this slice.
+not a conversation platform. This page-first form has no model; conversational
+requests use the separate [AI Assistant](./assistant.md).
 
 After Apply, the server invalidates old browser write revisions and clean tabs
 reopen actual records. The retained plan recovers the durable receipt after a
@@ -260,7 +262,9 @@ Phase 2a uses this shared boundary and the existing preview protocol while
 preserving conservative external-CLI exclusion. This does not complete all
 Phase 2 or Phase 3 roadmap work. Phase 3 may produce strict
 proposals but must keep conversation/run state, plans, approvals and receipts
-separate. No model calls or provider credentials are part of this implementation.
+separate. The [AI Assistant](./assistant.md) builds on this boundary: its model
+runner only proposes into a shared draft, and Apply/Undo stay explicit operator
+actions through the same writer, journal and browser coordination.
 
 The installed browser proof additionally exercises the page-first UI, all three
 exact insertions, identical JSON/JSX before approval, Original/Proposed,

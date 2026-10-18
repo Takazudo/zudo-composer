@@ -175,108 +175,6 @@ interface Grammar {
     };
 }
 
-/** Produces a fresh, unique node or record id on each call. */
-type IdFactory = (hint?: string) => string;
-
-declare const ASSET_TYPES: readonly ["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/zip", "text/plain", "text/csv", "application/json"];
-
-/** The only Assets document schema understood by this build. */
-declare const ASSET_SCHEMA_VERSION: 1;
-type AssetSchemaVersion = typeof ASSET_SCHEMA_VERSION;
-type AssetType = (typeof ASSET_TYPES)[number];
-/** Persisted Assets metadata. Binary bytes are stored by providers separately. */
-interface AssetDocument {
-    schemaVersion: AssetSchemaVersion;
-    id: RecordId;
-    fileName: string;
-    folderId: string | null;
-    note: string;
-    state: "active" | "trash";
-    currentVersionId: string;
-    versions: AssetVersion[];
-}
-interface AssetVersion {
-    /** SHA-256 identifies immutable bytes, independently of the mutable head. */
-    id: string;
-    mimeType: AssetType;
-    byteLength: number;
-    checksum: string;
-    url: string;
-    createdAt: string;
-}
-/** The canonical record envelope persisted by a Assets provider. */
-interface AssetRecord {
-    id: RecordId;
-    revision: number;
-    createdAt: string;
-    updatedAt: string;
-    document: AssetDocument;
-}
-interface AssetFolder {
-    id: string;
-    parentId: string | null;
-    name: string;
-    state: "active" | "trash";
-    revision: number;
-    createdAt: string;
-    updatedAt: string;
-}
-/** One atomic global metadata snapshot, separate from SiteProject providers. */
-interface AssetSnapshot {
-    schemaVersion: AssetSchemaVersion;
-    mutationToken: string;
-    records: AssetRecord[];
-    folders: AssetFolder[];
-}
-/** Stable provider-qualified identity used by authoring references. */
-interface AssetAssetRef {
-    providerId: string;
-    assetId: string;
-}
-/** Exact immutable version identity used by release/pin operations. */
-interface AssetVersionRef extends AssetAssetRef {
-    versionId: string;
-}
-interface AssetVersionPin extends AssetVersionRef {
-    checksum: string;
-    byteLength: number;
-    mimeType: AssetType;
-    url: string;
-}
-interface AssetPinManifest {
-    schemaVersion: 1;
-    pins: AssetVersionPin[];
-}
-
-type AssetValidationCode = "invalid-record" | "unsafe-id" | "id-mismatch" | "invalid-timestamp" | "invalid-timestamp-order" | "not-json-safe" | "malformed-document" | "future-schema" | "invalid-file-name" | "invalid-mime-type" | "invalid-byte-length" | "invalid-checksum";
-interface AssetValidationIssue {
-    code: AssetValidationCode;
-    message: string;
-    path?: string;
-    foundSchemaVersion?: number;
-}
-
-type AssetBytesMissingReason = "missing" | "checksum-mismatch";
-type AssetLoadOutcome<T = AssetRecord> = {
-    status: "loaded";
-    record: T;
-} | {
-    status: "not-found";
-    id: string;
-} | {
-    status: "invalid";
-    issue: AssetValidationIssue;
-    raw: unknown;
-} | {
-    status: "future-schema";
-    foundSchemaVersion: number;
-    raw: unknown;
-} | {
-    status: "bytes-missing";
-    record: T;
-    reason?: AssetBytesMissingReason;
-};
-
 interface PersistedSnapshot<T> {
     mutationToken: number | string;
     records: readonly T[];
@@ -456,6 +354,9 @@ interface CompositionLifecycleStore extends CompositionStore {
      */
     saveLifecycleRecord(record: CompositionRecord): Promise<void>;
 }
+
+/** Produces a fresh, unique node or record id on each call. */
+type IdFactory = (hint?: string) => string;
 
 declare const CONTENT_MODEL_SCHEMA_VERSION: 1;
 declare const CONTENT_ENTRY_SCHEMA_VERSION: 1;
@@ -1205,6 +1106,105 @@ interface SiteProject {
     collectionAttachments: SiteProjectCollectionAttachment[];
 }
 
+declare const ASSET_TYPES: readonly ["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/zip", "text/plain", "text/csv", "application/json"];
+
+/** The only Assets document schema understood by this build. */
+declare const ASSET_SCHEMA_VERSION: 1;
+type AssetSchemaVersion = typeof ASSET_SCHEMA_VERSION;
+type AssetType = (typeof ASSET_TYPES)[number];
+/** Persisted Assets metadata. Binary bytes are stored by providers separately. */
+interface AssetDocument {
+    schemaVersion: AssetSchemaVersion;
+    id: RecordId;
+    fileName: string;
+    folderId: string | null;
+    note: string;
+    state: "active" | "trash";
+    currentVersionId: string;
+    versions: AssetVersion[];
+}
+interface AssetVersion {
+    /** SHA-256 identifies immutable bytes, independently of the mutable head. */
+    id: string;
+    mimeType: AssetType;
+    byteLength: number;
+    checksum: string;
+    url: string;
+    createdAt: string;
+}
+/** The canonical record envelope persisted by a Assets provider. */
+interface AssetRecord {
+    id: RecordId;
+    revision: number;
+    createdAt: string;
+    updatedAt: string;
+    document: AssetDocument;
+}
+interface AssetFolder {
+    id: string;
+    parentId: string | null;
+    name: string;
+    state: "active" | "trash";
+    revision: number;
+    createdAt: string;
+    updatedAt: string;
+}
+/** One atomic global metadata snapshot, separate from SiteProject providers. */
+interface AssetSnapshot {
+    schemaVersion: AssetSchemaVersion;
+    mutationToken: string;
+    records: AssetRecord[];
+    folders: AssetFolder[];
+}
+/** Stable provider-qualified identity used by authoring references. */
+interface AssetAssetRef {
+    providerId: string;
+    assetId: string;
+}
+/** Exact immutable version identity used by release/pin operations. */
+interface AssetVersionRef extends AssetAssetRef {
+    versionId: string;
+}
+interface AssetVersionPin extends AssetVersionRef {
+    checksum: string;
+    byteLength: number;
+    mimeType: AssetType;
+    url: string;
+}
+interface AssetPinManifest {
+    schemaVersion: 1;
+    pins: AssetVersionPin[];
+}
+
+type AssetValidationCode = "invalid-record" | "unsafe-id" | "id-mismatch" | "invalid-timestamp" | "invalid-timestamp-order" | "not-json-safe" | "malformed-document" | "future-schema" | "invalid-file-name" | "invalid-mime-type" | "invalid-byte-length" | "invalid-checksum";
+interface AssetValidationIssue {
+    code: AssetValidationCode;
+    message: string;
+    path?: string;
+    foundSchemaVersion?: number;
+}
+
+type AssetBytesMissingReason = "missing" | "checksum-mismatch";
+type AssetLoadOutcome<T = AssetRecord> = {
+    status: "loaded";
+    record: T;
+} | {
+    status: "not-found";
+    id: string;
+} | {
+    status: "invalid";
+    issue: AssetValidationIssue;
+    raw: unknown;
+} | {
+    status: "future-schema";
+    foundSchemaVersion: number;
+    raw: unknown;
+} | {
+    status: "bytes-missing";
+    record: T;
+    reason?: AssetBytesMissingReason;
+};
+
 /** Provider identities are data, not application-layer implementations. */
 interface AssetProviderDescriptor {
     readonly id: string;
@@ -1327,6 +1327,73 @@ type AssetInitializationOutcome = {
     status: "error";
     error: AssetPersistenceError;
 };
+
+declare const pageRefSchema: z.ZodObject<{
+    sitemapId: z.ZodString;
+    pageId: z.ZodString;
+}, z.core.$strict>;
+type PageRef = z.infer<typeof pageRefSchema>;
+interface Provenance {
+    actor: "assistant" | "operator";
+    conversationId?: string;
+    runId?: string;
+    turnId?: string;
+}
+interface DraftPage {
+    page: PageRef;
+    identity: ReturnType<typeof resolvePage>["identity"];
+    before: CompositionRecord;
+    contextDigest: string;
+}
+type DraftStatus = "open" | "applied" | "discarded" | "undone";
+interface DraftChange {
+    id: string;
+    kind: "field" | "added" | "removed";
+    page: PageRef;
+    recordId: string;
+    nodeId: string;
+    componentId: string;
+    componentTitle: string;
+    prop?: string;
+    fieldLabel?: string;
+    before?: JsonValue;
+    after?: JsonValue;
+    /** Props of an added node, all of which are new authored values. */
+    props?: JsonObject;
+    children?: number;
+    operationIds: string[];
+    reasons: string[];
+}
+
+type ExactPayload = {
+    kind: "text";
+    text: string;
+} | {
+    kind: "table";
+    columns: string[];
+    rows: string[][];
+} | {
+    kind: "image";
+    assetId: string;
+    alt: string;
+};
+type PayloadResolver = (payloadId: string) => Promise<ExactPayload>;
+interface DraftReceipt {
+    schemaVersion: 1;
+    kind: "draft-applied" | "draft-undone";
+    operationId: string;
+    draftId: string;
+    revision: number;
+    candidateDigest: string;
+    workspaceId: string;
+    committedAt: string;
+    pages: {
+        identity: DraftPage["identity"];
+        beforeDigest: string;
+        afterDigest: string;
+        jsxDigest: string;
+    }[];
+}
 
 interface SafeRootFilesystemOperations {
     mkdir(path: string, options: {
@@ -1827,12 +1894,16 @@ interface FilesystemCompositionStoreOptions {
     now?: () => string;
 }
 
+interface ReviewedCompositionChange {
+    candidate: CompositionRecord;
+    jsx: string;
+}
+/** One reviewed operation may publish several Composition pairs; all share one journal. */
 interface ReviewedCompositionEdit<T extends object> {
     operationId: string;
     planDigest: string;
     expectedSnapshotToken: string;
-    candidate: CompositionRecord;
-    jsx: string;
+    changes: ReviewedCompositionChange[];
     receipt: T;
 }
 
@@ -2131,6 +2202,26 @@ interface NativeEditingConfig {
     };
 }
 
+/**
+ * Host opt-in for the AI Assistant. The config names a provider/model and the
+ * server-side environment variable that holds the credential; it never holds
+ * a secret itself and is never serialized to the browser.
+ */
+interface AssistantConfig {
+    provider: "anthropic";
+    /** Messages API model id. */
+    model: string;
+    /** Environment variable read by the local authoring server only. */
+    apiKeyEnv: string;
+    effort: "low" | "medium" | "high";
+    /** Default display name; a site-scoped stored name may replace it. */
+    name: string;
+    /** `propose` permits conversation, drafts and review but never Apply. */
+    permission: "apply" | "propose";
+    /** Messages API origin: HTTPS (e.g. an organization gateway) or loopback HTTP for local proxies and tests. */
+    baseUrl: string;
+}
+
 /** Absolute paths derived from the settings. Node-side only, never serialized. */
 interface ComposerPaths {
     workspaceRoot: string;
@@ -2145,6 +2236,7 @@ interface ComposerPaths {
 }
 interface ResolvedComposerConfig {
     nativeEditing: NativeEditingConfig | undefined;
+    assistant: AssistantConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */
     workspaceRoot: string;
     /** Absolute path of the host config file, whether or not it exists. */
@@ -2237,6 +2329,10 @@ declare function resolvePage(capture: HostCapture, request: InspectPageRequest):
         sitemapId: string;
         pageId: string;
     }[];
+    attachedSlots: {
+        nodeId: string;
+        slotId: string;
+    }[];
     writeBlockers: string[];
     capabilities: Partial<Record<NativeKind, {
         available: boolean;
@@ -2316,6 +2412,431 @@ interface EditReceipt {
  * The digest binds content; the caller, not this service, supplies human authority.
  */
 declare function createEditingService$1(options: CaptureHostOptions): {
+    drafts: {
+        draft(input: unknown): Promise<{
+            generation: number;
+            draft: null;
+            permission: "apply" | "propose";
+        } | {
+            generation: number;
+            permission: "apply" | "propose";
+            draft: {
+                id: string;
+                revision: number;
+                status: DraftStatus;
+                createdAt: string;
+                updatedAt: string;
+                applied: {
+                    operationId: string;
+                    candidateDigest: string;
+                    committedAt: string;
+                } | null;
+                undone: {
+                    operationId: string;
+                    committedAt: string;
+                } | null;
+                dependenciesCurrent: boolean;
+                dependencyDigest: string;
+                operations: {
+                    id: string;
+                    kind: "updateField" | "insertNode";
+                    page: {
+                        sitemapId: string;
+                        pageId: string;
+                    };
+                    provenance: Provenance;
+                    reason: string | null;
+                    createdAt: string;
+                }[];
+                pages: {
+                    page: {
+                        sitemapId: string;
+                        pageId: string;
+                    };
+                    identity: {
+                        workspaceId: string;
+                        sitemapId: string;
+                        pageId: string;
+                        providerId: string;
+                        recordId: string;
+                    };
+                    before: CompositionRecord;
+                    candidate: CompositionRecord;
+                    changed: boolean;
+                    linked: {
+                        sourceRecordId: string;
+                        sourceDocument: CompositionDocument;
+                        outlet: GlobalTemplateOutlet;
+                    } | null;
+                }[];
+                changes: DraftChange[];
+                stale: {
+                    page: PageRef;
+                    reason: string;
+                }[];
+                buildError: {
+                    code: string;
+                    message: string;
+                } | null;
+                candidateDigest: string | null;
+            };
+        }>;
+        propose(input: unknown, payloads?: PayloadResolver): Promise<{
+            added: string[];
+            generation: number;
+            draft: null;
+            permission: "apply" | "propose";
+        } | {
+            added: string[];
+            generation: number;
+            permission: "apply" | "propose";
+            draft: {
+                id: string;
+                revision: number;
+                status: DraftStatus;
+                createdAt: string;
+                updatedAt: string;
+                applied: {
+                    operationId: string;
+                    candidateDigest: string;
+                    committedAt: string;
+                } | null;
+                undone: {
+                    operationId: string;
+                    committedAt: string;
+                } | null;
+                dependenciesCurrent: boolean;
+                dependencyDigest: string;
+                operations: {
+                    id: string;
+                    kind: "updateField" | "insertNode";
+                    page: {
+                        sitemapId: string;
+                        pageId: string;
+                    };
+                    provenance: Provenance;
+                    reason: string | null;
+                    createdAt: string;
+                }[];
+                pages: {
+                    page: {
+                        sitemapId: string;
+                        pageId: string;
+                    };
+                    identity: {
+                        workspaceId: string;
+                        sitemapId: string;
+                        pageId: string;
+                        providerId: string;
+                        recordId: string;
+                    };
+                    before: CompositionRecord;
+                    candidate: CompositionRecord;
+                    changed: boolean;
+                    linked: {
+                        sourceRecordId: string;
+                        sourceDocument: CompositionDocument;
+                        outlet: GlobalTemplateOutlet;
+                    } | null;
+                }[];
+                changes: DraftChange[];
+                stale: {
+                    page: PageRef;
+                    reason: string;
+                }[];
+                buildError: {
+                    code: string;
+                    message: string;
+                } | null;
+                candidateDigest: string | null;
+            };
+        }>;
+        withdraw(input: unknown): Promise<{
+            generation: number;
+            draft: null;
+            permission: "apply" | "propose";
+        } | {
+            generation: number;
+            permission: "apply" | "propose";
+            draft: {
+                id: string;
+                revision: number;
+                status: DraftStatus;
+                createdAt: string;
+                updatedAt: string;
+                applied: {
+                    operationId: string;
+                    candidateDigest: string;
+                    committedAt: string;
+                } | null;
+                undone: {
+                    operationId: string;
+                    committedAt: string;
+                } | null;
+                dependenciesCurrent: boolean;
+                dependencyDigest: string;
+                operations: {
+                    id: string;
+                    kind: "updateField" | "insertNode";
+                    page: {
+                        sitemapId: string;
+                        pageId: string;
+                    };
+                    provenance: Provenance;
+                    reason: string | null;
+                    createdAt: string;
+                }[];
+                pages: {
+                    page: {
+                        sitemapId: string;
+                        pageId: string;
+                    };
+                    identity: {
+                        workspaceId: string;
+                        sitemapId: string;
+                        pageId: string;
+                        providerId: string;
+                        recordId: string;
+                    };
+                    before: CompositionRecord;
+                    candidate: CompositionRecord;
+                    changed: boolean;
+                    linked: {
+                        sourceRecordId: string;
+                        sourceDocument: CompositionDocument;
+                        outlet: GlobalTemplateOutlet;
+                    } | null;
+                }[];
+                changes: DraftChange[];
+                stale: {
+                    page: PageRef;
+                    reason: string;
+                }[];
+                buildError: {
+                    code: string;
+                    message: string;
+                } | null;
+                candidateDigest: string | null;
+            };
+        } | {
+            requiresCascade: boolean;
+            dependents: {
+                id: string;
+                kind: "updateField" | "insertNode";
+                page: {
+                    sitemapId: string;
+                    pageId: string;
+                };
+                reason: string | null;
+            }[];
+        }>;
+        discard(input: unknown): Promise<{
+            generation: number;
+            draft: null;
+            permission: "apply" | "propose";
+        } | {
+            generation: number;
+            permission: "apply" | "propose";
+            draft: {
+                id: string;
+                revision: number;
+                status: DraftStatus;
+                createdAt: string;
+                updatedAt: string;
+                applied: {
+                    operationId: string;
+                    candidateDigest: string;
+                    committedAt: string;
+                } | null;
+                undone: {
+                    operationId: string;
+                    committedAt: string;
+                } | null;
+                dependenciesCurrent: boolean;
+                dependencyDigest: string;
+                operations: {
+                    id: string;
+                    kind: "updateField" | "insertNode";
+                    page: {
+                        sitemapId: string;
+                        pageId: string;
+                    };
+                    provenance: Provenance;
+                    reason: string | null;
+                    createdAt: string;
+                }[];
+                pages: {
+                    page: {
+                        sitemapId: string;
+                        pageId: string;
+                    };
+                    identity: {
+                        workspaceId: string;
+                        sitemapId: string;
+                        pageId: string;
+                        providerId: string;
+                        recordId: string;
+                    };
+                    before: CompositionRecord;
+                    candidate: CompositionRecord;
+                    changed: boolean;
+                    linked: {
+                        sourceRecordId: string;
+                        sourceDocument: CompositionDocument;
+                        outlet: GlobalTemplateOutlet;
+                    } | null;
+                }[];
+                changes: DraftChange[];
+                stale: {
+                    page: PageRef;
+                    reason: string;
+                }[];
+                buildError: {
+                    code: string;
+                    message: string;
+                } | null;
+                candidateDigest: string | null;
+            };
+        }>;
+        revalidate(input: unknown): Promise<{
+            dropped: {
+                id: string;
+                reason: string;
+            }[];
+            generation: number;
+            draft: null;
+            permission: "apply" | "propose";
+        } | {
+            dropped: {
+                id: string;
+                reason: string;
+            }[];
+            generation: number;
+            permission: "apply" | "propose";
+            draft: {
+                id: string;
+                revision: number;
+                status: DraftStatus;
+                createdAt: string;
+                updatedAt: string;
+                applied: {
+                    operationId: string;
+                    candidateDigest: string;
+                    committedAt: string;
+                } | null;
+                undone: {
+                    operationId: string;
+                    committedAt: string;
+                } | null;
+                dependenciesCurrent: boolean;
+                dependencyDigest: string;
+                operations: {
+                    id: string;
+                    kind: "updateField" | "insertNode";
+                    page: {
+                        sitemapId: string;
+                        pageId: string;
+                    };
+                    provenance: Provenance;
+                    reason: string | null;
+                    createdAt: string;
+                }[];
+                pages: {
+                    page: {
+                        sitemapId: string;
+                        pageId: string;
+                    };
+                    identity: {
+                        workspaceId: string;
+                        sitemapId: string;
+                        pageId: string;
+                        providerId: string;
+                        recordId: string;
+                    };
+                    before: CompositionRecord;
+                    candidate: CompositionRecord;
+                    changed: boolean;
+                    linked: {
+                        sourceRecordId: string;
+                        sourceDocument: CompositionDocument;
+                        outlet: GlobalTemplateOutlet;
+                    } | null;
+                }[];
+                changes: DraftChange[];
+                stale: {
+                    page: PageRef;
+                    reason: string;
+                }[];
+                buildError: {
+                    code: string;
+                    message: string;
+                } | null;
+                candidateDigest: string | null;
+            };
+        }>;
+        apply(input: unknown): Promise<DraftReceipt>;
+        receipt(input: unknown): Promise<{
+            status: DraftStatus;
+            applied: DraftReceipt | null;
+            undone: DraftReceipt | null;
+        }>;
+        undo(input: unknown): Promise<DraftReceipt>;
+        describePage(input: unknown): Promise<{
+            resolved: {
+                record: CompositionRecord;
+                rootPolicy: RootPolicy;
+                linked: {
+                    sourceRecordId: string;
+                    sourceDocument: CompositionDocument;
+                    outlet: GlobalTemplateOutlet;
+                } | undefined;
+                targets: NativeTarget[];
+                allTargets: {
+                    reason?: string | undefined;
+                    nodeId: string;
+                    componentId: string;
+                    native: NativeKind | null;
+                }[];
+                consumers: {
+                    kind: string;
+                    sitemapId: string;
+                    pageId: string;
+                }[];
+                linkedConsumers: string[];
+                mappedConsumers: string[];
+                mappedPages: {
+                    sitemapId: string;
+                    pageId: string;
+                }[];
+                mappedDescendants: {
+                    sitemapId: string;
+                    pageId: string;
+                }[];
+                attachedSlots: {
+                    nodeId: string;
+                    slotId: string;
+                }[];
+                writeBlockers: string[];
+                capabilities: Partial<Record<NativeKind, {
+                    available: boolean;
+                    componentId: string;
+                    reason?: string;
+                }>>;
+                sitemapId: string;
+                pageId: string;
+                identity: {
+                    workspaceId: string;
+                    sitemapId: string;
+                    pageId: string;
+                    providerId: string;
+                    recordId: string;
+                };
+                grammar: Grammar;
+            };
+            document: CompositionDocument;
+            inDraft: boolean;
+        }>;
+    };
     inspectBrowserReview(input: unknown): Promise<{
         plan: EditPlan;
         page: {
@@ -2347,6 +2868,10 @@ declare function createEditingService$1(options: CaptureHostOptions): {
             mappedDescendants: {
                 sitemapId: string;
                 pageId: string;
+            }[];
+            attachedSlots: {
+                nodeId: string;
+                slotId: string;
             }[];
             writeBlockers: string[];
             capabilities: Partial<Record<NativeKind, {
@@ -2396,6 +2921,10 @@ declare function createEditingService$1(options: CaptureHostOptions): {
         mappedDescendants: {
             sitemapId: string;
             pageId: string;
+        }[];
+        attachedSlots: {
+            nodeId: string;
+            slotId: string;
         }[];
         writeBlockers: string[];
         capabilities: Partial<Record<NativeKind, {
@@ -2447,7 +2976,7 @@ declare function createEditingService$1(options: CaptureHostOptions): {
 /** Trusted local authoring adapter; never expose apply/undo to a proposal runner. */
 declare function createEditingService(options?: {
     workspaceRoot?: string;
-}): Promise<Omit<ReturnType<typeof createEditingService$1>, "initializeSourceEpoch" | "inspectBrowserReview">>;
+}): Promise<Omit<ReturnType<typeof createEditingService$1>, "initializeSourceEpoch" | "inspectBrowserReview" | "drafts">>;
 
 export { createEditingService };
 export type { EditPlan, EditReceipt, EditRequest };

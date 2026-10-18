@@ -97,7 +97,8 @@
     "!src/test",
     "!src/hosted-demo",
     "docs/hosted-content.md",
-    "docs/native-editing.md"
+    "docs/native-editing.md",
+    "docs/assistant.md"
   ],
   "engines": {
     "node": "^22.13.0 || >=24.0.0",
@@ -151,6 +152,7 @@
     "test:browser:site-project": "node scripts/run-site-project-browser.mjs",
     "test:browser:demo-editor": "node scripts/run-demo-editor-browser.mjs",
     "test:browser:demos": "node scripts/run-demos-browser.mjs",
+    "test:browser:assistant": "node scripts/verify-assistant-browser.mjs",
     "hosted-demo:verify": "node scripts/check-hosted-demo.mjs",
     "hosted-demo:live-check": "node scripts/hosted-demo/live-check.mjs",
     "hosted-demo:workflow-guard": "node scripts/hosted-demo/workflow-guard.mjs",

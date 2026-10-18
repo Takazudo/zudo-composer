@@ -497,7 +497,18 @@ In a configured local dev server, open **Composer → Edit page**
 (`/composer?native=1`) to select a real native target, supply exact content,
 review Original/Proposed, explicitly Apply to draft, recover its durable receipt
 and use guarded Undo. The existing structural editor remains available through
-**Structure**; no generation provider is connected.
+**Structure**.
+
+## AI Assistant
+
+Hosts that opt in with an `assistant` config block get **Composer → AI
+Assistant** (`/composer?assistant=1`): a compact conversation beside the real
+page preview. The Assistant edits only within the installed components, fields
+and slots; its proposals accumulate in one reviewable shared draft with yellow
+changed words and outlined, labelled changed blocks, and nothing is saved until
+you choose **Apply to Composer** (not publish). Site Memory, modes, provider
+configuration (Anthropic Messages API, server-side credential) and data flow
+are described in [docs/assistant.md](docs/assistant.md).
 
 ## Development and validation
 

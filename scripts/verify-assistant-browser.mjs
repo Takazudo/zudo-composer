@@ -212,7 +212,8 @@ async function exactInsertionJourneys() {
   const file = (id, ext) => join(host.dir, "cms/compositions/workspace-v1-native-proof", `composition-${id}.${ext}`);
   const read = async () => Promise.all(["home", "other"].flatMap(id => [readFile(file(id, "composition.json"), "utf8"), readFile(file(id, "tsx"), "utf8")]));
   await start(host.dir);
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await context.newPage();
   await page.goto(`${origin}/composer?assistant=1&sitemap=main&page=home`);
   await expect(frame(page, "Current").getByText("Before replacement", { exact: true })).toBeVisible({ timeout: 90_000 });
   const before = await read();
@@ -258,6 +259,22 @@ async function exactInsertionJourneys() {
   await expect(frame(page, "Draft").locator(".zc-review-badge")).toHaveText(["Changed 1/1"]);
   await expect.poll(() => highlighted(frame(page, "Draft"))).toEqual([", now clearer"]);
   await expect(page.locator("#assistant-apply-state")).toContainText("rendered successfully", { timeout: 30_000 });
+  // Another tab holding an unsaved iframe edit blocks Apply without consuming that edit or writing anything.
+  const second = await page.context().newPage();
+  await second.goto(`${origin}/composer?provider=files&composition=other`);
+  const structural = second.frameLocator('iframe[title="Composer preview canvas"]');
+  await structural.getByText("Editable Markdown source", { exact: true }).dblclick();
+  const prose = structural.getByRole("textbox", { name: "Markdown source", exact: true });
+  await prose.fill("未保存の Markdown");
+  await page.getByRole("button", { name: "Apply to Composer" }).click();
+  await expect(page.locator(".cms-assistant-review [role=alert]")).toContainText("Finish saving in every authoring tab", { timeout: 30_000 });
+  await expect(prose).toHaveText("未保存の Markdown");
+  assert.deepEqual(await read(), before, "a dirty tab must block Apply");
+  await prose.press("Escape");
+  await structural.getByRole("button", { name: "Discard changes", exact: true }).click();
+  await second.close();
+  log("an unsaved edit in another tab blocked Apply and was retained");
+  await expect(page.getByRole("button", { name: "Apply to Composer" })).toBeEnabled({ timeout: 30_000 });
   await page.getByRole("button", { name: "Apply to Composer" }).click();
   await expect(page.getByRole("heading", { name: "Applied to Composer" })).toBeVisible({ timeout: 60_000 });
   const applied = await read();
@@ -267,11 +284,20 @@ async function exactInsertionJourneys() {
   await page.reload();
   await expect(page.getByRole("heading", { name: "Applied to Composer" })).toBeVisible({ timeout: 60_000 });
   await shot(page, "native-applied-receipt");
-  await page.getByRole("button", { name: "Undo apply" }).click();
-  await expect(page.getByRole("heading", { name: "Undo committed" })).toBeVisible({ timeout: 60_000 });
+  // A just-reloaded tab's previous socket may still be registered; coordination then refuses safely and a retry succeeds.
+  for (let attempt = 0; ; attempt++) {
+    await page.getByRole("button", { name: "Undo apply" }).click();
+    const outcome = await Promise.race([
+      page.getByRole("heading", { name: "Undo committed" }).waitFor({ timeout: 60_000 }).then(() => "done"),
+      page.locator(".cms-assistant-review [role=alert]").filter({ hasText: "Finish saving in every authoring tab" }).waitFor({ timeout: 60_000 }).then(() => "refused"),
+    ]);
+    if (outcome === "done") break;
+    assert.ok(attempt < 2, "Undo kept being refused by browser coordination");
+    log("Undo refused while a stale tab connection drained; retrying as an operator would");
+  }
   assert.deepEqual((await read()).map(text => text.replace(/"updatedAt": "[^"]+"/g, "")), before.map(text => text.replace(/"updatedAt": "[^"]+"/g, "")));
   log("exact text/table/image + multi-page Apply committed both pages with one receipt; guarded Undo restored them");
-  await page.close();
+  await context.close();
   await stop();
 }
 
