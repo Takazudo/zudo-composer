@@ -67,7 +67,10 @@ const TURNS = {
   G2: "In the newsletter page's body, the last paragraph misspells \"receive\". Fix only that word and keep everything else exactly the same.",
   G3: "Change the intro under the newsletter page heading to exactly: \"One short letter every Sunday morning.\"",
   H1: "Change the selected block's heading to \"Notes from the workbench\".",
+  I1: "Put my attached text right after the selected paragraph, the table after the list, and the image after the table. Nothing else.",
+  I2: "Insert the sentence \"Added in the middle.\" inside the Markdown block, between its existing words, not as a new block.",
 };
+const EXACT_TEXT = "正確な日本語の追記。\n改行と  空白を保持。";
 
 const plan = {
   lane: "assistant-live",
@@ -75,9 +78,9 @@ const plan = {
   provider: "anthropic", model: MODEL, adapter: "@anthropic-ai/sdk 0.131.0 (pinned), streaming, adaptive thinking, effort medium, fallbacks: \"default\"",
   upstream, credentialEnv: KEY_ENV, limits: { maxRequests, maxUsd: Number.isFinite(maxUsd) ? maxUsd : null, hardCeilingUsd: HARD_CEILING_USD, replyTimeoutMs: REPLY_TIMEOUT },
   data: "Public demo definitions seeded into new disposable hosts, plus the synthetic texts listed here. No private data.",
-  hosts: ["Orrery (packages/demo-landing)", "Margin Notes (packages/demo-blog)", "Nightjar Supply (packages/demo-webshop)"],
-  turns: Object.entries(TURNS).map(([id, text]) => ({ id, text })), syntheticAttachment: { kind: "text", characters: LONG_TEXT.length },
-  estimate: "About 45-60 model calls (18 turns) at roughly $0.05-0.20 each; the meter refuses any call whose worst case would pass the cap.",
+  hosts: ["Orrery (packages/demo-landing)", "Margin Notes (packages/demo-blog)", "Nightjar Supply (packages/demo-webshop)", "native edit fixture (fixtures/edit-host)"],
+  turns: Object.entries(TURNS).map(([id, text]) => ({ id, text })), syntheticAttachments: [{ kind: "text", characters: LONG_TEXT.length }, { kind: "text", text: EXACT_TEXT }, { kind: "table", columns: ["項目", "値"], rows: [["数量", "3"]] }, { kind: "image", asset: "fixture's first managed image" }],
+  estimate: "About 50-65 model calls (20 turns) at roughly $0.05-0.20 each; the meter refuses any call whose worst case would pass the cap.",
 };
 
 /** @param {Record<string, unknown>} record */
@@ -194,7 +197,7 @@ function effective(/** @type {any} */ draft) {
     walk(page?.before?.document?.root ?? []);
     return JSON.stringify(nodes.find(node => node.id === operation.nodeId)?.props?.[operation.prop]) !== JSON.stringify(operation.value);
   }).map(operation => ({ page: operation.page.pageId, nodeId: operation.nodeId, prop: operation.prop, value: operation.value }));
-  const inserts = draft.operations.filter((/** @type {any} */ operation) => operation.kind === "insertNode").map((/** @type {any} */ operation) => ({ page: operation.page.pageId, componentId: operation.origin?.componentId ?? operation.node.componentId, at: operation.at, props: operation.node.props }));
+  const inserts = draft.operations.filter((/** @type {any} */ operation) => operation.kind === "insertNode").map((/** @type {any} */ operation) => ({ page: operation.page.pageId, componentId: operation.origin?.componentId ?? operation.node.componentId, exact: operation.origin?.kind === "exact" ? operation.origin.payloadKind : null, at: operation.at, props: operation.node.props }));
   return { fields, inserts };
 }
 
@@ -481,6 +484,51 @@ async function nightjar() {
   await stop();
 }
 
+async function nativeFixture() {
+  const host = (await prepareAssistantHost({ kind: "edit-host", dir: join(temporary, "native"), baseUrl: meter.url, apiKeyEnv: KEY_ENV, name: "Proof Bot" })).dir;
+  hostDirs.push(host);
+  await start(host);
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  page.on("dialog", dialog => void dialog.accept());
+  await page.goto(`${origin}/composer?assistant=1&sitemap=main&page=home`);
+  await expect(frame(page, "Current").getByText("Before replacement", { exact: true })).toBeVisible({ timeout: 90_000 });
+  const pristine = await canonical(host);
+  await journey("I", async () => {
+    await frame(page, "Current").getByText("Before replacement", { exact: true }).click();
+    await expect(page.getByText(/Selected:/)).toBeVisible();
+    const attach = async (/** @type {string} */ kind, /** @type {() => Promise<void>} */ fill) => {
+      await page.locator(".cms-assistant-compose > .cms-assistant-row").getByRole("button", { name: "Attach", exact: true }).click();
+      await page.getByRole("combobox", { name: "Kind" }).selectOption(kind);
+      await fill();
+      await page.locator(".cms-assistant-attach").getByRole("button", { name: "Attach", exact: true }).click();
+      await expect(page.locator(".cms-assistant-attach")).toHaveCount(0);
+    };
+    await attach("text", () => page.getByRole("textbox", { name: "Exact text" }).fill(EXACT_TEXT));
+    await attach("table", () => page.getByRole("textbox", { name: "Table JSON" }).fill(JSON.stringify({ columns: ["項目", "値"], rows: [["数量", "3"]] })));
+    await attach("image", async () => { await page.getByRole("combobox", { name: "Image", exact: true }).selectOption({ index: 1 }); await page.getByRole("textbox", { name: "Alternative text" }).fill("Native managed image"); });
+    await turn(page, host, "I1");
+    const changes = effective((await draftState(host)).draft);
+    // Same position, any placement form: after the block, before the next one, or the root index.
+    const order = ["paragraph", "list", "table"];
+    const placed = (/** @type {string} */ kind, /** @type {string} */ after) => changes.inserts.some(insert => insert.exact === kind && (insert.at?.after === after || (insert.at?.before && insert.at.before === order[order.indexOf(after) + 1]) || (insert.at?.parentId === null && insert.at?.index === order.indexOf(after) + 1)));
+    const text = changes.inserts.find(insert => insert.exact === "text");
+    check("I", "exact-insertions", "Exact text, table and image are inserted by reference at the three requested positions, with nothing else", changes, changes.inserts.length === 3 && changes.fields.length === 0 && placed("text", "paragraph") && placed("table", "list") && placed("image", "table") && JSON.stringify(text?.props ?? {}).includes(JSON.stringify(EXACT_TEXT).slice(1, -1)));
+    await page.getByRole("button", { name: /^Draft/ }).click();
+    await expect(page.locator("#assistant-apply-state")).toContainText("rendered successfully", { timeout: 60_000 });
+    await shot(page, "native-exact-draft");
+    await page.getByRole("button", { name: "Discard all" }).click();
+    await expect(page.getByText("No pending AI changes")).toBeVisible({ timeout: 30_000 });
+    await page.goto(`${origin}/composer?assistant=1&sitemap=main&page=other`);
+    await expect(frame(page, "Current").getByText("Editable Markdown source")).toBeVisible({ timeout: 90_000 });
+    const range = await turn(page, host, "I2");
+    const after = effective((await draftState(host)).draft);
+    check("I", "range-not-moved", "A position inside a Markdown block is never turned into a new block before or after it", { inserts: after.inserts, fields: after.fields, reply: range.reply }, after.inserts.length === 0);
+    check("I", "canonical-unchanged", "Nothing was saved", null, JSON.stringify(await canonical(host)) === JSON.stringify(pristine));
+  }, page);
+  await page.close();
+  await stop();
+}
+
 let status = "failed";
 try {
   await rm(evidence, { recursive: true, force: true });
@@ -489,6 +537,7 @@ try {
   const orreryHost = await orrery();
   await marginNotes(orreryHost);
   await nightjar();
+  await nativeFixture();
   status = checks.some(entry => entry.verdict === "fail") ? "failed" : "passed";
 } catch (error) {
   check("lane", "harness", "the lane ran to the end", error instanceof Error ? error.message.split("\n")[0] : String(error), false);

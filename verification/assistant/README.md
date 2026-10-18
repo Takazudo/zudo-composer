@@ -75,6 +75,7 @@ key and no private text.
 - **F**: Ambiguous, unsupported and Mapping-owned requests change nothing; restart keeps state; same workspace id on another host shares nothing.
 - **G** (Margin Notes): exact long attachment, `read_field` before a narrow long-field fix, Discard, narrow edit and Apply.
 - **H** (Nightjar Supply): selected-heading edit and Apply.
+- **I** (`fixtures/edit-host`): exact Japanese text, table and managed image inserted by reference at three requested positions, Discard, then a position inside a Markdown block that must not become a new block.
 
 ### Status
 
