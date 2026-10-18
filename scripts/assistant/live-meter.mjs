@@ -25,7 +25,7 @@ export const PRICES = /** @type {const} */ ({
 /** @param {string | undefined} model */
 const price = model => (model && model in PRICES ? PRICES[/** @type {keyof typeof PRICES} */ (model)] : PRICES.fallback);
 /** Cache writes bill at 1.25x input, cache reads at 0.05x input. */
-/** @param {Record<string, any> | undefined} usage @param {string | undefined} model */
+/** @param {Record<string, any> | undefined} usage @param {string | undefined} model @returns {number} */
 export function costOf(usage, model) {
   if (!usage) return 0;
   // A fallback bills every attempt; price each iteration at its own model and never below the top-level total.
