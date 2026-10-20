@@ -17,7 +17,7 @@ pin and the synced scaffold surfaces in the same commit.
 
 - 2026-10-15 reconciliation: Compared the integrity-verified published 6.1.1 and 6.2.0 tarballs, including the full scaffold generator. The template selects Doc/history 6.2.0 and ZFB 4.5.0; the host independently advances the published ZFB family to 4.5.2. Adopted its dependency updates and removal of `baseUrl`, with `./src/*` alias targets. The optional MCP Wrangler update remains unselected; local routes, assets, styles, navigation, writing skill and independent root workspace policy remain unchanged. Registry gitHead and the release tag resolve to the commit above; no independent cryptographic attestation verification is claimed. Doc 7 is intentionally excluded because published SG 0.5.4 supports Doc ^6.1.1.
 
-- 2026-10-20: the host advances the published ZFB family to 4.5.3 together with the UI pack's md-wasm; Doc/history stay at ^6.2.0, whose ^4.5.2 ZFB peer ranges accept 4.5.3. No scaffold file needed resync.
+- 2026-10-20: the host advances the published ZFB family to 4.5.3 together with the UI pack's md-wasm; Doc/history stay at ^6.2.0, whose ^4.5.0 ZFB peer ranges accept 4.5.3. No scaffold file needed resync.
 
 ## zudo-sg
 
