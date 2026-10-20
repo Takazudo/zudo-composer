@@ -17,7 +17,7 @@
     "./src/*.composer.tsx": "./src/*.composer.tsx"
   },
   "dependencies": {
-    "@takazudo/zfb-md-wasm": "4.5.2",
+    "@takazudo/zfb-md-wasm": "4.5.3",
     "dompurify": "^3.4.16"
   },
   "peerDependencies": {
