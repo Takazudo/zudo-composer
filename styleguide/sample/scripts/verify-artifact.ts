@@ -42,6 +42,10 @@ const ui = JSON.parse(
   await readFile("node_modules/@zudo-composer/ui/package.json", "utf8"),
 );
 assert.equal(ui.dependencies["@takazudo/zfb-md-wasm"], "4.5.3");
+const mdWasm = JSON.parse(
+  await readFile("node_modules/@takazudo/zfb-md-wasm/package.json", "utf8"),
+);
+assert.equal(mdWasm.version, "4.5.3");
 assert.deepEqual(
   await readFile("dist/_sample-preview/zfb_md_wasm_render_bg.wasm"),
   await readFile(
