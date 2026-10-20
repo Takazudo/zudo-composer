@@ -30,7 +30,7 @@ describe("sample styleguide host styles", () => {
       "utf8",
     );
 
-    // SG 0.5/doc 6 use Wind in the shell; the actual Git-installed UI's
+    // SG 0.5/doc 7 use Wind in the shell; the actual Git-installed UI's
     // Tailwind stylesheet is compiled separately for the Preact iframe.
     for (const stylesheet of [
       "@takazudo/zudo-doc/theme.css",
