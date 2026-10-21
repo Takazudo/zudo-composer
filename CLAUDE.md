@@ -29,7 +29,7 @@ This repository also owns its dogfood component set in `packages/ui`
 (`@zudo-composer/ui`): typed component sidecars, the runtime pack, and
 canonical Composer CSS. Its package metadata is `@zudo-composer/ui@0.1.0`
 and its component-pack protocol identity is `@zudo-composer/ui@1.0.0`. The
-pack's focused `@takazudo/zfb-md-wasm` dependency, exactly `4.5.4`, is allowed
+pack's focused `@takazudo/zfb-md-wasm` dependency, exactly `4.6.0`, is allowed
 for `ProseMd` as a dependency of `packages/ui`, never of the tool; no zudo-doc,
 zfb application runtime/config, virtual-zfb, or styleguide registry may enter
 this tool. The tool never lists the pack under `dependencies` or
@@ -115,12 +115,12 @@ fast-forward branch whose root tree equals the package directory:
 | Package | Source | Handoff file | Branch | Package commit |
 | --- | --- | --- | --- | --- |
 | `@zudo-composer/component-contract@1.0.0` | `packages/component-contract` | `contract-handoff.json` | `package/component-contract-v1` | `c0b452da075b66757c60bd0d721a47062d4354d0` |
-| `@zudo-composer/ui@0.1.0` (pack `@zudo-composer/ui@1.0.0`) | `packages/ui` | `ui-handoff.json` | `package/ui-v1` | `72a8bdac4477e7088ac28fd917c1f1f4b8d3e85a` |
+| `@zudo-composer/ui@0.1.0` (pack `@zudo-composer/ui@1.0.0`) | `packages/ui` | `ui-handoff.json` | `package/ui-v1` | `e5a5a24e6ac88e78b5dacd0ce66749462a315837` |
 
 External hosts install each through its exact root Git spec,
 `git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0`
 for the contract and
-`git+https://github.com/Takazudo/zudo-composer.git#72a8bdac4477e7088ac28fd917c1f1f4b8d3e85a`
+`git+https://github.com/Takazudo/zudo-composer.git#e5a5a24e6ac88e78b5dacd0ce66749462a315837`
 for the UI pack — never through a branch/tag, sibling checkout, `workspace:`,
 `file:`, `link:`, `path:`, copied source, or a pnpm Git subdirectory selector.
 Inside this monorepo both relationships are `workspace:*` development
@@ -149,7 +149,7 @@ The host installs the UI pack and component contract by their exact root Git
 specs, so its dependencies show the pinned package commits recorded by the
 handoff files:
 
-- `@zudo-composer/ui`: `git+https://github.com/Takazudo/zudo-composer.git#72a8bdac4477e7088ac28fd917c1f1f4b8d3e85a`
+- `@zudo-composer/ui`: `git+https://github.com/Takazudo/zudo-composer.git#e5a5a24e6ac88e78b5dacd0ce66749462a315837`
 - `@zudo-composer/component-contract`: `git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0`
 
 This is the proven Git-spec state from the scaffold; it does not fall back to
