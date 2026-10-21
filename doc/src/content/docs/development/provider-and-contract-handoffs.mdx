@@ -22,8 +22,8 @@ records the package-only external handoff:
 | Package | `@zudo-composer/ui` |
 | Source path | `packages/ui` |
 | Package branch | `package/ui-v1` |
-| Package commit | `72a8bdac4477e7088ac28fd917c1f1f4b8d3e85a` |
-| External Git spec | `git+https://github.com/Takazudo/zudo-composer.git#72a8bdac4477e7088ac28fd917c1f1f4b8d3e85a` |
+| Package commit | `e5a5a24e6ac88e78b5dacd0ce66749462a315837` |
+| External Git spec | `git+https://github.com/Takazudo/zudo-composer.git#e5a5a24e6ac88e78b5dacd0ce66749462a315837` |
 | Package metadata | `@zudo-composer/ui@0.1.0` |
 | Component-pack protocol identity | `@zudo-composer/ui@1.0.0` |
 
@@ -95,7 +95,7 @@ package tree, creates a package-only temporary consumer with the full Git SHA,
 performs a frozen install, and imports both the contract and `./fixtures`.
 `ui:external-install` does the same for `@zudo-composer/ui`, then checks that the
 installed files and `package.json` bytes match `packages/ui`, that
-`@takazudo/zfb-md-wasm` resolves at `4.5.4`, and that the pack declares its
+`@takazudo/zfb-md-wasm` resolves at `4.6.0`, and that the pack declares its
 twelve sidecars.
 
 `provider:boundary` performs the corresponding pack identity, workspace link,
