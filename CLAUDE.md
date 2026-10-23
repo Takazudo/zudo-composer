@@ -118,8 +118,8 @@ fast-forward branch whose root tree equals the package directory:
 | `@zudo-composer/ui@0.1.0` (pack `@zudo-composer/ui@1.0.0`) | `packages/ui` | `ui-handoff.json` | `package/ui-v1` | `4e987d919fe51c905854af2260903ea60c79f2ec` |
 
 The UI package commit is a development candidate reachable on
-`candidate/composer-ui-zfb-4-7-20261023`. The shared `package/ui-v1` branch
-still points to `e5a5a24e6ac88e78b5dacd0ce66749462a315837`; advancing it and
+the candidate development branch. The shared `package/ui-v1` branch
+has not yet advanced to this candidate; advancing it and
 passing `ui:external-install -- --exact` remain pending.
 
 External hosts install each through its exact root Git spec,
