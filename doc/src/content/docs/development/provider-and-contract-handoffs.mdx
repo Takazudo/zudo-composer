@@ -32,6 +32,11 @@ different questions. None can stand in for the immutable package commit.
 Inside this monorepo the pack is a `workspace:*` development dependency; the
 tool never lists it as a runtime or peer dependency and never bundles it.
 
+The UI package commit is a development candidate reachable on
+`candidate/composer-ui-zfb-4-7-20261023`. The shared `package/ui-v1` branch
+still points to `e5a5a24e6ac88e78b5dacd0ce66749462a315837`; advancing it and
+passing `ui:external-install -- --exact` remain pending.
+
 ## Updating the UI pack
 
 An update is a new package-only commit:

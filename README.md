@@ -617,6 +617,11 @@ it through a package-only commit recorded by [`ui-handoff.json`](./ui-handoff.js
 | Package metadata | `@zudo-composer/ui@0.1.0` |
 | Component-pack protocol identity | `@zudo-composer/ui@1.0.0` |
 
+The UI package commit is a development candidate reachable on
+`candidate/composer-ui-zfb-4-7-20261023`. The shared `package/ui-v1` branch
+still points to `e5a5a24e6ac88e78b5dacd0ce66749462a315837`; advancing it and
+passing `ui:external-install -- --exact` remain pending.
+
 The package version and pack protocol version are intentionally different.
 Neither is a substitute for the immutable package commit. Inside this
 repository the pack is a `workspace:*` development dependency, never a runtime
