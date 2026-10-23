@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "23a9577c97c272dc67cab482ec0a16e59a393d44",
-  "payloadSha256": "94b5bc239a93d344940d41c1379141fa02a860ef96acc36bb1d30ab548942053",
-  "rawPackageJsonSha256": "e8b10f521a253fb396983fc5eab0d44c5b3253d6fc1baf89e7f6a79365ee5a7b",
+  "packageOutputSha": "802714d0d10c46f1c30225d337375ff40ac12c39",
+  "payloadSha256": "e9c46e792fd7662571e9ad676eaffe9cfde546e42b8dca97b486d7137f47fcd0",
+  "rawPackageJsonSha256": "668ce7d4535d2cde20756faff03701483082cd64c0297fe1b91744b60e2f2c4e",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -12,9 +12,9 @@
     },
     {
       "path": "README.md",
-      "bytes": 39972,
+      "bytes": 40217,
       "mode": 420,
-      "sha256": "41c1c0dd5bce026300fe4e6afb3cf0f559fabe75a24aa04bf417bca3c3a30cd5"
+      "sha256": "607a8e877445423af78bba127949ee1626f8a580b5b5b1e95c5b872e79e146ab"
     },
     {
       "path": "bin/zudo-composer.mjs",
@@ -4004,7 +4004,7 @@
       "path": "ui-handoff.json",
       "bytes": 282,
       "mode": 420,
-      "sha256": "27fcb4d90ceed9f9b292f52160d152e0a73dd7ebadf79ba00f7e195f9e10cf63"
+      "sha256": "0efe1c5d4d935b05ccc91d63eccd562ebc0cf2cf1874d70ba7ed6762f76a8b3b"
     }
   ]
 }
