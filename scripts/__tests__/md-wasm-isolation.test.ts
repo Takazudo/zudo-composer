@@ -8,8 +8,8 @@ describe("app and documentation markdown runtimes", () => {
     const tool = manifest("package.json");
     const pack = manifest("packages/ui/package.json");
     const doc = manifest("doc/package.json");
-    expect(pack.dependencies["@takazudo/zfb-md-wasm"]).toBe("4.7.0");
-    expect(doc.dependencies["@takazudo/zfb-md-wasm"]).toBe("4.7.0");
+    expect(pack.dependencies["@takazudo/zfb-md-wasm"]).toBe("5.0.1");
+    expect(doc.dependencies["@takazudo/zfb-md-wasm"]).toBe("5.0.1");
     for (const dependencies of [tool.dependencies, tool.peerDependencies]) {
       expect(dependencies ?? {}).not.toHaveProperty("@takazudo/zfb-md-wasm");
     }
@@ -72,7 +72,7 @@ describe("app and documentation markdown runtimes", () => {
         const entry = require.resolve("@takazudo/zfb-md-wasm/render");
         const parser = await import(pathToFileURL(entry).href);
         const shipped = require("@takazudo/zfb-md-wasm/shipped-artifacts.json");
-        assert.equal(shipped.version, "4.7.0", owner);
+        assert.equal(shipped.version, "5.0.1", owner);
         for (const { source, fragments } of cases) {
           const actual = await parser.renderHtml(source, options);
           assert.deepEqual(actual.diagnostics, [], owner);
