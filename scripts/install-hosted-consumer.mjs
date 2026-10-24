@@ -17,6 +17,7 @@ const manifest = {
   dependencies: {
     "zudo-composer": `git+https://github.com/Takazudo/zudo-composer.git#${sha}`,
     "@zudo-composer/component-contract": "git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
+    // ZFB/Doc stay on 4.7.0/7.1.0 until a zudo-sg release peers on ZFB ^5 and Doc ^8 (strict peers below; #944).
     preact: "10.29.8", "@takazudo/zfb": "4.7.0", "@takazudo/zfb-runtime": "4.7.0",
     "@takazudo/zudo-sg": "0.5.6", "@takazudo/zdtp": "0.8.6", "@takazudo/zudo-doc": "7.1.0",
     marked: "16.3.0", // host-only Markdown renderer; never a tool runtime dependency

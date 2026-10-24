@@ -41,20 +41,20 @@ for (const story of storyDescriptors) {
 const ui = JSON.parse(
   await readFile("node_modules/@zudo-composer/ui/package.json", "utf8"),
 );
-assert.equal(ui.dependencies["@takazudo/zfb-md-wasm"], "4.7.0");
+assert.equal(ui.dependencies["@takazudo/zfb-md-wasm"], "5.0.1");
 const mdWasm = JSON.parse(
   await readFile("node_modules/@takazudo/zfb-md-wasm/package.json", "utf8"),
 );
-assert.equal(mdWasm.version, "4.7.0");
+assert.equal(mdWasm.version, "5.0.1");
 assert.deepEqual(
   await readFile("dist/_sample-preview/zfb_md_wasm_render_bg.wasm"),
   await readFile(
     "node_modules/@takazudo/zfb-md-wasm/dist/wasm-render/zfb_md_wasm_render_bg.wasm",
   ),
-  "The emitted Preact renderer WASM must be exactly the installed 4.7.0 binary",
+  "The emitted Preact renderer WASM must be exactly the installed 5.0.1 binary",
 );
 const tokens = await readFile("dist/tokens/index.html", "utf8");
 assert(tokens.includes("color-bg"), "Token dashboard is not populated");
 console.log(
-  "Artifact boundary passed: 12 components, 71 variants, source/workbench, real thumbnails, tokens, isolated Preact document, Git UI md-wasm4.7.0.",
+  "Artifact boundary passed: 12 components, 71 variants, source/workbench, real thumbnails, tokens, isolated Preact document, Git UI md-wasm5.0.1.",
 );

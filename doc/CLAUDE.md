@@ -2,10 +2,10 @@
 
 The `doc/` directory is the English developer documentation site for
 `zudo-composer`, built with [zudo-doc](https://github.com/zudolab/zudo-doc)
-7.1.0 on the aligned zfb 4.7.0 family, using zudo-react and Wind. The Drift theme, layout, chrome, routes, and interactive islands
+8.0.0 on the aligned zfb 5.0.1 family, using zudo-react and Wind. The Drift theme, layout, chrome, routes, and interactive islands
 come from the package; this workspace owns the config and MDX content.
-zudo-doc 7 supports only the Node 24 LTS line, so `doc/package.json` declares
-`engines.node: ">=24 <25"`; CI builds the site on Node 24.
+zudo-doc 8 requires Node 24 or later, so `doc/package.json` declares
+`engines.node: ">=24"`; CI builds the site on Node 24.
 
 ## Structure
 
