@@ -72,7 +72,7 @@ export function structuredRequestDocument(request: Pick<ProviderRequest, "system
 
 /** Recover the request document from a rendered prompt (used by fake CLIs and tests). */
 export function readStructuredPrompt(prompt: string): ReturnType<typeof structuredRequestDocument> {
-  const match = /<request_json>([\s\S]*?)<\/request_json>/.exec(prompt);
+  const match = /^<request_json>([\s\S]*?)<\/request_json>$/m.exec(prompt);
   if (!match) throw new Error("No request_json in prompt.");
   return JSON.parse(match[1]);
 }
@@ -85,7 +85,7 @@ export function readStructuredPrompt(prompt: string): ReturnType<typeof structur
 export function renderStructuredPrompt(request: Pick<ProviderRequest, "system" | "messages" | "tools">): string {
   const document = structuredRequestDocument(request);
   return [
-    "You are the model behind Zudo Composer's AI Assistant. Produce exactly one reply to the conversation in <request_json>, following its \"system\" rules.",
+    "You are the model behind Zudo Composer's AI Assistant. Produce exactly one reply to the conversation in the request_json block below, following its \"system\" rules.",
     "You have no tools of your own in this session: do not read or write files, run commands, browse, or use any built-in or MCP tool. The only tools available are the ones listed in request_json.tools, and you call them only by describing the calls in your reply; Composer runs them and returns the results in a later request.",
     "",
     `<request_json>${embed(document)}</request_json>`,

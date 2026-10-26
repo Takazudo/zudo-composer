@@ -144,7 +144,8 @@ export function AssistantRoute() {
           setLive(current => {
             if (!current || current.runId !== runId) return current;
             if (event.type === "text") return { ...current, text: current.text + String(event.data.delta ?? ""), status: "running" };
-            if (event.type === "status") return { ...current, phase: "Thinking…", status: "running" };
+            // Provider progress is real activity (e.g. "Codex CLI started"); model calls show as Thinking.
+            if (event.type === "status") return { ...current, phase: event.data.phase === "provider" && typeof event.data.activity === "string" ? `${event.data.activity}…` : "Thinking…", status: "running" };
             if (event.type === "tool") return { ...current, phase: event.data.status === "running" ? toolPhase(String(event.data.name)) : current.phase, status: "running" };
             return current;
           });
