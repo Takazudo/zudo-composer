@@ -1,6 +1,7 @@
 // @vitest-environment node
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { PRODUCTION_DELIVERY_STATE, PRODUCTION_DELIVERY_STOPPED_MESSAGE } from "./delivery-state.mjs";
 import { guardWorkflow, validateTrustedRun, verifyMainHead, verifyWorkflowRunApi } from "./workflow-guard.mjs";
 
 const SHA = "a".repeat(40);
@@ -84,11 +85,38 @@ describe("hosted demo trusted workflow guard", () => {
     })).rejects.toThrow(/stale/);
   });
 
-  it("combines event, API and fresh-main checks", async () => {
+  it("combines event, API and fresh-main checks once delivery is enabled", async () => {
     const trusted = await guardWorkflow(baseEnvironment, {
+      deliveryState: "enabled",
       fetchImpl: async () => new Response(JSON.stringify(successfulRun())),
       runCommand: async () => ({ stdout: `${SHA}\trefs/heads/main\n` }),
     });
     expect(trusted).toMatchObject({ runId: "34267634566", sha: SHA });
+  });
+
+  describe("while production delivery is stopped", () => {
+    const dispatchEnvironment = {
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      GITHUB_REPOSITORY: "Takazudo/zudo-composer",
+      HOSTED_DEMO_DISPATCH_SHA: SHA,
+      HOSTED_DEMO_DISPATCH_RUN_ID: "34267634566",
+      GITHUB_TOKEN: "github-token",
+    };
+
+    it("is the state committed on main", () => {
+      expect(PRODUCTION_DELIVERY_STATE).toBe("stopped");
+    });
+
+    it.each([
+      ["an old automatic workflow_run event", baseEnvironment],
+      ["a manual dispatch", dispatchEnvironment],
+      ["an unknown event", { ...baseEnvironment, GITHUB_EVENT_NAME: "push" }],
+    ])("refuses %s before any GitHub or git lookup", async (_name, environment) => {
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify(successfulRun())));
+      const runCommand = vi.fn(async () => ({ stdout: `${SHA}\trefs/heads/main\n` }));
+      await expect(guardWorkflow(environment, { fetchImpl, runCommand })).rejects.toThrow(PRODUCTION_DELIVERY_STOPPED_MESSAGE);
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(runCommand).not.toHaveBeenCalled();
+    });
   });
 });
