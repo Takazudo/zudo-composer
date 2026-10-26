@@ -41,6 +41,11 @@ function killTree(child: ChildProcess, signal: NodeJS.Signals) {
   } catch { /* already gone */ }
 }
 
+/** The configured CLI, in its own process group so Stop reaches its children without touching anything else. */
+function spawnCliGroup(executable: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): ChildProcess {
+  return spawn(executable, args, { cwd, env, shell: false, windowsHide: true, detached: process.platform !== "win32", stdio: ["pipe", "pipe", "pipe"] });
+}
+
 /**
  * Run one CLI invocation with shell:false, prompt on stdin and JSONL on
  * stdout. Resolves only when the process has exited; the caller decides
@@ -55,12 +60,7 @@ export function runCliProcess(invocation: CliInvocation): Promise<CliExit> {
     if (invocation.signal.aborted) { reject(new ProviderError("aborted", "Stopped.", false)); return; }
     let child: ChildProcess;
     try {
-      child = spawn(invocation.executable, [...invocation.args], {
-        cwd: invocation.cwd, env: invocation.env, shell: false, windowsHide: true,
-        // Own process group, so Stop reaches the CLI's children without touching anything else.
-        detached: process.platform !== "win32",
-        stdio: ["pipe", "pipe", "pipe"],
-      });
+      child = spawnCliGroup(invocation.executable, [...invocation.args], invocation.cwd, invocation.env);
     } catch (error) { reject(spawnFailure(error, invocation.executable)); return; }
 
     let failure: ProviderError | undefined;

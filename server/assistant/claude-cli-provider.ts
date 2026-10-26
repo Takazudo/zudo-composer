@@ -92,26 +92,26 @@ const hasFlag = (help: string, flag: string) => new RegExp(`(?:^|[\\s,])${flag}(
 
 async function probe(config: CliAssistantConfig, env: NodeJS.ProcessEnv): Promise<CliProbe> {
   if (process.platform !== "darwin" && process.platform !== "linux") return { ok: false, code: "unsupported-platform", message: `${CLAUDE_CLI_LABEL} is supported on macOS and Linux (including WSL) only.`, version: null };
-  const run = async (args: string[]) => {
+  const probeArgs = async (args: string[]) => {
     try { return await probeCli(config.executable, args, { env }); } catch (error) {
       if (error instanceof ProviderError && error.code === "not-installed") return null;
       throw error;
     }
   };
   const notInstalled: CliProbe = { ok: false, code: "not-installed", message: "Claude Code CLI was not found. Install Claude Code, or set assistant.executable to its location.", version: null };
-  const versionRun = await run(["--version"]);
+  const versionRun = await probeArgs(["--version"]);
   if (!versionRun) return notInstalled;
   const match = VERSION.exec(versionRun.output);
   if (versionRun.code !== 0 || !match || !/Claude Code/.test(versionRun.output)) return { ok: false, code: "probe-failed", message: "The configured executable did not report a Claude Code version. Check assistant.executable.", version: null };
   const version = match[0];
   if (compareVersions(version, CLAUDE_CLI_MIN_VERSION) < 0) return { ok: false, code: "unsupported-version", message: `Claude Code ${version} is too old for Composer; ${CLAUDE_CLI_MIN_VERSION} or later is required. Update Claude Code.`, version };
-  const helpRun = await run(["--help"]);
+  const helpRun = await probeArgs(["--help"]);
   if (!helpRun) return notInstalled;
   const missing: string[] = CLAUDE_CLI_REQUIRED_FLAGS.filter(flag => !hasFlag(helpRun.output, flag));
   if (!missing.includes("--permission-mode") && !/\bdontAsk\b/.test(helpRun.output)) missing.push("--permission-mode dontAsk");
   if (missing.length) return { ok: false, code: "unsupported-version", message: `Claude Code ${version} lacks options Composer requires (${missing.join(", ")}). Update Claude Code.`, version };
   // Local check: reads the CLI's own sign-in state without a model request (documented exit 0 = signed in, 1 = not).
-  const authRun = await run(["auth", "status", "--json"]);
+  const authRun = await probeArgs(["auth", "status", "--json"]);
   if (!authRun) return notInstalled;
   let loggedIn: unknown;
   try { loggedIn = (JSON.parse(authRun.output.slice(authRun.output.indexOf("{"), authRun.output.lastIndexOf("}") + 1)) as { loggedIn?: unknown }).loggedIn; } catch { loggedIn = undefined; }
