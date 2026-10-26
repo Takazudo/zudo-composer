@@ -1,13 +1,9 @@
 name: Hosted demo production deploy
 
+# Production delivery is stopped. There is no automatic trigger; a manual
+# dispatch still runs the guard from trusted main, which refuses every event
+# while scripts/hosted-demo/delivery-state.mjs is "stopped".
 on:
-  workflow_run:
-    workflows:
-      - CI
-    types:
-      - completed
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       run_id:
@@ -45,16 +41,9 @@ permissions:
 
 jobs:
   deploy:
-    # A workflow_run can be emitted for a PR or a fork even when the workflow
-    # file is present on main. Keep the Cloudflare-secret job unreachable for
-    # those events; workflow-guard repeats the checks before artifact access.
-    if: >-
-      (github.event_name == 'workflow_dispatch' ||
-       (github.event_name == 'workflow_run' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_branch == 'main' &&
-        github.event.workflow_run.head_repository.full_name == github.repository &&
-        github.event.workflow_run.conclusion == 'success'))
+    # Only a manual dispatch can start this job; workflow-guard (read from
+    # trusted main) then refuses it while production delivery is stopped.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # One production deploy at a time per target; the thirteen targets are
@@ -107,7 +96,7 @@ jobs:
             dist_dir: styleguide/blog/dist
         # `jobs.<job_id>.if` is evaluated before matrix expansion, so filter
         # dispatches in the matrix itself. Workflow-run events have no target
-        # input and therefore retain every entry.
+        # input and would retain every entry; that trigger is removed.
         exclude: >-
           ${{ fromJSON(
             inputs.target == '' && '[]' ||

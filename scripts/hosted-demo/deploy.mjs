@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
+import { assertProductionDeliveryEnabled } from "./delivery-state.mjs";
 import { verifyLiveWithRetries } from "./live-check.mjs";
 import { resolveTarget } from "./targets.mjs";
 
@@ -565,6 +566,7 @@ function parseArguments(argv) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+  assertProductionDeliveryEnabled();
   const options = parseArguments(process.argv.slice(2));
   const target = resolveTarget(options.target ?? process.env.HOSTED_DEMO_TARGET);
   await deployHostedDemo({
