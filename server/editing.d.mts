@@ -2202,25 +2202,46 @@ interface NativeEditingConfig {
     };
 }
 
-/**
- * Host opt-in for the AI Assistant. The config names a provider/model and the
- * server-side environment variable that holds the credential; it never holds
- * a secret itself and is never serialized to the browser.
- */
-interface AssistantConfig {
+type AssistantEffort = "low" | "medium" | "high";
+interface AssistantCommonConfig {
+    /** Default display name; a site-scoped stored name may replace it. */
+    name: string;
+    /** `propose` permits conversation, drafts and review but never Apply. */
+    permission: "apply" | "propose";
+}
+/** Anthropic Messages API through the pinned SDK. */
+interface AnthropicAssistantConfig extends AssistantCommonConfig {
     provider: "anthropic";
     /** Messages API model id. */
     model: string;
     /** Environment variable read by the local authoring server only. */
     apiKeyEnv: string;
-    effort: "low" | "medium" | "high";
-    /** Default display name; a site-scoped stored name may replace it. */
-    name: string;
-    /** `propose` permits conversation, drafts and review but never Apply. */
-    permission: "apply" | "propose";
+    effort: AssistantEffort;
     /** Messages API origin: HTTPS (e.g. an organization gateway) or loopback HTTP for local proxies and tests. */
     baseUrl: string;
 }
+/** Deterministic, offline provider for local trials and automated tests. It never contacts a model. */
+interface FakeAssistantConfig extends AssistantCommonConfig {
+    provider: "fake";
+    model: "fake";
+}
+/**
+ * A locally installed, already signed-in coding CLI used for one model reply
+ * per call. Composer passes the prompt on stdin and runs the CLI with a fixed,
+ * restricted profile; it never manages the CLI's credentials.
+ */
+interface CliAssistantConfig extends AssistantCommonConfig {
+    provider: "claude-cli" | "codex-cli";
+    /** Executable name (looked up on PATH) or absolute path. Never a shell command line. */
+    executable: string;
+    /** Model passed to the CLI; `null` uses the CLI's own default. */
+    model: string | null;
+    /** Reasoning effort passed to the CLI when it supports one; `null` uses the CLI default. */
+    effort: AssistantEffort | null;
+    /** Upper bound for one CLI invocation (one model reply). */
+    timeoutMs: number;
+}
+type AssistantConfig = AnthropicAssistantConfig | FakeAssistantConfig | CliAssistantConfig;
 
 /** Absolute paths derived from the settings. Node-side only, never serialized. */
 interface ComposerPaths {
