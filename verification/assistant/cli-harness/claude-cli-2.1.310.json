@@ -1,12 +1,12 @@
 {
   "label": "real binary, scripted model endpoint — not model inference",
-  "generatedAt": "2026-10-26T20:21:56.103Z",
+  "generatedAt": "2026-10-26T21:28:19.421Z",
   "claudeCodeVersion": "2.1.310",
   "platform": "linux-x64",
   "node": "v22.22.0",
   "provider": {
     "label": "Claude Code CLI (local login)",
-    "minVersion": "2.1.259",
+    "minVersion": "2.1.310",
     "requiredHelpFlags": [
       "--print",
       "--output-format",
@@ -112,7 +112,7 @@
         "claude_code_version": "2.1.310"
       },
       "modelRequests": 1,
-      "ms": 559
+      "ms": 607
     },
     {
       "name": "normal structured reply",
@@ -149,7 +149,7 @@
         "tools"
       ],
       "modelRequests": 1,
-      "ms": 515
+      "ms": 652
     },
     {
       "name": "reply requesting Composer tools",
@@ -169,7 +169,7 @@
         }
       },
       "modelRequests": 1,
-      "ms": 594
+      "ms": 647
     },
     {
       "name": "model attempts built-in Write/Edit/Bash only",
@@ -182,7 +182,7 @@
       "filesystemUntouched": true,
       "secondModelRequest": false,
       "modelRequests": 1,
-      "ms": 555
+      "ms": 629
     },
     {
       "name": "model attempts built-in tools alongside StructuredOutput",
@@ -201,7 +201,7 @@
       },
       "filesystemUntouched": true,
       "modelRequests": 1,
-      "ms": 593
+      "ms": 688
     },
     {
       "name": "model answers in plain text instead of the schema",
@@ -212,7 +212,7 @@
         "message": "The model did not answer in Composer's reply format within one reply. Retry this turn."
       },
       "modelRequests": 1,
-      "ms": 597
+      "ms": 584
     },
     {
       "name": "HTTP 401 → auth",
@@ -223,7 +223,7 @@
         "message": "Claude Code is not signed in or its sign-in was rejected. Run \"claude auth login\" in a terminal, then retry."
       },
       "modelRequests": 1,
-      "ms": 589
+      "ms": 534
     },
     {
       "name": "HTTP 429 → quota",
@@ -234,7 +234,7 @@
         "message": "Claude Code reached a rate or usage limit. Try again later."
       },
       "modelRequests": 2,
-      "ms": 1472
+      "ms": 1616
     },
     {
       "name": "HTTP 529 → overloaded",
@@ -245,7 +245,7 @@
         "message": "The model service behind Claude Code is overloaded. Try again shortly."
       },
       "modelRequests": 3,
-      "ms": 2246
+      "ms": 2247
     },
     {
       "name": "Stop mid-stream terminates the process tree",
@@ -258,7 +258,7 @@
       "processesWhileRunning": 1,
       "processesAfterStop": 0,
       "modelRequests": 1,
-      "ms": 913
+      "ms": 898
     }
   ],
   "network": {

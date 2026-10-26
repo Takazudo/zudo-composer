@@ -49,23 +49,28 @@ export function createLocalHttpServer({ withService, actor, policy, presentation
   let allowedHosts = new Set();
   const origins = new Map();
   const artifactOrigin = id => {
-    if (!origins.has(id)) origins.set(id, (async () => {
-      let hosts = new Set();
-      const site = createServer(async (request, response) => {
-        const fail = status => response.writeHead(status, { "content-type": "text/plain; charset=utf-8" }).end(status === 404 ? "Not found in this local artifact" : "Rejected");
-        try {
-          if (!hosts.has(request.headers.host ?? "") || request.method !== "GET") { fail(421); return; }
-          const filename = await publisher.artifacts.resolveSiteFile(id, decodeURIComponent(new URL(request.url, "http://localhost").pathname));
-          if (!filename) { fail(404); return; }
-          response.writeHead(200, { "content-type": types[extname(filename)] ?? "application/octet-stream", "cache-control": "no-store", "x-content-type-options": "nosniff" })
-            .end(await readFile(filename));
-        } catch { if (!response.headersSent) fail(404); }
-      });
-      await new Promise((ready, reject) => { site.once("error", reject); site.listen(0, "127.0.0.1", ready); });
-      const port = site.address().port;
-      hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
-      return { site, origin: `http://127.0.0.1:${port}` };
-    })());
+    if (!origins.has(id)) {
+      const pending = (async () => {
+        let hosts = new Set();
+        const site = createServer(async (request, response) => {
+          const fail = status => response.writeHead(status, { "content-type": "text/plain; charset=utf-8" }).end(status === 404 ? "Not found in this local artifact" : "Rejected");
+          try {
+            if (!hosts.has(request.headers.host ?? "") || request.method !== "GET") { fail(421); return; }
+            const filename = await publisher.artifacts.resolveSiteFile(id, decodeURIComponent(new URL(request.url, "http://localhost").pathname));
+            if (!filename) { fail(404); return; }
+            response.writeHead(200, { "content-type": types[extname(filename)] ?? "application/octet-stream", "cache-control": "no-store", "x-content-type-options": "nosniff" })
+              .end(await readFile(filename));
+          } catch { if (!response.headersSent) fail(404); }
+        });
+        await new Promise((ready, reject) => { site.once("error", reject); site.listen(0, "127.0.0.1", ready); });
+        const port = site.address().port;
+        hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
+        return { site, origin: `http://127.0.0.1:${port}` };
+      })();
+      // A failed listen is not cached, so the next request retries and close() never awaits it.
+      origins.set(id, pending);
+      pending.catch(() => { if (origins.get(id) === pending) origins.delete(id); });
+    }
     return origins.get(id).then(entry => entry.origin);
   };
   const server = createServer(async (request, response) => {
@@ -82,7 +87,9 @@ export function createLocalHttpServer({ withService, actor, policy, presentation
       if (path.startsWith("/local-artifacts/")) {
         // Each artifact is the renderer's unmodified root-relative site, so it opens on its own loopback origin.
         const [, , id, ...rest] = path.split("/");
-        const manifest = request.method === "GET" && id ? await publisher.artifacts.readManifest(decodeURIComponent(id)).catch(() => null) : null;
+        let decoded = null;
+        try { decoded = id ? decodeURIComponent(id) : null; } catch { /* malformed escape: no such artifact */ }
+        const manifest = request.method === "GET" && decoded ? await publisher.artifacts.readManifest(decoded).catch(() => null) : null;
         if (!manifest) { send(404, { code: "not-found", message: "No such local artifact" }); return; }
         const origin = await artifactOrigin(manifest.publicationId);
         response.writeHead(302, { location: `${origin}/${rest.join("/")}${url.search}`, "cache-control": "no-store" }).end();
@@ -134,8 +141,9 @@ export function createLocalHttpServer({ withService, actor, policy, presentation
       return actual;
     },
     async close() {
-      for (const pending of origins.values()) {
-        const { site } = await pending;
+      for (const entry of await Promise.allSettled(origins.values())) {
+        if (entry.status !== "fulfilled") continue;
+        const { site } = entry.value;
         await new Promise(ready => { site.close(() => ready()); site.closeAllConnections?.(); });
       }
       await new Promise((ready, reject) => { server.close(error => error ? reject(error) : ready()); server.closeAllConnections?.(); });

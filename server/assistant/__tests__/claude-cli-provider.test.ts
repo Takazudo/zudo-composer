@@ -143,6 +143,7 @@ describe("Claude Code CLI provider: one reply per invocation", () => {
     ["max-turns", "malformed-output"],
     ["text-only", "malformed-output"],
     ["extra-tools", "unsupported"],
+    ["no-init", "unsupported"],
   ])("maps CLI mode %s to %s with short operator text", async (mode, code) => {
     const started = Date.now();
     const error = await failure(providerFor(mode).turn(request("hello").value));
@@ -178,7 +179,7 @@ describe("Claude Code CLI provider: process boundary", () => {
 
   it("withholds the API provider's Anthropic variables and Composer's own variables from the CLI", async () => {
     const record = join(await scratchRoot(), "env.json");
-    await providerFor("success", { FAKE_CLAUDE_RECORD: record, ANTHROPIC_API_KEY: "api-provider-key", ANTHROPIC_AUTH_TOKEN: "token", ANTHROPIC_BASE_URL: "http://127.0.0.1:9", ZUDO_ASSISTANT_LIVE_API_KEY: "live", ...reply({ text: "ok", tool_calls: [], stop: "end_turn" }) })
+    await providerFor("success", { FAKE_CLAUDE_RECORD: record, ANTHROPIC_API_KEY: "api-provider-key", ANTHROPIC_AUTH_TOKEN: "token", ANTHROPIC_BASE_URL: "http://127.0.0.1:9", ANTHROPIC_CUSTOM_HEADERS: "x-a: b", CLAUDE_CODE_USE_BEDROCK: "1", CLAUDE_CODE_USE_VERTEX: "1", ZUDO_ASSISTANT_LIVE_API_KEY: "live", ...reply({ text: "ok", tool_calls: [], stop: "end_turn" }) })
       .turn(request("Hello").value);
     expect((JSON.parse(await readFile(record, "utf8")) as { envKeys: string[] }).envKeys).toEqual([]);
   });

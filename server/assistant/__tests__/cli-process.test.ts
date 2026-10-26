@@ -85,6 +85,32 @@ describe("CLI process runner", () => {
     await waitFor(() => !alive(pid));
   });
 
+  it("does not wait for a grandchild that keeps stdout open after the CLI exits, and stops it", async () => {
+    const { root, invocation } = await child(`
+      import { spawn } from "node:child_process"; import { writeFileSync } from "node:fs";
+      const grandchild = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: ["ignore", "inherit", "inherit"] });
+      writeFileSync(process.env.CHILD_ROOT + "/pid", String(grandchild.pid));
+      process.stdout.write("done\\n"); process.exit(0);`, { timeoutMs: 20_000 });
+    const started = Date.now();
+    await expect(runCliProcess(invocation)).resolves.toMatchObject({ code: 0 });
+    expect(Date.now() - started).toBeLessThan(5_000);
+    const pid = Number(await readFile(join(root, "pid"), "utf8"));
+    await waitFor(() => !alive(pid));
+  });
+
+  it("times out even when a grandchild that ignores SIGTERM holds stdout", async () => {
+    const { root, invocation } = await child(`
+      import { spawn } from "node:child_process"; import { writeFileSync } from "node:fs";
+      const grandchild = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: ["ignore", "inherit", "inherit"] });
+      writeFileSync(process.env.CHILD_ROOT + "/pid", String(grandchild.pid));
+      process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);`, { timeoutMs: 300 });
+    const started = Date.now();
+    await expect(runCliProcess(invocation)).rejects.toMatchObject({ code: "timeout" });
+    expect(Date.now() - started).toBeLessThan(300 + 3 * 2_000);
+    const pid = Number(await readFile(join(root, "pid"), "utf8"));
+    await waitFor(() => !alive(pid));
+  });
+
   it("resolves with the exit status so callers decide success from result and status together", async () => {
     const { invocation } = await child(`process.stdout.write('{"type":"result"}\\n'); process.stderr.write("boom"); process.exit(3);`);
     await expect(runCliProcess(invocation)).resolves.toMatchObject({ code: 3, stderrTail: "boom" });

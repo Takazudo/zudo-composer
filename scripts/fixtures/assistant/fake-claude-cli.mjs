@@ -51,10 +51,10 @@ try { JSON.parse(argv[schemaIndex + 1] ?? ""); } catch { process.stderr.write("E
 const chunks = [];
 for await (const chunk of process.stdin) chunks.push(chunk);
 const prompt = Buffer.concat(chunks).toString("utf8");
-if (process.env.FAKE_CLAUDE_RECORD) writeFileSync(process.env.FAKE_CLAUDE_RECORD, JSON.stringify({ argv, cwd: process.cwd(), stdinBytes: Buffer.byteLength(prompt), envKeys: Object.keys(process.env).filter(key => /^(ANTHROPIC_|ZUDO_ASSISTANT_)/.test(key)).sort() }));
+if (process.env.FAKE_CLAUDE_RECORD) writeFileSync(process.env.FAKE_CLAUDE_RECORD, JSON.stringify({ argv, cwd: process.cwd(), stdinBytes: Buffer.byteLength(prompt), envKeys: Object.keys(process.env).filter(key => /^(ANTHROPIC_|ZUDO_ASSISTANT_|CLAUDE_CODE_USE_BEDROCK$|CLAUDE_CODE_USE_VERTEX$)/.test(key)).sort() }));
 
 const usage = { input_tokens: 1, output_tokens: 1 };
-out({ type: "system", subtype: "init", cwd: process.cwd(), session_id, tools: mode === "extra-tools" ? ["Bash", "StructuredOutput"] : ["StructuredOutput"], mcp_servers: [], model: "claude-opus-5-5", permissionMode: "dontAsk", slash_commands: [], apiKeySource: "none", claude_code_version: VERSION, uuid: randomUUID() });
+if (mode !== "no-init") out({ type: "system", subtype: "init", cwd: process.cwd(), session_id, tools: mode === "extra-tools" ? ["Bash", "StructuredOutput"] : ["StructuredOutput"], mcp_servers: [], model: "claude-opus-5-5", permissionMode: "dontAsk", slash_commands: [], apiKeySource: "none", claude_code_version: VERSION, uuid: randomUUID() });
 
 /** @param {number} status @param {string} category @param {string} text */
 const apiError = (status, category, text) => {

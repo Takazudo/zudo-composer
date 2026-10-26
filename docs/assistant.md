@@ -68,10 +68,11 @@ no CLI session/resume/auto-memory is used as Composer state.
   reasoning"); replies are not streamed token by token.
 - Composer never reads, copies or stores credentials and does not relocate
   `HOME`/`CODEX_HOME`. The CLI uses its own normal sign-in. For `claude-cli`
-  the server's `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` and
-  `ANTHROPIC_BASE_URL` are withheld, so a key held for the API provider is
-  never reused; Composer's own `ZUDO_ASSISTANT_*` variables are withheld from
-  every CLI.
+  the server's `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+  `ANTHROPIC_BASE_URL`, `ANTHROPIC_CUSTOM_HEADERS`, `ANTHROPIC_MODEL` and the
+  Bedrock/Vertex routing variables are withheld, so a key or route held for
+  the API provider is never reused; Composer's own `ZUDO_ASSISTANT_*`
+  variables are withheld from every CLI.
 
 | CLI | Supported | Fixed profile (summary) |
 | --- | --- | --- |

@@ -143,6 +143,7 @@ function createParser(): CliStreamParser {
   let result: ResultEvent | undefined;
   let lastCategory: string | null = null, lastStatus: number | null = null;
   let replied = false;
+  let profileVerified = false;
   return {
     line(text, activity) {
       if (!text.trim()) return;
@@ -156,6 +157,7 @@ function createParser(): CliStreamParser {
         const tools = Array.isArray(value.tools) ? value.tools.filter((tool): tool is string => typeof tool === "string") : [];
         const extra = tools.filter(tool => tool !== CLAUDE_CLI_STRUCTURED_OUTPUT_TOOL);
         if (!tools.includes(CLAUDE_CLI_STRUCTURED_OUTPUT_TOOL) || extra.length) throw fail("unsupported", `Claude Code CLI started with tools Composer does not allow${extra.length ? ` (${extra.slice(0, 5).map(name => name.slice(0, 40)).join(", ")})` : ""}. Check managed settings or update Claude Code.`, false);
+        profileVerified = true;
         activity("Claude Code CLI session ready");
       } else if (value.type === "system" && value.subtype === "api_retry") {
         const category = typeof value.error === "string" ? value.error : null;
@@ -183,6 +185,8 @@ function createParser(): CliStreamParser {
       }
       if (result.is_error === false && result.subtype === "success") {
         if (exit.code !== 0) throw fail("process-failed", `Claude Code CLI reported success but exited with status ${exit.code}.`, true);
+        // Without the init event the restricted tool set was never confirmed; do not accept the reply.
+        if (!profileVerified) throw fail("unsupported", "Claude Code CLI did not report its session setup, so Composer could not confirm the restricted profile. Update Claude Code.", false);
         const output = result.structured_output;
         if (output && typeof output === "object" && !Array.isArray(output)) return output;
         if (result.stop_reason === "refusal") throw fail("refused", "The model declined this request.", false);
@@ -206,7 +210,12 @@ export const claudeCliProtocol: CliProtocol = {
   provider: "claude-cli",
   label: CLAUDE_CLI_LABEL,
   // Claude Code would prefer these over the user's subscription login; a key held for the API provider is never reused.
-  excludedEnv: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"],
+  // Routing and header overrides (Bedrock, Vertex, custom headers, model) are withheld for the same reason.
+  excludedEnv: [
+    "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "ANTHROPIC_MODEL",
+    "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_VERTEX_BASE_URL", "ANTHROPIC_VERTEX_PROJECT_ID",
+    "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_SKIP_BEDROCK_AUTH", "CLAUDE_CODE_SKIP_VERTEX_AUTH",
+  ],
   probe,
   prepare: async ({ config, schema }) => ({ args: claudeCliArgs(config, schema) }),
   createParser,

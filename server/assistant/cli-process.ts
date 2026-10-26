@@ -32,9 +32,13 @@ export interface CliInvocation {
 }
 export interface CliExit { code: number | null; signal: NodeJS.Signals | null; stderrTail: string }
 
-/** Signals the whole process group the CLI leads, and nothing else. */
+/**
+ * Signals the whole process group the CLI leads, and nothing else. The group
+ * can outlive its leader (a grandchild holding stdout), so this is gated only
+ * by the caller's "closed" state, never by the leader's exit status.
+ */
 function killTree(child: ChildProcess, signal: NodeJS.Signals) {
-  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
+  if (child.pid === undefined) return;
   try {
     if (process.platform === "win32") child.kill(signal);
     else process.kill(-child.pid, signal);
@@ -69,12 +73,20 @@ export function runCliProcess(invocation: CliInvocation): Promise<CliExit> {
     let line: Buffer[] = [], lineBytes = 0;
     let stderr = Buffer.alloc(0);
     let killTimer: ReturnType<typeof setTimeout> | undefined;
+    let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+    let closed = false;
     const decoder = new StringDecoder("utf8");
     const stop = (error: ProviderError) => {
       if (!failure) failure = error;
       accepting = false;
+      if (closed) return;
       killTree(child, "SIGTERM");
-      killTimer ??= setTimeout(() => killTree(child, "SIGKILL"), KILL_GRACE_MS);
+      killTimer ??= setTimeout(() => {
+        if (closed) return;
+        killTree(child, "SIGKILL");
+        // Last resort: a holder outside the group must not keep this call open.
+        releaseTimer = setTimeout(() => { child.stdout?.destroy(); child.stderr?.destroy(); }, KILL_GRACE_MS);
+      }, KILL_GRACE_MS);
     };
     const timer = setTimeout(() => stop(new ProviderError("timeout", "The local CLI did not finish in time and was stopped.", true)), invocation.timeoutMs);
     const onAbort = () => stop(new ProviderError("aborted", "Stopped.", false));
@@ -111,9 +123,13 @@ export function runCliProcess(invocation: CliInvocation): Promise<CliExit> {
     // A CLI that exits before reading stdin raises EPIPE here; the exit status reports the real failure.
     child.stdin!.on("error", () => {});
     child.on("error", error => { stop(spawnFailure(error, invocation.executable)); });
+    // Once the leader has exited, leftover children only hold the pipes open.
+    child.on("exit", () => { if (!closed) killTree(child, "SIGKILL"); });
     child.on("close", (code, signal) => {
+      closed = true;
       clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
+      if (releaseTimer) clearTimeout(releaseTimer);
       invocation.signal.removeEventListener("abort", onAbort);
       // A final line without a trailing newline still counts.
       if (accepting && lineBytes) emit(Buffer.concat(line));
