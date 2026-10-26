@@ -506,9 +506,12 @@ Assistant** (`/composer?assistant=1`): a compact conversation beside the real
 page preview. The Assistant edits only within the installed components, fields
 and slots; its proposals accumulate in one reviewable shared draft with yellow
 changed words and outlined, labelled changed blocks, and nothing is saved until
-you choose **Apply to Composer** (not publish). Site Memory, modes, provider
-configuration (Anthropic Messages API, server-side credential) and data flow
-are described in [docs/assistant.md](docs/assistant.md).
+you choose **Apply to Composer** (not publish). The host selects one provider:
+your signed-in Claude Code or Codex CLI, an offline deterministic fake, or the
+Anthropic Messages API; there is no fallback between them. Site Memory, modes,
+provider configuration and data flow are described in
+[docs/assistant.md](docs/assistant.md); `corepack pnpm assistant:local` starts
+a persistent local AI editing host ([docs/local-operation.md](docs/local-operation.md)).
 
 ## Development and validation
 

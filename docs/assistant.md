@@ -12,45 +12,125 @@ Composer. It does not publish or deploy.**
 ## Enabling it
 
 The Assistant is opt-in per host. It requires `nativeEditing` (writable,
-workspace-owned pages) and an `assistant` block in `zudo-composer.config.ts`:
+workspace-owned pages) and an `assistant` block in `zudo-composer.config.ts`
+that selects exactly **one** provider:
 
 ```ts
 export default defineComposerConfig({
   pack: "my-site/components",
   nativeEditing: { source: "workspace" },
-  assistant: {
-    name: "Site Bot",              // default display name; renamable per site
-    model: "claude-opus-5-5",      // Anthropic Messages API model (default)
-    apiKeyEnv: "ANTHROPIC_API_KEY",// variable read by the authoring server only (default)
-    effort: "medium",              // low | medium | high (default medium)
-    permission: "apply",           // or "propose": review allowed, Apply refused
-    // baseUrl: "https://gateway.example.com", // https, or loopback http
-  },
+  assistant: { provider: "claude-cli", name: "Site Bot" },
 });
 ```
 
-The config never holds a secret. Start `zudo-composer dev` with the variable
-set in the server's environment. Without it, the Assistant shows a
-configuration state, sends nothing, and the rest of Composer (including saved
-conversations, Memory and review) keeps working.
+| `provider` | What answers | Settings (all optional except `provider`) |
+| --- | --- | --- |
+| `"fake"` | Deterministic offline policy; no model, no network | `name`, `permission` |
+| `"claude-cli"` | Your installed, signed-in Claude Code CLI | `executable` (default `claude`), `model`, `effort`, `timeoutMs` |
+| `"codex-cli"` | Your installed, signed-in Codex CLI | `executable` (default `codex`), `model`, `effort`, `timeoutMs` |
+| `"anthropic"` (default) | Anthropic Messages API via the pinned SDK | `model`, `apiKeyEnv`, `effort`, `baseUrl` |
 
-### Provider and data flow
+`name` is the default display name (renamable per site); `permission` is
+`"apply"` or `"propose"` (review allowed, Apply refused). `executable` is a
+command name looked up on `PATH` or an absolute path, never a command line.
+API-only settings are rejected for the CLI and fake providers. The config
+never holds a secret.
 
-One provider adapter ships: the Anthropic Messages API through the pinned
-official SDK (`@anthropic-ai/sdk`), called by the local authoring server, with
-streaming, adaptive thinking and the server-side refusal fallback
-(`fallbacks: "default"`). Internally the runner uses a provider-neutral
-interface; there is no multi-provider product. The developer's Claude Code
-session is never a runtime credential, and the adapter ignores
-`ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`: it uses only `apiKeyEnv` and
-`baseUrl`.
+**There is no fallback.** If the selected provider is missing, signed out or
+unsupported, the Assistant shows that state and sends nothing; it never
+switches to another provider. Composer, review, Memory and saved
+conversations keep working.
+
+### CLI providers
+
+A CLI provider is used for **one model reply per call**. Composer renders the
+whole request (rules, tool list, bounded conversation, tool results) as one
+escaped JSON document on **stdin**, runs the CLI with a fixed restricted
+profile in a fresh empty temporary directory, and reads its JSONL output.
+The CLI answers with Composer's structured reply (`text`, requested
+`tool_calls`, `stop`); Composer validates it itself (allowed tool names,
+unused ids, JSON object inputs, size limits) and only Composer's runner
+executes inspect/read/list/propose/Memory tools. The CLI never gets an
+Apply, Undo, publish, file or shell capability, no Composer MCP server, and
+no CLI session/resume/auto-memory is used as Composer state.
+
+- Arguments, environment additions and the output schema file are fixed by
+  Composer, never derived from prompts or model output; the process runs with
+  `shell: false` in its own process group. **Stop**, the reply timeout and
+  server shutdown terminate that process tree and wait for it; late output is
+  ignored.
+- A reply counts only when the CLI's terminal result reports success, the
+  structured reply is present and the exit status is 0. Raw CLI output,
+  thinking and messages that could carry secrets are never shown; errors are
+  mapped to fixed messages (not installed, not signed in, unsupported
+  version/platform, refused, usage limit, overloaded, timeout, malformed).
+- Progress shows only what the CLI actually reports (for example "Codex is
+  reasoning"); replies are not streamed token by token.
+- Composer never reads, copies or stores credentials and does not relocate
+  `HOME`/`CODEX_HOME`. The CLI uses its own normal sign-in. For `claude-cli`
+  the server's `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` and
+  `ANTHROPIC_BASE_URL` are withheld, so a key held for the API provider is
+  never reused; Composer's own `ZUDO_ASSISTANT_*` variables are withheld from
+  every CLI.
+
+| CLI | Supported | Fixed profile (summary) |
+| --- | --- | --- |
+| Claude Code | **2.1.310** or later on macOS and Linux/WSL | `-p --output-format stream-json --verbose --no-session-persistence --safe-mode --restricted --setting-sources "" --tools "" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --disallowedTools "mcp__*" --permission-mode dontAsk --permission-prompts none --disable-slash-commands --max-turns 1 --system-prompt <fixed> --json-schema <reply schema>` |
+| Codex | **0.164.0** or later on macOS and Linux/WSL | `exec --json --ephemeral --skip-git-repo-check -C <scratch> --ignore-user-config --ignore-rules --strict-config --sandbox read-only -c approval_policy="never"`; shell/exec, web search, multi-agent, apps, plugins, hooks, memories, image, browser/computer use, code mode, plan and user-input tools disabled; skills, AGENTS.md project docs and environment context off; no history or side channels; `--output-schema <file> -`. A reply in which Codex ran one of its own tools is refused. |
+
+Each version range was verified on Linux with the real binary against a
+loopback scripted model endpoint (see Verification). macOS uses the same
+flags but was not run; Windows is reported as unsupported. Any probe that
+finds an older version or a missing flag reports **unsupported**; Composer
+never runs a looser profile. What still applies under these profiles:
+
+- **Managed/admin policy** is never bypassed (Claude Code managed settings;
+  Codex `managed_config.toml`/`requirements.toml`/MDM). If it adds tools or
+  rejects the profile, the run fails closed.
+- **Claude Code:** user/project settings, CLAUDE.md, hooks, plugins and MCP
+  are not loaded; only `StructuredOutput` is offered, and the model's attempts
+  at Write/Edit/Bash were answered "No such tool". Sign-in that depends on
+  `apiKeyHelper` or `env` in your user `settings.json` is therefore not
+  available; use `claude auth login` (or `CLAUDE_CODE_OAUTH_TOKEN`).
+- **Codex:** `apply_patch` is part of the model's own toolset and cannot be
+  removed; the read-only sandbox with approval `never` rejects every patch,
+  inside or outside the scratch directory. **Read-only does not stop
+  reading**: no read tool is offered by this profile, but the sandbox itself
+  would allow reading files your account can read. Global
+  `$CODEX_HOME/AGENTS.md` is still sent to the model, and Codex still writes
+  its own state databases under `CODEX_HOME`. If you set
+  `cli_auth_credentials_store="keyring"` in your user `config.toml`, that
+  setting is ignored by this profile and replies fail as signed out.
+
+### When a CLI provider is unavailable
+
+| Shown | Do this |
+| --- | --- |
+| not installed | Install the CLI, or set `assistant.executable` to its absolute path, then reload. |
+| not signed in | Run `claude auth login` or `codex login` in a terminal as the same user, then retry. |
+| unsupported version | Update the CLI to the supported version or later. |
+| unsupported platform | Use macOS or Linux/WSL. |
+| usage limit / overloaded | Wait and retry; Composer does not switch providers. |
+
+### Anthropic Messages API provider
+
+`provider: "anthropic"` calls the Messages API through the pinned official
+SDK (`@anthropic-ai/sdk`) from the local authoring server, with streaming,
+adaptive thinking and the server-side refusal fallback
+(`fallbacks: "default"`). It reads only `apiKeyEnv` (default
+`ANTHROPIC_API_KEY`) and `baseUrl`, and ignores
+`ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`. Start `zudo-composer dev` with
+that variable set in the server's environment.
+
+### What a model call can carry
 
 Each model call can send: your message and recent conversation (bounded), the
 current page/selection ids, the blocks the model inspects, saved site Memory,
 exact materials you attach to the turn, and component definitions from the
-installed pack. **Context details** under the message box lists this and the
-destination. Credentials, host paths and source files are never sent, logged
-or returned to the browser.
+installed pack. **Context details** under the message box lists this, the
+destination, model and CLI version. Host paths and source files are never
+sent; credentials are never read by Composer. Each run records the provider,
+model and CLI version that produced it.
 
 ## Using it
 
@@ -179,18 +259,17 @@ undone draft cannot be revived by a late reply.
 
 ## Verification
 
-- Native/store/runner tests: `server/edit/__tests__/draft-service.test.ts`,
-  `server/assistant/__tests__/*.test.ts` (runner tests use a scripted fake
-  provider), and the preview/review tests under `src/`.
-- `pnpm test:browser:assistant` (port 4177) seeds disposable writable hosts from
-  the real Orrery, Margin Notes and Nightjar Supply definitions and the
-  native-edit fixture (`scripts/assistant/prepare-host.mjs`), then drives the
-  real dev server, renderers and adapter against a loopback **scripted**
-  Messages API. It is real-browser evidence with fake model replies, not live
-  inference.
-- `pnpm test:browser:assistant:live` is the separate, opt-in live-model lane.
-  It drives the same disposable hosts and UI against the real Messages API
-  through a loopback meter that only forwards, records the request/response
-  contract and enforces an approved spend cap. It needs a dedicated
-  credential and cap, never runs in CI, and records `blocked` without them.
-- Synthetic IME tests are not physical-device evidence.
+Evidence classes are kept separate; none stands in for another.
+
+| Class | Command | What it proves |
+| --- | --- | --- |
+| Provider contract (fake) | `pnpm test` (`server/assistant/__tests__/`) | The same multi-page propose → Apply → receipt retry → Undo, Memory, refusal, unknown-tool and Stop flow passes for the in-process fake and for fake `claude`/`codex` executables that are really spawned; reply validation, process runner (stdin, UTF-8 chunking, size caps, process-tree Stop/timeout) and probe states. |
+| Fake browser | `pnpm test:browser:assistant` (port 4177) | Real dev server, renderers and UI on disposable hosts seeded from Orrery, Margin Notes, Nightjar Supply and the native-edit fixture against a loopback scripted Messages API. |
+| Local host lifecycle | `pnpm test:browser:assistant:local-host` | `pnpm assistant:local` creates, reuses and restarts a host; Memory, conversation and applied change survive restart; reset is explicit. Fake provider. |
+| Real CLI binary harness | `pnpm assistant:claude-harness`, `pnpm assistant:codex-harness -- --codex <path>` (opt-in, never CI) | The installed binary with Composer's exact profile against a loopback **scripted** model endpoint: output protocol, refused built-in tools/writes, error mapping, Stop. Evidence: `verification/assistant/cli-harness/`. **Not model inference.** |
+| Real CLI usage | `pnpm test:browser:assistant:real-cli -- --provider claude-cli\|codex-cli --yes` (opt-in, uses your normal sign-in) | Natural-language edit → candidate → preview → Apply → reload → Undo, Memory, Stop, restart and out-of-scope refusal with a real model. Evidence: `verification/assistant/real-cli/`. |
+| Live Messages API | `pnpm test:browser:assistant:live` | The API provider with a dedicated credential and approved spend cap; records `blocked` without them. |
+
+Fake success is never reported as real CLI use, and harness success is never
+reported as model inference. Synthetic IME tests are not physical-device
+evidence.
