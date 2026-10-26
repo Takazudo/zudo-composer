@@ -7,6 +7,7 @@ export default tseslint.config(
   // re-lints every file once per worktree. The rest are gitignored tool output.
   {
     ignores: [
+      ".zudo-local/**",
       'dist',
       '**/dist-editor',
       '**/dist-site',
