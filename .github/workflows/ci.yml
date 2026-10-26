@@ -15,7 +15,8 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    # ubuntu-latest moved to ubuntu-26.04, where the Vite dev-server browser lanes fail with net::ERR_INSUFFICIENT_RESOURCES.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
