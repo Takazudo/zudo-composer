@@ -30,6 +30,10 @@ export interface PreviewState {
   /** Resolved read-only source/outlet context, or `null` for a local/broken view. */
   linked: PreviewLinkedSourceContext | null;
   session: PreviewSession;
+  nativePage?: import("./protocol").NativePageIdentity;
+  nativeReview?: import("./protocol").NativeReviewIdentity;
+  selectNative?: boolean;
+  review?: import("./protocol").ReviewAnnotations;
 }
 
 /**
@@ -74,8 +78,13 @@ export function applyInbound(
         localRecordId: message.localRecordId,
         linked: message.linked ?? null,
         session: message.session,
+        nativeReview: message.nativeReview,
+        nativePage: message.nativePage,
+        selectNative: message.selectNative,
+        review: message.review,
       };
     case "mode":
+      if (state.nativeReview || state.nativePage) return null;
       // Session-only — the document on screen is kept as-is.
       return {
         revision: message.revision,
@@ -83,6 +92,8 @@ export function applyInbound(
         localRecordId: state.localRecordId,
         linked: state.linked,
         session: message.session,
+        nativeReview: undefined,
+        selectNative: state.selectNative,
       };
     default: {
       // Compile-time exhaustiveness over the NARROWED two-member type above.

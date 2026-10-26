@@ -6,7 +6,7 @@ import type { JsonValue } from "@zudo-composer/component-contract";
 import { loadHostContext } from "../host-context.mjs";
 import { captureHost, resolvePage, type CaptureHostOptions, type HostCapture } from "./inspect";
 import { EditError, openPlans } from "./plans";
-import { acquireAuthoringLease } from "./authoring-lease.mjs";
+import { executeAuthoringOperation } from "./authoring-lease.mjs";
 import { canonicalStringifyJson } from "../../src/site-project/model/canonical";
 import { indexDocument } from "../../src/composer/model/index-model";
 import { addNode, updateProps } from "../../src/composer/model/commands";
@@ -18,6 +18,7 @@ import { collectPackSourceGraph } from "../site-project-local/pack-source-graph"
 import { workspaceDomainRoots } from "../../src/shared/workspace-scope";
 import { withMutationBarrier } from "../../src/shared/node-fs";
 import type { AssetVersionPin } from "../../src/assets/model/types";
+import { createDraftOperations } from "./draft-service";
 
 const name = z.string().min(1).max(256);
 const pageSchema = z.object({ workspaceId: name, page: name, sitemapId: name.optional() }).strict();
@@ -72,6 +73,7 @@ function candidate(capture: HostCapture, request: EditRequest, generatedId: stri
     : target.kind === request.after.kind && target.ordinal === request.after.ordinal);
   if (matching.length !== 1) throw new EditError("unsupported-target", "Select exactly one standalone native node from inspect.targets. Markdown sub-blocks, opaque components, and guessed positions are unsupported.");
   const anchor = indexDocument(page.record.document, capture.manifest).byId.get(matching[0]!.nodeId)!;
+  if (page.attachedSlots.some(slot => slot.nodeId === anchor.parentId && slot.slotId === anchor.slotId)) throw new EditError("unsupported-scope", "That position is inside a Mapping-owned collection slot. Edit the collection through Mapping.");
   const insert = request.insert;
   const kind = insert.kind === "text" ? "paragraph" : insert.kind;
   const capability = page.capabilities[kind];
@@ -153,13 +155,9 @@ export function createEditingService(options: CaptureHostOptions) {
     tokens: state.tokens, workspace: state.workspace, sourceAuthored: state.sourceAuthored,
     config: state.config.nativeEditing ?? null,
   });
-  const leased = async <T>(action: () => Promise<T>) => {
-    const lease = await acquireAuthoringLease(options.config.workspaceRoot, "reviewed-edit");
-    try { return await action(); } finally { await lease.release(); }
-  };
-  const pin = async (state: HostCapture, request: EditRequest): Promise<AssetVersionPin | null> => {
-    if (request.insert.kind !== "image") return null;
-    const assetId = request.insert.assetId;
+  const leased = <T>(action: () => Promise<T>) => executeAuthoringOperation(options.config.workspaceRoot, action) as Promise<T>;
+  const pin = async (state: HostCapture, request: EditRequest): Promise<AssetVersionPin | null> => request.insert.kind === "image" ? pinAsset(state, request.insert.assetId) : null;
+  const pinAsset = async (state: HostCapture, assetId: string): Promise<AssetVersionPin> => {
     const asset = state.assets.records.find(record => record.id === assetId);
     if (!asset || asset.document.state !== "active") throw new EditError("invalid-asset", "Select an active managed image from this host.");
     const value = await state.stores.assets.resolveVersion({ providerId: "asset-files", assetId, versionId: asset.document.currentVersionId });
@@ -182,7 +180,26 @@ export function createEditingService(options: CaptureHostOptions) {
     const next = (index: number): Promise<T> => index === all.length ? action() : withMutationBarrier(all[index]!, () => next(index + 1));
     return next(0);
   };
+  const drafts = createDraftOperations({
+    host: identity, dataRoot: options.config.paths.data, digest: editDigest, capture, revisions, leased, barriers,
+    pinAsset,
+    permission: options.config.assistant?.permission ?? "apply",
+  });
   return {
+    drafts,
+    async inspectBrowserReview(input: unknown) {
+      const { planId } = parse(idSchema, input);
+      const { plan } = await loadPlan(planId);
+      const state = await capture();
+      const page = resolvePage(state, plan.request);
+      if (editDigest(page.identity) !== editDigest(plan.identity)) throw new EditError("wrong-target", "The reviewed page owner changed.");
+      const applied = await state.stores.compositions.reviewedEditReceipt<EditReceipt>(planId);
+      if (!applied) {
+        if (editDigest(await revisions(state)) !== editDigest(plan.revisions)) throw new EditError("stale-plan", "Reviewed dependencies changed. Review a fresh plan.");
+        await pending(planId, await openPlans(options.config.paths.data));
+      }
+      return { plan, page };
+    },
     async initializeSourceEpoch() { await checkedSources(options); },
     async inspect(input: unknown) { const request = parse(pageSchema, input); return resolvePage(await capture(), request); },
     async resolve(input: unknown) {
@@ -224,7 +241,7 @@ export function createEditingService(options: CaptureHostOptions) {
           const rebuilt = candidate(state, plan.request, plan.generatedId, plan.createdAt, assetPin);
           if (editDigest(rebuilt.page.record) !== editDigest(plan.before) || editDigest(rebuilt.page.identity) !== editDigest(plan.identity) || editDigest(rebuilt.record) !== editDigest(plan.candidate) || rebuilt.jsx !== plan.jsx) throw new EditError("tampered-plan", "Candidate does not equal the one exact requested insertion.");
           const receipt: EditReceipt = { schemaVersion: 1, operationId: planId, planId, reviewDigest: plan.digest, kind: "applied", identity: plan.identity, beforeDigest: editDigest(plan.before), afterDigest: editDigest(plan.candidate), jsxDigest: editDigest(plan.jsx), committedAt: new Date().toISOString() };
-          return state.stores.compositions.commitReviewedEdit({ operationId: planId, planDigest: plan.digest, expectedSnapshotToken: state.tokens.compositions, candidate: plan.candidate, jsx: plan.jsx, receipt }, async () => {
+          return state.stores.compositions.commitReviewedEdit({ operationId: planId, planDigest: plan.digest, expectedSnapshotToken: state.tokens.compositions, changes: [{ candidate: plan.candidate, jsx: plan.jsx }], receipt }, async () => {
             // Catalog/source bytes can change independently of CMS writers.
             if (editDigest(await revisions(state)) !== editDigest(plan.revisions)) throw new EditError("stale-plan", "Pack or source changed at the writer boundary.");
           });
@@ -284,7 +301,7 @@ export function createEditingService(options: CaptureHostOptions) {
           if (!output || output.status !== "generated") throw new EditError("undo-conflict", "Current pack/template cannot safely render the prior draft.");
           const undoRevisions = await revisions(state);
           const receipt: EditReceipt = { ...applied, operationId, kind: "undone", beforeDigest: applied.afterDigest, afterDigest: applied.beforeDigest, jsxDigest: editDigest(output.code), committedAt: new Date().toISOString() };
-          return state.stores.compositions.commitReviewedEdit({ operationId, planDigest: approve, expectedSnapshotToken: state.tokens.compositions, candidate: plan.before, jsx: output.code, receipt }, async () => {
+          return state.stores.compositions.commitReviewedEdit({ operationId, planDigest: approve, expectedSnapshotToken: state.tokens.compositions, changes: [{ candidate: plan.before, jsx: output.code }], receipt }, async () => {
             if (editDigest(await revisions(state)) !== editDigest(undoRevisions)) throw new EditError("undo-conflict", "Pack or source changed at the undo writer boundary.");
           });
         });

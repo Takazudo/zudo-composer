@@ -201,8 +201,16 @@ existing `pnpm sg:build-site` entry point remains unchanged.
   test:browser:dev`, `corepack pnpm test:browser:site-project`, `corepack pnpm
   test:browser:demos` (port 4176, the four `packages/demo-*` hosts), and
   `corepack pnpm test:browser:demo-editor [sample|shop|landing|blog]` (port
-  4175, the prepared per-host editor artifacts). Each owns one machine-global
-  port, so none may run concurrently, and no lane may rebuild.
+  4175, the prepared per-host editor artifacts), and `corepack pnpm
+  test:browser:assistant` (port 4177, disposable demo-derived Assistant hosts
+  against a scripted loopback Messages API; see `docs/assistant.md`). Each owns
+  one machine-global port, so none may run concurrently, and no lane may rebuild.
+- Live Assistant lane: `corepack pnpm test:browser:assistant:live` (port 4177)
+  is opt-in and never part of CI or `check`. It sends real Messages API
+  requests only with a dedicated `ZUDO_ASSISTANT_LIVE_API_KEY` and an approved
+  `ZUDO_ASSISTANT_LIVE_MAX_USD`; otherwise it records `blocked` and exits 3.
+  `--plan` lists every input first. Never substitute a Claude Code login or
+  inject replies. See `verification/assistant/README.md`.
 - Consumer boundary: the ledger must contain zero entries. Scan actual creator
   templates and complete generated output before packed dependency rewriting.
 - Host install: `corepack pnpm smoke:host-install` packs the tool and contract,

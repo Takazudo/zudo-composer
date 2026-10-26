@@ -1,3 +1,4 @@
+import { authoringFetch } from "../../../shared/authoring-fetch";
 import { fileProviderConfig } from "virtual:composer-file-provider-config";
 import { notifyPersistenceChange } from "../../../shared/persistence-generation";
 import {
@@ -139,7 +140,7 @@ export function createFileProviderAssetStore(options: CreateFileProviderAssetSto
   if (fileProviderConfig === undefined) return undefined;
   const config = fileProviderConfig as AssetFileProviderConfig;
   if (typeof config.assetEndpoint !== "string") return undefined;
-  return new BrowserFileProviderAssetStore(config, options.fetch ?? globalThis.fetch.bind(globalThis));
+  return new BrowserFileProviderAssetStore(config, options.fetch ?? authoringFetch);
 }
 
 export function createFileProviderAssetProvider(options: CreateFileProviderAssetStoreOptions = {}): AssetFileProvider | undefined {

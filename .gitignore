@@ -24,3 +24,6 @@ coverage/
 
 dist-editor/
 dist-site/
+
+# Persistent local hosts (scripts/assistant/local-host.mjs, hosted-content local host)
+/.zudo-local/

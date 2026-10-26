@@ -1,0 +1,623 @@
+{
+  "label": "real binary, scripted model endpoint — not model inference",
+  "codexVersion": "0.164.0",
+  "minimumSupportedVersion": "0.164.0",
+  "platform": "linux-x64",
+  "generatedBy": "scripts/assistant/codex-cli-harness.mjs",
+  "productProfile": [
+    "exec",
+    "--json",
+    "--color",
+    "never",
+    "--skip-git-repo-check",
+    "--ephemeral",
+    "--ignore-user-config",
+    "--ignore-rules",
+    "--strict-config",
+    "--sandbox",
+    "read-only",
+    "-c",
+    "approval_policy=\"never\"",
+    "--disable",
+    "shell_tool",
+    "--disable",
+    "unified_exec",
+    "--disable",
+    "shell_snapshot",
+    "-c",
+    "allow_login_shell=false",
+    "-c",
+    "web_search=\"disabled\"",
+    "--disable",
+    "multi_agent",
+    "-c",
+    "agents.enabled=false",
+    "--disable",
+    "goals",
+    "--disable",
+    "view_image",
+    "--disable",
+    "image_generation",
+    "--disable",
+    "apps",
+    "--disable",
+    "plugins",
+    "--disable",
+    "tool_suggest",
+    "--disable",
+    "skill_search",
+    "--disable",
+    "hooks",
+    "--disable",
+    "memories",
+    "--disable",
+    "browser_use",
+    "--disable",
+    "computer_use",
+    "--disable",
+    "sleep_tool",
+    "--disable",
+    "code_mode",
+    "--disable",
+    "code_mode_host",
+    "-c",
+    "tools.experimental_request_user_input.enabled=false",
+    "-c",
+    "tools.update_plan.enabled=false",
+    "-c",
+    "skills.include_instructions=false",
+    "-c",
+    "skills.bundled.enabled=false",
+    "-c",
+    "project_doc_max_bytes=0",
+    "-c",
+    "include_environment_context=false",
+    "--disable",
+    "unbounded_connection_retries",
+    "-c",
+    "history.persistence=\"none\"",
+    "-c",
+    "check_for_update_on_startup=false",
+    "-c",
+    "analytics.enabled=false",
+    "-c",
+    "feedback.enabled=false",
+    "-c",
+    "notify=[]"
+  ],
+  "harnessOnlyAdditions": [
+    "temporary HOME and CODEX_HOME (with an AGENTS.md marker)",
+    "-c model_providers.scripted={... base_url=loopback, env_key=SCRIPTED_KEY, retries 0} and -c model_provider=\"scripted\"",
+    "dummy SCRIPTED_KEY/CODEX_API_KEY",
+    "HTTP(S)_PROXY/ALL_PROXY at a refusing loopback sink, NO_PROXY=127.0.0.1,localhost",
+    "sandbox-only variant drops --disable shell_tool/unified_exec"
+  ],
+  "proxiedDestinationsAttempted": [],
+  "checks": [
+    {
+      "name": "normal gpt-5.5: valid reply via product path",
+      "pass": true
+    },
+    {
+      "name": "normal gpt-5.5: every request reached the scripted server",
+      "pass": true
+    },
+    {
+      "name": "normal gpt-6-sol: valid reply via product path",
+      "pass": true
+    },
+    {
+      "name": "normal gpt-6-sol: every request reached the scripted server",
+      "pass": true
+    },
+    {
+      "name": "write gpt-5.5: apply_patch add file in scratch → no file changed",
+      "pass": true
+    },
+    {
+      "name": "write gpt-5.5: apply_patch update file in scratch → no file changed",
+      "pass": true
+    },
+    {
+      "name": "write gpt-5.5: apply_patch add file outside (absolute) → no file changed",
+      "pass": true
+    },
+    {
+      "name": "write gpt-5.5: apply_patch update file outside (absolute) → no file changed",
+      "pass": true
+    },
+    {
+      "name": "write gpt-5.5: shell write outside (exec_command) → no file changed",
+      "pass": true
+    },
+    {
+      "name": "write gpt-5.5: shell write outside (shell_command) → no file changed",
+      "pass": true
+    },
+    {
+      "name": "write gpt-5.5: code-mode exec calling apply_patch → no file changed",
+      "pass": true
+    },
+    {
+      "name": "write gpt-6-sol: apply_patch add file in scratch → no file changed",
+      "pass": true
+    },
+    {
+      "name": "write gpt-6-sol: apply_patch update file in scratch → no file changed",
+      "pass": true
+    },
+    {
+      "name": "write gpt-6-sol: apply_patch add file outside (absolute) → no file changed",
+      "pass": true
+    },
+    {
+      "name": "write gpt-6-sol: apply_patch update file outside (absolute) → no file changed",
+      "pass": true
+    },
+    {
+      "name": "write gpt-6-sol: shell write outside (exec_command) → no file changed",
+      "pass": true
+    },
+    {
+      "name": "write gpt-6-sol: shell write outside (shell_command) → no file changed",
+      "pass": true
+    },
+    {
+      "name": "write gpt-6-sol: code-mode exec calling apply_patch → no file changed",
+      "pass": true
+    },
+    {
+      "name": "apply_patch update in scratch never reported success",
+      "pass": true
+    },
+    {
+      "name": "sandbox variant: read-only sandbox blocked both writes",
+      "pass": true
+    },
+    {
+      "name": "error 401 persistent → auth",
+      "pass": true
+    },
+    {
+      "name": "error 429 usage limit → quota",
+      "pass": true
+    },
+    {
+      "name": "error 429 insufficient quota → quota",
+      "pass": true
+    },
+    {
+      "name": "error 400 invalid request → invalid-request",
+      "pass": true
+    },
+    {
+      "name": "unknown override key → unsupported, no model request",
+      "pass": true
+    },
+    {
+      "name": "abort → aborted and no codex process left",
+      "pass": true
+    }
+  ],
+  "scenarios": {
+    "normal-gpt-5.5": {
+      "status": {
+        "ok": true,
+        "version": "0.164.0"
+      },
+      "activity": [
+        "Codex CLI (local login) started",
+        "Codex turn started",
+        "Codex produced a reply"
+      ],
+      "result": {
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "h-1",
+            "name": "suggest_wording",
+            "input": {
+              "text": "Hello"
+            }
+          }
+        ],
+        "stopReason": "tool_use"
+      },
+      "modelRequestCount": 1,
+      "allModelRequestsScripted": true,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "authMatchesDummy": true
+        }
+      ],
+      "toolsOfferedToModel": {
+        "direct": [
+          "apply_patch"
+        ],
+        "additional": [],
+        "nested": []
+      },
+      "requestFields": {
+        "model": "gpt-5.5",
+        "reasoning": {
+          "effort": "low"
+        },
+        "textFormat": "json_schema",
+        "strict": true,
+        "store": false
+      },
+      "instructionsSeen": {
+        "globalAgentsMdFromCodexHome": true,
+        "projectAgentsMdInScratch": false,
+        "skillsInstructions": false,
+        "environmentContext": false,
+        "permissionsInstructions": true
+      },
+      "promptPersistedUnderCodexHome": [],
+      "codexHomeEntriesAfterRun": [
+        "AGENTS.md",
+        "goals_1.sqlite",
+        "goals_1.sqlite-shm",
+        "goals_1.sqlite-wal",
+        "installation_id",
+        "logs_2.sqlite",
+        "memories_1.sqlite",
+        "memories_1.sqlite-shm",
+        "memories_1.sqlite-wal",
+        "queue_1.sqlite",
+        "queue_1.sqlite-shm",
+        "queue_1.sqlite-wal",
+        "state_5.sqlite",
+        "state_5.sqlite-shm",
+        "state_5.sqlite-wal"
+      ]
+    },
+    "normal-gpt-6-sol": {
+      "status": {
+        "ok": true,
+        "version": "0.164.0"
+      },
+      "activity": [
+        "Codex CLI (local login) started",
+        "Codex turn started",
+        "Codex produced a reply"
+      ],
+      "result": {
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "h-1",
+            "name": "suggest_wording",
+            "input": {
+              "text": "Hello"
+            }
+          }
+        ],
+        "stopReason": "tool_use"
+      },
+      "modelRequestCount": 1,
+      "allModelRequestsScripted": true,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "authMatchesDummy": true
+        }
+      ],
+      "toolsOfferedToModel": {
+        "direct": [],
+        "additional": [
+          "functions.exec",
+          "functions.wait"
+        ],
+        "nested": [
+          "code-mode nested: apply_patch",
+          "code-mode nested: list_mcp_resource_templates",
+          "code-mode nested: list_mcp_resources",
+          "code-mode nested: read_mcp_resource",
+          "code-mode nested: clock__curr_time"
+        ]
+      },
+      "requestFields": {
+        "model": "gpt-6-sol",
+        "reasoning": {
+          "effort": "low",
+          "context": "all_turns"
+        },
+        "textFormat": "json_schema",
+        "strict": true,
+        "store": false
+      },
+      "instructionsSeen": {
+        "globalAgentsMdFromCodexHome": true,
+        "projectAgentsMdInScratch": false,
+        "skillsInstructions": false,
+        "environmentContext": false,
+        "permissionsInstructions": true
+      },
+      "promptPersistedUnderCodexHome": [],
+      "codexHomeEntriesAfterRun": [
+        "AGENTS.md",
+        "goals_1.sqlite",
+        "goals_1.sqlite-shm",
+        "goals_1.sqlite-wal",
+        "installation_id",
+        "logs_2.sqlite",
+        "memories_1.sqlite",
+        "queue_1.sqlite",
+        "queue_1.sqlite-shm",
+        "queue_1.sqlite-wal",
+        "state_5.sqlite",
+        "state_5.sqlite-shm",
+        "state_5.sqlite-wal"
+      ]
+    },
+    "write gpt-5.5: apply_patch add file in scratch": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "patch rejected: writing is blocked by read-only sandbox; rejected by user approval settings"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "write gpt-5.5: apply_patch update file in scratch": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "patch rejected: writing is blocked by read-only sandbox; rejected by user approval settings"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "write gpt-5.5: apply_patch add file outside (absolute)": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "patch rejected: writing is blocked by read-only sandbox; rejected by user approval settings"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "write gpt-5.5: apply_patch update file outside (absolute)": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "patch rejected: writing is blocked by read-only sandbox; rejected by user approval settings"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "write gpt-5.5: shell write outside (exec_command)": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "unsupported call: exec_command"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "write gpt-5.5: shell write outside (shell_command)": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "unsupported call: shell_command"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "write gpt-5.5: code-mode exec calling apply_patch": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "unsupported custom tool call: exec"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "write gpt-6-sol: apply_patch add file in scratch": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "patch rejected: writing is blocked by read-only sandbox; rejected by user approval settings"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "write gpt-6-sol: apply_patch update file in scratch": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "patch rejected: writing is blocked by read-only sandbox; rejected by user approval settings"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "write gpt-6-sol: apply_patch add file outside (absolute)": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "patch rejected: writing is blocked by read-only sandbox; rejected by user approval settings"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "write gpt-6-sol: apply_patch update file outside (absolute)": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "patch rejected: writing is blocked by read-only sandbox; rejected by user approval settings"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "write gpt-6-sol: shell write outside (exec_command)": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "unsupported call: exec_command"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "write gpt-6-sol: shell write outside (shell_command)": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "unsupported call: shell_command"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "write gpt-6-sol: code-mode exec calling apply_patch": {
+      "resultStop": "tool_use",
+      "modelRequestCount": 2,
+      "toolOutputReturnedToModel": [
+        "code-mode host is disabled"
+      ],
+      "scratchAfter": [
+        "composer-reply.schema.json",
+        "scratch-canary.txt"
+      ],
+      "outsideUnchanged": true,
+      "allModelRequestsScripted": true
+    },
+    "shell read gpt-5.5": {
+      "resultStop": "tool_use",
+      "toolOutputReturnedToModel": [
+        "unsupported call: exec_command"
+      ],
+      "canaryContentReachedModel": false
+    },
+    "shell read gpt-6-sol": {
+      "resultStop": "tool_use",
+      "toolOutputReturnedToModel": [
+        "unsupported call: exec_command"
+      ],
+      "canaryContentReachedModel": false
+    },
+    "sandbox-only variant (shell re-enabled, harness only)": {
+      "exitCode": 0,
+      "eventTypes": [
+        "thread.started",
+        "turn.started",
+        "item.started:command_execution",
+        "item.completed:command_execution",
+        "item.completed:agent_message",
+        "turn.completed"
+      ],
+      "commandOutput": "/bin/bash: line 1: <harness-tmp>/outside/sandbox.txt: Read-only file system\n/bin/bash: line 1: inside-sandbox.txt: Read-only file system\noriginal\n",
+      "outsideWritten": false,
+      "scratchWritten": false,
+      "readSucceeded": true,
+      "productParserWouldRefuse": true
+    },
+    "error 401 persistent": {
+      "error": {
+        "code": "auth",
+        "retryable": false,
+        "message": "Codex CLI could not authenticate. Run \"codex login\" in a terminal, then retry."
+      },
+      "modelRequestCount": 1,
+      "allModelRequestsScripted": true
+    },
+    "error 429 usage limit": {
+      "error": {
+        "code": "quota",
+        "retryable": false,
+        "message": "Your Codex usage limit or quota is used up. Try again later or check your plan."
+      },
+      "modelRequestCount": 1,
+      "allModelRequestsScripted": true
+    },
+    "error 429 insufficient quota": {
+      "error": {
+        "code": "quota",
+        "retryable": false,
+        "message": "Your Codex usage limit or quota is used up. Try again later or check your plan."
+      },
+      "modelRequestCount": 1,
+      "allModelRequestsScripted": true
+    },
+    "error 400 invalid request": {
+      "error": {
+        "code": "invalid-request",
+        "retryable": false,
+        "message": "Codex rejected the request (check assistant.model and assistant.effort)."
+      },
+      "modelRequestCount": 1,
+      "allModelRequestsScripted": true
+    },
+    "unknown override key under --strict-config": {
+      "error": {
+        "code": "unsupported",
+        "retryable": false,
+        "message": "This Codex CLI version does not accept Composer's restricted profile. Use a supported Codex CLI version."
+      },
+      "modelRequestCount": 0
+    },
+    "abort mid-stream": {
+      "error": {
+        "code": "aborted",
+        "retryable": false,
+        "message": "Stopped."
+      },
+      "processesBeforeStop": 2,
+      "processesAfterStop": 0
+    }
+  }
+}

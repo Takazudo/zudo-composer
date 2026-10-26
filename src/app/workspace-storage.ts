@@ -1,3 +1,4 @@
+import { authoringFetch } from "../shared/authoring-fetch";
 // The workspace registry, as the application sees it.
 //
 // Durable workspace metadata lives in the host project's files, under
@@ -164,7 +165,7 @@ class FileProviderWorkspaceStorage implements WorkspaceStorage {
     this.client = new DomainFileProviderClient(
       options.config,
       workspaceFileProviderErrorAdapter,
-      options.fetchImpl ?? globalThis.fetch.bind(globalThis),
+      options.fetchImpl ?? authoringFetch,
     );
   }
 

@@ -8,11 +8,19 @@ const assets = await createFilesystemAssetStore({ assetsStoreRoot: composerConfi
 // An original one-pixel PNG, uploaded through Assets rather than a loose URL.
 const image = await assets.upload({ fileName: "native-proof.png", declaredMimeType: "image/png", bytes: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMwy9rwHwAEegJQ3vho/gAAAABJRU5ErkJggg==", "base64") });
 const site = defineSite({ id: "native-edit-proof", name: "Native editing proof", componentPack: pack });
-const home = site.page({ id: "home", name: "Native editing home", root: [
+const template = site.template({ id: "frame", name: "Installed template", root: [node("native.frame", {}, { body: [] }, "frame-root")], outlet: { target: { parentId: "frame-root", slotId: "body" } } });
+const home = site.page({ id: "home", name: "Native editing home", template, root: [
   node("native.paragraph", { text: "Before replacement" }, {}, "paragraph"),
   node("native.list", { items: ["First item", "Second item"] }, {}, "list"),
   node("native.table", { columns: ["Name", "Value"], rows: [["Alpha", "Before cell"]] }, {}, "table"),
 ] });
-site.sitemap({ id: "main", name: "Native sitemap", root: { id: "home", title: "Home", page: home } });
+const other = site.page({ id: "other", name: "Other native page", root: [
+  node("native.paragraph", { text: "Other page copy" }, {}, "paragraph"),
+  node("native.list", { items: ["Other item"] }, {}, "list"),
+  node("native.table", { columns: ["Other"], rows: [["Untouched"]] }, {}, "table"),
+  node("native.note", { text: "Unsupported owner copy" }, {}, "note"),
+  node("native.md", { markdown: "Editable Markdown source" }, {}, "prose"),
+] });
+site.sitemap({ id: "main", name: "Native sitemap", root: { id: "home", title: "Home", page: home, children: [{ id: "other", title: "Other", slug: "other", page: other }] } });
 await initializeAuthoringWorkspace({ composerConfig, pack, project: site.toSiteProject(), workspaceId: "native-proof" });
 process.stdout.write(JSON.stringify({ workspaceId: "native-proof", pageId: "home", assetId: image.id }) + "\n");

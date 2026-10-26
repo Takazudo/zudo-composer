@@ -26,11 +26,15 @@ import {
   openSourceMessage,
   readParentToPreview,
   readyMessage,
+  renderedMessage,
+  reviewAnnotatedMessage,
   requestAddMessage,
   requestInsertMenuMessage,
   requestNodeMenuMessage,
   requestHistoryMessage,
   selectMessage,
+  nativeSelectMessage,
+  authoringSettledMessage,
 } from "./protocol";
 import { INITIAL_PREVIEW_STATE, applyInbound, type PreviewState } from "./snapshot-store";
 
@@ -55,6 +59,10 @@ export interface PreviewClientOptions {
    * `PreviewState` — see `snapshot-store.ts`'s `applyInbound` comment.
    */
   onRestoreFocus?: (focusToken: string) => void;
+  /** Scroll/pulse one review annotation of the current review key. */
+  onFocusAnnotation?: (key: string, id: string) => void;
+  /** Active inline drafts remain in this document until explicitly finished. */
+  isAuthoringClean?: () => boolean;
   /** A message was DROPPED by the guard. */
   onRejected?: (reason: GuardFailure, detail?: string) => void;
 }
@@ -62,6 +70,7 @@ export interface PreviewClientOptions {
 export interface PreviewClient {
   /** Announce readiness. Called on every load — including after a reload. */
   emitReady(): void;
+  emitRendered(): void;
   emitSelect(nodeId: string | null): void;
   emitRequestAdd(target: InsertionTarget, rect?: SerializedRect): void;
   /** Navigate to the linked source; this never selects or mutates source nodes. */
@@ -92,6 +101,8 @@ export interface PreviewClient {
   /** Ask the host controller to redo; only called for guarded canvas chrome keys. */
   emitRequestRedo(): void;
   emitError(message: string, recoverable?: boolean): void;
+  /** Reports, for the review key on screen, which annotations mapped to words. */
+  emitReviewAnnotated(key: string, results: import("./protocol").ReviewAnnotatedMessage["results"]): void;
   /** The newest applied state. */
   readonly state: PreviewState;
   readonly terminal: boolean;
@@ -132,8 +143,18 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
       return;
     }
     const message = result.message;
+    if (message.type === "authoring-probe") {
+      // This reply follows previously emitted inline commits on the same
+      // postMessage channel. Parent flush starts only after those arrive.
+      post(authoringSettledMessage(pack, message.nonce, state.document !== null && options.isAuthoringClean?.() === true));
+      return;
+    }
     // `restore-focus` (Takazudo/zudo-sg#256) is not a document/session snapshot — it never
     // reaches the revision-gated fold below. See `applyInbound`'s comment.
+    if (message.type === "focus-annotation") {
+      if (state.review?.key === message.key) options.onFocusAnnotation?.(message.key, message.id);
+      return;
+    }
     if (message.type === "restore-focus") {
       options.onRestoreFocus?.(message.focusToken);
       return;
@@ -150,7 +171,12 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
     emitReady() {
       post(readyMessage(pack));
     },
+    emitRendered() {
+      if (state.nativeReview) post(renderedMessage(pack, state.revision, state.nativeReview));
+    },
     emitSelect(nodeId) {
+      if (state.nativeReview) return;
+      if (state.nativePage) { if (state.selectNative && nodeId) post(nativeSelectMessage(pack, outboundRevision(), nodeId, state.nativePage)); return; }
       post(selectMessage(pack, outboundRevision(), nodeId));
     },
     emitRequestAdd(target, rect) {
@@ -166,18 +192,25 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
       post(requestInsertMenuMessage(pack, outboundRevision(), target, rect, focusToken));
     },
     emitCommitInlineEdit(nodeId, fieldKey, value, documentRevision) {
+      if (state.nativeReview || state.selectNative) return;
       // `Math.max(0, ...)` mirrors `outboundRevision()`'s own guard — defence
       // against a rogue caller producing a schema-invalid negative revision.
       post(commitInlineEditMessage(pack, nodeId, fieldKey, value, Math.max(0, documentRevision)));
     },
     emitDropNode(sourceNodeId, target, copy) {
+      if (state.nativeReview || state.selectNative) return;
       post(dropNodeMessage(pack, sourceNodeId, target, copy, outboundRevision()));
     },
     emitRequestUndo() {
+      if (state.nativeReview || state.selectNative) return;
       post(requestHistoryMessage(pack, "undo"));
     },
     emitRequestRedo() {
+      if (state.nativeReview || state.selectNative) return;
       post(requestHistoryMessage(pack, "redo"));
+    },
+    emitReviewAnnotated(key, results) {
+      if (state.review?.key === key) post(reviewAnnotatedMessage(pack, state.revision, key, results));
     },
     emitError(message, recoverable = true) {
       post(errorMessage(pack, state.revision < 0 ? null : state.revision, message, recoverable));

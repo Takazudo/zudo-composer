@@ -75,10 +75,34 @@ try {
     await expect(image).toBeVisible();
     await expect.poll(() => image.evaluate(element => element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0)).toBe(true);
     assert.deepEqual(errors, [], `${pass}: browser runtime errors`);
+    if (pass === "first open") {
+      const { proveBrowserEdits } = await import("./fixtures/native-edit/browser.mjs");
+      await proveBrowserEdits(page, host, cli, initialized);
+    } else {
+      await page.goto("http://127.0.0.1:4175/composer?native=1&sitemap=main&page=home");
+      const native = page.frameLocator('iframe[title="Native page preview"]');
+      const { browserText } = await import("./fixtures/native-edit/browser.mjs");
+      await expect(native.getByText(browserText, { exact: true })).toBeVisible({ timeout: 60_000 });
+      await expect(native.getByRole("img", { name: "Browser managed image", exact: true })).toBeVisible();
+    }
     await context.close();
     await server.stop(); server = undefined;
     console.log(`Installed native editing Composer ${pass}: passed.`);
   }
+} catch (error) {
+  // Retain runner-only browser state before disposable host cleanup. These are
+  // fixture pages, never installed operator capabilities or request headers.
+  const diagnostics = join(root, "test-results/native-edit-install");
+  await mkdir(diagnostics, { recursive: true });
+  let index = 0;
+  for (const context of browser?.contexts() ?? []) for (const page of context.pages()) {
+    const name = `page-${index++}`;
+    await page.screenshot({ path: join(diagnostics, `${name}.png`), fullPage: true }).catch(() => {});
+    for (const [frameIndex, frame] of page.frames().entries()) {
+      await frame.content().then(html => writeFile(join(diagnostics, `${name}-frame-${frameIndex}.html`), html)).catch(() => {});
+    }
+  }
+  throw error;
 } finally {
   await browser?.close();
   await server?.stop();

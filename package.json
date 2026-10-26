@@ -96,7 +96,9 @@
     "!**/*.test.*",
     "!src/test",
     "!src/hosted-demo",
-    "docs/hosted-content.md"
+    "docs/hosted-content.md",
+    "docs/native-editing.md",
+    "docs/assistant.md"
   ],
   "engines": {
     "node": "^22.13.0 || >=24.0.0",
@@ -150,6 +152,13 @@
     "test:browser:site-project": "node scripts/run-site-project-browser.mjs",
     "test:browser:demo-editor": "node scripts/run-demo-editor-browser.mjs",
     "test:browser:demos": "node scripts/run-demos-browser.mjs",
+    "test:browser:assistant": "node scripts/verify-assistant-browser.mjs",
+    "test:browser:assistant:live": "node scripts/verify-assistant-live.mjs",
+    "test:browser:assistant:local-host": "node scripts/assistant/verify-local-host.mjs",
+    "test:browser:assistant:real-cli": "node scripts/assistant/verify-real-cli.mjs",
+    "assistant:local": "node scripts/assistant/local-host.mjs",
+    "assistant:claude-harness": "tsx scripts/assistant/claude-cli-harness.mjs",
+    "assistant:codex-harness": "tsx scripts/assistant/codex-cli-harness.mjs",
     "hosted-demo:verify": "node scripts/check-hosted-demo.mjs",
     "hosted-demo:live-check": "node scripts/hosted-demo/live-check.mjs",
     "hosted-demo:workflow-guard": "node scripts/hosted-demo/workflow-guard.mjs",
@@ -167,13 +176,17 @@
     "hosted:check": "node scripts/build-hosted-entries.mjs --check && pnpm exec vitest run src/hosted-content && node scripts/check-hosted-boundary.mjs",
     "hosted:durable": "node fixtures/hosted-content-consumer/durable-proof.mjs && node fixtures/hosted-content-consumer/publication-proof.mjs",
     "hosted:install": "node scripts/install-hosted-consumer.mjs",
-    "hosted:installed": "node scripts/verify-hosted-consumer.mjs"
+    "hosted:installed": "node scripts/verify-hosted-consumer.mjs",
+    "hosted:local:prepare": "node fixtures/hosted-content-consumer/local.mjs --prepare",
+    "hosted:local": "node fixtures/hosted-content-consumer/local.mjs",
+    "hosted:local:proof": "node fixtures/hosted-content-consumer/local-proof.mjs && node fixtures/hosted-content-consumer/local-browser-proof.mjs"
   },
   "peerDependencies": {
     "@zudo-composer/component-contract": "^1.0.0",
     "preact": "^10.29.8"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
     "@codemirror/commands": "^6.11.0",
     "@codemirror/lang-markdown": "^6.5.2",
     "@codemirror/language": "^6.12.4",

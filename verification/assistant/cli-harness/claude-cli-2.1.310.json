@@ -1,0 +1,271 @@
+{
+  "label": "real binary, scripted model endpoint — not model inference",
+  "generatedAt": "2026-10-26T21:28:19.421Z",
+  "claudeCodeVersion": "2.1.310",
+  "platform": "linux-x64",
+  "node": "v22.22.0",
+  "provider": {
+    "label": "Claude Code CLI (local login)",
+    "minVersion": "2.1.310",
+    "requiredHelpFlags": [
+      "--print",
+      "--output-format",
+      "--verbose",
+      "--json-schema",
+      "--system-prompt",
+      "--tools",
+      "--disallowedTools",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "--permission-mode",
+      "--permission-prompts",
+      "--no-session-persistence",
+      "--setting-sources",
+      "--disable-slash-commands",
+      "--safe-mode",
+      "--restricted",
+      "--model",
+      "--effort"
+    ]
+  },
+  "productArgv": [
+    "--print",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--no-session-persistence",
+    "--safe-mode",
+    "--restricted",
+    "--setting-sources",
+    "",
+    "--tools",
+    "",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+    "--disallowedTools",
+    "mcp__*",
+    "--permission-mode",
+    "dontAsk",
+    "--permission-prompts",
+    "none",
+    "--disable-slash-commands",
+    "--max-turns",
+    "1",
+    "--system-prompt",
+    "You produce exactly one reply for Zudo Composer's AI Assistant. The request arrives as the user message. Deliver your reply only by calling the StructuredOutput tool exactly once with an object that matches its schema; do not write the reply as plain text. You have no other tools in this session: do not try to read or write files, run commands, browse, or use any built-in or MCP tool.",
+    "--json-schema",
+    "<structuredTurnJsonSchema(request.tools)>"
+  ],
+  "harnessEnvironmentKeys": [
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_BASE_URL",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+    "HOME",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "LANG",
+    "NO_PROXY",
+    "PATH",
+    "TMPDIR",
+    "ZC_HARNESS_RUN",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy"
+  ],
+  "scenarios": [
+    {
+      "name": "status probe (version, help flags, local auth status)",
+      "pass": true,
+      "status": "ok",
+      "modelRequests": 0,
+      "ms": 0
+    },
+    {
+      "name": "argv carries no prompt or site data",
+      "pass": true,
+      "modelRequests": 0,
+      "ms": 0
+    },
+    {
+      "name": "init event: what the restricted session exposes",
+      "pass": true,
+      "init": {
+        "tools": [
+          "StructuredOutput"
+        ],
+        "mcp_servers": [],
+        "permissionMode": "dontAsk",
+        "slash_commands": [],
+        "skills": [],
+        "apiKeySource": "ANTHROPIC_API_KEY",
+        "plugins": [
+          "cc-plugin-agents-md",
+          "cc-plugin-plugin-authoring"
+        ],
+        "agents": [
+          "claude",
+          "Explore",
+          "general-purpose",
+          "Plan"
+        ],
+        "claude_code_version": "2.1.310"
+      },
+      "modelRequests": 1,
+      "ms": 607
+    },
+    {
+      "name": "normal structured reply",
+      "pass": true,
+      "result": {
+        "ok": true,
+        "value": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Hello from the scripted model."
+            }
+          ],
+          "stopReason": "end_turn"
+        }
+      },
+      "toolsOfferedToModel": [
+        "DeferredToolPlaceholder",
+        "StructuredOutput"
+      ],
+      "systemPromptHasSiteData": false,
+      "systemPromptIsComposerFixedText": true,
+      "siteDataInUserMessage": true,
+      "requestBodyKeys": [
+        "context_management",
+        "max_tokens",
+        "messages",
+        "metadata",
+        "model",
+        "output_config",
+        "stream",
+        "system",
+        "thinking",
+        "tools"
+      ],
+      "modelRequests": 1,
+      "ms": 652
+    },
+    {
+      "name": "reply requesting Composer tools",
+      "pass": true,
+      "result": {
+        "ok": true,
+        "value": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "call_1",
+              "name": "inspect_page",
+              "input": {}
+            }
+          ],
+          "stopReason": "tool_use"
+        }
+      },
+      "modelRequests": 1,
+      "ms": 647
+    },
+    {
+      "name": "model attempts built-in Write/Edit/Bash only",
+      "pass": true,
+      "result": {
+        "ok": false,
+        "code": "malformed-output",
+        "message": "The model did not answer in Composer's reply format within one reply. Retry this turn."
+      },
+      "filesystemUntouched": true,
+      "secondModelRequest": false,
+      "modelRequests": 1,
+      "ms": 629
+    },
+    {
+      "name": "model attempts built-in tools alongside StructuredOutput",
+      "pass": true,
+      "result": {
+        "ok": true,
+        "value": {
+          "content": [
+            {
+              "type": "text",
+              "text": "done"
+            }
+          ],
+          "stopReason": "end_turn"
+        }
+      },
+      "filesystemUntouched": true,
+      "modelRequests": 1,
+      "ms": 688
+    },
+    {
+      "name": "model answers in plain text instead of the schema",
+      "pass": true,
+      "result": {
+        "ok": false,
+        "code": "malformed-output",
+        "message": "The model did not answer in Composer's reply format within one reply. Retry this turn."
+      },
+      "modelRequests": 1,
+      "ms": 584
+    },
+    {
+      "name": "HTTP 401 → auth",
+      "pass": true,
+      "result": {
+        "ok": false,
+        "code": "auth",
+        "message": "Claude Code is not signed in or its sign-in was rejected. Run \"claude auth login\" in a terminal, then retry."
+      },
+      "modelRequests": 1,
+      "ms": 534
+    },
+    {
+      "name": "HTTP 429 → quota",
+      "pass": true,
+      "result": {
+        "ok": false,
+        "code": "quota",
+        "message": "Claude Code reached a rate or usage limit. Try again later."
+      },
+      "modelRequests": 2,
+      "ms": 1616
+    },
+    {
+      "name": "HTTP 529 → overloaded",
+      "pass": true,
+      "result": {
+        "ok": false,
+        "code": "overloaded",
+        "message": "The model service behind Claude Code is overloaded. Try again shortly."
+      },
+      "modelRequests": 3,
+      "ms": 2247
+    },
+    {
+      "name": "Stop mid-stream terminates the process tree",
+      "pass": true,
+      "result": {
+        "ok": false,
+        "code": "aborted",
+        "message": "Stopped."
+      },
+      "processesWhileRunning": 1,
+      "processesAfterStop": 0,
+      "modelRequests": 1,
+      "ms": 898
+    }
+  ],
+  "network": {
+    "modelRequestsAtScriptedServer": 13,
+    "requestsWithOtherCredentials": 0,
+    "nonModelRequestsAtScriptedServer": [],
+    "proxiedDestinationsRefused": []
+  },
+  "pass": true
+}

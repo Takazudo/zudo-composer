@@ -22,6 +22,47 @@ interface NativeEditingConfig {
     };
 }
 
+type AssistantEffort = "low" | "medium" | "high";
+interface AssistantCommonConfig {
+    /** Default display name; a site-scoped stored name may replace it. */
+    name: string;
+    /** `propose` permits conversation, drafts and review but never Apply. */
+    permission: "apply" | "propose";
+}
+/** Anthropic Messages API through the pinned SDK. */
+interface AnthropicAssistantConfig extends AssistantCommonConfig {
+    provider: "anthropic";
+    /** Messages API model id. */
+    model: string;
+    /** Environment variable read by the local authoring server only. */
+    apiKeyEnv: string;
+    effort: AssistantEffort;
+    /** Messages API origin: HTTPS (e.g. an organization gateway) or loopback HTTP for local proxies and tests. */
+    baseUrl: string;
+}
+/** Deterministic, offline provider for local trials and automated tests. It never contacts a model. */
+interface FakeAssistantConfig extends AssistantCommonConfig {
+    provider: "fake";
+    model: "fake";
+}
+/**
+ * A locally installed, already signed-in coding CLI used for one model reply
+ * per call. Composer passes the prompt on stdin and runs the CLI with a fixed,
+ * restricted profile; it never manages the CLI's credentials.
+ */
+interface CliAssistantConfig extends AssistantCommonConfig {
+    provider: "claude-cli" | "codex-cli";
+    /** Executable name (looked up on PATH) or absolute path. Never a shell command line. */
+    executable: string;
+    /** Model passed to the CLI; `null` uses the CLI's own default. */
+    model: string | null;
+    /** Reasoning effort passed to the CLI when it supports one; `null` uses the CLI default. */
+    effort: AssistantEffort | null;
+    /** Upper bound for one CLI invocation (one model reply). */
+    timeoutMs: number;
+}
+type AssistantConfig = AnthropicAssistantConfig | FakeAssistantConfig | CliAssistantConfig;
+
 /**
  * Every setting a host may declare. Path settings are relative to the host
  * project root; `pack` is a module specifier.
@@ -102,6 +143,8 @@ type ComposerSettingDefaults = Omit<ComposerSettings, "pack">;
  */
 interface ComposerConfigOverrides {
     nativeEditing?: NativeEditingConfig;
+    /** Explicit AI Assistant opt-in; requires `nativeEditing` for writable pages. */
+    assistant?: Partial<AssistantConfig>;
     /** Absolute host project root. Defaults to `process.cwd()`. */
     workspaceRoot?: string;
     /** Absolute path of the config file, used in resolution error messages. */
@@ -132,6 +175,7 @@ interface ComposerPaths {
 }
 interface ResolvedComposerConfig {
     nativeEditing: NativeEditingConfig | undefined;
+    assistant: AssistantConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */
     workspaceRoot: string;
     /** Absolute path of the host config file, whether or not it exists. */
@@ -150,4 +194,4 @@ interface ComposerRuntime {
 declare function defineComposerConfig(config: ComposerConfig): ComposerConfig;
 
 export { defineComposerConfig };
-export type { ComposerConfig, ComposerConfigInput, ComposerConfigOverrides, ComposerPaths, ComposerRuntime, ComposerSettingDefaults, ComposerSettings, NativeEditingConfig, ResolvedComposerConfig };
+export type { AssistantConfig, ComposerConfig, ComposerConfigInput, ComposerConfigOverrides, ComposerPaths, ComposerRuntime, ComposerSettingDefaults, ComposerSettings, NativeEditingConfig, ResolvedComposerConfig };

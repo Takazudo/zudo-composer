@@ -1,0 +1,19 @@
+{
+  "proof": "actual-broad-editor-browser",
+  "browserExecution": "PASS",
+  "create": "fb369a1a-bea8-4205-8d00-1769e7ffdce5",
+  "addExisting": "faq-detached",
+  "snapshotA": "f876f95e-65e1-4f7e-b470-7ca6abfb5427",
+  "digestA": "6aea64310f9488d143c829aaef2783402284279e5449ed06bf6fdd4f2581be4b",
+  "snapshotB": "e37d8f73-fc85-4677-aa9c-1abcdfb68a16",
+  "digestB": "4177ca7b178e9002cf4b910a1dd5d7354f262672724ceca20a023d1721ab41b7",
+  "independentBrowserContexts": 2,
+  "checks": [
+    "real Markdown source/numeric/asset controls",
+    "real create/add/reorder",
+    "exact saved preview and Submit",
+    "durable B during A with backend restart",
+    "two baseline integrations",
+    "UI snapshots A/B no-JS ZFB/SG/iframe parity"
+  ]
+}
