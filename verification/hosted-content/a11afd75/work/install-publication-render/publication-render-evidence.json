@@ -1,0 +1,376 @@
+{
+  "installedToolSpec": "git+https://github.com/Takazudo/zudo-composer.git#a11afd7536616b1530d12dede5d4c1b8614f2a3f",
+  "installedToolSha": "a11afd7536616b1530d12dede5d4c1b8614f2a3f",
+  "node": "v22.22.0",
+  "publication": {
+    "node": "v22.22.0",
+    "provider": "fixture:approved-course-content",
+    "system": "persisted local synthetic remote, no live Git/API",
+    "assertions": 67,
+    "scenarios": [
+      "two-publications-existing-entry",
+      "two-publications-new-entry",
+      "export-failure-retains-draft",
+      "unavailable-and-stale-status",
+      "disabled-provider-and-forbidden-destination",
+      "independent-external-baseline-conflict"
+    ],
+    "traces": [
+      {
+        "scenario": "existing-entry",
+        "snapshotA": "b249dd90-71e7-414a-8ad8-103ec24aad85",
+        "digestA": "41d7f22e4be35f8fab80606471a699257b625d4cff17b67bbdd0d8d0558a76be",
+        "snapshotB": "f5dccb0d-a8d4-4c15-bcb0-b19557770f75",
+        "digestB": "5100063c742c7fe5288b0760d0a298c915ef5e878449ce6466b427850fb682f6",
+        "baseline1": {
+          "gitSha": "94cac353cc90eabd8f38f36301bfa15b32040f19",
+          "contentDigest": "41d7f22e4be35f8fab80606471a699257b625d4cff17b67bbdd0d8d0558a76be"
+        },
+        "baseline2": {
+          "gitSha": "71fe2238602b08ea1a055fff4521bebda2606e71",
+          "contentDigest": "5100063c742c7fe5288b0760d0a298c915ef5e878449ce6466b427850fb682f6"
+        },
+        "databaseReopenedBeforeReconciliation": true
+      },
+      {
+        "scenario": "new-entry",
+        "snapshotA": "82dca3b0-43e7-453d-ad65-77e0297af627",
+        "digestA": "e6bbd01ec15c01eefb1f53aeee5f8222dc72f2b8edc1cab3e27eb048a7a54e85",
+        "snapshotB": "069b3992-2b00-419a-b699-7cc54e3bac44",
+        "digestB": "fd3932073757a1a8d882c11a62debd81682a4508a0cb611b37f345b1bbf1de72",
+        "baseline1": {
+          "gitSha": "d62e69798131c8027643502dde909eedbb8e8b41",
+          "contentDigest": "e6bbd01ec15c01eefb1f53aeee5f8222dc72f2b8edc1cab3e27eb048a7a54e85"
+        },
+        "baseline2": {
+          "gitSha": "744174864840858056552f84ec359c736f5153ac",
+          "contentDigest": "fd3932073757a1a8d882c11a62debd81682a4508a0cb611b37f345b1bbf1de72"
+        },
+        "databaseReopenedBeforeReconciliation": true
+      }
+    ],
+    "downstreamD1": "not tested"
+  },
+  "cycles": [
+    {
+      "scenario": "existing-entry",
+      "cycle": "A",
+      "snapshotId": "b249dd90-71e7-414a-8ad8-103ec24aad85",
+      "digest": "41d7f22e4be35f8fab80606471a699257b625d4cff17b67bbdd0d8d0558a76be",
+      "draftRevision": "707d3b2e-05a1-4412-8e33-5e32e483d536",
+      "targetEntryId": "home",
+      "targetField": "title",
+      "exactMappedValue": "講座A",
+      "faqIds": [
+        "faq-initial"
+      ],
+      "image": {
+        "url": "/approved.svg",
+        "alt": "講座の写真",
+        "caption": "承認済み画像",
+        "versionId": "v1",
+        "checksum": "98341f749915a496670a188d1f6ae9d75a6401bf9ecfbb9a203e84519c4af692"
+      },
+      "checks": {
+        "realZfbStatic": "PASS",
+        "registeredSgStory": "PASS",
+        "exactCandidateMapping": "PASS",
+        "formattedMarkdownHeadingBoldSafeLink": "PASS",
+        "hostMarkdownUnsafeSourceRejection": "PASS",
+        "completeFaqMembershipAndOrder": "PASS",
+        "exactAssetPin": "PASS",
+        "exactEmittedAssetBytes": "PASS",
+        "sharedNeutralPreviewByteGraph": "PASS",
+        "browserRuntime": "NOT RUN"
+      },
+      "artifactDirectory": "/tmp/claude-0/hosted-consumer/work/install-publication-render/existing-entry-A",
+      "staticFiles": [
+        {
+          "path": "__zfb/routes.json",
+          "sha256": "f701c926fa44ccbb3998339827f2e88f4e3aab36d65838d4f9ae66def5fa7287"
+        },
+        {
+          "path": "approved-alternate.svg",
+          "sha256": "75e43e09733ec6c580840e22e0a2368fc4e7098e863f1b5e755f7fe428b5154f"
+        },
+        {
+          "path": "approved.svg",
+          "sha256": "98341f749915a496670a188d1f6ae9d75a6401bf9ecfbb9a203e84519c4af692"
+        },
+        {
+          "path": "assets/styles-aea4c9f8.css",
+          "sha256": "aea4c9f841d3484255b1fb6f0f0622d68a20d8a5215e519e32fe7e85a15a7dc3"
+        },
+        {
+          "path": "index.html",
+          "sha256": "0f0aaf60bbe488eccc7693ed6e8dc907e3abaa00e61e565d91e5385c49483292"
+        },
+        {
+          "path": "preview.html",
+          "sha256": "409f512b32554876aa81ed2222b9b8b62132a4d8dfce676850b30d7fd5828a9b"
+        },
+        {
+          "path": "preview.js",
+          "sha256": "1abea7e2ab6475b1d72e114f0e7f9610ae85effdc7fe2c4e77feb944183c7603"
+        },
+        {
+          "path": "review.html",
+          "sha256": "97a50611be522887d1b09a34ffcc1f1fd1412480b30027f354b5ab0d8e94bd09"
+        },
+        {
+          "path": "review.js",
+          "sha256": "64d230ee37b150c5700f02fd7ff6db81235ce4250687f3df532a16b40dc25479"
+        },
+        {
+          "path": "styleguide/index.html",
+          "sha256": "4cc2c2e9b879ac3553bf71bdf2375c1ce9641de2315d6f78a1a73931141fc4e1"
+        },
+        {
+          "path": "visitor.css",
+          "sha256": "c082e280c9d2c2ad8f9c1867607e19b2438d6af4443ca936638b354fce11055a"
+        }
+      ]
+    },
+    {
+      "scenario": "existing-entry",
+      "cycle": "B",
+      "snapshotId": "f5dccb0d-a8d4-4c15-bcb0-b19557770f75",
+      "digest": "5100063c742c7fe5288b0760d0a298c915ef5e878449ce6466b427850fb682f6",
+      "draftRevision": "f9c2aff7-eeb0-4001-ab2d-1f8019b3948f",
+      "targetEntryId": "home",
+      "targetField": "title",
+      "exactMappedValue": "講座B",
+      "faqIds": [
+        "faq-initial"
+      ],
+      "image": {
+        "url": "/approved.svg",
+        "alt": "講座の写真",
+        "caption": "承認済み画像",
+        "versionId": "v1",
+        "checksum": "98341f749915a496670a188d1f6ae9d75a6401bf9ecfbb9a203e84519c4af692"
+      },
+      "checks": {
+        "realZfbStatic": "PASS",
+        "registeredSgStory": "PASS",
+        "exactCandidateMapping": "PASS",
+        "formattedMarkdownHeadingBoldSafeLink": "PASS",
+        "hostMarkdownUnsafeSourceRejection": "PASS",
+        "completeFaqMembershipAndOrder": "PASS",
+        "exactAssetPin": "PASS",
+        "exactEmittedAssetBytes": "PASS",
+        "sharedNeutralPreviewByteGraph": "PASS",
+        "browserRuntime": "NOT RUN"
+      },
+      "artifactDirectory": "/tmp/claude-0/hosted-consumer/work/install-publication-render/existing-entry-B",
+      "staticFiles": [
+        {
+          "path": "__zfb/routes.json",
+          "sha256": "f701c926fa44ccbb3998339827f2e88f4e3aab36d65838d4f9ae66def5fa7287"
+        },
+        {
+          "path": "approved-alternate.svg",
+          "sha256": "75e43e09733ec6c580840e22e0a2368fc4e7098e863f1b5e755f7fe428b5154f"
+        },
+        {
+          "path": "approved.svg",
+          "sha256": "98341f749915a496670a188d1f6ae9d75a6401bf9ecfbb9a203e84519c4af692"
+        },
+        {
+          "path": "assets/styles-aea4c9f8.css",
+          "sha256": "aea4c9f841d3484255b1fb6f0f0622d68a20d8a5215e519e32fe7e85a15a7dc3"
+        },
+        {
+          "path": "index.html",
+          "sha256": "bab694b6cfb7f7156334fcbc70c108843586e4c753f422896bde606ceec7a3a5"
+        },
+        {
+          "path": "preview.html",
+          "sha256": "debf4ccfd340ecaa1cdcc5e56b7c91e82ffecfd4ddea328057b2fc7cb5c00e00"
+        },
+        {
+          "path": "preview.js",
+          "sha256": "1abea7e2ab6475b1d72e114f0e7f9610ae85effdc7fe2c4e77feb944183c7603"
+        },
+        {
+          "path": "review.html",
+          "sha256": "97a50611be522887d1b09a34ffcc1f1fd1412480b30027f354b5ab0d8e94bd09"
+        },
+        {
+          "path": "review.js",
+          "sha256": "b355b138b816061f3aebe1b5073c9a5764d5fac298a5ab94d765fa5009008ada"
+        },
+        {
+          "path": "styleguide/index.html",
+          "sha256": "a1fdd8cc9de14cd62b57881f333978bb892bb312ff2ce51fc5f87204150266c0"
+        },
+        {
+          "path": "visitor.css",
+          "sha256": "c082e280c9d2c2ad8f9c1867607e19b2438d6af4443ca936638b354fce11055a"
+        }
+      ]
+    },
+    {
+      "scenario": "new-entry",
+      "cycle": "A",
+      "snapshotId": "82dca3b0-43e7-453d-ad65-77e0297af627",
+      "digest": "e6bbd01ec15c01eefb1f53aeee5f8222dc72f2b8edc1cab3e27eb048a7a54e85",
+      "draftRevision": "7da1fe5f-e313-481c-a40c-3ba53af799de",
+      "targetEntryId": "e114b57d-e36c-418a-825b-327e9835c6ed",
+      "targetField": "question",
+      "exactMappedValue": "新規の質問A",
+      "faqIds": [
+        "faq-initial",
+        "e114b57d-e36c-418a-825b-327e9835c6ed"
+      ],
+      "image": {
+        "url": "/approved.svg",
+        "alt": "講座の写真",
+        "caption": "承認済み画像",
+        "versionId": "v1",
+        "checksum": "98341f749915a496670a188d1f6ae9d75a6401bf9ecfbb9a203e84519c4af692"
+      },
+      "checks": {
+        "realZfbStatic": "PASS",
+        "registeredSgStory": "PASS",
+        "exactCandidateMapping": "PASS",
+        "formattedMarkdownHeadingBoldSafeLink": "PASS",
+        "hostMarkdownUnsafeSourceRejection": "PASS",
+        "completeFaqMembershipAndOrder": "PASS",
+        "exactAssetPin": "PASS",
+        "exactEmittedAssetBytes": "PASS",
+        "sharedNeutralPreviewByteGraph": "PASS",
+        "browserRuntime": "NOT RUN"
+      },
+      "artifactDirectory": "/tmp/claude-0/hosted-consumer/work/install-publication-render/new-entry-A",
+      "staticFiles": [
+        {
+          "path": "__zfb/routes.json",
+          "sha256": "f701c926fa44ccbb3998339827f2e88f4e3aab36d65838d4f9ae66def5fa7287"
+        },
+        {
+          "path": "approved-alternate.svg",
+          "sha256": "75e43e09733ec6c580840e22e0a2368fc4e7098e863f1b5e755f7fe428b5154f"
+        },
+        {
+          "path": "approved.svg",
+          "sha256": "98341f749915a496670a188d1f6ae9d75a6401bf9ecfbb9a203e84519c4af692"
+        },
+        {
+          "path": "assets/styles-aea4c9f8.css",
+          "sha256": "aea4c9f841d3484255b1fb6f0f0622d68a20d8a5215e519e32fe7e85a15a7dc3"
+        },
+        {
+          "path": "index.html",
+          "sha256": "955c67b32aa073a704c1059ec4a3f480ed8ecf3eaabb1b4116c141b105e8e5de"
+        },
+        {
+          "path": "preview.html",
+          "sha256": "53068f65e328f8081dd0861159d24e3a9f45e74de49c123016c0743e28ed01d0"
+        },
+        {
+          "path": "preview.js",
+          "sha256": "1abea7e2ab6475b1d72e114f0e7f9610ae85effdc7fe2c4e77feb944183c7603"
+        },
+        {
+          "path": "review.html",
+          "sha256": "97a50611be522887d1b09a34ffcc1f1fd1412480b30027f354b5ab0d8e94bd09"
+        },
+        {
+          "path": "review.js",
+          "sha256": "407554874d992e1b339e23a6e2114e1b663d7884ed45f31843669d7994aae22e"
+        },
+        {
+          "path": "styleguide/index.html",
+          "sha256": "8fd74dfdebc8e9fc094ce79debe335b4a798fb3b4bbac18cd422339dc954d354"
+        },
+        {
+          "path": "visitor.css",
+          "sha256": "c082e280c9d2c2ad8f9c1867607e19b2438d6af4443ca936638b354fce11055a"
+        }
+      ]
+    },
+    {
+      "scenario": "new-entry",
+      "cycle": "B",
+      "snapshotId": "069b3992-2b00-419a-b699-7cc54e3bac44",
+      "digest": "fd3932073757a1a8d882c11a62debd81682a4508a0cb611b37f345b1bbf1de72",
+      "draftRevision": "1f8c0084-c81f-4f8e-9f09-9f7b30204504",
+      "targetEntryId": "e114b57d-e36c-418a-825b-327e9835c6ed",
+      "targetField": "question",
+      "exactMappedValue": "新規の質問B",
+      "faqIds": [
+        "faq-initial",
+        "e114b57d-e36c-418a-825b-327e9835c6ed"
+      ],
+      "image": {
+        "url": "/approved.svg",
+        "alt": "講座の写真",
+        "caption": "承認済み画像",
+        "versionId": "v1",
+        "checksum": "98341f749915a496670a188d1f6ae9d75a6401bf9ecfbb9a203e84519c4af692"
+      },
+      "checks": {
+        "realZfbStatic": "PASS",
+        "registeredSgStory": "PASS",
+        "exactCandidateMapping": "PASS",
+        "formattedMarkdownHeadingBoldSafeLink": "PASS",
+        "hostMarkdownUnsafeSourceRejection": "PASS",
+        "completeFaqMembershipAndOrder": "PASS",
+        "exactAssetPin": "PASS",
+        "exactEmittedAssetBytes": "PASS",
+        "sharedNeutralPreviewByteGraph": "PASS",
+        "browserRuntime": "NOT RUN"
+      },
+      "artifactDirectory": "/tmp/claude-0/hosted-consumer/work/install-publication-render/new-entry-B",
+      "staticFiles": [
+        {
+          "path": "__zfb/routes.json",
+          "sha256": "f701c926fa44ccbb3998339827f2e88f4e3aab36d65838d4f9ae66def5fa7287"
+        },
+        {
+          "path": "approved-alternate.svg",
+          "sha256": "75e43e09733ec6c580840e22e0a2368fc4e7098e863f1b5e755f7fe428b5154f"
+        },
+        {
+          "path": "approved.svg",
+          "sha256": "98341f749915a496670a188d1f6ae9d75a6401bf9ecfbb9a203e84519c4af692"
+        },
+        {
+          "path": "assets/styles-aea4c9f8.css",
+          "sha256": "aea4c9f841d3484255b1fb6f0f0622d68a20d8a5215e519e32fe7e85a15a7dc3"
+        },
+        {
+          "path": "index.html",
+          "sha256": "58984c2bd15d2bc36381d927a43ce6e5c9bd4057df528cb5d4e40951f2bcd724"
+        },
+        {
+          "path": "preview.html",
+          "sha256": "e4e890503acb73973a98614d03075b7f682b17992e0c1fbcdc9baed42ded628c"
+        },
+        {
+          "path": "preview.js",
+          "sha256": "1abea7e2ab6475b1d72e114f0e7f9610ae85effdc7fe2c4e77feb944183c7603"
+        },
+        {
+          "path": "review.html",
+          "sha256": "97a50611be522887d1b09a34ffcc1f1fd1412480b30027f354b5ab0d8e94bd09"
+        },
+        {
+          "path": "review.js",
+          "sha256": "207c5d3403a18525e09e585c00cb1290cb5c254b348afb6fdf0044b68dc668de"
+        },
+        {
+          "path": "styleguide/index.html",
+          "sha256": "09058bdc2d8e92964384ea3dfcd1f8c86ba354ff83c8f527a2cefb98cb52b6ef"
+        },
+        {
+          "path": "visitor.css",
+          "sha256": "c082e280c9d2c2ad8f9c1867607e19b2438d6af4443ca936638b354fce11055a"
+        }
+      ]
+    }
+  ],
+  "browser": "not executed by this Node/static proof; separate real browser acceptance required",
+  "system": "persisted local synthetic publication sink; no live Git/API publication or deployment"
+}
