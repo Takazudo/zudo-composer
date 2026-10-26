@@ -155,6 +155,7 @@
     "test:browser:assistant": "node scripts/verify-assistant-browser.mjs",
     "test:browser:assistant:live": "node scripts/verify-assistant-live.mjs",
     "test:browser:assistant:local-host": "node scripts/assistant/verify-local-host.mjs",
+    "test:browser:assistant:real-cli": "node scripts/assistant/verify-real-cli.mjs",
     "assistant:local": "node scripts/assistant/local-host.mjs",
     "assistant:claude-harness": "tsx scripts/assistant/claude-cli-harness.mjs",
     "assistant:codex-harness": "tsx scripts/assistant/codex-cli-harness.mjs",

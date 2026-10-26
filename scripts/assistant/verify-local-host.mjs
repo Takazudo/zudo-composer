@@ -4,63 +4,22 @@
 // launcher's 4178 or the 4175–4177 lanes). Real launcher process, real dev
 // server and real browser; serial by construction.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { clearTimeout } from "node:timers";
-import { fileURLToPath } from "node:url";
 import { chromium, expect } from "@playwright/test";
 import { frame, lastReply, send } from "./browser-helpers.mjs";
+import { freePort, launchLocalHost, runLauncherToExit as runToExit } from "./launch-local-host.mjs";
 
-const launcher = fileURLToPath(new URL("./local-host.mjs", import.meta.url));
 const temporary = await mkdtemp(join(tmpdir(), "assistant-local-host-"));
 const dir = join(temporary, "host");
 const log = (/** @type {string} */ line) => console.log(`local-host: ${line}`);
-const port = await new Promise((settle, reject) => {
-  const probe = createServer().once("error", reject).listen(0, "127.0.0.1", () => {
-    const address = probe.address();
-    probe.close(() => settle(typeof address === "object" && address ? address.port : 0));
-  });
-});
+const port = await freePort();
 const origin = `http://127.0.0.1:${port}`;
 const composition = join(dir, "cms/compositions/workspace-v1-native-proof/composition-home.composition.json");
 const markerOf = () => readFile(join(dir, ".zudo-local-host.json"), "utf8");
-
-/** Runs the launcher to completion (refusals). @param {string[]} args */
-function runToExit(args) {
-  return new Promise((settle) => {
-    const child = spawn(process.execPath, [launcher, ...args], { stdio: ["ignore", "pipe", "pipe"] });
-    let output = "";
-    child.stdout.on("data", chunk => { output += chunk; });
-    child.stderr.on("data", chunk => { output += chunk; });
-    child.once("close", code => settle({ code, output }));
-  });
-}
-
-/** Starts the launcher and resolves once it prints the URL. @param {string[]} args */
-async function launch(args) {
-  const child = spawn(process.execPath, [launcher, "--dir", dir, "--port", String(port), ...args], { stdio: ["ignore", "pipe", "pipe"] });
-  let output = "";
-  const closed = new Promise(settle => child.once("close", settle));
-  await new Promise((settle, reject) => {
-    const timer = setTimeout(() => reject(new Error(`launcher never printed its URL:\n${output}`)), 240_000);
-    const check = () => { if (/Ctrl\+C stops/.test(output)) { clearTimeout(timer); settle(undefined); } };
-    child.stdout.on("data", chunk => { output += chunk; check(); });
-    child.stderr.on("data", chunk => { output += chunk; });
-    closed.then(code => { clearTimeout(timer); reject(new Error(`launcher exited ${code} before ready:\n${output}`)); });
-  });
-  return {
-    output: () => output,
-    url: /Open:\s+(\S+)/.exec(output)?.[1] ?? "",
-    async stop() {
-      child.kill("SIGTERM");
-      const code = await closed;
-      assert.equal(code, 0, `launcher should stop cleanly:\n${output}`);
-    },
-  };
-}
+/** @param {string[]} args */
+const launch = args => launchLocalHost(["--dir", dir, "--port", String(port), ...args]);
 
 /** @type {import('@playwright/test').Browser | undefined} */
 let browser;
@@ -72,12 +31,12 @@ try {
   await mkdir(foreign);
   await writeFile(join(foreign, "keep.txt"), "not a local host");
   for (const args of [["--dir", foreign, "--reset"], ["--dir", foreign]]) {
-    const result = /** @type {{ code: number, output: string }} */ (await runToExit([...args, "--port", String(port)]));
+    const result = (await runToExit([...args, "--port", String(port)]));
     assert.notEqual(result.code, 0, result.output);
     assert.match(result.output, /Refusing to (reset|use)/);
   }
   assert.equal(await readFile(join(foreign, "keep.txt"), "utf8"), "not a local host");
-  const reserved = /** @type {{ code: number, output: string }} */ (await runToExit(["--dir", dir, "--port", "4177"]));
+  const reserved = (await runToExit(["--dir", dir, "--port", "4177"]));
   assert.notEqual(reserved.code, 0);
   assert.match(reserved.output, /reserved/);
   log("refused a foreign --reset/--dir and a reserved port");
