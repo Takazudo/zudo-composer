@@ -3,6 +3,7 @@
 // local workflow/actions, shell wrappers and JS/TS imports/command arguments.
 // Cloudflare commands must have statically provable dry-run arguments; opaque
 // Cloudflare wrappers and SDK/API calls are deliberately rejected.
+import { execFileSync } from "node:child_process";
 import { existsSync, globSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -532,7 +533,69 @@ export function checkNoDeploy({ root = resolve(import.meta.dirname, ".."), entri
   return { scripts: visitedScripts.size, sources: visitedSources.size, workflows: visitedWorkflows.size, commands: commands.size };
 }
 
+/**
+ * Prove that production delivery is stopped: the workflow has no automatic
+ * trigger, its guard runs from trusted main before any secret-bearing step,
+ * the switch on disk is "stopped", and both executable entry points refuse a
+ * fully valid event before any lookup, credential use or Wrangler call.
+ *
+ * @param {{ root?: string }} [options]
+ */
+export async function checkProductionDeliveryStopped({ root = resolve(import.meta.dirname, "..") } = {}) {
+  /** @type {(message: string) => never} */
+  const fail = (message) => { throw new Error(`Production-delivery stop assertion: ${message}`); };
+  const workflowFile = join(root, ".github/workflows/hosted-demo-deploy.yml");
+  const document = object(parse(readFileSync(workflowFile, "utf8"), { uniqueKeys: true }));
+  const triggers = document.on;
+  const triggerNames = typeof triggers === "string" ? [triggers] : Array.isArray(triggers) ? triggers.map(String) : Object.keys(object(triggers));
+  if (triggerNames.length !== 1 || triggerNames[0] !== "workflow_dispatch") fail(`hosted-demo-deploy.yml must be triggered only by workflow_dispatch, found ${JSON.stringify(triggerNames)}`);
+  const jobs = Object.entries(object(document.jobs));
+  if (jobs.length !== 1) fail("hosted-demo-deploy.yml must contain exactly one job");
+  const job = object(jobs[0][1]);
+  if (String(job.if ?? "").trim() !== "github.event_name == 'workflow_dispatch'") fail("deploy job must be reachable only from workflow_dispatch");
+  const steps = Array.isArray(job.steps) ? job.steps.map(object) : [];
+  const guardIndex = steps.findIndex((step) => typeof step.run === "string" && /\bscripts\/hosted-demo\/workflow-guard\.mjs\b/u.test(step.run));
+  if (guardIndex < 0) fail("deploy job has no workflow-guard step");
+  if (steps[guardIndex]["working-directory"] !== "trusted-main") fail("workflow-guard must run from the trusted-main checkout");
+  const trustedCheckout = steps.slice(0, guardIndex).find((step) => object(step.with).path === "trusted-main");
+  if (!trustedCheckout || object(trustedCheckout.with).ref !== "main") fail("trusted-main must be checked out from ref main before the guard");
+  const firstSecretStep = steps.findIndex((step) => /secrets\.CLOUDFLARE/u.test(JSON.stringify(step)));
+  if (firstSecretStep >= 0 && firstSecretStep < guardIndex) fail("a Cloudflare-secret step precedes the guard");
+
+  const stateModule = await import(pathToFileURL(join(root, "scripts/hosted-demo/delivery-state.mjs")).href);
+  if (stateModule.PRODUCTION_DELIVERY_STATE !== "stopped") fail(`delivery-state.mjs is ${JSON.stringify(stateModule.PRODUCTION_DELIVERY_STATE)}, not "stopped"`);
+
+  const sha = "a".repeat(40);
+  const repository = "Takazudo/zudo-composer";
+  const events = {
+    workflow_run: { GITHUB_EVENT_NAME: "workflow_run", HOSTED_DEMO_WORKFLOW_EVENT: "push", HOSTED_DEMO_HEAD_BRANCH: "main", HOSTED_DEMO_HEAD_REPOSITORY: repository, HOSTED_DEMO_CONCLUSION: "success", HOSTED_DEMO_HEAD_SHA: sha, HOSTED_DEMO_RUN_ID: "1" },
+    workflow_dispatch: { GITHUB_EVENT_NAME: "workflow_dispatch", HOSTED_DEMO_DISPATCH_SHA: sha, HOSTED_DEMO_DISPATCH_RUN_ID: "1" },
+  };
+  const { guardWorkflow } = await import(pathToFileURL(join(root, "scripts/hosted-demo/workflow-guard.mjs")).href);
+  for (const [name, fields] of Object.entries(events)) {
+    let reached = false;
+    const touch = async () => { reached = true; throw new Error("reached"); };
+    const error = await guardWorkflow({ GITHUB_REPOSITORY: repository, GITHUB_TOKEN: "token", ...fields }, { fetchImpl: touch, runCommand: touch }).then(() => undefined, (/** @type {unknown} */ caught) => caught);
+    if (reached) fail(`workflow-guard reached GitHub or git for a ${name} event`);
+    if (!(error instanceof Error) || error.message !== stateModule.PRODUCTION_DELIVERY_STOPPED_MESSAGE) fail(`workflow-guard accepted or misreported a ${name} event`);
+  }
+
+  // No credentials or PATH: even if the stop were missing, nothing could deploy.
+  let output = "";
+  try {
+    execFileSync(process.execPath, [join(root, "scripts/hosted-demo/deploy.mjs"), "--target", "doc"], { cwd: root, env: { HOSTED_DEMO_TARGET: "doc" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30_000 });
+    fail("deploy.mjs exited successfully while production delivery is stopped");
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Production-delivery stop assertion")) throw error;
+    const failure = /** @type {{ stderr?: string, stdout?: string }} */ (error);
+    output = `${failure.stdout ?? ""}${failure.stderr ?? ""}`;
+  }
+  if (!output.includes(stateModule.PRODUCTION_DELIVERY_STOPPED_MESSAGE)) fail("deploy.mjs did not refuse with the stopped-delivery message before deployment");
+  return { state: stateModule.PRODUCTION_DELIVERY_STATE, triggers: triggerNames, refusedEvents: Object.keys(events) };
+}
+
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   if (process.argv.length !== 2) throw new Error("Usage: check-no-deploy.mjs");
   console.log(`No-deploy assertion passed: ${JSON.stringify(checkNoDeploy())}`);
+  console.log(`Production delivery stop assertion passed: ${JSON.stringify(await checkProductionDeliveryStopped())}`);
 }

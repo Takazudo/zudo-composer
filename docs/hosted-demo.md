@@ -173,6 +173,19 @@ same form for any of the thirteen keys in the table above.
 
 ## Production rollout
 
+**Production delivery is currently stopped.** `scripts/hosted-demo/delivery-state.mjs`
+is `"stopped"`, the workflow below has no automatic trigger, and both
+`workflow-guard.mjs` (read from trusted `main`) and the `deploy.mjs` entry
+refuse every event before any run lookup, artifact access, credential use or
+Wrangler call. A run queued by an older copy of the workflow still reads the
+guard from current `main` and is refused. CI keeps building and verifying all
+thirteen artifacts. `pnpm no-deploy:check` asserts the stopped state: a
+dispatch-only trigger, the trusted-main guard ordering, the switch value, and
+a refusal from both entry points for a fully valid `workflow_run` and
+`workflow_dispatch` event. Re-enabling delivery is a separate owner-approved
+change that flips the switch, restores the trigger and updates that audit.
+The rest of this section describes the workflow as it runs once re-enabled.
+
 The production workflow is `.github/workflows/hosted-demo-deploy.yml`, run as
 a matrix of the thirteen targets above. A successful `main` run of `CI` is its
 only automatic trigger. Each matrix leg downloads the artifact whose name

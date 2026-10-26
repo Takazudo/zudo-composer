@@ -256,7 +256,12 @@ handling with an explicit `404-page` fallback. The target registry owns each
 Worker, config file, artifact directory, domain and verifier shape;
 `deploy.mjs`, `live-check.mjs` and `check-hosted-demo.mjs` are generic over
 that target, while `workflow-guard.mjs` validates the trusted run before
-artifact access. The production workflow is serialized per target and accepts
+artifact access. Production delivery is currently **stopped**:
+`scripts/hosted-demo/delivery-state.mjs` is `"stopped"`, the workflow has only
+a `workflow_dispatch` trigger, the trusted-main guard and the `deploy.mjs`
+entry refuse every event, and `pnpm no-deploy:check` asserts all of it.
+Re-enabling is a separate owner-approved change. Once re-enabled, the
+production workflow is serialized per target and accepts
 only a successful same-repository `main` CI run, its exact SHA-named artifact,
 and the current `main` head. It captures the active single-version
 deployment, performs a Wrangler dry run, uploads the verified directory with

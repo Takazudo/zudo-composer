@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { appendFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { assertProductionDeliveryEnabled } from "./delivery-state.mjs";
 
 const execFileAsync = promisify(execFile);
 const SHA_PATTERN = /^[a-f0-9]{40}$/;
@@ -88,8 +89,11 @@ export async function verifyMainHead({ expectedSha, runCommand = async (file, ar
   return mainSha;
 }
 
-/** @param {Record<string, string | undefined>} environment @param {{ fetchImpl?: typeof fetch, runCommand?: (file: string, args: string[]) => Promise<{ stdout: string }> }} [dependencies] */
+/** @param {Record<string, string | undefined>} environment @param {{ fetchImpl?: typeof fetch, runCommand?: (file: string, args: string[]) => Promise<{ stdout: string }>, deliveryState?: string }} [dependencies] */
 export async function guardWorkflow(environment, dependencies = {}) {
+  // Checked first, so no event shape (including a run queued by an older
+  // workflow file) reaches the run lookup or artifact selection while stopped.
+  assertProductionDeliveryEnabled(dependencies.deliveryState);
   const trusted = validateTrustedRun(environment);
   await verifyWorkflowRunApi({
     repository: trusted.repository,

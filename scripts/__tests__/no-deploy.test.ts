@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { checkNoDeploy, shellCommands } from "../check-no-deploy.mjs";
+import { checkNoDeploy, checkProductionDeliveryStopped, shellCommands } from "../check-no-deploy.mjs";
 import { discoverPackedHosts, packedHostMatrix } from "../packed-host-helpers.mjs";
 import { TARGET_KEYS, TARGETS } from "../hosted-demo/targets.mjs";
 
@@ -375,5 +375,49 @@ describe("CI and aggregate packed-host coverage", () => {
     const manifest = JSON.parse(await readFile(join(repositoryRoot, "package.json"), "utf8"));
     expect(shellCommands(manifest.scripts.check)).toContainEqual(["pnpm", "smoke:host-install"]);
     expect(shellCommands(manifest.scripts.check)[0]).toEqual(["pnpm", "no-deploy:check"]);
+  });
+});
+
+describe("production delivery stays stopped", () => {
+  async function stoppedFixture(workflow?: (text: string) => string, state?: string) {
+    const root = await mkdtemp(join(tmpdir(), "delivery-stop-test-"));
+    temporaries.push(root);
+    for (const path of [".github/workflows/hosted-demo-deploy.yml", "scripts/hosted-demo/delivery-state.mjs", "scripts/hosted-demo/workflow-guard.mjs"]) {
+      let text = await readFile(join(repositoryRoot, path), "utf8");
+      if (path.endsWith(".yml") && workflow) text = workflow(text);
+      if (path.endsWith("delivery-state.mjs") && state) text = text.replace('export const PRODUCTION_DELIVERY_STATE = "stopped";', `export const PRODUCTION_DELIVERY_STATE = "${state}";`);
+      await put(root, path, text);
+    }
+    // A stand-in deploy entry that would "deploy" if it were reached.
+    await put(root, "scripts/hosted-demo/deploy.mjs", 'import { assertProductionDeliveryEnabled } from "./delivery-state.mjs";\nassertProductionDeliveryEnabled();\nconsole.log("deployed");\n');
+    return root;
+  }
+
+  it("holds for the actual repository: dispatch-only trigger, trusted guard and refusing entry points", async () => {
+    await expect(checkProductionDeliveryStopped({ root: repositoryRoot })).resolves.toEqual({
+      state: "stopped",
+      triggers: ["workflow_dispatch"],
+      refusedEvents: ["workflow_run", "workflow_dispatch"],
+    });
+  });
+
+  it("rejects a restored automatic workflow_run trigger", async () => {
+    const root = await stoppedFixture((text) => text.replace("on:\n  workflow_dispatch:", "on:\n  workflow_run:\n    workflows: [CI]\n    types: [completed]\n  workflow_dispatch:"));
+    await expect(checkProductionDeliveryStopped({ root })).rejects.toThrow(/only by workflow_dispatch/);
+  });
+
+  it("rejects a guard that no longer runs from trusted main", async () => {
+    const root = await stoppedFixture((text) => text.replace("working-directory: trusted-main", "working-directory: ."));
+    await expect(checkProductionDeliveryStopped({ root })).rejects.toThrow(/trusted-main/);
+  });
+
+  it("rejects an enabled delivery switch", async () => {
+    const root = await stoppedFixture(undefined, "enabled");
+    await expect(checkProductionDeliveryStopped({ root })).rejects.toThrow(/not "stopped"/);
+  });
+
+  it("keeps the stopped workflow itself parseable with a single manual trigger", async () => {
+    const document = parse(await readFile(join(repositoryRoot, ".github/workflows/hosted-demo-deploy.yml"), "utf8"));
+    expect(Object.keys(document.on)).toEqual(["workflow_dispatch"]);
   });
 });
