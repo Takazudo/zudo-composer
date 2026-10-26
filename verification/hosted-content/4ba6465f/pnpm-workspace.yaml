@@ -1,0 +1,7 @@
+packages: []
+autoInstallPeers: false
+strictPeerDependencies: true
+allowBuilds:
+  '@zudo-composer/component-contract': true
+  esbuild: true
+  workerd: true

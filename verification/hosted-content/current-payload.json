@@ -1,6 +1,6 @@
 {
-  "packageOutputSha": "a11afd7536616b1530d12dede5d4c1b8614f2a3f",
-  "payloadSha256": "3ae3702534107331d30b0256ba55787c35830b6f8a050a1a7dd6f37638af10a6",
+  "packageOutputSha": "4ba6465f0dd49bf8351bcf7677387134b4422720",
+  "payloadSha256": "abc7bcc6c4e768ecbe13c0ea035564c41c8512306d52fb2c598291b5fea484f5",
   "rawPackageJsonSha256": "453c2ed3bf612ac87831823a56396168faabb01ca41d2aca597339a3cdd1e62c",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
@@ -30,9 +30,9 @@
     },
     {
       "path": "docs/assistant.md",
-      "bytes": 16753,
+      "bytes": 16849,
       "mode": 420,
-      "sha256": "b3073e793db967a4db7694e5cbbac1cbb2f70de24aa8873d5b802d899928c7d9"
+      "sha256": "679748c9c40f0616a36ed6b0059f3bedb18c9776d0f363ca4de427f9c1e4816c"
     },
     {
       "path": "docs/hosted-content.md",
@@ -450,15 +450,15 @@
     },
     {
       "path": "server/assistant/claude-cli-provider.ts",
-      "bytes": 14946,
+      "bytes": 15685,
       "mode": 420,
-      "sha256": "c9ba639b0baaf743bd56d5a2ff71944232b83206668dbaaa3b77ba4ec4b3e0c1"
+      "sha256": "28ee9d3a646f4ff553b2ae0458da20a6d83ea33c94cb80ad7aa4b62d5e17c2c1"
     },
     {
       "path": "server/assistant/cli-process.ts",
-      "bytes": 8684,
+      "bytes": 9371,
       "mode": 420,
-      "sha256": "211e369c89dedcf33788d1c8cd8feb7ddb2b863f955ec2835adada71c5b894ce"
+      "sha256": "bb20ded2392ef82718e16b1d85e65720d764ab455170cb123ac8d53acc74ce10"
     },
     {
       "path": "server/assistant/cli-provider.ts",
