@@ -20,8 +20,13 @@ import { ProviderError, type ProviderErrorCode } from "./provider";
  * https://code.claude.com/docs/en/headless.
  */
 
-/** Oldest accepted version: `--permission-prompts` needs 2.1.259 (`--restricted` 2.1.248, strict `--json-schema` 2.1.205). */
-export const CLAUDE_CLI_MIN_VERSION = "2.1.259";
+/**
+ * Oldest accepted version: the one whose restricted profile was verified with
+ * the real-binary harness. Changelog floors for the flags are older
+ * (`--permission-prompts` 2.1.259, `--restricted` 2.1.248), but untested
+ * versions are not assumed to behave the same.
+ */
+export const CLAUDE_CLI_MIN_VERSION = "2.1.310";
 
 /**
  * Options that must be listed by `claude --help` before Composer runs the CLI.
