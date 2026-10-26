@@ -2,13 +2,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startFakeMessagesApi } from "../../../scripts/fixtures/assistant/fake-messages-api.mjs";
 import { createAnthropicProvider } from "../anthropic-provider";
-import { parseAssistant } from "../../config/assistant";
+import { parseAssistant, type AnthropicAssistantConfig } from "../../config/assistant";
 
 let api: Awaited<ReturnType<typeof startFakeMessagesApi>>;
 beforeAll(async () => { api = await startFakeMessagesApi(); });
 afterAll(async () => { await api.close(); });
 
-const provider = () => createAnthropicProvider(parseAssistant({ baseUrl: api.url, apiKeyEnv: "ZUDO_ASSISTANT_TEST_KEY", effort: "high" })!, { ZUDO_ASSISTANT_TEST_KEY: "test-key", ANTHROPIC_BASE_URL: "http://127.0.0.1:9", ANTHROPIC_AUTH_TOKEN: "session-token" });
+const provider = () => createAnthropicProvider(parseAssistant({ baseUrl: api.url, apiKeyEnv: "ZUDO_ASSISTANT_TEST_KEY", effort: "high" }) as AnthropicAssistantConfig, { ZUDO_ASSISTANT_TEST_KEY: "test-key", ANTHROPIC_BASE_URL: "http://127.0.0.1:9", ANTHROPIC_AUTH_TOKEN: "session-token" });
 const request = (onText: (delta: string) => void = () => {}) => ({ system: "system", messages: [{ role: "user" as const, content: [{ type: "text" as const, text: "hi" }] }], tools: [{ name: "inspect_page", description: "d", inputSchema: { type: "object", properties: {} } }], signal: new AbortController().signal, onText });
 
 describe("Anthropic adapter", () => {

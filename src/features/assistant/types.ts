@@ -34,7 +34,7 @@ export interface ConversationSummary { id: string; title: string; updatedAt: str
 export interface RunEvent { seq: number; at: string; type: string; data: Record<string, unknown> }
 export interface RunRecord { id: string; conversationId: string; turnId: string; status: "running" | "completed" | "stopped" | "failed" | "interrupted"; error?: { code: string; message: string }; events: RunEvent[]; memory: UsedMemory | null }
 export interface AssistantStatus {
-  provider: { ok: true; provider: string; model: string } | { ok: false; code: string; message: string; model?: string };
+  provider: ({ ok: true } | { ok: false; code: string; message: string }) & { provider: string; label: string; model: string | null; version: string | null };
   siteName: string; botName: string; defaultName: string; permission: "apply" | "propose"; memory: MemoryView;
   destination: { provider: string; model: string; sends: string[] };
 }

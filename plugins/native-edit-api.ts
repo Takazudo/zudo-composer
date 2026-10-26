@@ -75,12 +75,12 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
   if (assistantConfig) {
     const [storeModule, runnerModule, providerModule, apiModule, inspectModule] = await Promise.all([
       server.ssrLoadModule(appModuleId("server/assistant/store.ts")), server.ssrLoadModule(appModuleId("server/assistant/runner.ts")),
-      server.ssrLoadModule(appModuleId("server/assistant/anthropic-provider.ts")), server.ssrLoadModule(appModuleId("plugins/assistant-api.ts")),
+      server.ssrLoadModule(appModuleId("server/assistant/provider-factory.ts")), server.ssrLoadModule(appModuleId("plugins/assistant-api.ts")),
       server.ssrLoadModule(appModuleId("server/edit/inspect.ts")),
     ]);
     const capture = () => inspectModule.captureHost({ config: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity });
     const store = await storeModule.openAssistantStore(context.composerConfig.paths.data);
-    const runner = runnerModule.createAssistantRunner({ store, service, provider: providerModule.createAnthropicProvider(assistantConfig), config: assistantConfig, lease, capture, siteName: (state: { workspace: { metadata: { name: string } } }) => state.workspace.metadata.name });
+    const runner = runnerModule.createAssistantRunner({ store, service, provider: providerModule.createModelProvider(assistantConfig), config: assistantConfig, lease, capture, siteName: (state: { workspace: { metadata: { name: string } } }) => state.workspace.metadata.name });
     assistantRunner = runner;
     const installed = apiModule.installAssistantApi(server, { service, store, runner, config: assistantConfig, lease, coordinator, capability, approvalCapability, peers, capture });
     assistant = { endpoint: installed.endpoint, name: assistantConfig.name };
@@ -148,7 +148,8 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
     config: { endpoint: "/__zudo-native-edit", capability, approvalCapability, pack: { packId: context.pack.manifest.packId, packVersion: context.pack.manifest.packVersion }, ...(assistant ? { assistant } : {}) },
     isProvider: (req: { url?: string }) => /^\/__zudo_composer_[a-z_]*provider$/.test(req.url ?? "") || req.url === "/__zudo-release",
     provider: (req: { headers: Record<string, unknown> }, action: () => unknown) => coordinator.provider(String(req.headers["x-zudo-native-client"] ?? ""), Number(req.headers["x-zudo-native-epoch"]), action),
-    close: () => { for (const watcher of watchers) watcher.close(); coordinator.close(); void assistantRunner?.stopAll(); },
+    // Awaited on shutdown so no CLI process tree outlives the authoring server.
+    close: async () => { for (const watcher of watchers) watcher.close(); coordinator.close(); await assistantRunner?.stopAll(); },
     drain: () => coordinator.drain(),
   };
 }

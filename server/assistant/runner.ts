@@ -7,7 +7,7 @@ import { resolvePage } from "../edit/inspect";
 import { operationRequestSchema, type PageRef } from "../edit/draft-model";
 import type { AssistantConfig } from "../config/assistant";
 import { AssistantError, type Suggestion, type AssistantScope, type AssistantStore, type ChatMessage, type MemoryChange, type MemoryProposal, type MessageContext, type RunEvent, type RunRecord, type UsedMemory } from "./store";
-import { ProviderError, type ModelProvider, type ProviderBlock, type ProviderMessage, type ToolSpec } from "./provider";
+import { MODEL_CALL_SENDS, ProviderError, type ModelProvider, type ProviderBlock, type ProviderMessage, type ToolSpec } from "./provider";
 import { CLIP_MARKER, catalogSummary, pageOutline } from "./context";
 
 const MAX_MODEL_CALLS = 10;
@@ -16,6 +16,8 @@ const RUN_DEADLINE_MS = 240_000;
 const HISTORY_MESSAGES = 24;
 const HISTORY_CHARACTERS = 40_000;
 const TOOL_RESULT_CHARACTERS = 40_000;
+/** Longer than a CLI process tree's SIGTERM→SIGKILL grace period. */
+const SETTLE_TIMEOUT_MS = 5_000;
 
 type Service = ReturnType<typeof createEditingService>;
 export interface RunnerOptions {
@@ -304,6 +306,8 @@ export function createAssistantRunner(options: RunnerOptions) {
     } finally { if (run.active) emit(run, "tool", { name, status: "done" }); }
     return { content: "Unhandled tool.", isError: true };
   };
+  // Waits (bounded) until a stopped run's provider call, including any CLI process tree, has ended.
+  const settle = (run: ActiveRun) => Promise.race([run.settled.catch(() => {}), new Promise<void>(resolve => setTimeout(resolve, SETTLE_TIMEOUT_MS).unref?.())]);
   const contexts = new Map<string, MessageContext>();
   const currentContext = async (run: ActiveRun) => contexts.get(run.record.id) ?? null;
 
@@ -333,6 +337,7 @@ export function createAssistantRunner(options: RunnerOptions) {
         const turn = await options.provider.turn({
           system: frame.system,
           messages: [...history(conversationMessages), ...transcript], tools: frame.tools, signal: run.controller.signal,
+          onActivity: activity => { if (run.active) emit(run, "status", { phase: "provider", activity: activity.slice(0, 200) }); },
           onText: delta => { if (!run.active) return; streamed += delta; run.text += delta; run.textBuffer += delta; run.flushTimer ??= setTimeout(() => flushText(run), 100); },
         });
         if (!run.active) return;
@@ -376,13 +381,15 @@ export function createAssistantRunner(options: RunnerOptions) {
     async status(workspaceId: string) {
       const { scope, capture } = await scopeFor(workspaceId);
       const settings = await options.store.settings(scope);
-      return { siteName: options.siteName(capture), provider: options.provider.status(), botName: settings.botName ?? options.config.name, defaultName: options.config.name, permission: options.config.permission, memory: settings.memory, destination: { provider: options.config.baseUrl === "https://api.anthropic.com" ? "Anthropic Messages API" : `Anthropic Messages API via ${new URL(options.config.baseUrl).host}`, model: options.config.model, sends: ["your message and recent conversation", "current page/selection ids and the blocks you ask it to inspect", "site Memory", "attached exact materials", "component definitions"] } };
+      const provider = await options.provider.status();
+      return { siteName: options.siteName(capture), provider, botName: settings.botName ?? options.config.name, defaultName: options.config.name, permission: options.config.permission, memory: settings.memory, destination: { provider: provider.label, model: provider.model ?? "the CLI's default model", sends: [...MODEL_CALL_SENDS] } };
     },
     async start(workspaceId: string, input: unknown) {
       const request = startSchema.parse(input);
       const { scope } = await scopeFor(workspaceId);
-      const providerStatus = options.provider.status();
+      const providerStatus = await options.provider.status();
       if (!providerStatus.ok) throw new AssistantError(providerStatus.code, providerStatus.message);
+      const { provider: providerKind, label, model, version } = providerStatus;
       const conversation = await options.store.conversation(scope, request.conversationId);
       const turnId = request.clientTurnId;
       const existing = conversation.messages.find(message => message.id === `user-${turnId}`);
@@ -400,7 +407,7 @@ export function createAssistantRunner(options: RunnerOptions) {
       const draft = await options.service.drafts.draft({ workspaceId });
       const record: RunRecord = {
         schemaVersion: 1, id: `run-${randomUUID()}`, scope, conversationId: conversation.id, turnId, status: "running", startedAt: new Date(clock()).toISOString(), events: [],
-        draft: { generation: draft.generation, draftId: draft.draft?.status === "open" ? draft.draft.id : null }, memory: null, model: options.config.model,
+        draft: { generation: draft.generation, draftId: draft.draft?.status === "open" ? draft.draft.id : null }, memory: null, model: model ?? "default", provider: { provider: providerKind, label, model, version },
       };
       const run: ActiveRun = { record, controller: new AbortController(), listeners: new Set(), active: true, textBuffer: "", text: "", allowedPages: [], clippedUnread: new Set(), operationIds: [], draftId: record.draft.draftId, proposals: [], remembered: [], suggestions: [], clarification: null, memory: null, settled: Promise.resolve() };
       active.set(record.id, run);
@@ -418,11 +425,14 @@ export function createAssistantRunner(options: RunnerOptions) {
       run.controller.abort();
       // Marked stopped immediately; late provider output and tools are ignored.
       await finish(run, "stopped");
+      await settle(run);
       return { status: "stopped" };
     },
     /** Stops every run of a workspace (Memory Clear, mode change, discard or site switch fences them). */
     async stopAll(predicate: (run: RunRecord) => boolean = () => true) {
-      for (const run of [...active.values()]) if (predicate(run.record)) { run.controller.abort(); await finish(run, "stopped"); }
+      const stopping = [...active.values()].filter(run => predicate(run.record));
+      for (const run of stopping) { run.controller.abort(); await finish(run, "stopped"); }
+      await Promise.all(stopping.map(settle));
     },
     async run(workspaceId: string, runId: string) {
       const { scope } = await scopeFor(workspaceId);

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { SafeRootFilesystem, commitDocument, type DurableExtraErrorCode } from "../../src/shared/node-fs";
+import type { ProviderIdentity } from "./provider";
 
 export class AssistantError extends Error {
   constructor(readonly code: string, message: string) { super(message); }
@@ -40,6 +41,8 @@ export interface RunRecord {
   schemaVersion: 1; id: string; scope: AssistantScope; conversationId: string; turnId: string; status: RunStatus;
   startedAt: string; endedAt?: string; error?: { code: string; message: string }; events: RunEvent[];
   draft: { generation: number; draftId: string | null }; memory: UsedMemory | null; model: string;
+  /** Provider identity and CLI version that produced this run. */
+  provider: ProviderIdentity;
 }
 export type ExactPayloadInput = { conversationId: string | null } & ({ kind: "text"; text: string } | { kind: "table"; columns: string[]; rows: string[][] } | { kind: "image"; assetId: string; alt: string });
 export type ExactPayloadRecord = ExactPayloadInput & { id: string; createdAt: string };

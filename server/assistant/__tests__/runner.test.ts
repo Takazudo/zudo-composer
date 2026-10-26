@@ -19,7 +19,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 type Script = (request: ProviderRequest, call: number) => Promise<ProviderTurn> | ProviderTurn;
-function fakeProvider(script: Script, status: ReturnType<ModelProvider["status"]> = { ok: true, provider: "fake", model: "fake-model" }) {
+function fakeProvider(script: Script, status: ReturnType<ModelProvider["status"]> = { ok: true, provider: "fake", label: "Scripted test provider", model: "fake-model", version: null }) {
   const requests: ProviderRequest[] = [];
   const provider: ModelProvider = { status: () => status, turn: async request => { requests.push({ ...request, messages: structuredClone(request.messages) }); return script(request, requests.length); } };
   return { provider, requests };
@@ -163,7 +163,7 @@ describe("restricted Assistant runner", () => {
     expect(again).toMatchObject({ runId: first.runId, duplicate: true });
     expect((await store.conversation(scope, conversation.id)).messages.filter(message => message.role === "user")).toHaveLength(1);
 
-    const missing = await fixture(() => text("never"), { ok: false, code: "missing-credential", message: "ANTHROPIC_API_KEY is not set" });
+    const missing = await fixture(() => text("never"), { ok: false, code: "missing-credential", message: "ANTHROPIC_API_KEY is not set", provider: "anthropic", label: "Anthropic Messages API", model: "claude-opus-5-5", version: null });
     const other = await missing.store.createConversation(missing.scope);
     await expect(missing.runner.start("proof", { conversationId: other.id, clientTurnId: turn(), text: "Hi", context })).rejects.toMatchObject({ code: "missing-credential" });
     expect((await missing.store.conversation(missing.scope, other.id)).messages).toEqual([]);

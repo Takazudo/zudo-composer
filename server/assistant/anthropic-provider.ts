@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { AssistantConfig } from "../config/assistant";
+import type { AnthropicAssistantConfig } from "../config/assistant";
 import { ProviderError, type ModelProvider, type ProviderBlock, type ProviderRequest, type ProviderTurn } from "./provider";
 
 const MAX_OUTPUT_TOKENS = 16_000;
@@ -9,7 +9,7 @@ const REQUEST_TIMEOUT_MS = 120_000;
  * Anthropic Messages API adapter. The credential is read from the configured
  * server-side environment variable at call time and never leaves this module.
  */
-export function createAnthropicProvider(config: AssistantConfig, env: NodeJS.ProcessEnv = process.env): ModelProvider {
+export function createAnthropicProvider(config: AnthropicAssistantConfig, env: NodeJS.ProcessEnv = process.env): ModelProvider {
   let client: Anthropic | undefined, clientKey: string | undefined;
   const credential = () => env[config.apiKeyEnv]?.trim() || undefined;
   const connect = () => {
@@ -41,8 +41,9 @@ export function createAnthropicProvider(config: AssistantConfig, env: NodeJS.Pro
   };
   return {
     status() {
-      if (!credential()) return { ok: false, code: "missing-credential", message: `The Assistant is configured for Anthropic (${config.model}), but ${config.apiKeyEnv} is not set for the authoring server.`, provider: "anthropic", model: config.model };
-      return { ok: true, provider: "anthropic", model: config.model };
+      const identity = { provider: "anthropic" as const, label: config.baseUrl === "https://api.anthropic.com" ? "Anthropic Messages API" : `Anthropic Messages API via ${new URL(config.baseUrl).host}`, model: config.model, version: null };
+      if (!credential()) return { ok: false, code: "missing-credential", message: `The Assistant is configured for Anthropic (${config.model}), but ${config.apiKeyEnv} is not set for the authoring server.`, ...identity };
+      return { ok: true, ...identity };
     },
     async turn(request: ProviderRequest): Promise<ProviderTurn> {
       try {
