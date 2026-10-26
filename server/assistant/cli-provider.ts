@@ -23,6 +23,12 @@ export interface CliStreamParser {
 export interface CliProtocol {
   provider: CliAssistantConfig["provider"];
   label: string;
+  /**
+   * Inherited variables never passed to this CLI, e.g. an Anthropic API key
+   * the server holds for the API provider. Composer's own ZUDO_ASSISTANT_*
+   * variables are always withheld.
+   */
+  excludedEnv?: readonly string[];
   probe(config: CliAssistantConfig, env: NodeJS.ProcessEnv): Promise<CliProbe>;
   prepare(context: { config: CliAssistantConfig; scratch: string; schema: Record<string, unknown>; version: string }): Promise<{ args: string[]; env?: Record<string, string> }>;
   createParser(): CliStreamParser;
@@ -35,7 +41,9 @@ const STATUS_TTL_MS = 30_000;
  * stdin, restricted profile, scratch working directory, and Composer-side
  * validation of every reply. An unavailable CLI is reported, never replaced.
  */
-export function createCliProvider(config: CliAssistantConfig, protocol: CliProtocol, base: NodeJS.ProcessEnv = process.env): ModelProvider {
+export function createCliProvider(config: CliAssistantConfig, protocol: CliProtocol, inherited: NodeJS.ProcessEnv = process.env): ModelProvider {
+  const excluded = new Set(protocol.excludedEnv ?? []);
+  const base = Object.fromEntries(Object.entries(inherited).filter(([key]) => !excluded.has(key) && !key.startsWith("ZUDO_ASSISTANT_")));
   let cached: { at: number; status: ProviderStatus } | undefined;
   let pending: Promise<ProviderStatus> | undefined;
   const identity = (version: string | null) => ({ provider: protocol.provider, label: protocol.label, model: config.model, version });
