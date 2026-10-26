@@ -175,7 +175,10 @@
     "hosted:check": "node scripts/build-hosted-entries.mjs --check && pnpm exec vitest run src/hosted-content && node scripts/check-hosted-boundary.mjs",
     "hosted:durable": "node fixtures/hosted-content-consumer/durable-proof.mjs && node fixtures/hosted-content-consumer/publication-proof.mjs",
     "hosted:install": "node scripts/install-hosted-consumer.mjs",
-    "hosted:installed": "node scripts/verify-hosted-consumer.mjs"
+    "hosted:installed": "node scripts/verify-hosted-consumer.mjs",
+    "hosted:local:prepare": "node fixtures/hosted-content-consumer/local.mjs --prepare",
+    "hosted:local": "node fixtures/hosted-content-consumer/local.mjs",
+    "hosted:local:proof": "node fixtures/hosted-content-consumer/local-proof.mjs && node fixtures/hosted-content-consumer/local-browser-proof.mjs"
   },
   "peerDependencies": {
     "@zudo-composer/component-contract": "^1.0.0",

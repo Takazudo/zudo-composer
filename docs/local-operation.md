@@ -39,6 +39,42 @@ providers `--executable <name|/abs/path>`, `--model <id>`,
 The Assistant UI, provider selection, CLI profiles and troubleshooting are
 described in [AI Assistant](./assistant.md).
 
+## Hosted Content host
+
+```sh
+corepack pnpm hosted:local:prepare   # once, needs network: installs the real renderer host
+corepack pnpm hosted:local           # every time; never installs anything
+corepack pnpm hosted:local -- --dir <path> --port <n>   # default 127.0.0.1:4179
+```
+
+- It uses the public Hosted Content service with a real SQLite file over
+  loopback HTTP, the published editor, and the **real renderer**
+  (`fixtures/hosted-content-consumer/renderer/`, ZFB + zudo-sg) installed by
+  the existing `scripts/install-hosted-consumer.mjs`. Preparation installs it
+  into `.zudo-local/renderer-host/<sha12>/` at the merge-base commit and
+  refuses one whose hosted-content code differs from your checkout; a normal
+  start refuses a missing or stale installation and prints the prepare
+  command.
+- In the browser: edit and **Save**, review the **exact saved snapshot** in
+  the real renderer's preview, **Generate local artifact**, then open it.
+  Each artifact is a real ZFB build of that immutable snapshot, stored under
+  `.zudo-local/hosted-content/artifacts/<publication>/` with a manifest that
+  links publication, snapshot, digest, operation and renderer, and opened at
+  `/local-artifacts/<publication>/` (each artifact is served on its own
+  loopback origin). It is labelled a local artifact and is never live,
+  production or deployed.
+- **Data:** `.zudo-local/hosted-content/` holds `content.sqlite`, the local
+  publication sink (`publication/remote.json`) and the artifacts. Identity
+  (a fixed local actor), storage, renderer and publisher are chosen in one
+  composition root (`local/host.mjs`); core and UI have no local/production
+  branches.
+- Saving while a publication builds does not change that publication; a
+  restart, lost acknowledgement, failed build or stale notification resumes
+  from the persisted facts without duplicating the operation. `--reset` is
+  the only way to delete local data and refuses folders it did not create.
+- Proofs: `corepack pnpm hosted:local:proof` (after preparation; needs
+  Chromium).
+
 ## Kinds of evidence
 
 | Kind | Talks to | Proves | Does not prove |
