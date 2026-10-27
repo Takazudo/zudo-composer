@@ -1,0 +1,288 @@
+{
+  "installedToolSha": "0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+  "node": "v24.22.1",
+  "packageManager": "pnpm@11.5.2",
+  "contractSha": "c0b452da075b66757c60bd0d721a47062d4354d0",
+  "contractProtocol": 2,
+  "peerPreact": "10.29.8",
+  "commands": [
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "/home/user/zudo-composer/scripts/install-hosted-consumer.mjs",
+        "0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e"
+      ],
+      "cwd": "/home/user/zudo-composer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/work/install-browser-bundle"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/work/install-browser-transport.sqlite",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/work/install-browser-transport"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/work/install-render.sqlite"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/work/install-publication-render"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/renderer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/work/frozen-browser-bundle"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/work/frozen-browser-transport.sqlite",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/work/frozen-browser-transport"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/work/frozen-render.sqlite"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/work/frozen-publication-render"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "playwright",
+        "install",
+        "--with-deps",
+        "chromium"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "browser-proof.mjs",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/work/browser.sqlite"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    },
+    {
+      "command": "/tmp/claude-0/node-v24.22.1-linux-x64/bin/node",
+      "args": [
+        "browser-broad-proof.mjs",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/work/browser-broad.sqlite",
+        "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e/work/browser-broad"
+      ],
+      "cwd": "/tmp/claude-0/hc-installed-0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
+      "outcome": "passed"
+    }
+  ],
+  "payloadSha256": "b629d620be47beaa93d4eb9bc45c896d6a5c53a13e2a0d03dfa0098045219b13",
+  "lockDigests": {
+    "package.json": "584cc9c31add7fbe6944554d93203c7c0903270cd7b6c42d0bd1a1382db49a8e",
+    "pnpm-lock.yaml": "60cec9e50998097bfc383f85281d067b42095710ae4d758e7803e6ebf29d7bea",
+    "renderer/package.json": "10bed7191cdc419c7c4c5fbf6eea792bad118451ef941d3465763d02ddf4e9ce",
+    "renderer/pnpm-lock.yaml": "93dc802243f168dd96ab87e5ff7592bd1c690f41a6b9fd4e42fda74fb456d018"
+  },
+  "independentInstall": "passed",
+  "frozenReinstall": "passed",
+  "worker": "passed",
+  "browserBundle": "passed",
+  "nodeBoundary": "passed",
+  "sqlite": "passed",
+  "httpTransport": "passed",
+  "staticRenderer": "passed",
+  "browser": "passed"
+}
