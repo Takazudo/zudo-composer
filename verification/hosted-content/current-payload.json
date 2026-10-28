@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "0ab0e49f4edddf22666d7b72a5e3f0f4669ffd4e",
-  "payloadSha256": "c3c820f5bb248197ecef9dc955a138c8eb49c7f4e55c497bbb948aaf37cef9da",
-  "rawPackageJsonSha256": "13f8d8385081087e4d2f4fb9199cf5301b2401f5c1dc5c8905717fde1cb40593",
+  "packageOutputSha": "79635a7c1d40c44f9f5213ee9ad549bfb4aaf0e1",
+  "payloadSha256": "1dd43f5fd90cb6e8736b82979a97c980414854039f76966dd9c1ddfd9bfbb813",
+  "rawPackageJsonSha256": "4b90fcc9b8d966fc6210d66b891b10a1e1cb5f4c06fa0e5810614db7d2cdda69",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -12,9 +12,9 @@
     },
     {
       "path": "README.md",
-      "bytes": 41106,
+      "bytes": 41243,
       "mode": 420,
-      "sha256": "355fd5b1fb2c0cda88e9def95f5fb051ec6f79f1532dc1c70985daaf88946a3e"
+      "sha256": "ed438270fc22760be27c6ddce81de051bbb9ec0c9d0a57bc25a68bc8b9c3255f"
     },
     {
       "path": "bin/zudo-composer.mjs",
@@ -30,9 +30,9 @@
     },
     {
       "path": "docs/assistant.md",
-      "bytes": 16849,
+      "bytes": 17279,
       "mode": 420,
-      "sha256": "679748c9c40f0616a36ed6b0059f3bedb18c9776d0f363ca4de427f9c1e4816c"
+      "sha256": "25ce5d151c4f527783c6b0acc4c8b3d1fdaf3d283985042423398c657fb9a884"
     },
     {
       "path": "docs/hosted-content.md",
@@ -1044,9 +1044,9 @@
     },
     {
       "path": "server/site-project-local/pack-source-graph.ts",
-      "bytes": 14780,
+      "bytes": 16563,
       "mode": 420,
-      "sha256": "8ea0ca97ee32a793b8b6f5a224a691141bca4f773be587a7ea47530037f8def2"
+      "sha256": "5e18ebce8b11d9f54f992a855be00c6e8d55cd83a7adb906ba4ab5f6591074cd"
     },
     {
       "path": "server/site-project-local/seed.ts",
