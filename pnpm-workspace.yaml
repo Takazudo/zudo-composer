@@ -26,17 +26,8 @@ allowBuilds:
 # `pnpm clean --lockfile` clears that error but re-resolves every `^` range in
 # the repo, which is a much wider change than the bump itself.
 minimumReleaseAgeExclude:
-  - '@takazudo/zudo-doc@9.0.0'
-  - '@takazudo/zudo-doc-history-server@9.0.0'
-  - '@takazudo/zfb@5.1.5'
-  - '@takazudo/zfb-darwin-arm64@5.1.5'
-  - '@takazudo/zfb-darwin-x64@5.1.5'
-  - '@takazudo/zfb-linux-arm64-gnu@5.1.5'
-  - '@takazudo/zfb-linux-x64-gnu@5.1.5'
-  - '@takazudo/zfb-md-wasm@5.1.5'
-  - '@takazudo/zfb-runtime@5.1.5'
-  - '@takazudo/zfb-slugify@5.1.5'
-  - '@takazudo/zfb-win32-x64-msvc@5.1.5'
+  - '@takazudo/zudo-doc@9.1.0'
+  - '@takazudo/zudo-doc-history-server@9.1.0'
   - '@cloudflare/workerd-darwin-64@1.20261006.1'
   - '@cloudflare/workerd-darwin-arm64@1.20261006.1'
   - '@cloudflare/workerd-linux-64@1.20261006.1'
