@@ -8,6 +8,8 @@ const preset = zudoDoc({
   base: "/",
   port: 4398,
   mermaid: false,
+  // zudo-doc 9 renders Graphite when themePack is omitted; keep Classic.
+  themePack: "default",
   strictContentBridge: true,
   // Bundling follows `bundleZdtp ?? designTokenPanel`; this host never
   // sets `designTokenPanel`, so without this the zdtp loader resolves to
