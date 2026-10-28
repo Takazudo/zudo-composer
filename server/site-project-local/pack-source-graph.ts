@@ -1,4 +1,4 @@
-import { readFile, realpath } from "node:fs/promises";
+import { readFile, readdir, realpath } from "node:fs/promises";
 import { isBuiltin } from "node:module";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { BuildEnvironment, createIdResolver, parseAst, resolveConfig, transformWithOxc } from "vite";
@@ -85,6 +85,7 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
   const attestedFiles = new Set<string>();
   const dependencies = new Map<string, PackSourceDependency>();
   const followed = new Set<string>();
+  const widened = new Set<string>();
   const queue: string[] = [];
 
   async function admit(resolvedId: string, from: string, follow: boolean): Promise<void> {
@@ -161,11 +162,35 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
     await admitRoot(splitQuery(resolvedId)[0], `source.module "${specifier}"`);
   }
 
+  // An installed file whose loads cannot be proven statically (a computed
+  // `import()` in a WASM loader, say) widens the editing attestation to every
+  // byte of its own installed package. Host-owned source still fails closed.
+  async function widenToPackage(file: string, reason: string): Promise<void> {
+    const segments = file.split(sep);
+    const modulesIndex = segments.lastIndexOf("node_modules");
+    if (!options.attestExternalFiles || modulesIndex === -1) fail(reason);
+    const scoped = segments[modulesIndex + 1]?.startsWith("@") ?? false;
+    const packageDir = segments.slice(0, modulesIndex + (scoped ? 3 : 2)).join(sep);
+    if (widened.has(packageDir)) return;
+    widened.add(packageDir);
+    const walk = async (directory: string): Promise<void> => {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        if (entry.name === "node_modules") continue;
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) await walk(path);
+        else if (entry.isFile()) attestedFiles.add(await realpath(path));
+      }
+    };
+    await walk(packageDir);
+  }
+
   while (queue.length > 0) {
     const file = queue.shift()!;
     const extension = extname(file);
     if (SCRIPT_EXTENSIONS.has(extension)) {
-      for (const specifier of await scriptSpecifiers(file, hostRoot)) {
+      const { specifiers, unprovable } = await scriptSpecifiers(file, hostRoot);
+      if (unprovable !== undefined) await widenToPackage(file, unprovable);
+      for (const specifier of specifiers) {
         await admitSpecifier(specifier.value, file, specifier.relativeToFile ? relativeFileResolver(file) : resolveScript);
       }
     } else if (extension === ".css") {
@@ -197,7 +222,7 @@ function relativeFileResolver(importer: string): Resolver {
   return async (specifier) => resolve(dirname(importer), specifier);
 }
 
-async function scriptSpecifiers(file: string, hostRoot: string): Promise<{ value: string; relativeToFile: boolean }[]> {
+async function scriptSpecifiers(file: string, hostRoot: string): Promise<{ specifiers: { value: string; relativeToFile: boolean }[]; unprovable?: string }> {
   const source = await readFile(file, "utf8");
   const extension = extname(file);
   const where = relative(hostRoot, file).split(sep).join("/");
@@ -211,6 +236,9 @@ async function scriptSpecifiers(file: string, hostRoot: string): Promise<{ value
     fail(`${where} cannot be parsed: ${error instanceof Error ? error.message : String(error)}`);
   }
   const found: { value: string; relativeToFile: boolean }[] = [];
+  // The caller decides whether an unprovable load fails or widens the attestation.
+  let unprovable: string | undefined;
+  const refuse = (reason: string) => { unprovable ??= reason; };
   visit(program, (node) => {
     switch (node.type) {
       case "ImportDeclaration":
@@ -222,7 +250,7 @@ async function scriptSpecifiers(file: string, hostRoot: string): Promise<{ value
       }
       case "ImportExpression": {
         const value = literalString(node.source);
-        if (value === undefined) fail(`${where} has a dynamic import() whose specifier is not a string literal.`);
+        if (value === undefined) { refuse(`${where} has a dynamic import() whose specifier is not a string literal.`); break; }
         found.push({ value, relativeToFile: false });
         break;
       }
@@ -230,14 +258,14 @@ async function scriptSpecifiers(file: string, hostRoot: string): Promise<{ value
         const callee = node.callee as Node;
         if (callee.type === "Identifier" && callee.name === "require") {
           const value = literalString((node.arguments as Node[])[0]);
-          if (value === undefined) fail(`${where} has a require() whose specifier is not a string literal.`);
+          if (value === undefined) { refuse(`${where} has a require() whose specifier is not a string literal.`); break; }
           found.push({ value, relativeToFile: false });
         }
         break;
       }
       case "MemberExpression":
         if (isImportMeta(node.object) && propertyName(node) !== undefined && propertyName(node)!.startsWith("glob")) {
-          fail(`${where} uses import.meta.${propertyName(node)}, whose matches cannot be attested statically.`);
+          refuse(`${where} uses import.meta.${propertyName(node)}, whose matches cannot be attested statically.`);
         }
         break;
       case "NewExpression": {
@@ -245,14 +273,14 @@ async function scriptSpecifiers(file: string, hostRoot: string): Promise<{ value
         const args = node.arguments as Node[];
         if (callee.type === "Identifier" && callee.name === "URL" && args.length >= 2 && isImportMetaUrl(args[1])) {
           const value = literalString(args[0]);
-          if (value === undefined) fail(`${where} has new URL(…, import.meta.url) whose first argument is not a string literal.`);
+          if (value === undefined) { refuse(`${where} has new URL(…, import.meta.url) whose first argument is not a string literal.`); break; }
           found.push({ value, relativeToFile: true });
         }
         break;
       }
     }
   });
-  return found;
+  return { specifiers: found, unprovable };
 }
 
 function visit(node: unknown, onNode: (node: Node) => void): void {

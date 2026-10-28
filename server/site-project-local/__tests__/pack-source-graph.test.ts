@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { collectPackSourceGraph } from "../pack-source-graph";
@@ -176,6 +176,26 @@ describe("collectPackSourceGraph", () => {
     const root = await host({ "pack.ts": source });
     await writeFile(join(root, "..", "outside.ts"), "export {};\n");
     await expect(collect(root)).rejects.toThrow(message);
+  });
+
+  it("attests a whole installed package whose loads cannot be proven, for editing", async () => {
+    const root = await host({
+      "node_modules/@scope/wasm/package.json": JSON.stringify({ name: "@scope/wasm", version: "5.1.5", exports: "./index.js" }),
+      "node_modules/@scope/wasm/index.js": 'export const load = (specifier) => import(specifier);\nexport const glue = new URL("./glue.mjs", import.meta.url);\n',
+      "node_modules/@scope/wasm/glue.mjs": "export {};\n",
+      "node_modules/@scope/wasm/wasm/unreached.wasm": "bytes",
+      "node_modules/@scope/wasm/node_modules/nested/index.js": "export {};\n",
+      "pack.ts": 'import { load } from "@scope/wasm";\nexport { load };\n',
+    });
+    const graph = await collectPackSourceGraph({ hostRoot: root, entryPath: join(root, "pack.ts"), sourceModules: [], attestExternalFiles: true });
+    const installed = (graph.attestedFiles ?? []).map(path => path.split(sep).join("/")).filter(path => path.includes("/@scope/wasm/")).map(path => path.split("/@scope/wasm/")[1]);
+    expect(installed.sort()).toEqual(["glue.mjs", "index.js", "package.json", "wasm/unreached.wasm"]);
+    expect(graph.dependencies).toContainEqual({ name: "@scope/wasm", version: "5.1.5" });
+  });
+
+  it("still fails closed on an unprovable load in host-owned source while attesting installed files", async () => {
+    const root = await host({ "pack.ts": "const name = './x'; export const load = () => import(name);" });
+    await expect(collectPackSourceGraph({ hostRoot: root, entryPath: join(root, "pack.ts"), sourceModules: [], attestExternalFiles: true })).rejects.toThrow(/dynamic import\(\)/);
   });
 
   it("fails closed on a CSS escape and on a symlink leaving the host", async () => {

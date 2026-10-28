@@ -18,13 +18,13 @@ const repo = fileURLToPath(new URL("../..", import.meta.url));
 /**
  * One row per demo. `find`/`replace` target a real editable Composition field on
  * Home. `shared` is visible Home text from the locked shared site-frame template
- * and `owned` a Content value delivered through Mapping; the Assistant must not
- * be able to change either.
- * @typedef {{ host: "sample" | "landing" | "blog" | "webshop", name: string, pack: string, home: { sitemapId: string, pageId: string }, heading: string, token: string, find: string, replace: string, shared: string, owned: string }} Demo
+ * (Sample's frame has none) and `owned` a Content value delivered through
+ * Mapping; the Assistant must not be able to change either.
+ * @typedef {{ host: "sample" | "landing" | "blog" | "webshop", name: string, pack: string, home: { sitemapId: string, pageId: string }, heading: string, token: string, find: string, replace: string, shared: string | null, owned: string }} Demo
  * @type {readonly Demo[]}
  */
 export const LOCAL_DEMOS = Object.freeze([
-  { host: "sample", name: "Sample Studio", pack: "@zudo-composer/ui/composer-pack", home: { sitemapId: "sample-studio-sitemap", pageId: "home-node" }, heading: "Clear ideas, carefully shaped", token: "--palette-neutral-0", find: "Clear ideas, carefully shaped", replace: "Clear ideas, shaped together", shared: "SAMPLE_SHARED", owned: "SAMPLE_OWNED" },
+  { host: "sample", name: "Sample Studio", pack: "@zudo-composer/ui/composer-pack", home: { sitemapId: "sample-studio-sitemap", pageId: "home-node" }, heading: "Clear ideas, carefully shaped", token: "--palette-neutral-0", find: "Clear ideas, carefully shaped", replace: "Clear ideas, shaped together", shared: null, owned: "A studio built around useful clarity" },
   { host: "landing", name: "Orrery", pack: "demo-landing/components", home: { sitemapId: "demo-landing-sitemap", pageId: "home-node" }, heading: "Every moving part of your week", token: "--land-palette-gray-0", find: "Plan next week in ten minutes", replace: "Plan next week in five minutes", shared: "A fictional product for a demo site.", owned: "Which calendars does Orrery work with?" },
   { host: "blog", name: "Margin Notes", pack: "demo-blog/components", home: { sitemapId: "margin-notes-sitemap", pageId: "home" }, heading: "Notes from the margin", token: "--blog-palette-gray-0", find: "The Sunday note", replace: "The Saturday note", shared: "Margin Notes is a two-author journal", owned: "A desk with one thing on it" },
   { host: "webshop", name: "Nightjar Supply", pack: "demo-webshop/components", home: { sitemapId: "nightjar-supply-sitemap", pageId: "home" }, heading: "Letters from the shelf", token: "--shop-palette-gray-0", find: "Letters from the shelf", replace: "Letters from the workbench", shared: "Nightjar Supply is a demo shop.", owned: "Brass Rule 30 cm" },
@@ -85,7 +85,7 @@ export async function firstRun(browser, { dir, port, demo, log }) {
       assert.equal(response.status, 200, record.document.versions[0].url);
       assert.match(response.headers.get("content-type") ?? "", /^image\//u);
     }
-    await expect(current.getByText(demo.shared).first()).toBeVisible();
+    if (demo.shared) await expect(current.getByText(demo.shared).first()).toBeVisible();
     log(`${demo.name}: Home rendered with the real pack, styles and ${catalog.records.length} managed assets`);
 
     await send(page, `remember: ${demo.name} memory marker.`);
@@ -95,7 +95,7 @@ export async function firstRun(browser, { dir, port, demo, log }) {
     const before = await canonical(dir, demo);
     const owned = await ownedData(dir);
     // Neither the shared template nor Content delivered through Mapping is an editable page field.
-    for (const text of [demo.shared, demo.owned]) {
+    for (const text of [demo.shared, demo.owned].filter(value => value !== null)) {
       await send(page, `replace "${text}" with "Changed by AI"`);
       await expect(lastReply(page)).toContainText("couldn't find");
       await expect(page.getByText("No pending AI changes")).toBeVisible();
