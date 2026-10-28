@@ -139,6 +139,9 @@ export async function firstRun(browser, { dir, port, demo, log }) {
     assert.deepEqual(errors, []);
     await page.close();
     return { before, applied };
+  } catch (error) {
+    console.error(running.output());
+    throw error;
   } finally {
     await running.stop();
   }
@@ -163,11 +166,14 @@ export async function restartAndUndo(browser, { dir, port, demo, before, others,
     for (const other of others) assert.doesNotMatch(await memory.inputValue(), new RegExp(other.name), `${demo.name} Memory must not hold ${other.name}'s`);
     await page.getByRole("dialog", { name: /Site Memory/ }).getByRole("button", { name: "Close" }).click();
     log(`${demo.name}: restart kept the conversation, Memory and applied change; no other demo's state leaked in`);
+    const refusals = page.locator(".cms-assistant-review [role=alert]").filter({ hasText: "Finish saving in every authoring tab" });
     for (let attempt = 0; ; attempt++) {
+      // A refusal left over from an earlier attempt must not count for this one.
+      const seen = await refusals.count();
       await page.getByRole("button", { name: "Undo apply" }).click();
       const outcome = await Promise.race([
         page.getByRole("heading", { name: "Undo committed" }).waitFor({ timeout: 60_000 }).then(() => "done"),
-        page.locator(".cms-assistant-review [role=alert]").filter({ hasText: "Finish saving in every authoring tab" }).waitFor({ timeout: 60_000 }).then(() => "refused"),
+        refusals.nth(seen).waitFor({ timeout: 60_000 }).then(() => "refused"),
       ]);
       if (outcome === "done") break;
       assert.ok(attempt < 2, "Undo kept being refused by browser coordination");
@@ -175,6 +181,9 @@ export async function restartAndUndo(browser, { dir, port, demo, before, others,
     assert.deepEqual(withoutTimestamps(await canonical(dir, demo)), withoutTimestamps(before), "Undo restores the original saved JSON/JSX");
     log(`${demo.name}: Undo restored the original content`);
     await page.close();
+  } catch (error) {
+    console.error(running.output());
+    throw error;
   } finally {
     await running.stop();
   }

@@ -168,7 +168,9 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
   async function widenToPackage(file: string, reason: string): Promise<void> {
     const segments = file.split(sep);
     const modulesIndex = segments.lastIndexOf("node_modules");
-    if (!options.attestExternalFiles || modulesIndex === -1) fail(reason);
+    const inHost = relative(hostRoot, file);
+    const hostOwned = !inHost.startsWith(`..${sep}`) && !isAbsolute(inHost) && !inHost.split(sep).includes("node_modules");
+    if (!options.attestExternalFiles || modulesIndex === -1 || hostOwned) fail(reason);
     const scoped = segments[modulesIndex + 1]?.startsWith("@") ?? false;
     const packageDir = segments.slice(0, modulesIndex + (scoped ? 3 : 2)).join(sep);
     if (widened.has(packageDir)) return;

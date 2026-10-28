@@ -43,10 +43,11 @@ export async function prepareAssistantHost({ kind, dir, baseUrl, apiKeyEnv = "ZU
   const require = createRequire(join(target, "package.json"));
   const authoring = await import(pathToFileURL(require.resolve("zudo-composer/authoring")).href);
   const vite = await import(pathToFileURL(require.resolve("zudo-composer/vite")).href);
-  // The source host's own resolved settings, read-only and without ambient
-  // ZUDO_COMPOSER_* overrides: a host-local self-reference pack and an installed
-  // themeset are both carried over exactly as the demo names them.
-  const { composerConfig: sourceConfig } = await vite.loadHostContext({ workspaceRoot: source, env: {} });
+  // The source host's own resolved settings, read without evaluating its pack
+  // and without ambient ZUDO_COMPOSER_* overrides: a host-local self-reference
+  // pack and an installed themeset are both carried over exactly as named.
+  const { loadHostConfig } = await import(pathToFileURL(join(repo, "server/host-context.mjs")).href);
+  const sourceConfig = await loadHostConfig(source, {});
   await writeFile(join(target, "zudo-composer.config.ts"), `// Editable Assistant host seeded from packages/${DEMOS[kind]}.\nimport { defineComposerConfig } from "zudo-composer/config";\n\nexport default defineComposerConfig({\n${Object.entries(sourceConfig.settings).map(([key, value]) => `  ${key}: ${JSON.stringify(value)},\n`).join("")}  nativeEditing: { source: "workspace" },\n  assistant: ${JSON.stringify(assistant)},\n});\n`);
   const { composerConfig, pack } = await vite.loadHostContext({ workspaceRoot: target, env: {} });
   // Exact repository definition; the committed SiteProject JSON is its generated form.

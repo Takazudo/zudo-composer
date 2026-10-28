@@ -48,7 +48,11 @@ try {
   const reserved = (await runToExit(["--dir", dir, "--port", "4177"]));
   assert.notEqual(reserved.code, 0);
   assert.match(reserved.output, /reserved/);
-  log("refused a foreign --reset/--dir and a reserved port");
+  // `pnpm assistant:local -- …` passes the separator through.
+  const help = await runToExit(["--", "--help"]);
+  assert.equal(help.code, 0, help.output);
+  assert.match(help.output, /--host sample\|landing\|blog\|webshop\|edit-host/);
+  log("refused a foreign --reset/--dir and a reserved port; accepted pnpm's -- separator");
 
   browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}) });
   if (!cli["skip-edit-host"]) await editHostLifecycle(browser);

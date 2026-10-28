@@ -36,7 +36,8 @@ class UsageError extends Error {}
 /** @param {string[]} argv */
 function readOptions(argv) {
   const { values } = parseArgs({
-    args: argv,
+    // `pnpm assistant:local -- --host sample` forwards the separator itself.
+    args: argv[0] === "--" ? argv.slice(1) : argv,
     strict: true,
     options: {
       provider: { type: "string", default: "fake" },
@@ -148,9 +149,10 @@ function assistantFor(options) {
   return { assistant, status: `${options.provider} — ${cliStatus(executable)}${model ? `, model ${model}` : ""}` };
 }
 
-// Ambient storage/pack overrides would point the editable host at other data
-// (such as the tracked demo it was seeded from); the host's own config decides.
-const HOST_OVERRIDE = /^(?:ZUDO_COMPOSER_(?:DATA_DIR|COMPOSITIONS_DIR|CONTENT_DIR|MAPPINGS_DIR|SITEMAPS_DIR|ASSETS_DIR|PUBLIC_ASSETS_DIR|STYLES|PACK|CONFIG)|ZUDO_(?:COMPOSITIONS_ROOT|ASSETS_STORE_ROOT|SITE_PROJECT_ROOT|DATA_ROOT|HOST_ROOT))$/u;
+// Ambient setting overrides (every ZUDO_COMPOSER_* key) and absolute storage
+// roots would point the editable host at other data, such as the tracked demo
+// it was seeded from; the host's own config decides.
+const HOST_OVERRIDE = /^(?:ZUDO_COMPOSER_|ZUDO_(?:COMPOSITIONS_ROOT|ASSETS_STORE_ROOT|SITE_PROJECT_ROOT|DATA_ROOT)$)/u;
 const hostEnv = () => Object.fromEntries(Object.entries(process.env).filter(([key]) => !HOST_OVERRIDE.test(key)));
 
 /** @param {string} origin @param {Promise<unknown>} exited */
