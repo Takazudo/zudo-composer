@@ -8,33 +8,78 @@ Access, D1, a Git publisher or a deployment.
 
 ## AI editing host
 
+One command opens any of the four demos in the AI Assistant, with that demo's
+own components, styles, images and pages:
+
 ```sh
-corepack pnpm assistant:local                          # fake provider, Orrery (landing) host
-corepack pnpm assistant:local -- --provider claude-cli # your signed-in Claude Code
-corepack pnpm assistant:local -- --provider codex-cli  # your signed-in Codex
+corepack pnpm assistant:local -- --host <sample|landing|blog|webshop> --provider <fake|claude-cli|codex-cli>
 ```
 
-Options: `--host landing|blog|webshop|edit-host`, `--dir <path>`,
-`--port <n>` (default 4178; 4175–4177 belong to test lanes), and for CLI
-providers `--executable <name|/abs/path>`, `--model <id>`,
-`--effort low|medium|high`, `--timeout-ms <n>` (or
+| Demo | `--host` | Start it | Try this (fake provider) |
+| --- | --- | --- | --- |
+| Sample Studio | `sample` | `corepack pnpm assistant:local -- --host sample` | `replace "Clear ideas, carefully shaped" with "Clear ideas, shaped together"` |
+| Orrery | `landing` | `corepack pnpm assistant:local` (the default) | `replace "Plan next week in ten minutes" with "Plan next week in five minutes"` |
+| Margin Notes | `blog` | `corepack pnpm assistant:local -- --host blog` | `replace "The Sunday note" with "The Saturday note"` |
+| Nightjar Supply | `webshop` | `corepack pnpm assistant:local -- --host webshop` | `replace "Letters from the shelf" with "Letters from the workbench"` |
+
+`--host edit-host` opens the small native-edit fixture instead. Run one host
+at a time on the default port, or give each its own `--port`.
+
+**Providers.** `--provider fake` (the default) is offline and deterministic:
+it never contacts a model and understands only a few fixed requests —
+`replace "A" with "B"`, `replace "A" with "B" on all pages`, `suggest "text"`
+and `remember: a fact`. It proves the editing flow, not answer quality.
+`--provider claude-cli` and `--provider codex-cli` use the Claude Code or
+Codex CLI you are already signed in to, so you can ask in your own words
+("make the Home heading warmer"). At start the launcher only looks the CLI
+up: if it is missing, the `Provider:` line says `unavailable: …`. The
+authoring server then checks that the CLI runs and is signed in; when it is
+not, the Assistant says that replies are unavailable and why, and **Send**
+stays disabled. It never falls back to another provider. To switch, stop the server and start
+again with another `--provider`; your data stays.
+
+Other options: `--dir <path>`, `--port <n>` (default 4178; 4175–4177 belong
+to test lanes), and for CLI providers `--executable <name|/abs/path>`,
+`--model <id>`, `--effort low|medium|high`, `--timeout-ms <n>` (or
 `ZUDO_CLAUDE_CLI_EXECUTABLE`/`_MODEL`, `ZUDO_CODEX_CLI_EXECUTABLE`/`_MODEL`).
+
+**Using it.** Open the printed `Open:` URL; the first start lands on the
+demo's editable Home. Ask for a change: it appears as a pending proposal in
+**Draft** with changed words highlighted and the changed block labelled, and
+**Current** marks what will change. Nothing is saved until you choose
+**Apply to Composer**, which records a receipt; **Undo apply** restores the
+previous content. The review highlights and labels never enter saved data or
+site output.
+
+**What it can change.** The Assistant edits fields and blocks of a page's own
+Composition, within the demo's registered components. It cannot change the
+shared site frame (header, navigation, footer), values delivered from Content
+through Mapping (articles, products, pricing tiers, testimonials, FAQ), or
+Markdown text ranges, and it does not write HTML, CSS, JSX or new components;
+such requests are declined and nothing changes. Working with four demos does
+not mean every page and every value is editable.
+
+**Your data stays until you reset.**
 
 - The first start seeds a new writable, workspace-owned host from the
   repository's real demo definition and component pack through the public
-  `initializeAuthoringWorkspace`; tracked demo sources and generated CMS are
-  never made writable.
-- It prints the URL to open (`/composer?assistant=1&…`), the provider status
-  (for a CLI: found and version, or why it is unavailable; only `--version`
-  is run) and where data is stored.
-- **Data:** `.zudo-local/assistant/<host>/` (gitignored). Conversations, run
-  events and Memory are under `cms/assistant/`, the shared draft under
-  `cms/edit-drafts/`, applied pages under `cms/compositions/`. Server output
-  goes to `.zudo-local-host.log` (`--verbose` prints it instead).
-- **Every later start reuses the host.** Conversations, Memory, the draft and
-  applied changes survive restarts; switching provider needs no reset.
-- `--reset` is the only way to start over. It refuses directories this
-  command did not create; stop the running server first.
+  `initializeAuthoringWorkspace`; the demo's own pack setting (a host-local
+  pack or an installed themeset) is read from its config, and its images
+  enter through the owning Assets store. The tracked `packages/demo-*`
+  sources and generated CMS are never written.
+- **Data:** `.zudo-local/assistant/<host>/` (gitignored), one folder per demo,
+  so each demo has its own conversations, Memory, draft and applied changes.
+  Conversations, run events and Memory are under `cms/assistant/`, the
+  shared draft under `cms/edit-drafts/`, applied pages under
+  `cms/compositions/`. Server output goes to `.zudo-local-host.log`
+  (`--verbose` prints it instead).
+- **Every later start reuses the host.** Conversations, Memory, the draft
+  and applied changes survive restarts; switching provider needs no reset.
+- `--reset` is the only way to start over: it deletes that demo's folder and
+  seeds it again. It refuses directories this command did not create; stop
+  the running server first.
+- **Apply is local.** It saves into this local copy only; it does not
+  publish, deploy or change the demo sites.
 
 The Assistant UI, provider selection, CLI profiles and troubleshooting are
 described in [AI Assistant](./assistant.md).

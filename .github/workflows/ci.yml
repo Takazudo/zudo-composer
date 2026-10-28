@@ -64,6 +64,9 @@ jobs:
       # Real dev server, pack renderers and Assistant adapter against a loopback
       # scripted Messages API (fake model replies; not live inference).
       - run: pnpm test:browser:assistant
+      # The persistent assistant:local launcher on every demo and the native-edit
+      # fixture: fake provider, free loopback port, serial after the lane above.
+      - run: pnpm test:browser:assistant:local-host
       # The site-project and demo browser lanes verify artifacts prepared here
       # and never rebuild them.
       - run: pnpm demo:build-sites

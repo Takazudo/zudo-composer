@@ -38,6 +38,12 @@ Markdown image/link destinations.
 Generation, asset import, and release commands are provided directly by the
 installed `zudo-composer` tool in each host.
 
+Each demo can also be opened in the AI Assistant as an editable local copy:
+`corepack pnpm assistant:local -- --host <sample|landing|blog|webshop>` (Sample
+Studio, Orrery, Margin Notes, Nightjar Supply). The copy lives under
+`.zudo-local/assistant/<host>/`; the demo package itself is never written. See
+[AI editing host](../local-operation.md#ai-editing-host).
+
 ## What a demo package is
 
 Webshop, Landing and Blog are complete hosts in the **self-reference** pack shape

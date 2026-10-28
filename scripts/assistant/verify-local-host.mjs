@@ -1,8 +1,11 @@
 // @ts-check
 // Lifecycle proof for scripts/assistant/local-host.mjs, fully offline with the
-// fake provider in a temporary --dir on a free loopback port (never the
+// fake provider in temporary --dir hosts on a free loopback port (never the
 // launcher's 4178 or the 4175–4177 lanes). Real launcher process, real dev
-// server and real browser; serial by construction.
+// server and real browser; serial by construction. The native-edit fixture
+// proves refusals, restart, provider switching and --reset; then each of the
+// four demos runs its editing journey, and every demo is restarted to prove
+// persistence, isolation and Undo. `-- --host <name>` limits the demo part.
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,6 +13,12 @@ import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { frame, lastReply, send } from "./browser-helpers.mjs";
 import { freePort, launchLocalHost, runLauncherToExit as runToExit } from "./launch-local-host.mjs";
+import { LOCAL_DEMOS, demoSource, firstRun, restartAndUndo, sourceDigest } from "./local-demo-journeys.mjs";
+import { parseArgs } from "node:util";
+
+const { values: cli } = parseArgs({ args: process.argv.slice(2).filter(arg => arg !== "--"), options: { host: { type: "string", multiple: true }, "skip-edit-host": { type: "boolean", default: false } } });
+const demos = LOCAL_DEMOS.filter(demo => !cli.host?.length || cli.host.includes(demo.host));
+if (cli.host?.some(host => !LOCAL_DEMOS.some(demo => demo.host === host))) throw new Error(`--host must be one of ${LOCAL_DEMOS.map(demo => demo.host).join(", ")}`);
 
 const temporary = await mkdtemp(join(tmpdir(), "assistant-local-host-"));
 const dir = join(temporary, "host");
@@ -42,6 +51,20 @@ try {
   log("refused a foreign --reset/--dir and a reserved port");
 
   browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}) });
+  if (!cli["skip-edit-host"]) await editHostLifecycle(browser);
+  await demoJourneys(browser);
+  log("passed");
+} catch (error) {
+  if (running) console.error(running.output());
+  throw error;
+} finally {
+  await running?.stop().catch(() => {});
+  await browser?.close();
+  await rm(temporary, { recursive: true, force: true });
+}
+
+/** @param {import('@playwright/test').Browser} browser */
+async function editHostLifecycle(browser) {
   running = await launch(["--host", "edit-host", "--provider", "fake"]);
   assert.match(running.output(), /"edit-host" created/);
   assert.equal(running.url, `${origin}/composer?assistant=1&sitemap=main&page=home`);
@@ -89,9 +112,26 @@ try {
   assert.match(await readFile(join(dir, "zudo-composer.config.ts"), "utf8"), /"provider":"claude-cli"/);
   assert.equal(await markerOf(), marker);
   assert.match(await readFile(composition, "utf8"), /Persisted local change/);
+  page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  await page.goto(running.url);
+  await expect(page.getByText("AI replies are unavailable.")).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
+  await page.close();
   await running.stop();
   running = undefined;
-  log("switched to claude-cli without reset; unavailable executable reported");
+  // A CLI that exists but does not start is found by the launcher and refused by the server's own check.
+  const broken = join(temporary, "broken-claude");
+  await writeFile(broken, "#!/bin/sh\necho 'broken on purpose' >&2\nexit 3\n", { mode: 0o755 });
+  running = await launch(["--provider", "claude-cli", "--executable", broken]);
+  assert.match(running.output(), /Provider: claude-cli — found .*broken-claude/);
+  page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  await page.goto(running.url);
+  await expect(page.getByText("AI replies are unavailable.")).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
+  await page.close();
+  await running.stop();
+  running = undefined;
+  log("switched to claude-cli without reset; missing and failing executables shown as unavailable, never replaced");
 
   // Explicit --reset of our own host starts over.
   running = await launch(["--reset"]);
@@ -102,12 +142,18 @@ try {
   await running.stop();
   running = undefined;
   log("--reset recreated this command's own host");
-  log("passed");
-} catch (error) {
-  if (running) console.error(running.output());
-  throw error;
-} finally {
-  await running?.stop().catch(() => {});
-  await browser?.close();
-  await rm(temporary, { recursive: true, force: true });
+}
+
+/** @param {import('@playwright/test').Browser} browser */
+async function demoJourneys(browser) {
+  const sources = await Promise.all(demos.map(demo => sourceDigest(demoSource(demo))));
+  const hostDir = (/** @type {string} */ host) => join(temporary, "demos", host);
+  /** @type {Map<string, Record<string, string>>} */
+  const originals = new Map();
+  for (const demo of demos) originals.set(demo.host, (await firstRun(browser, { dir: hostDir(demo.host), port, demo, log })).before);
+  for (const demo of demos) {
+    await restartAndUndo(browser, { dir: hostDir(demo.host), port, demo, before: /** @type {Record<string, string>} */ (originals.get(demo.host)), others: LOCAL_DEMOS.filter(other => other !== demo), log });
+  }
+  assert.deepEqual(await Promise.all(demos.map(demo => sourceDigest(demoSource(demo)))), sources, "packages/demo-* source, generated CMS and assets must be unchanged");
+  log(`demos (${demos.map(demo => demo.host).join(", ")}): source packages unchanged`);
 }
