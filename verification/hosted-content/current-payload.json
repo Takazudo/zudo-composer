@@ -1,6 +1,6 @@
 {
-  "packageOutputSha": "ae1fd59089ad184d7c23ce3d9c8127121fcf316e",
-  "payloadSha256": "b2dc5711c9220921b24642ca20a6024738a4a44edd1c1886cf50d8ac1ed4fc84",
+  "packageOutputSha": "6cc71cccd6a3d08ebc5bf59519d7bdbb91306c5e",
+  "payloadSha256": "04ced306799b7081aaee518733de3e6c73113c91bb92c2c86c8ee55d09d45858",
   "rawPackageJsonSha256": "453c2ed3bf612ac87831823a56396168faabb01ca41d2aca597339a3cdd1e62c",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
@@ -36,9 +36,9 @@
     },
     {
       "path": "docs/hosted-content.md",
-      "bytes": 39975,
+      "bytes": 40523,
       "mode": 420,
-      "sha256": "3cdce7e7d5089dfcf5cfb4b04e875a6de093183ed9077d2218e854a52e44474b"
+      "sha256": "a93bd3a897b63febbf0361ced3fa25a25e7e9d8ce50b5dd6f5d7bbd02af3d90e"
     },
     {
       "path": "docs/native-editing.md",
@@ -821,10 +821,10 @@
       "sha256": "d972c13dde57d7e974016a86cde63f82e3b22363cbac1faae126e001d00642b7"
     },
     {
-      "path": "server/hosted-content/chunks/service-W2Pc5NE8.mjs",
-      "bytes": 77603,
+      "path": "server/hosted-content/chunks/service-EjK9CN-b.mjs",
+      "bytes": 77896,
       "mode": 420,
-      "sha256": "772e1bacacc1669ebe1f405b829f2c28bffcd42de5e815adc4fb759bcbdd10f3"
+      "sha256": "0dfb3d72e376b3c7b98fdc5eb5dd6dc61e319ff7297af89ec5c3abca34126d2a"
     },
     {
       "path": "server/hosted-content/editor.css",
@@ -834,9 +834,9 @@
     },
     {
       "path": "server/hosted-content/editor.d.mts",
-      "bytes": 30490,
+      "bytes": 30955,
       "mode": 420,
-      "sha256": "54fcaf62c66856a0a81d19beaac9ff11da276bb0c466b618696c317a4bcb8ae0"
+      "sha256": "e67ea2b24c1c5eda34b68fb7f87b95592cfab96fc9f9152b16acc948d143ee02"
     },
     {
       "path": "server/hosted-content/editor.mjs",
@@ -846,15 +846,15 @@
     },
     {
       "path": "server/hosted-content/index.d.mts",
-      "bytes": 47755,
+      "bytes": 48242,
       "mode": 420,
-      "sha256": "02b7349b65a9d5d180859437ef99d204c4164e905bec48b1c2c7cfacd10edf05"
+      "sha256": "306394f393756560e3f251f5d7512294678cac3cede9f3a71e7094c8dfa08501"
     },
     {
       "path": "server/hosted-content/index.mjs",
       "bytes": 212765,
       "mode": 420,
-      "sha256": "5759d5de2daba6fc2aafffa09a0adfed1756669636872e1445325514cdc906e5"
+      "sha256": "21757426121748d4af23cc9f59b1b89a8208d7e9971a5e198beb3a806b14a76a"
     },
     {
       "path": "server/hosted-content/preview.d.mts",
@@ -870,15 +870,15 @@
     },
     {
       "path": "server/hosted-content/testing.d.mts",
-      "bytes": 18662,
+      "bytes": 19127,
       "mode": 420,
-      "sha256": "ed9be78899f73fdee768dddf5e6b78abc85f4d12c5e8f2e4f7aaa4d76dc97b5a"
+      "sha256": "c67abef15e5238af1fdef2737bfe1a6c3c721e04a4ec74bbdb23ec7869522268"
     },
     {
       "path": "server/hosted-content/testing.mjs",
-      "bytes": 45368,
+      "bytes": 46547,
       "mode": 420,
-      "sha256": "b94b7736285cca1ceb6a6fa37205bd74ea5aa2971301782cdbbfaac6201989a8"
+      "sha256": "ccbbf85156e3eb2a9047d0cde2a334c319b77a3c286d80dbe4c5a9226df47d40"
     },
     {
       "path": "server/module-evaluator.d.mts",
@@ -3474,9 +3474,9 @@
     },
     {
       "path": "src/hosted-content/service.ts",
-      "bytes": 45842,
+      "bytes": 46168,
       "mode": 420,
-      "sha256": "ec7ecd0e71d5155898bf5f3bd5825d0b14150c6eaf1793ab96ee1c25b4d90406"
+      "sha256": "d768ebc007de69fc77c8ed2d888f43442b0173bf62bd8397995228888c4b1254"
     },
     {
       "path": "src/hosted-content/session.ts",
@@ -3486,15 +3486,15 @@
     },
     {
       "path": "src/hosted-content/testing.ts",
-      "bytes": 48524,
+      "bytes": 49667,
       "mode": 420,
-      "sha256": "fe9e6f2f45603d9a24a6bfa15658d4937bb206669e9eb6a3ac8c758aa66284cd"
+      "sha256": "23cc847f79c8cb19f15be857db490b7acd0fa699e85349ede3ba78bf6327800d"
     },
     {
       "path": "src/hosted-content/types.ts",
-      "bytes": 15022,
+      "bytes": 15470,
       "mode": 420,
-      "sha256": "328480d5a0197e7edf14cd29aaa0c1a890f40c3bd14b964a535ef2cf800d031e"
+      "sha256": "2e455ce5c09347e3c908001032688dee6f4cfd6f37036a8616083601bc20cd5f"
     },
     {
       "path": "src/hosted-content/validation.ts",
