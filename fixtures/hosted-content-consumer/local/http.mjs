@@ -5,6 +5,11 @@ import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 
 const conflictCodes = ["revision-conflict", "baseline-conflict", "definition-conflict", "operation-key-reuse", "publication-busy"];
+// Editorial reads carry their validated query as one JSON parameter; the service parses and authorizes it.
+const query = url => {
+  try { return JSON.parse(url.searchParams.get("q") ?? "null"); }
+  catch { throw Object.assign(new Error("Query is not JSON"), { code: "invalid-request" }); }
+};
 const types = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp" };
 
@@ -113,6 +118,18 @@ export function createLocalHttpServer({ withService, actor, policy, presentation
         } else if (request.method === "GET" && path === "/api/state") result = await withService(service => service.readState(actor));
         else if (request.method === "GET" && path === "/api/receipt") result = await withService(service => service.readReceipt(actor, url.searchParams.get("key")));
         else if (request.method === "GET" && path === "/api/publication") result = await withService(service => service.getPublication(actor, url.searchParams.get("id")));
+        else if (request.method === "GET" && path === "/api/models") result = await withService(service => service.listModels(actor));
+        else if (request.method === "GET" && path === "/api/entries") result = await withService(service => service.listEntries(actor, query(url)));
+        else if (request.method === "GET" && path === "/api/entry") result = await withService(service => service.readEntry(actor, query(url)));
+        else if (request.method === "GET" && path === "/api/revisions") result = await withService(service => service.listRevisions(actor, query(url)));
+        else if (request.method === "GET" && path === "/api/revision") result = await withService(service => service.readRevision(actor, url.searchParams.get("id")));
+        else if (request.method === "GET" && path === "/api/compare") result = await withService(service => service.compareRevisions(actor, query(url)));
+        else if (request.method === "GET" && path === "/api/publication-status") {
+          const overview = await withService(service => service.readPublicationStatus(actor));
+          // The local artifact is this host's own fact; the service reports only what a host recorded.
+          const manifest = overview.submission ? await publisher.artifacts.readManifest(overview.submission.publicationId) : null;
+          result = { ...overview, artifact: overview.artifact ?? (manifest ? manifest.publicationId : null) };
+        }
         else if (request.method === "POST" && path === "/api/execute") {
           const command = await readJson(request);
           result = await withService(service => service.execute(actor, command));
@@ -128,8 +145,8 @@ export function createLocalHttpServer({ withService, actor, policy, presentation
       send(404, { code: "not-found", message: "Not found" });
     } catch (error) {
       if (!error.code) log(`request ${request.method} ${request.url}: ${error.stack ?? error}`);
-      if (!response.headersSent) send(conflictCodes.includes(error.code) ? 409 : error.code ? 400 : 500,
-        { code: error.code ?? "local-host-error", message: error.message, diagnostics: error.diagnostics });
+      if (!response.headersSent) send(conflictCodes.includes(error.code) ? 409 : error.code === "restore-incompatible" ? 422 : error.code ? 400 : 500,
+        { code: error.code ?? "local-host-error", message: error.message, diagnostics: error.diagnostics, restoreDiagnostics: error.restoreDiagnostics });
     }
   });
   return {

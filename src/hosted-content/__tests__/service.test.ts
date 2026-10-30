@@ -26,7 +26,7 @@ function fixture() {
   const homepage = createContentEntryRecord("page", { title: "初期", price: 10, enabled: true, slug: "home", details: { label: "Visible", secret: "Locked" }, rows: [{ label: "A", secret: "one" }, { label: "B", secret: "two" }], image: { kind: "image", asset: { providerId: "assets", assetId: "first" }, alt: "Image", decorative: false, caption: "" }, faqs: [json(faq)] }, { id: "home", timestamp });
   homepage.lifecycle = "published";
   const providers = [{ providerId: "content", models: [pageModel, faqModel], entries: [homepage, createContentEntryRecord("faq", { question: "Q", answer: "A" }, { id: "one", timestamp }), createContentEntryRecord("faq", { question: "Private", answer: "Never listed" }, { id: "private", timestamp })] }];
-  const memory = createMemoryHostedStorage({ state: { draftRevision: "r0", baseline: { gitSha: "g0", contentDigest: "c0" }, definition: "definition", providers, integrationFence: 0 }, baselineProviders: structuredClone(providers), snapshots: [], publications: [], receipts: [] });
+  const memory = createMemoryHostedStorage({ state: { draftRevision: "r0", baseline: { gitSha: "g0", contentDigest: "c0" }, definition: "definition", providers, integrationFence: 0 }, baselineProviders: structuredClone(providers), snapshots: [], publications: [], receipts: [], revisions: [] });
   let failCommit = false, loseResponse = false;
   const storage: HostedStorage = { ...memory.storage, async commit(change) {
     if (failCommit) { failCommit = false; throw new Error("receipt persistence failed"); }
@@ -244,9 +244,10 @@ describe("hosted Content trusted boundary", () => {
     const [create, capture] = await Promise.allSettled([f.service.execute(actor, command), f.service.execute(actor, captured)]);
     expect(create.status).toBe("fulfilled");
     // Either order is coherent: a capture that committed first holds exactly the prior revision.
+    // Its public projection omits the protected "private" record that the stored candidate keeps.
     if (capture.status === "fulfilled") {
       expect(capture.value.snapshot!.draftRevision).toBe(captured.expected.draftRevision);
-      expect(capture.value.snapshot!.providers[0]!.entries.map(entry => entry.id)).toEqual(["home", "one", "private"]);
+      expect(capture.value.snapshot!.providers[0]!.entries.map(entry => entry.id)).toEqual(["home", "one"]);
     } else expect(capture).toMatchObject({ status: "rejected", reason: { code: "revision-conflict" } });
     const { snapshot } = await f.service.execute(actor, f.capture("current"));
     const before = structuredClone(snapshot!);

@@ -46,6 +46,7 @@ export const hostedErrorMessages: Record<HostedErrorCode, string> = {
   "operation-key-reuse": "This save was already used for different content. Reload and try again.",
   "publication-busy": "A submission is already in progress.",
   incomplete: "Complete the required content before submitting.",
+  "restore-incompatible": "This version no longer fits the current fields. Nothing was changed.",
   "configuration-required": "The site settings changed. Your changes are retained until the site is updated.",
   unavailable: "The service is busy. Your changes are retained; try again.",
 };
@@ -60,6 +61,7 @@ export const hostedErrorMessagesJa: Record<HostedErrorCode, string> = {
   "operation-key-reuse": "この保存操作は別の内容で使用済みです。再読み込みしてからもう一度お試しください。",
   "publication-busy": "すでに公開申請が進行中です。",
   incomplete: "申請する前に必須の内容を入力してください。",
+  "restore-incompatible": "この版は現在の項目設定に合わないため復元できません。何も変更されていません。",
   "configuration-required": "サイトの設定が更新されました。サイトの更新が終わるまで変更内容は保持されます。",
   unavailable: "混み合っています。変更内容は保持されています。もう一度お試しください。",
 };

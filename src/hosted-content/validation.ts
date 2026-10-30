@@ -19,7 +19,24 @@ const commandSchema = z.discriminatedUnion("kind", [
   z.object({ ...base, kind: z.literal("reorder"), collectionId: token, entries: z.array(ref).max(1_000) }).strict(),
   z.object({ ...base, kind: z.literal("capture-snapshot") }).strict(),
   z.object({ ...base, kind: z.literal("begin-publication"), snapshotId: token }).strict(),
+  z.object({ ...base, kind: z.literal("restore-revision"), entry: ref, revisionId: token }).strict(),
 ]);
+const pageSchema = { cursor: token.optional(), limit: z.number().int().min(1).max(100).optional() };
+const perspective = z.enum(["working", "published"]);
+const target = z.union([z.object({ revisionId: token }).strict(), z.object({ perspective }).strict()]);
+const querySchemas = {
+  entries: z.object({ perspective, providerId: token, modelId: token, ...pageSchema }).strict(),
+  entry: z.object({ perspective, entry: ref }).strict(),
+  revisions: z.object({ entry: ref, ...pageSchema }).strict(),
+  revision: token,
+  compare: z.object({ entry: ref, from: target, to: target }).strict(),
+};
+/** Editorial reads are validated like commands, so every entry point shares one shape. */
+export function parseHostedQuery<K extends keyof typeof querySchemas>(kind: K, request: unknown): z.infer<(typeof querySchemas)[K]> {
+  const parsed = querySchemas[kind].safeParse(request);
+  if (!parsed.success) throw new HostedContentError("invalid-request", "Malformed hosted query.");
+  return parsed.data as z.infer<(typeof querySchemas)[K]>;
+}
 
 export function parseHostedCommand(request: unknown): HostedCommand {
   // Bound recursion before entering recursive validators; direct service callers need this too.

@@ -229,18 +229,21 @@ content and copies a full recovery checkpoint; persistence is not batched.
 
 ## Transaction adapter and recovery
 
-`HostedStorage` is four keyed reads plus one conditional write; no transaction stays
+`HostedStorage` is six keyed reads plus one conditional write; no transaction stays
 open across host code, so it maps directly onto D1 `batch()`:
 
 - `readHead()` returns the single mutable row: an opaque `version`, the working
   `state`, the `baselineProviders` and the active publication ID. Its size follows
   the content, never the history.
-- `readReceipt(actorId, operationKey)`, `readSnapshot(id)` and
-  `readPublication(id)` read insert-only keyed rows.
-- `commit({ expectedVersion, head, receipt?, snapshot?, publication? })` writes
-  everything or nothing. It resolves `false`, writing nothing, when the stored
-  head version differs from `expectedVersion` or the receipt `(actorId,
-  operationKey)` or snapshot ID already exists. It throws only when the outcome
+- `readReceipt(actorId, operationKey)`, `readSnapshot(id)`,
+  `readPublication(id)` and `readRevision(id)` read insert-only keyed rows.
+- `listRevisions(entry, { beforeSequence?, limit })` returns one Entry's
+  revisions newest first, never more than `limit`.
+- `commit({ expectedVersion, head, receipt?, snapshot?, publication?, revisions? })`
+  writes everything or nothing. It resolves `false`, writing nothing, when the
+  stored head version differs from `expectedVersion` or the receipt `(actorId,
+  operationKey)`, snapshot ID, revision ID or revision `(entry, sequence)` already
+  exists. It throws only when the outcome
   is unknown or storage failed; a throw after a durable write is recovered
   through the receipt.
 
@@ -251,11 +254,13 @@ error with nothing written. Every read must return detached data.
 
 D1 mapping: `hosted_head(id = 1, version, state, baseline_providers,
 active_publication_id)`; `hosted_receipt` keyed by `(actor_id, operation_key)`;
-`hosted_snapshot` and `hosted_publication` keyed by `id`, bodies as JSON text.
+`hosted_snapshot` and `hosted_publication` keyed by `id`, bodies as JSON text;
+`hosted_revision(id, provider_id, model_id, record_id, sequence, body)` with
+`UNIQUE (provider_id, model_id, record_id, sequence)`.
 Send one `batch()` per commit: an `UPDATE hosted_head … WHERE id = 1 AND version =
 ?expected`; a guard `INSERT` into an always-empty table that aborts the batch when
 that update did not apply (D1 cannot branch in JavaScript between statements);
-`INSERT` for the receipt and snapshot; and an upsert for the publication. A
+`INSERT` for the receipt, snapshot and each revision; and an upsert for the publication. A
 constraint failure rolls the batch back and the adapter resolves `false`.
 `fixtures/hosted-content-consumer/sqlite-storage.mjs` shows the exact static
 statement list. A receipt stores a copy of the scoped result state, so plan row
@@ -269,8 +274,8 @@ independent handle exposing `faultNextCommit`, `holdNextCommit` and `dump`),
 `restart()` and `close()`. It runs the same scenarios against any adapter,
 including commit refusal after an interleaved writer, faults before commit, in
 receipt persistence and after a lost acknowledgement, coherent capture,
-duplicate creation, competing reorder, two integrations, and external baseline
-and definition adoption. A CAS adapter passes the hold/interleave scenarios by
+duplicate creation, competing reorder, two integrations, external baseline
+and definition adoption, and the editorial perspectives and history journey. A CAS adapter passes the hold/interleave scenarios by
 refusing the held commit.
 
 Operation keys are unique within the site and authenticated actor. Fingerprints
@@ -311,6 +316,82 @@ silent overwrite or replacement draft:
   and writes nothing, so run a dry run first.
 - An applied adoption issues a new draft revision, advances the integration fence
   and replaces the baseline providers; editors then `refresh` the state.
+
+## Editorial reads, history and restore
+
+The service is the only entry point; every read authenticates, validates its query
+and applies the current policy, including to history.
+
+| Method | Returns |
+| --- | --- |
+| `listModels(actor)` | policy-visible models (`ContentModelRecord`, with presentation metadata) and working/published Entry counts |
+| `listEntries(actor, { perspective, providerId, modelId, cursor?, limit? })` | at most 100 Entries ordered by ID, with `nextCursor` |
+| `readEntry(actor, { perspective, entry })` | one Entry's values, lifecycle, editorial status and newest revision ID |
+| `listRevisions(actor, { entry, cursor?, limit? })` | at most 100 revisions newest first, with `nextCursor` |
+| `readRevision(actor, revisionId)` | one exact revision |
+| `compareRevisions(actor, { entry, from, to })` | field differences between two revisions or perspectives |
+| `readPublicationStatus(actor)` | the activated baseline, the newest accepted submission, the host-recorded artifact and deployment, each separately |
+
+**Perspectives.** `working` is the retained draft. `published` is the active
+canonical baseline, the content the last confirmed integration or adoption
+activated; it is never the draft filtered by lifecycle. Editorial status is `new`
+(no published version), `published` (working equals published) or `changed`.
+Incomplete drafts may still be saved; submission keeps its stricter completeness
+check.
+
+**History.** Every working change of an Entry's values appends one immutable
+`HostedRevision` with its ID, parent, per-Entry sequence, values, hosted
+definition, timestamp, trusted actor (null for canonical content), the trusted
+`source` from the service options, the operation kind and key, and `restoredFrom`
+for a restore. The first change of an Entry without history first records an
+`initial` revision of its prior values. Revisions commit in the same conditional
+write as the Entry change and its receipt, so a refused commit writes neither and
+an acknowledged retry replays the receipt without a second revision. A save that
+changes nothing records only its receipt: no revision and no new draft revision.
+Lifecycle-only integration writes no revision; an applied canonical adoption that
+changes values writes `adopt-canonical-baseline` revisions with a null actor.
+
+History is retained for the life of the storage and is never pruned. It is
+separate from storage versions, snapshots, publications, local filesystem
+generations and AI Undo receipts; no history read loads the head's whole history,
+and ordinary state reads never include it.
+
+**Restore.** `{ kind: "restore-revision", entry, revisionId }` carries the usual
+`operationKey` and expected identities, so a stale restore is refused like a stale
+save. It writes the revision's values as a new working revision through the same
+field validation as `set-fields`, keeping lifecycle intent, the active baseline,
+publications and every earlier revision; it never unpublishes, rewinds storage or
+activates anything. When a value no longer fits the current definition or policy
+it answers `restore-incompatible` with `restoreDiagnostics`
+(`field-removed`, `collection-owned`, `forbidden`, `invalid-value`) per field and
+writes nothing; values are never silently dropped.
+
+**Publication.** Publishing stays the snapshot flow below. Publishing a reviewed A
+while B is saved keeps B as the working draft and activates A only on confirmed
+integration. `readPublicationStatus` reports the accepted submission, the activated
+baseline, the host-recorded `artifact` fact and `deployed` independently; none
+implies the next, and there is no second published store.
+
+The browser transport may implement the matching optional methods
+(`listModels`, `listEntries`, `readEntry`, `listRevisions`, `readRevision`,
+`compareRevisions`, `readPublicationStatus`). The local host serves them as
+`GET /api/models`, `/api/entries?q=`, `/api/entry?q=`, `/api/revisions?q=`,
+`/api/revision?id=`, `/api/compare?q=` and `/api/publication-status`, with each
+query as one JSON parameter.
+
+### Editor extension points
+
+`mountHostedContentEditor` accepts `fieldRenderers`: the first renderer whose
+`matches(field, entry)` returns true replaces that record field's control, while
+the label and clear action stay built in. `mount(element, context)` receives the
+field definition, permission, value, `disabled`, labels, `setValue(next)` and
+`renderDefault(element)`, which mounts the built-in control so a host can wrap it
+(for example with a length counter). It returns `{ update(context), destroy() }`.
+`setValue` stages the same session edit as the built-in control, and the service
+validates it on save; a renderer never receives storage, the transport or the
+session. The handle adds `selection` and `restore(entry, revisionId)`, which saves
+retained edits first and drops a definitely refused restore without leaving an
+operation to review.
 
 ## Review and submit an exact snapshot
 
@@ -394,7 +475,8 @@ These are deliberately absent, not pending:
 - Mapping or Sitemap writes. Collection order is a Content reference-list only.
 - Evaluating Markdown as MDX/JSX, raw HTML, images in prose (use approved asset
   fields) and executable URL schemes.
-- Concurrent publications for one site, and pruning or recycling operation keys.
+- Concurrent publications for one site, pruning or recycling operation keys,
+  and pruning, editing or deleting revision history.
 - Several preview routes per editor mount (one `routeId` per mount), and a
   model-grouped record selector (the selector is flat).
 - Conflict resolution actions on the handle: review, reapply and discard are
@@ -535,9 +617,11 @@ re-run the host's Worker SSR byte-equality check against it.
    head `UPDATE … WHERE version = ?` plus an abort-on-miss guard statement must
    be in the same `batch()` as the inserts.
 2. `commit` resolves `false`, writing nothing, on a stale head version, or a
-   duplicate receipt key or snapshot ID; it throws only for unknown outcomes.
-3. All reads return detached data; retain receipts and snapshots and do not
-   recycle operation keys; budget row size for the result copy in each receipt.
+   duplicate receipt key, snapshot ID, revision ID or revision `(entry,
+   sequence)`; it throws only for unknown outcomes.
+3. All reads return detached data; retain receipts, snapshots and revisions and
+   do not recycle operation keys; budget row size for the result copy in each
+   receipt and for one values copy per revision.
 4. Run `runHostedContentConformance` against the real D1 adapter. A pass against
    a mock does not verify D1.
 
