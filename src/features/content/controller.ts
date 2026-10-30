@@ -24,7 +24,7 @@ import {
   type ContentProvider,
   type ContentStore,
 } from "../../content";
-import { sameEditorialValue, type ContentAiPrepareResult, type ContentAiProposal, type ContentEditorialBoundary, type EditorialReceipt, type RemoteContentAi } from "../../content/editorial";
+import { EditorialError, sameEditorialValue, type ContentAiPrepareResult, type ContentAiProposal, type ContentEditorialBoundary, type EditorialReceipt, type RemoteContentAi } from "../../content/editorial";
 import { createUuidIdFactory, type IdFactory } from "../../shared";
 import { createSaveQueue, type SaveQueue } from "../../shared/persistence";
 import type { AssetSummary } from "../../assets";
@@ -573,7 +573,11 @@ export class ContentAuthoringController {
     if (!proposalId) return false;
     let operation;
     try { operation = await contentAi.read({ proposalId }); }
-    catch { writeAiReference(ref, null); return false; }
+    catch (error) {
+      // Only a proposal this backend no longer knows is forgotten; a transient failure keeps the reference for the next reload.
+      if (error instanceof EditorialError && (error.code === "not-found" || error.code === "invalid-request")) writeAiReference(ref, null);
+      return false;
+    }
     if (this.current.entry?.id !== entry.id || this.current.aiSession?.entryId === entry.id) return false;
     this.set({ ...this.current, aiSession: { ...this.newAiSession(entry.id, { status: "proposed", proposal: operation.proposal }), applied: operation.applied, undone: operation.undone, recovered: operation.undone ? "undo" : operation.applied ? "apply" : null, restored: true } });
     return true;
