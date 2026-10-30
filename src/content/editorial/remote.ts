@@ -4,7 +4,7 @@
 import { EditorialError, type ContentEditorialBoundary, type EditorialErrorCode, type EditorialFieldDiagnostic } from "./types";
 
 export type EditorialWireOperation =
-  | "editorial-read" | "editorial-revisions" | "editorial-revision" | "editorial-compare"
+  | "editorial-read" | "editorial-fields" | "editorial-revisions" | "editorial-revision" | "editorial-compare"
   | "editorial-validate" | "editorial-save" | "editorial-restore" | "editorial-publication";
 export type EditorialWireCall = (operation: EditorialWireOperation, payload: unknown) => Promise<unknown>;
 
@@ -28,6 +28,7 @@ export function createRemoteContentEditorial(call: EditorialWireCall): ContentEd
   return {
     backend: "native",
     readEntry: (query) => send("editorial-read", query),
+    readFields: (query) => send("editorial-fields", query),
     listRevisions: (query) => send("editorial-revisions", query),
     readRevision: (query) => send("editorial-revision", query),
     compare: (query) => send("editorial-compare", query),
@@ -35,5 +36,26 @@ export function createRemoteContentEditorial(call: EditorialWireCall): ContentEd
     saveFields: (request) => send("editorial-save", request),
     restoreRevision: (request) => send("editorial-restore", request),
     publicationStatus: () => send("editorial-publication"),
+  };
+}
+
+export type ContentAiWireOperation = "content-ai-status" | "content-ai-scope" | "content-ai-prepare" | "content-ai-apply" | "content-ai-undo";
+export interface RemoteContentAi {
+  status(): Promise<{ available: false } | { available: true; provider: string; canApply: boolean }>;
+  scope(entry: import("../model").ContentEntryRef): Promise<import("./types").EditorialField[]>;
+  prepare(request: { entry: import("../model").ContentEntryRef; instruction: string }): Promise<import("./ai").ContentAiPrepareResult>;
+  apply(request: { proposalId: string }): Promise<import("./types").EditorialReceipt>;
+  undo(request: { proposalId: string }): Promise<import("./types").EditorialReceipt>;
+}
+
+/** The browser half of Content-AI. Provenance and the proposer stay on the server. */
+export function createRemoteContentAi(call: (operation: ContentAiWireOperation, payload: unknown) => Promise<unknown>): RemoteContentAi {
+  const send = async <T>(operation: ContentAiWireOperation, payload: unknown = {}): Promise<T> => unwrap<T>(await call(operation, payload));
+  return {
+    status: () => send("content-ai-status"),
+    scope: (entry) => send("content-ai-scope", { entry }),
+    prepare: (request) => send("content-ai-prepare", request),
+    apply: (request) => send("content-ai-apply", request),
+    undo: (request) => send("content-ai-undo", request),
   };
 }

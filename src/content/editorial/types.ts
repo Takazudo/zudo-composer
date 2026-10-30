@@ -109,6 +109,8 @@ export class EditorialError extends Error {
 export interface ContentEditorialBoundary {
   readonly backend: "native" | "hosted";
   readEntry(query: { entry: ContentEntryRef; perspective: EditorialPerspective }): Promise<EditorialEntryView>;
+  /** The Entry model's current field definitions. */
+  readFields(query: { entry: ContentEntryRef }): Promise<EditorialField[]>;
   listRevisions(query: { entry: ContentEntryRef; cursor?: string; limit?: number }): Promise<EditorialRevisionPage>;
   readRevision(query: { entry: ContentEntryRef; revisionId: string }): Promise<EditorialRevision>;
   compare(query: { entry: ContentEntryRef; from: EditorialRevisionTarget; to: EditorialRevisionTarget }): Promise<EditorialComparison>;
@@ -118,5 +120,8 @@ export interface ContentEditorialBoundary {
   restoreRevision(request: { entry: ContentEntryRef; revisionId: string; expected: string; operationKey: string }): Promise<EditorialReceipt>;
   publicationStatus(): Promise<EditorialPublicationStatus>;
 }
+
+/** One field of the Entry's current definition. */
+export interface EditorialField { id: string; key: string; label: string; kind: string; required: boolean }
 
 export interface EditorialProvenance { actor: { id: string } | null; source: string }

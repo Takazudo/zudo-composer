@@ -139,6 +139,12 @@ export function createNativeContentEditorial(options: NativeEditorialOptions): C
       const [snapshot, published] = [await read(), await options.readPublished()];
       return view(snapshot, published, query.entry, query.perspective);
     },
+    async readFields(query) {
+      own(query.entry);
+      const model = (await read()).models.find((candidate) => candidate.id === query.entry.modelId);
+      if (!model) throw new EditorialError("not-found", "Entry model is unavailable.");
+      return model.document.fields.map((field) => ({ id: field.id, key: field.key, label: field.label, kind: field.kind, required: field.required }));
+    },
     async listRevisions(query) {
       own(query.entry);
       const limit = query.limit ?? DEFAULT_LIMIT;

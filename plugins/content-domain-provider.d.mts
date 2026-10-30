@@ -14,6 +14,7 @@ export function resolveContentRoot(
 ): string;
 
 export const CONTENT_EDITORIAL_OPERATIONS: readonly string[];
+export const CONTENT_AI_OPERATIONS: readonly string[];
 
 export default function contentDomainProvider(options?: {
   contentRoot?: string;

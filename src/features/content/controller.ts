@@ -24,7 +24,7 @@ import {
   type ContentProvider,
   type ContentStore,
 } from "../../content";
-import type { ContentEditorialBoundary, EditorialReceipt } from "../../content/editorial";
+import type { ContentAiPrepareResult, ContentEditorialBoundary, EditorialReceipt, RemoteContentAi } from "../../content/editorial";
 import { createUuidIdFactory, type IdFactory } from "../../shared";
 import { createSaveQueue, type SaveQueue } from "../../shared/persistence";
 import type { AssetSummary } from "../../assets";
@@ -70,12 +70,14 @@ export interface ContentAuthoringState {
   conflictRecovery: { message: string; canReapply: boolean; authoritativeReady: boolean } | null;
   /** The outcome of the last history action, kept across the Entry reload it causes. */
   historyNotice: { entryId: string; text: string } | null;
+  /** The open Entry's latest AI proposal and what became of it. */
+  aiSession: { entryId: string; result: ContentAiPrepareResult; receipt: EditorialReceipt | null; undone: boolean } | null;
 }
 
 const initialState: ContentAuthoringState = {
   viewId: null,
   phase: "idle", modelSelectionPending: false, entryCreationPending: false, models: [], providerId: "", providerLabel: "", modelDescriptions: {}, entryCounts: {}, incompleteCounts: {}, model: null, entries: [], usedFieldIds: [], entry: null,
-  workMode: "entries", saveStatus: "pristine", message: "", recoveryMessage: null, graphStatus: "idle", graphMessage: "", snapshots: [], incoming: [], publicationState: "draft", conflictRecovery: null, historyNotice: null,
+  workMode: "entries", saveStatus: "pristine", message: "", recoveryMessage: null, graphStatus: "idle", graphMessage: "", snapshots: [], incoming: [], publicationState: "draft", conflictRecovery: null, historyNotice: null, aiSession: null,
 };
 
 function queueStatus(state: { status: Exclude<ContentSaveStatus, "pristine"> }): Exclude<ContentSaveStatus, "pristine"> {
@@ -507,6 +509,45 @@ export class ContentAuthoringController {
     await this.reloadEntries();
     if (this.current.entry?.id !== entry.id) await this.openEntry(entry.id);
     this.set({ ...this.current, historyNotice: { entryId: entry.id, text: `Restored revision ${revision.sequence} as a new revision.` } });
+    return receipt;
+  }
+
+  /** Bounded Content-AI, when the open provider offers it. */
+  get contentAi(): RemoteContentAi | null {
+    const store = this.provider.store as ContentStore & { contentAi?: RemoteContentAi };
+    return store.contentAi ?? null;
+  }
+
+  /** Prepare a proposal against everything already typed; nothing is written. */
+  async prepareAiProposal(instruction: string): Promise<ContentAiPrepareResult> {
+    const contentAi = this.contentAi;
+    if (!contentAi) throw new Error("Content-AI is unavailable for this provider.");
+    const entry = this.current.entry;
+    if (!entry) throw new Error("No Entry is open.");
+    await this.flushEditSessions();
+    const result = await contentAi.prepare({ entry: this.entryRef(entry), instruction });
+    this.set({ ...this.current, aiSession: { entryId: entry.id, result, receipt: null, undone: false } });
+    return result;
+  }
+
+  discardAiProposal(): void {
+    this.set({ ...this.current, aiSession: null });
+  }
+
+  /** Apply or undo a prepared proposal, then show the Entry as stored. */
+  async runAiProposal(action: "apply" | "undo", proposalId: string): Promise<EditorialReceipt> {
+    const contentAi = this.contentAi;
+    if (!contentAi) throw new Error("Content-AI is unavailable for this provider.");
+    const entry = this.current.entry;
+    if (!entry) throw new Error("No Entry is open.");
+    await this.flushEditSessions();
+    const receipt = await contentAi[action]({ proposalId });
+    await this.reloadEntries();
+    if (this.current.entry?.id !== entry.id) await this.openEntry(entry.id);
+    const session = this.current.aiSession;
+    this.set({ ...this.current,
+      historyNotice: { entryId: entry.id, text: action === "apply" ? "Applied the AI proposal as a new revision." : "Undid the AI proposal as a new revision." },
+      aiSession: session && session.entryId === entry.id ? { ...session, receipt: action === "apply" ? receipt : session.receipt, undone: action === "undo" } : session });
     return receipt;
   }
 

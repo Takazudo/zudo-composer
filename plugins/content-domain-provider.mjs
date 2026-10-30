@@ -82,9 +82,12 @@ const OPERATIONS = {
  * refusal keeps its field diagnostics on the wire.
  */
 export const CONTENT_EDITORIAL_OPERATIONS = [
-  "editorial-read", "editorial-revisions", "editorial-revision", "editorial-compare",
+  "editorial-read", "editorial-fields", "editorial-revisions", "editorial-revision", "editorial-compare",
   "editorial-validate", "editorial-save", "editorial-restore", "editorial-publication",
 ];
+
+/** Bounded Article title/body proposals through the host's Assistant provider. */
+export const CONTENT_AI_OPERATIONS = ["content-ai-status", "content-ai-scope", "content-ai-prepare", "content-ai-apply", "content-ai-undo"];
 
 /**
  * @param {{contentRoot?: string, release?: {workspaceRoot?: string, packIdentity?: unknown, stylesPath?: string}}} [options]
@@ -107,6 +110,15 @@ export default function contentDomainProvider(options = {}) {
           return reader.readActivatedSiteRelease({ ...release, pack });
         }
         : async () => null;
+      /** @type {Promise<any> | undefined} */ let contentAi;
+      const contentAiHost = () => contentAi ??= (async () => {
+        if (!release || !server) return null;
+        const { loadHostConfig } = await import("../server/host-context.mjs");
+        const config = (await loadHostConfig(release.workspaceRoot ?? process.cwd())).assistant;
+        if (!config) return null;
+        const factory = await server.ssrLoadModule(appModuleId("server/content-ai/proposer-factory.ts"));
+        return { proposer: await factory.createContentAiProposer(config), canApply: config.permission === "apply" };
+      })();
       return {
         isDomainError: module.isContentPersistenceError,
         createStore: (workspaceId) => module.createWorkspaceScopedContentStore(root, workspaceId),
@@ -116,6 +128,11 @@ export default function contentDomainProvider(options = {}) {
             operation,
             /** @param {any} store @param {unknown} payload */
             (store, payload) => module.runContentEditorial(store, readActivated, operation, payload),
+          ])),
+          ...Object.fromEntries(CONTENT_AI_OPERATIONS.map((operation) => [
+            operation,
+            /** @param {any} store @param {unknown} payload */
+            (store, payload) => module.runContentAi(store, readActivated, contentAiHost, operation, payload),
           ])),
         },
       };
