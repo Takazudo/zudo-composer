@@ -242,11 +242,19 @@ collection slots filled through Mapping, shared or published templates,
 positions inside a Markdown field, and arbitrary tables or components a theme
 does not define. A request is never silently moved to another position.
 
+Content-owned Article title and body are edited by the separate **Content-AI**
+proposal in the Content editor, which uses the same `assistant` provider
+setting. Its rendered candidate review, durable proposals and lost-response
+recovery are described in
+[local operation](./local-operation.md#content-ai-proposals); the two remain
+separate tools.
+
 ## Storage and recovery
 
 Assistant data is private authoring state under the host data directory:
 `<dataDir>/assistant` (conversations, run events, Memory, name, attached
-materials) and `<dataDir>/edit-drafts` (shared drafts). It is keyed by the
+materials), `<dataDir>/edit-drafts` (shared drafts) and `<dataDir>/content-ai`
+(immutable Content-AI proposal records). It is keyed by the
 host's real path and the `WorkspaceRecord.id`, never by a display name, and is
 never part of SiteProject JSON, generated JSX, assets, site builds or visitor
 routes. Files with an unknown schema are preserved and reported, not replaced.

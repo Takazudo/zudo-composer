@@ -206,23 +206,84 @@ copy.
 - **Content editor.** An opened Entry shows its History: compare any
   revision with the working values, restore it, and load older pages.
 - **Content-AI.** When the host config has an `assistant`, an Article's
-  editor offers an AI proposal for **Title and Body only**. Prepare asks the
-  configured provider, validates the candidate against the pinned entry
-  identity and writes nothing; the editor shows each changed field and the
-  exact candidate. Apply is one guarded save with operation key, receipt and
-  `content-ai` provenance, so a repeated Apply returns the same receipt and a
-  stale Apply (the entry changed after Prepare) is refused without writing.
-  Undo restores the pre-Apply revision as a new revision and is refused if a
-  later edit happened. A provider decline is shown as a refusal. Publication
-  stays the existing explicit step, `permission: "propose"` disables Apply,
-  and the composition Assistant keeps its refusals of Content-owned values.
+  editor offers an AI proposal for **Title and Body only**. See below.
+
+### Content-AI proposals
+
+**Prepare** asks the configured provider, validates the candidate against the
+pinned Entry identity through the owning backend and writes no Content. The
+proposal (id, Entry, pinned precondition, owner scope and actor, the exact
+candidate and its digest, the operation key, creation and expiry times) is
+stored create-only before the editor sees it, under `<dataDir>/content-ai/`
+beside the native Content files. The service takes its proposal store as a
+dependency, and the shared scenario runs it against local SQLite Hosted
+Content too; a hosted site would supply its own durable store, which is
+outside this local tool. A record is never changed; whether it was applied or
+undone is read back from the Content store's own receipts.
+
+**Review.** The editor shows the changed fields, the raw candidate text and
+the **rendered candidate**: the working project is compiled exactly as
+`/website-preview` compiles it, with only this Entry's validated candidate
+overlaid in memory, and the route that shows the Entry is rendered by the
+host's own template, Mapping, components and styles. The raw text shows what
+will be stored; the rendered page shows how the site will present it (a
+Markdown heading or link as rendered output, missing images or fonts as a
+failed render). Nothing is saved while rendering.
+
+**Apply.** A fresh Apply is available only once the frame has acknowledged
+the current render of this exact candidate: the acknowledgement names the
+proposal, its digest, the route and Mapping, and a digest of the rendered
+dependencies, and only the latest render counts. The editor states
+preparing, rendering, ready for review, stale, render failed, applying or
+recovering, applied and undone. A new proposal, a local edit, a change of
+Entry, or a new render invalidates the approval, and after a reload the
+candidate must render again. The check lives in the controller's command
+path and again in the service, which refuses a fresh Apply without the
+candidate's digest. Apply is one keyed save through the same editorial path
+as a human edit, with `content-ai` provenance; a stale Apply (the Entry
+changed after Prepare) is refused, writes nothing and offers Prepare again.
+A host without a renderer for the Entry shows a blocked state and never
+enables Apply.
+
+**Lost acknowledgements and restarts.** Apply and Undo first look up their
+own operation key in the backend's receipts. If the commit happened and the
+response was lost, or the process stopped right after the commit, the retry
+returns the original receipt and adds no revision; it needs no new preview,
+because nothing new is written. The browser keeps a per-Entry reference to
+the last proposal (`localStorage`), so a reload reads the proposal and its
+committed outcome back without calling the model. A restarted dev server
+issues a new request capability, so an open page reloads before it can use
+it, which Vite does by itself.
+
+**Undo** restores the revision before the Apply as a new revision, pinned to
+the state right after Apply, so it is refused rather than overwriting a later
+human edit. A retried Undo recovers its own receipt the same way.
+
+**Expiry.** An unapplied proposal can be freshly applied for 24 hours after
+Prepare; after that the editor offers Prepare again. A committed Apply or
+Undo stays recoverable for as long as its record exists, and records are
+never pruned or reused: ids are random UUIDs, and the operation key derives
+from the id. Proposals belong to their backend scope and actor; another
+workspace, backend or actor gets "not found".
+
+A provider decline is shown as a refusal. Publication stays the existing
+explicit step, `permission: "propose"` disables Apply, and the composition
+Assistant keeps its refusals of Content-owned values.
 
 `pnpm exec vitest run server/content-editorial` runs the decisive scenario
 and the Content-AI scenario against both native files and local SQLite
-Hosted Content. `pnpm test:browser:content-history` and
+Hosted Content, closing and reopening the store and the proposal records
+between each half of a recovery. `pnpm test:browser:content-history` and
 `pnpm test:browser:content-ai` drive a disposable copy of the Blog host with
-the fake provider (port 4179); real CLI providers follow the evidence table
-above.
+the fake provider on port 4179, including a delayed and a failed render, a
+lost Apply acknowledgement followed by a dev-server restart and reload, and a
+lost Undo acknowledgement followed by a retry and a restart. CI runs both in
+the `content-browser` job. These use fake replies and are not evidence of
+model behavior.
+
+**Still outstanding:** a Content-AI journey with a real model through
+`claude-cli`, `codex-cli` or `anthropic` (the **Real CLI usage** row above)
+and the **Physical device** row. Neither is claimed by the fake lanes.
 
 ## Production delivery is stopped
 
