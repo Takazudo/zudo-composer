@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { cp, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 
 const repository = resolve(import.meta.dirname, "../..");
 
@@ -27,7 +28,7 @@ export async function startBlogHost({ port, assistant }) {
   const deadline = Date.now() + 60_000;
   for (;;) {
     if (child.exitCode !== null) throw new Error(`dev server exited:\n${output}`);
-    if (/Local:\s+http/.test(output.replace(/\u001b\[[0-9;]*m/g, ""))) break;
+    if (/Local:\s+http/.test(stripVTControlCharacters(output))) break;
     if (Date.now() > deadline) throw new Error(`dev server did not start:\n${output}`);
     await new Promise((done) => setTimeout(done, 500));
   }

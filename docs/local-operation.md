@@ -187,22 +187,42 @@ drives the whole journey in Chromium and is part of `pnpm hosted:installed`.
 Each row proves something different: a fake or scripted run never stands in
 for real CLI usage, and real CLI usage never stands in for a physical device.
 
-## Content-AI milestone (planned, not implemented)
+## Content history and Content-AI
 
-The AI Assistant still refuses Hosted Content- and Mapping-owned values; those
-refusals stay until this route lands as its own change:
+Native filesystem Content and Hosted Content answer the same editorial
+boundary (`src/content/editorial`): working and published reads, stable
+identities, field edits, history, compare, restore and publication status.
+Each backend keeps its own authoritative store; there is no second editable
+copy.
 
-1. The Assistant proposes Content edits as ordinary `set-fields` or
-   `restore-revision` commands against the **working** perspective, with
-   operation keys and expected identities, through the same Hosted Content
-   service and policy; it never writes storage directly.
-2. A proposal shows a field-level comparison (`compareRevisions`) and the
-   exact snapshot preview before Apply; Apply is the guarded save and records
-   a revision whose `source` names the Assistant.
-3. Undo is a `restore-revision` of the previous revision, so history stays
-   append-only and publication stays the existing explicit Submit.
-4. Verification follows the evidence table above: the fake provider first,
-   then each CLI with its normal sign-in.
+- **Native history.** Every value change appends a revision and an
+  operation receipt in the same Content generation commit. An existing
+  workspace opens unchanged; its current values are recorded as an
+  `initial` revision ("Values before history began") on the first change.
+  Restore validates the old values against the current model and appends a
+  new revision; an incompatible restore is refused with field diagnostics.
+  Published values come from the activated SiteProject release and are
+  never changed by an edit or a restore.
+- **Content editor.** An opened Entry shows its History: compare any
+  revision with the working values, restore it, and load older pages.
+- **Content-AI.** When the host config has an `assistant`, an Article's
+  editor offers an AI proposal for **Title and Body only**. Prepare asks the
+  configured provider, validates the candidate against the pinned entry
+  identity and writes nothing; the editor shows each changed field and the
+  exact candidate. Apply is one guarded save with operation key, receipt and
+  `content-ai` provenance, so a repeated Apply returns the same receipt and a
+  stale Apply (the entry changed after Prepare) is refused without writing.
+  Undo restores the pre-Apply revision as a new revision and is refused if a
+  later edit happened. A provider decline is shown as a refusal. Publication
+  stays the existing explicit step, `permission: "propose"` disables Apply,
+  and the composition Assistant keeps its refusals of Content-owned values.
+
+`pnpm exec vitest run server/content-editorial` runs the decisive scenario
+and the Content-AI scenario against both native files and local SQLite
+Hosted Content. `pnpm test:browser:content-history` and
+`pnpm test:browser:content-ai` drive a disposable copy of the Blog host with
+the fake provider (port 4179); real CLI providers follow the evidence table
+above.
 
 ## Production delivery is stopped
 
@@ -220,13 +240,15 @@ separate, owner-approved change; see [hosted demo](./hosted-demo.md).
   executables on the same structured reply contract; real-binary harnesses;
   the persistent local AI host; the persistent local Hosted Content host;
   the Hosted Content editorial API with durable revision history; the
-  installed Article CMS consumer.
+  installed Article CMS consumer; native Content history behind the shared
+  editorial boundary; Content-AI for Article title and body.
 - **Replaced:** completion no longer waits for direct Anthropic API live
   inference or for production delivery. Real use is verified with each
   CLI's normal sign-in through an opt-in command.
 - **Deferred:** Pinsel API migration and production settings; production
   resources, remote D1, Access, a real Git publisher, Cloudflare delivery and
-  releases; AI edits to Hosted Content/Mapping-owned values, shared templates
+  releases; Assistant edits to Mapping-owned values and Content fields beyond
+  Article title and body, shared templates
   and source-authored hosts; arbitrary HTML/CSS/JSX and new components;
   task-specific draft branches, partial Apply and Markdown range edits;
   Windows-native CLI support; physical-device checks.
