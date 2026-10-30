@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "e07056934f8d77ae7d49ad9f84c4b8a03f92e0c2",
-  "payloadSha256": "26d2583223f3660d81f6acbf51f4c39a61cdfce26e0fd212f7473f01c332cddb",
-  "rawPackageJsonSha256": "13f8d8385081087e4d2f4fb9199cf5301b2401f5c1dc5c8905717fde1cb40593",
+  "packageOutputSha": "233e1f531571e0aec0f8d66624baa8b118dddedb",
+  "payloadSha256": "24c2c795b914e0b2456d9db784c5896c78f891356de0ceb218162b0aae94bae3",
+  "rawPackageJsonSha256": "a319b2c2a465e78b6a6d3c3cf7f5f1c1dc4f4edfdac918ea954f4e3b9e38ad53",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -42,9 +42,9 @@
     },
     {
       "path": "docs/native-editing.md",
-      "bytes": 16744,
+      "bytes": 17132,
       "mode": 420,
-      "sha256": "9313bdda055c0bb15d3cc76f2de76d9813cb4c4e4a02766ff9cd90a2ec9fe118"
+      "sha256": "a12be6c2e8fee79afeea337f8703a6cb405967e792226f94edd8226b9a069e26"
     },
     {
       "path": "index.html",
@@ -780,9 +780,9 @@
     },
     {
       "path": "server/edit/service.ts",
-      "bytes": 24470,
+      "bytes": 24695,
       "mode": 420,
-      "sha256": "81538b2e975b207194c59dbad304a1f161c74ea5d3130f1be3286eb4d365bf27"
+      "sha256": "1e7c723d13eca17a7e7a4bd6d19f27d65f1fbd6777af95aa65b7e7560ec6bacc"
     },
     {
       "path": "server/editing.d.mts",
@@ -1043,10 +1043,16 @@
       "sha256": "563dcb946fcc32fdd44a451980ff643b77b4420d4cd5827c274af39d7451c986"
     },
     {
-      "path": "server/site-project-local/pack-source-graph.ts",
-      "bytes": 19184,
+      "path": "server/site-project-local/load-boundary.ts",
+      "bytes": 3306,
       "mode": 420,
-      "sha256": "b72e2a99740266c74c7d685b0a48ebfb04218eb672344e17615f04c782a5c8ac"
+      "sha256": "793a524c7ba98d8fcb7b514df83f9b6b82f6f7fb2c88fd8efe5d4292a1298fb5"
+    },
+    {
+      "path": "server/site-project-local/pack-source-graph.ts",
+      "bytes": 19700,
+      "mode": 420,
+      "sha256": "50aa4814847db34acc4822a189696753a2c50a0501d9d1869803a7862859aa99"
     },
     {
       "path": "server/site-project-local/seed.ts",
