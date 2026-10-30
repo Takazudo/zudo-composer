@@ -1,7 +1,7 @@
 /* global window, document */
 // Article CMS acceptance: a real browser drives the host admin over the loopback HTTP host and SQLite.
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,6 +67,25 @@ export async function runArticleCmsProof({ directory } = {}) {
     await page.getByRole("button", { name: "Save", exact: true }).click(); await phase("Saved");
     await page.locator('[data-entry-id="welcome"] .article-status[data-status="changed"]').waitFor();
     check("working reads B", (await api(`/api/entry?q=${q({ perspective: "working", entry: welcome })}`)).values.title === "Article B");
+    // Preview identity: published A -> working B -> preview B -> Published shows A, and back to Working is unreviewed.
+    const previewFrame = page.frameLocator("iframe.article-preview");
+    const previewIs = (state, prefix) => page.waitForFunction(([state, prefix]) => {
+      const frame = document.querySelector("iframe.article-preview");
+      return frame?.dataset.previewState === state && (frame.dataset.previewIdentity ?? "").startsWith(prefix);
+    }, [state, prefix]);
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await previewIs("rendered", "working:");
+    check("working preview renders exactly the saved B snapshot", await previewFrame.locator("h2", { hasText: "Article B" }).count() === 1
+      && (await page.evaluate(() => document.querySelector("iframe.article-preview").dataset.previewIdentity)) === (await page.evaluate(() => {
+        const snapshot = window.articleCms.handle.state.reviewedSnapshot; return snapshot && `working:${snapshot.id}:${snapshot.digest}`; })));
+    await page.getByRole("button", { name: "Published", exact: true }).click();
+    await previewIs("rendered", "published:");
+    check("switching to Published replaces the B preview with the activated A", await previewFrame.locator("h2", { hasText: "Article A" }).count() === 1
+      && await previewFrame.locator("h2", { hasText: "Article B" }).count() === 0);
+    await page.getByRole("button", { name: "Working", exact: true }).click();
+    await titleInput.waitFor();
+    await previewIs("empty", "");
+    check("returning to Working requires a new review", await page.getByRole("button", { name: "Submit", exact: true }).isDisabled());
     await page.getByRole("button", { name: "Published", exact: true }).click();
     await page.locator('[data-entry-id="welcome"] .article-title', { hasText: "Article A" }).waitFor();
     await page.locator('[data-entry-id="welcome"]').click();
@@ -116,6 +135,32 @@ export async function runArticleCmsProof({ directory } = {}) {
     check("incompatible restore answers diagnostics and writes nothing", incompatible?.status === 422 && incompatible.body.restoreDiagnostics?.[0]?.fieldId === "title"
       && incompatible.body.restoreDiagnostics[0].code === "invalid-value" && (await api("/api/state")).draftRevision === beforeIncompatible.draftRevision);
 
+    // Selection ownership: the editor's own navigation and the host list move form, list, history, comparison
+    // and restore target together, and restoring one Article leaves the other unchanged.
+    const welcomeBefore = (await api(`/api/entry?q=${q({ perspective: "working", entry: welcome })}`)).values;
+    await page.reload(); await page.locator('[data-entry-id="welcome"]').click(); await titleInput.waitFor();
+    const notesOption = await page.locator('select[aria-label="Content"] option', { hasText: "Release notes" }).getAttribute("value");
+    await page.getByRole("combobox", { name: "Content" }).selectOption(notesOption);
+    await page.waitForFunction(() => document.querySelector('[data-entry-id="release-notes"][aria-current="true"]') && document.querySelector('.article-history ol[data-history-entry="release-notes"]'));
+    check("editor navigation moves the list, history and host selection", (await titleInput.inputValue()) === "Release notes"
+      && await page.evaluate(() => window.articleCms.selected.recordId) === "release-notes" && await page.locator('[data-entry-id="welcome"][aria-current="true"]').count() === 0);
+    await titleInput.fill("Release notes v2");
+    await page.getByRole("button", { name: "Save", exact: true }).click(); await phase("Saved");
+    const notesHistory = (await api(`/api/revisions?q=${q({ entry: notes })}`)).revisions;
+    const shortNotes = notesHistory.find(revision => revision.values.title === "Release notes");
+    await page.getByRole("button", { name: `Compare revision ${shortNotes.sequence} with working` }).click();
+    await page.locator('.article-diff[data-history-entry="release-notes"] tr[data-field="title"]').waitFor();
+    check("comparison targets the navigated Article", (await page.locator('.article-diff tr[data-field="title"]').textContent()) === "TitleRelease notesRelease notes v2");
+    await page.getByRole("button", { name: `Restore revision ${shortNotes.sequence}` }).click();
+    await page.locator(".article-notice", { hasText: `Restored revision ${shortNotes.sequence}` }).waitFor();
+    const notesAfter = (await api(`/api/revisions?q=${q({ entry: notes })}`)).revisions[0];
+    check("restore targets the navigated Article and leaves the other unchanged", notesAfter.restoredFrom === shortNotes.id && notesAfter.values.title === "Release notes"
+      && JSON.stringify((await api(`/api/entry?q=${q({ perspective: "working", entry: welcome })}`)).values) === JSON.stringify(welcomeBefore));
+    await page.locator('[data-entry-id="welcome"]').click();
+    await page.waitForFunction(() => document.querySelector('.article-history ol[data-history-entry="welcome"]'));
+    check("list navigation moves the editor and history back together", (await titleInput.inputValue()) === welcomeBefore.title
+      && (await page.getByRole("combobox", { name: "Content" }).inputValue()) !== notesOption && await page.evaluate(() => window.articleCms.selected.recordId) === "welcome");
+
     // 9. The standard form edits the same records with the same command.
     await page.getByLabel("Standard form").check();
     await titleInput.waitFor();
@@ -132,6 +177,49 @@ export async function runArticleCmsProof({ directory } = {}) {
     const afterRetry = (await api(`/api/revisions?q=${q({ entry: welcome })}`)).revisions;
     check("a retried request replays without a second revision", JSON.stringify(first) === JSON.stringify(again) && afterRetry.filter(revision => revision.operation.key === "retry-once").length === 1);
 
+    // A delayed render loses to an edit, and to a perspective change, instead of becoming the reviewed preview.
+    const summaryInput = page.getByRole("textbox", { name: "Summary" });
+    // The retry above wrote outside this editor; a clean editor reloads current content first.
+    await page.evaluate(() => window.articleCms.handle.refresh());
+    await page.evaluate(() => { window.articleCms.frame.delayMs = 1500; });
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await previewIs("pending", "working:");
+    await summaryInput.fill("Edited while the preview was rendering.");
+    await page.waitForTimeout(2_000);
+    check("an edit during a delayed render leaves no reviewed preview", await page.evaluate(() => document.querySelector("iframe.article-preview").dataset.previewState) === "empty"
+      && await page.evaluate(() => window.articleCms.handle.state.reviewedSnapshot) === null && await previewFrame.locator("h2").count() === 0);
+    await page.getByRole("button", { name: "Save", exact: true }).click(); await phase("Saved");
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await previewIs("pending", "working:");
+    await page.getByRole("button", { name: "Published", exact: true }).click();
+    await previewIs("rendered", "published:");
+    await page.waitForTimeout(2_000);
+    check("a perspective change during a delayed render keeps the published preview", await page.evaluate(() => document.querySelector("iframe.article-preview").dataset.previewIdentity.startsWith("published:"))
+      && await previewFrame.locator("h2", { hasText: "Article A" }).count() === 1);
+    await page.evaluate(() => { window.articleCms.frame.delayMs = 0; });
+    await page.getByRole("button", { name: "Working", exact: true }).click();
+
+    // Paging: the list and history follow nextCursor instead of stopping at the first page.
+    const paged = await browser.newPage();
+    paged.on("pageerror", error => errors.push(error.message));
+    await paged.goto(`${host.url}/?pageSize=1`);
+    await paged.locator(".article-list li").first().waitFor();
+    const firstListPage = await paged.locator(".article-list li").count();
+    await paged.getByRole("button", { name: "Load more articles" }).click();
+    await paged.locator(".article-list li").nth(1).waitFor();
+    check("article list loads the next page through nextCursor", firstListPage === 1 && await paged.locator(".article-list li").count() === 2
+      && await paged.getByRole("button", { name: "Load more articles" }).count() === 0);
+    await paged.locator('[data-entry-id="welcome"]').click();
+    await paged.locator(".article-history li").first().waitFor();
+    const totalRevisions = (await api(`/api/revisions?q=${q({ entry: welcome, limit: 100 })}`)).revisions.length;
+    while (await paged.getByRole("button", { name: "Load older revisions" }).count()) {
+      const shown = await paged.locator(".article-history li").count();
+      await paged.getByRole("button", { name: "Load older revisions" }).click();
+      await paged.locator(".article-history li").nth(shown).waitFor();
+    }
+    check("history loads every older page through nextCursor", await paged.locator(".article-history li").count() === totalRevisions && totalRevisions > 1);
+    await paged.close();
+
     // 2. A restart preserves working, published and history.
     const beforeRestart = await api(`/api/revisions?q=${q({ entry: welcome, limit: 100 })}`);
     await page.close(); await host.close();
@@ -140,6 +228,35 @@ export async function runArticleCmsProof({ directory } = {}) {
       && (await api(`/api/entry?q=${q({ perspective: "working", entry: welcome })}`)).values.title === "Standard edit"
       && (await api(`/api/entry?q=${q({ perspective: "published", entry: welcome })}`)).values.title === "Article A");
     check("no page errors", errors.length === 0);
+
+    // Interrupted publication: verified but not activated before a stop; a restart activates it exactly once.
+    const interruptedRoot = join(root, "interrupted");
+    let interrupted = await startArticleCms({ directory: interruptedRoot, faults: { stopAfterVerified: true } });
+    const call = async (path, payload) => {
+      const response = await fetch(`${interrupted.url}${path}`, payload === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      return response.json();
+    };
+    try {
+      const saved = await call("/api/execute", { kind: "set-fields", operationKey: "interrupt-save", expected: identities(await call("/api/state")), entry: welcome, values: { title: "Interrupted A" }, clear: [] });
+      const snapshot = (await call("/api/execute", { kind: "capture-snapshot", operationKey: "interrupt-capture", expected: identities(saved.state) })).snapshot;
+      await call("/api/execute", { kind: "begin-publication", operationKey: "interrupt-submit", expected: identities(saved.state), snapshotId: snapshot.id });
+      await interrupted.settled();
+      const stopped = await call("/api/publication-status");
+      check("an interrupted publication stops verified and not activated", stopped.submission.status === "verified" && stopped.activated.integrationFence === 0
+        && (await call(`/api/entry?q=${q({ perspective: "published", entry: welcome })}`)).values.title === "Welcome to the journal");
+      await interrupted.close();
+      interrupted = await startArticleCms({ directory: interruptedRoot });
+      await interrupted.settled();
+      const resumed = await call("/api/publication-status");
+      await interrupted.close();
+      interrupted = await startArticleCms({ directory: interruptedRoot });
+      await interrupted.settled();
+      const again = await call("/api/publication-status");
+      const artifactDirectories = (await readdir(join(interruptedRoot, "artifacts"))).sort();
+      check("a restart resumes it to one activation and one artifact", resumed.submission.status === "integrated" && resumed.activated.integrationFence === 1
+        && JSON.stringify(again.activated) === JSON.stringify(resumed.activated) && JSON.stringify(artifactDirectories) === JSON.stringify([resumed.artifact])
+        && (await call(`/api/entry?q=${q({ perspective: "published", entry: welcome })}`)).values.title === "Interrupted A");
+    } finally { await interrupted.close(); }
     evidence.revisions = beforeRestart.revisions.length;
     return evidence;
   } catch (error) {

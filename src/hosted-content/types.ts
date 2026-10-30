@@ -148,9 +148,14 @@ export interface HostedModelSummary { providerId: string; model: ContentModelRec
 export interface HostedEntryView {
   entry: ContentEntryRef; perspective: HostedPerspective; status: HostedEditorialStatus;
   lifecycle: ContentEntryRecord["lifecycle"]; generation: number; updatedAt: string; values: Record<string, JsonValue>;
-  /** The newest revision id, or null when the Entry has no history yet. */
-  revisionId: string | null;
+  /** Head of the Entry's working history, the same in both perspectives; null before history begins. Guards history and restore. */
+  workingRevisionId: string | null;
+  /** What identifies the shown values: a working revision, or the activated baseline for published values (never a revision id). */
+  valuesIdentity: HostedValuesIdentity;
 }
+export type HostedValuesIdentity =
+  | { perspective: "working"; draftRevision: string; revisionId: string | null }
+  | { perspective: "published"; baseline: HostedState["baseline"]; integrationFence: number };
 export interface HostedPage { cursor?: string; limit?: number }
 export interface HostedEntryPage { entries: HostedEntryView[]; nextCursor: string | null }
 export interface HostedRevisionPage { revisions: HostedRevision[]; nextCursor: string | null }

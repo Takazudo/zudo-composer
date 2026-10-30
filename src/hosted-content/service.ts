@@ -7,7 +7,7 @@ import { assertFieldChange, assertSafeUrl, parseHostedCommand, parseHostedQuery,
 import { HostedContentError } from "./types";
 import type {
   ContentEntryRecord, ContentEntryRef, HostedActor, HostedAdoptionResult, HostedCollectionPermission, HostedCommand,
-  HostedCommit, HostedEditorialStatus, HostedEntryView, HostedFieldDifference, HostedHead, HostedIdentities, HostedModelPermission, HostedPerspective, HostedProvider, HostedPublication,
+  HostedCommit, HostedEditorialStatus, HostedEntryView, HostedValuesIdentity, HostedFieldDifference, HostedHead, HostedIdentities, HostedModelPermission, HostedPerspective, HostedProvider, HostedPublication,
   HostedPublicationStage, HostedRebaseChange, HostedRebaseDropReason, HostedReceipt, HostedRestoreDiagnostic, HostedResult, HostedRevision, HostedRevisionOperation, HostedRevisionTarget,
   HostedService, HostedServiceOptions, HostedSnapshot, HostedState, JsonValue,
 } from "./types";
@@ -297,8 +297,11 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
     if (diagnostics.length) throw new HostedContentError("restore-incompatible", "The revision cannot be restored under the current definition and policy; nothing was written.", undefined, diagnostics);
     if (Object.keys(set).length || clear.length) setFields(providers, target, set, clear);
   }
-  function entryView(head: HostedHead, perspective: HostedPerspective, entry: ContentEntryRecord, target: ContentEntryRef, revisionId: string | null): HostedEntryView {
-    return copy({ entry: target, perspective, status: editorialStatus(head, target), lifecycle: entry.lifecycle, generation: entry.generation, updatedAt: entry.updatedAt, values: entry.values, revisionId });
+  function entryView(head: HostedHead, perspective: HostedPerspective, entry: ContentEntryRecord, target: ContentEntryRef, workingRevisionId: string | null): HostedEntryView {
+    const valuesIdentity: HostedValuesIdentity = perspective === "working"
+      ? { perspective, draftRevision: head.state.draftRevision, revisionId: workingRevisionId }
+      : { perspective, baseline: head.state.baseline, integrationFence: head.state.integrationFence };
+    return copy({ entry: target, perspective, status: editorialStatus(head, target), lifecycle: entry.lifecycle, generation: entry.generation, updatedAt: entry.updatedAt, values: entry.values, workingRevisionId, valuesIdentity });
   }
   const perspectiveProviders = (head: HostedHead, perspective: HostedPerspective): HostedProvider[] => perspective === "working" ? head.state.providers : head.baselineProviders;
   /** Current read permissions apply to every perspective and to historical data. */

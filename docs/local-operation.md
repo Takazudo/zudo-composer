@@ -117,7 +117,16 @@ cd <dir> && node article-cms/server.mjs [data-dir] [port]   # default .zudo-loca
 
 Data is one SQLite file plus local artifacts under the data directory. Submit
 writes a local artifact and activates it as the local baseline; nothing is
-deployed, and the publication panel says so. `node article-cms/proof.mjs`
+deployed, and the publication panel says so. Each step resumes from the
+persisted publication status, so a publication stopped after its artifact was
+verified and before activation is activated exactly once at the next start.
+
+The list, history, comparison and restore always follow one selection, whether
+it changes from the list or from the editor's own navigation. The preview names
+the exact working snapshot or published baseline it shows, waits for the frame to
+render that identity, and is cleared or replaced when the perspective, the
+selection or the content changes; Submit stays disabled until the current saved
+content is previewed again. The list and history load further pages on request. `node article-cms/proof.mjs`
 drives the whole journey in Chromium and is part of `pnpm hosted:installed`.
 
 ## Kinds of evidence

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { initializeSqliteDatabase, openSqliteHandle } from "../sqlite-storage.mjs";
 import { articleActor, createArticlePolicy, createArticleSeed, createArticleService } from "./article-data.mjs";
-import { renderArticlesHtml } from "./render.mjs";
+import { projectArticles, renderArticlesHtml } from "./render.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const conflicts = new Set(["revision-conflict", "baseline-conflict", "definition-conflict", "operation-key-reuse", "publication-busy"]);
@@ -24,7 +24,11 @@ export async function buildArticleUi() {
   return { files, metafile: result.metafile };
 }
 
-export async function startArticleCms({ directory, port = 0 } = {}) {
+/**
+ * `faults.stopAfterVerified` is a proof-only interruption: the publisher stops after recording the verified
+ * artifact and before activation, as a crash would. A restart resumes it from the persisted facts.
+ */
+export async function startArticleCms({ directory, port = 0, faults = {} } = {}) {
   directory = resolve(directory);
   const database = join(directory, "articles.sqlite"), artifacts = join(directory, "artifacts");
   await mkdir(directory, { recursive: true });
@@ -36,19 +40,31 @@ export async function startArticleCms({ directory, port = 0 } = {}) {
   const { files } = await buildArticleUi();
   const publishing = new Map();
 
+  const readManifest = id => readFile(join(artifacts, id, "artifact.json"), "utf8").then(JSON.parse, () => null);
+  /** Writes the artifact once; an existing one is reused only when it is exactly this snapshot. */
+  async function ensureArtifact(publicationId, snapshot) {
+    const existing = await readManifest(publicationId);
+    if (existing?.snapshotId === snapshot.id && existing.snapshotDigest === snapshot.digest) return;
+    const target = join(artifacts, publicationId), staging = `${target}.staging`;
+    await rm(staging, { recursive: true, force: true }); await mkdir(staging, { recursive: true });
+    await writeFile(join(staging, "index.html"), renderArticlesHtml(snapshot.renderData));
+    await writeFile(join(staging, "artifact.json"), JSON.stringify({ publicationId, snapshotId: snapshot.id, snapshotDigest: snapshot.digest,
+      notice: "Local artifact only. It is not live and not deployed." }, null, 2));
+    await rm(target, { recursive: true, force: true }); await rename(staging, target);
+  }
   // Local publication: submitted → artifact written (verified) → activated as the local baseline (integrated).
+  // Each step resumes from the persisted status, so an interrupted publication completes once after a restart.
   async function publish(publicationId) {
     await withService(async (service, storage) => {
-      const publication = await service.getPublication(articleActor, publicationId);
-      if (publication.status !== "submitted") return;
+      let publication = await service.getPublication(articleActor, publicationId);
+      if (!["submitted", "verified"].includes(publication.status)) return;
       const snapshot = await storage.readSnapshot(publication.snapshotId);
-      const target = join(artifacts, publicationId), staging = `${target}.staging`;
-      await rm(staging, { recursive: true, force: true }); await mkdir(staging, { recursive: true });
-      await writeFile(join(staging, "index.html"), renderArticlesHtml(snapshot.renderData));
-      await writeFile(join(staging, "artifact.json"), JSON.stringify({ publicationId, snapshotId: snapshot.id, snapshotDigest: snapshot.digest,
-        notice: "Local artifact only. It is not live and not deployed." }, null, 2));
-      await rm(target, { recursive: true, force: true }); await rename(staging, target);
-      await service.recordStatus({ publicationId, snapshotId: snapshot.id, statusVersion: publication.statusVersion + 1, status: "verified", facts: { artifact: publicationId } });
+      await ensureArtifact(publicationId, snapshot);
+      if (publication.status === "submitted") {
+        await service.recordStatus({ publicationId, snapshotId: snapshot.id, statusVersion: publication.statusVersion + 1, status: "verified", facts: { artifact: publicationId } });
+        publication = await service.getPublication(articleActor, publicationId);
+        if (faults.stopAfterVerified) throw new Error("Interrupted after verification (proof fault)");
+      }
       // A deterministic local commit identity for the activated snapshot; no Git repository is involved.
       const gitSha = createHash("sha1").update(snapshot.digest).digest("hex");
       await service.recordConfirmedIntegration({ publicationId, snapshotId: snapshot.id, expectedBaseline: publication.expectedBaseline, gitSha, contentDigest: snapshot.digest });
@@ -58,6 +74,8 @@ export async function startArticleCms({ directory, port = 0 } = {}) {
     if (!publishing.has(id)) publishing.set(id, publish(id).finally(() => publishing.delete(id)));
     return publishing.get(id);
   };
+  const pending = (await withService(service => service.readPublicationStatus(articleActor))).submission;
+  if (pending && ["submitted", "verified"].includes(pending.status)) advance(pending.publicationId).catch(() => undefined);
 
   let hosts = new Set();
   const server = createServer(async (request, response) => {
@@ -72,8 +90,9 @@ export async function startArticleCms({ directory, port = 0 } = {}) {
       if (request.method === "GET" && files.has(path)) { send(200, files.get(path), path.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8"); return; }
       if (request.method === "GET" && path.startsWith("/artifacts/")) {
         const id = path.split("/")[2] ?? "";
-        if (!/^[A-Za-z0-9-]{1,80}$/.test(id)) { send(404, { code: "not-found", message: "No such artifact" }); return; }
-        send(200, await readFile(join(artifacts, id, "index.html"), "utf8"), "text/html; charset=utf-8"); return;
+        const html = /^[A-Za-z0-9-]{1,80}$/.test(id) ? await readFile(join(artifacts, id, "index.html"), "utf8").catch(() => null) : null;
+        if (html === null) { send(404, { code: "not-found", message: "No such artifact" }); return; }
+        send(200, html, "text/html; charset=utf-8"); return;
       }
       const reads = {
         "/api/policy": () => createArticlePolicy(),
@@ -87,6 +106,11 @@ export async function startArticleCms({ directory, port = 0 } = {}) {
         "/api/revision": service => service.readRevision(articleActor, url.searchParams.get("id")),
         "/api/compare": service => service.compareRevisions(articleActor, q()),
         "/api/publication-status": service => service.readPublicationStatus(articleActor),
+        // Host-owned: the activated baseline projected for the published preview, with its identity.
+        "/api/published-site": async (_service, storage) => {
+          const head = await storage.readHead();
+          return { baseline: head.state.baseline, integrationFence: head.state.integrationFence, renderData: projectArticles(head.baselineProviders) };
+        },
       };
       if (request.method === "GET" && reads[path]) { send(200, await withService(reads[path])); return; }
       if (request.method === "POST" && path === "/api/execute") {
@@ -106,7 +130,7 @@ export async function startArticleCms({ directory, port = 0 } = {}) {
   await new Promise((ready, reject) => { server.once("error", reject); server.listen(port, "127.0.0.1", ready); });
   const actual = server.address().port;
   hosts = new Set([`127.0.0.1:${actual}`, `localhost:${actual}`]);
-  return { url: `http://127.0.0.1:${actual}`, database, artifacts,
+  return { url: `http://127.0.0.1:${actual}`, database, artifacts, settled: () => Promise.allSettled(publishing.values()),
     async close() { await Promise.allSettled(publishing.values()); await new Promise(ready => { server.close(() => ready()); server.closeAllConnections?.(); }); } };
 }
 

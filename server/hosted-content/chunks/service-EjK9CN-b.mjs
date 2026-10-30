@@ -1274,7 +1274,16 @@ function createHostedContentService(supplied) {
 		if (diagnostics.length) throw new HostedContentError("restore-incompatible", "The revision cannot be restored under the current definition and policy; nothing was written.", void 0, diagnostics);
 		if (Object.keys(set).length || clear.length) setFields(providers, target, set, clear);
 	}
-	function entryView(head, perspective, entry, target, revisionId) {
+	function entryView(head, perspective, entry, target, workingRevisionId) {
+		const valuesIdentity = perspective === "working" ? {
+			perspective,
+			draftRevision: head.state.draftRevision,
+			revisionId: workingRevisionId
+		} : {
+			perspective,
+			baseline: head.state.baseline,
+			integrationFence: head.state.integrationFence
+		};
 		return copy({
 			entry: target,
 			perspective,
@@ -1283,7 +1292,8 @@ function createHostedContentService(supplied) {
 			generation: entry.generation,
 			updatedAt: entry.updatedAt,
 			values: entry.values,
-			revisionId
+			workingRevisionId,
+			valuesIdentity
 		});
 	}
 	const perspectiveProviders = (head, perspective) => perspective === "working" ? head.state.providers : head.baselineProviders;

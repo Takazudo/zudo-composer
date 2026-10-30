@@ -1,4 +1,4 @@
-import { t as createHostedContentService } from "./chunks/service-W2Pc5NE8.mjs";
+import { t as createHostedContentService } from "./chunks/service-EjK9CN-b.mjs";
 //#region src/hosted-content/testing.ts
 var receiptKey = (actorId, operationKey) => JSON.stringify([actorId, operationKey]);
 var entryKey = (entry) => JSON.stringify([
@@ -38,9 +38,10 @@ function applyCommit(data, change) {
 	if (data.head.version !== change.expectedVersion || change.head.version === change.expectedVersion) return null;
 	if (change.receipt && data.receipts.has(receiptKey(change.receipt.actorId, change.receipt.operationKey))) return null;
 	if (change.snapshot && data.snapshots.has(change.snapshot.id)) return null;
-	const sequences = new Set([...data.revisions.values()].map(sequenceKey));
+	const sequences = new Set([...data.revisions.values()].map(sequenceKey)), ids = new Set(data.revisions.keys());
 	for (const revision of change.revisions ?? []) {
-		if (data.revisions.has(revision.id) || sequences.has(sequenceKey(revision))) return null;
+		if (ids.has(revision.id) || sequences.has(sequenceKey(revision))) return null;
+		ids.add(revision.id);
 		sequences.add(sequenceKey(revision));
 	}
 	const next = {
@@ -593,6 +594,19 @@ async function runHostedContentConformance(factory) {
 			head: changed,
 			snapshot
 		}), "existing snapshot id is refused");
+		const [latest] = await a.storage.listRevisions(lesson, { limit: 1 });
+		assert(latest, "the save recorded a revision");
+		const fresh = (sequence) => ({
+			...latest,
+			id: "atomic-fresh-revision",
+			parentId: latest.id,
+			sequence
+		});
+		assert(!await a.storage.commit({
+			expectedVersion: head.version,
+			head: changed,
+			revisions: [fresh(latest.sequence + 1), fresh(latest.sequence + 2)]
+		}), "a fresh revision id repeated within one commit is refused");
 		equal(await b.dump(), before, "refused commits write nothing, including the head");
 		assert(await a.storage.commit({
 			expectedVersion: head.version,
@@ -1134,6 +1148,29 @@ async function runHostedContentConformance(factory) {
 			"A",
 			"changed"
 		], "working reads B while published reads the activated A");
+		const headRevision = (await two.listRevisions(actor, {
+			entry: lesson,
+			limit: 1
+		})).revisions[0].id;
+		equal([
+			working.workingRevisionId,
+			published.workingRevisionId,
+			working.valuesIdentity,
+			published.valuesIdentity
+		], [
+			headRevision,
+			headRevision,
+			{
+				perspective: "working",
+				draftRevision: (await two.readState(actor)).draftRevision,
+				revisionId: headRevision
+			},
+			{
+				perspective: "published",
+				baseline: integrated.activated.baseline,
+				integrationFence: integrated.activated.integrationFence
+			}
+		], "published values are identified by the activated baseline, never by the newest working revision");
 		equal((await two.readEntry(actor, {
 			perspective: "working",
 			entry: faq

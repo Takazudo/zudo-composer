@@ -243,7 +243,7 @@ open across host code, so it maps directly onto D1 `batch()`:
   writes everything or nothing. It resolves `false`, writing nothing, when the
   stored head version differs from `expectedVersion` or the receipt `(actorId,
   operationKey)`, snapshot ID, revision ID or revision `(entry, sequence)` already
-  exists. It throws only when the outcome
+  exists, or repeats within the same commit. It throws only when the outcome
   is unknown or storage failed; a throw after a durable write is recovered
   through the receipt.
 
@@ -326,7 +326,7 @@ and applies the current policy, including to history.
 | --- | --- |
 | `listModels(actor)` | policy-visible models (`ContentModelRecord`, with presentation metadata) and working/published Entry counts |
 | `listEntries(actor, { perspective, providerId, modelId, cursor?, limit? })` | at most 100 Entries ordered by ID, with `nextCursor` |
-| `readEntry(actor, { perspective, entry })` | one Entry's values, lifecycle, editorial status and newest revision ID |
+| `readEntry(actor, { perspective, entry })` | one Entry's values, lifecycle, editorial status, `workingRevisionId` and `valuesIdentity` |
 | `listRevisions(actor, { entry, cursor?, limit? })` | at most 100 revisions newest first, with `nextCursor` |
 | `readRevision(actor, revisionId)` | one exact revision |
 | `compareRevisions(actor, { entry, from, to })` | field differences between two revisions or perspectives |
@@ -338,6 +338,14 @@ activated; it is never the draft filtered by lifecycle. Editorial status is `new
 (no published version), `published` (working equals published) or `changed`.
 Incomplete drafts may still be saved; submission keeps its stricter completeness
 check.
+
+**Identities.** `workingRevisionId` is the head of the Entry's working history in
+both perspectives; restore and history guards use it. It never names published
+values. `valuesIdentity` says what the shown values are: in `working`, the draft
+revision and that working revision; in `published`, the activated baseline
+(`gitSha`, `contentDigest`) and its integration fence. Published values have no
+revision ID of their own, because one activation may publish several working
+revisions at once.
 
 **History.** Every working change of an Entry's values appends one immutable
 `HostedRevision` with its ID, parent, per-Entry sequence, values, hosted

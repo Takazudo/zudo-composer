@@ -57,10 +57,10 @@ function applyCommit(data: MemoryData, change: HostedCommit): MemoryData | null 
   if (data.head.version !== change.expectedVersion || change.head.version === change.expectedVersion) return null;
   if (change.receipt && data.receipts.has(receiptKey(change.receipt.actorId, change.receipt.operationKey))) return null;
   if (change.snapshot && data.snapshots.has(change.snapshot.id)) return null;
-  const sequences = new Set([...data.revisions.values()].map(sequenceKey));
+  const sequences = new Set([...data.revisions.values()].map(sequenceKey)), ids = new Set(data.revisions.keys());
   for (const revision of change.revisions ?? []) {
-    if (data.revisions.has(revision.id) || sequences.has(sequenceKey(revision))) return null;
-    sequences.add(sequenceKey(revision));
+    if (ids.has(revision.id) || sequences.has(sequenceKey(revision))) return null;
+    ids.add(revision.id); sequences.add(sequenceKey(revision));
   }
   const next = { head: clone(change.head), receipts: new Map(data.receipts), snapshots: new Map(data.snapshots), publications: new Map(data.publications), revisions: new Map(data.revisions) };
   for (const revision of change.revisions ?? []) next.revisions.set(revision.id, clone(revision));
@@ -341,6 +341,10 @@ export async function runHostedContentConformance(factory: HostedConformanceFact
     assert(!await a.storage.commit({ expectedVersion: `${head.version}-stale`, head: changed }), "stale version is refused");
     assert(!await a.storage.commit({ expectedVersion: head.version, head: changed, receipt: { ...receipt!, fingerprint: "other" } }), "existing receipt key is refused");
     assert(!await a.storage.commit({ expectedVersion: head.version, head: changed, snapshot: snapshot! }), "existing snapshot id is refused");
+    const [latest] = await a.storage.listRevisions(lesson, { limit: 1 });
+    assert(latest, "the save recorded a revision");
+    const fresh = (sequence: number): HostedRevision => ({ ...latest!, id: "atomic-fresh-revision", parentId: latest!.id, sequence });
+    assert(!await a.storage.commit({ expectedVersion: head.version, head: changed, revisions: [fresh(latest!.sequence + 1), fresh(latest!.sequence + 2)] }), "a fresh revision id repeated within one commit is refused");
     equal(await b.dump(), before, "refused commits write nothing, including the head");
     assert(await a.storage.commit({ expectedVersion: head.version, head: changed }), "current version commits");
     equal((await b.storage.readHead()).version, "atomic-next", "a successful commit stores the new version");
@@ -570,6 +574,11 @@ export async function runHostedContentConformance(factory: HostedConformanceFact
     const working = await two.readEntry(actor, { perspective: "working", entry: lesson });
     const published = await two.readEntry(actor, { perspective: "published", entry: lesson });
     equal([working.values.title, working.status, published.values.title, published.status], ["B", "changed", "A", "changed"], "working reads B while published reads the activated A");
+    const headRevision = (await two.listRevisions(actor, { entry: lesson, limit: 1 })).revisions[0]!.id;
+    equal([working.workingRevisionId, published.workingRevisionId, working.valuesIdentity, published.valuesIdentity],
+      [headRevision, headRevision, { perspective: "working", draftRevision: (await two.readState(actor)).draftRevision, revisionId: headRevision },
+        { perspective: "published", baseline: integrated.activated.baseline, integrationFence: integrated.activated.integrationFence }],
+      "published values are identified by the activated baseline, never by the newest working revision");
     equal((await two.readEntry(actor, { perspective: "working", entry: faq })).status, "published", "an unchanged Entry is published");
     const page = await two.listEntries(actor, { perspective: "published", providerId: "content", modelId: "lesson" });
     equal([page.entries.map(entry => entry.values.title), page.nextCursor], [["A"], null], "published lists read the baseline");

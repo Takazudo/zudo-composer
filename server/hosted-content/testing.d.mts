@@ -355,9 +355,20 @@ interface HostedEntryView {
     generation: number;
     updatedAt: string;
     values: Record<string, JsonValue>;
-    /** The newest revision id, or null when the Entry has no history yet. */
-    revisionId: string | null;
+    /** Head of the Entry's working history, the same in both perspectives; null before history begins. Guards history and restore. */
+    workingRevisionId: string | null;
+    /** What identifies the shown values: a working revision, or the activated baseline for published values (never a revision id). */
+    valuesIdentity: HostedValuesIdentity;
 }
+type HostedValuesIdentity = {
+    perspective: "working";
+    draftRevision: string;
+    revisionId: string | null;
+} | {
+    perspective: "published";
+    baseline: HostedState["baseline"];
+    integrationFence: number;
+};
 interface HostedPage {
     cursor?: string;
     limit?: number;
