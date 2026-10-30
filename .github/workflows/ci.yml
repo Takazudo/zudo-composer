@@ -45,8 +45,6 @@ jobs:
       - run: pnpm site-project:boundary
       - run: pnpm contract:conformance
       - run: pnpm contract:negative-scan
-      - run: pnpm contract:external-install
-      - run: pnpm ui:external-install
       - run: pnpm handoff:boundary
       - run: pnpm styles:class-names
       - run: pnpm provider:boundary
@@ -61,9 +59,6 @@ jobs:
       - run: pnpm test:browser:dev
         env:
           CI: true
-      # Real dev server, pack renderers and Assistant adapter against a loopback
-      # scripted Messages API (fake model replies; not live inference).
-      - run: pnpm test:browser:assistant
       # The site-project and demo browser lanes verify artifacts prepared here
       # and never rebuild them.
       - run: pnpm demo:build-sites
@@ -82,6 +77,59 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-results
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # The two exact package-root Git installs fetch over the network; a slow
+  # remote once stalled one for eight minutes inside validate's budget.
+  package-handoffs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Expose pnpm to isolated hosts
+        run: node scripts/prepare-packed-pnpm.mjs
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm contract:external-install
+      - run: pnpm ui:external-install
+
+  # Dev-server Assistant lanes need no build output, so they run beside
+  # validate instead of inside its 45-minute budget. Serial within this job.
+  assistant-browser:
+    # Same runner image as validate: the Vite dev-server lanes fail on ubuntu-26.04.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # Real dev server, pack renderers and Assistant adapter against a loopback
+      # scripted Messages API (fake model replies; not live inference).
+      - run: pnpm test:browser:assistant
+      # The persistent assistant:local launcher on every demo and the native-edit
+      # fixture: fake provider, free loopback port, serial after the lane above.
+      - run: pnpm test:browser:assistant:local-host
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: assistant-playwright-results
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
