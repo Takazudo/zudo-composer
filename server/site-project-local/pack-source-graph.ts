@@ -17,6 +17,11 @@ export interface PackSourceGraph {
   readonly dependencies: readonly PackSourceDependency[];
   /** Editing-only full executed graph, including installed dependency bytes. */
   readonly attestedFiles?: readonly string[];
+  /**
+   * Editing-only real paths of installed packages with a load the walk cannot prove. Their attestation is
+   * complete only while `enforceComputedLoadBoundary` confines what those packages load to `attestedFiles`.
+   */
+  readonly confinedPackages?: readonly string[];
 }
 
 export interface CollectPackSourceGraphOptions {
@@ -86,6 +91,7 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
   const dependencies = new Map<string, PackSourceDependency>();
   const followed = new Set<string>();
   const widened = new Set<string>();
+  const confined = new Set<string>();
   const queue: string[] = [];
 
   async function admit(resolvedId: string, from: string, follow: boolean): Promise<void> {
@@ -163,12 +169,13 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
   }
 
   // An installed file whose loads cannot be proven statically (a computed
-  // `import()` in a WASM loader, say) may reach any file of its own installed
-  // package and any package that package declares. The editing attestation
-  // widens to exactly that closure: every byte is attested, every module in it
-  // is followed like a statically reached one (so its own imports, including
-  // further dependencies, are attested and recorded too), and an undeclared or
-  // missing dependency refuses the graph. Host-owned source still fails closed.
+  // `import()` in a WASM loader, say) could reach any file at all, so a
+  // declaration is no confinement. The editing attestation widens to its own
+  // package and the packages it declares: every byte is attested, every module
+  // in it is followed like a statically reached one, and an undeclared or
+  // missing dependency refuses the graph. The package is then recorded as
+  // confined, and `enforceComputedLoadBoundary` refuses at load time anything
+  // it resolves outside the attested files. Host-owned source still fails closed.
   async function widenToPackage(file: string, reason: string): Promise<void> {
     const segments = file.split(sep);
     const modulesIndex = segments.lastIndexOf("node_modules");
@@ -176,7 +183,9 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
     const hostOwned = !inHost.startsWith(`..${sep}`) && !isAbsolute(inHost) && !inHost.split(sep).includes("node_modules");
     if (!options.attestExternalFiles || modulesIndex === -1 || hostOwned) fail(reason);
     const scoped = segments[modulesIndex + 1]?.startsWith("@") ?? false;
-    await widenPackageDir(segments.slice(0, modulesIndex + (scoped ? 3 : 2)).join(sep), reason);
+    const packageDir = segments.slice(0, modulesIndex + (scoped ? 3 : 2)).join(sep);
+    confined.add(await realpath(packageDir));
+    await widenPackageDir(packageDir, reason);
   }
 
   async function widenPackageDir(packageDir: string, reason: string): Promise<void> {
@@ -243,7 +252,7 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
 
   return {
     files: [...files].sort(byCodePoint),
-    ...(options.attestExternalFiles ? { attestedFiles: [...attestedFiles].sort(byCodePoint) } : {}),
+    ...(options.attestExternalFiles ? { attestedFiles: [...attestedFiles].sort(byCodePoint), confinedPackages: [...confined].sort(byCodePoint) } : {}),
     dependencies: [...dependencies.values()].sort((a, b) => byCodePoint(a.name, b.name) || byCodePoint(a.version, b.version)),
   };
 }

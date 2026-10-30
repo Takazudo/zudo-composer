@@ -14,6 +14,7 @@ import { planLinkedJsxModules } from "../../src/composer/source/plan-linked-jsx"
 import type { CompositionRecord } from "../../src/composer/library/types";
 import type { JsonObject } from "../../src/composer/model/types";
 import { resolveLocalReleaseToolchain } from "../site-project-local/toolchain-config";
+import { enforceComputedLoadBoundary } from "../site-project-local/load-boundary";
 import { collectPackSourceGraph } from "../site-project-local/pack-source-graph";
 import { workspaceDomainRoots } from "../../src/shared/workspace-scope";
 import { withMutationBarrier } from "../../src/shared/node-fs";
@@ -129,6 +130,8 @@ export function createEditingService(options: CaptureHostOptions) {
   const sources = async (state: CaptureHostOptions) => ({
     executedGraph: await (async () => {
       const graph = await collectPackSourceGraph({ hostRoot: state.config.workspaceRoot, entryPath: state.packIdentity.entryPath, sourceModules: state.pack.manifest.components.map(component => component.source.module), extraRoots: [state.config.configPath], attestExternalFiles: true });
+      // The attestation covers an unprovable load only while it is confined to the attested files.
+      enforceComputedLoadBoundary(graph);
       return Promise.all((graph.attestedFiles ?? []).map(async path => [path, await sourceBytes(path)]));
     })(),
     hostSources: await Promise.all([state.config.configPath, join(state.config.workspaceRoot, "site-project.ts"), join(state.config.workspaceRoot, "site-project.json")].map(sourceBytes)),

@@ -1,8 +1,10 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
+import { createModuleEvaluator } from "../../module-evaluator.mjs";
+import { enforceComputedLoadBoundary } from "../load-boundary";
 import { collectPackSourceGraph } from "../pack-source-graph";
 
 async function host(files: Record<string, string>): Promise<string> {
@@ -218,6 +220,36 @@ describe("collectPackSourceGraph", () => {
     expect(installedUnder(graph, "/nested/node_modules/deep/")).toEqual(["index.js", "package.json"]);
     expect(installedUnder(graph, "/node_modules/sibling/")).toEqual(["index.js", "package.json"]);
     expect(graph.dependencies.map(({ name }) => name)).toEqual(expect.arrayContaining(["@scope/wasm", "nested", "deep", "sibling"]));
+  });
+
+  it("confines an installed computed loader to attested files when it loads an undeclared nested or sibling target", async () => {
+    const root = await host({
+      ...computedLoader,
+      "node_modules/@scope/wasm/glue.mjs": "export const glue = \"own\";\n",
+      "node_modules/@scope/wasm/node_modules/undeclared/package.json": JSON.stringify({ name: "undeclared", version: "1.0.0", exports: "./index.js" }),
+      "node_modules/@scope/wasm/node_modules/undeclared/index.js": "export const undeclared = 1;\n",
+      "node_modules/stray/package.json": JSON.stringify({ name: "stray", version: "1.0.0", exports: "./index.js" }),
+      "node_modules/stray/index.js": "export const stray = 1;\n",
+      "loose.js": "export const loose = 1;\n",
+    });
+    const graph = await collectPackSourceGraph({ hostRoot: root, entryPath: join(root, "pack.ts"), sourceModules: [], attestExternalFiles: true });
+    expect(graph.confinedPackages).toEqual([await realpath(join(root, "node_modules/@scope/wasm"))]);
+    // The attestation itself never lists the undeclared targets, so only load-time confinement can cover them.
+    expect(installedUnder(graph, "/wasm/node_modules/undeclared/")).toEqual([]);
+    expect(installedUnder(graph, "/node_modules/stray/")).toEqual([]);
+    enforceComputedLoadBoundary(graph);
+    const file = (path: string) => pathToFileURL(join(root, path)).href;
+    // Evaluate the pack exactly as editing does: the installed loader is externalized to native Node loading.
+    const { load } = await createModuleEvaluator(root)(join(root, "pack.ts")) as { load: (specifier: string) => Promise<Record<string, unknown>> };
+    await expect(load(file("node_modules/@scope/wasm/glue.mjs"))).resolves.toMatchObject({ glue: "own" });
+    await expect(load(file("node_modules/@scope/wasm/node_modules/nested/more.js"))).resolves.toMatchObject({ more: 1 });
+    await expect(load("sibling")).resolves.toMatchObject({ sibling: 1 });
+    await expect(load(file("node_modules/@scope/wasm/node_modules/undeclared/index.js"))).rejects.toThrow(/did not attest/);
+    await expect(load("undeclared")).rejects.toThrow(/did not attest/);
+    await expect(load("stray")).rejects.toThrow(/did not attest/);
+    await expect(load(file("loose.js"))).rejects.toThrow(/did not attest/);
+    await expect(load("data:text/javascript,export default 1")).rejects.toThrow(/did not attest/);
+    await expect(load("node:path")).resolves.toHaveProperty("join");
   });
 
   it("follows a dynamically reachable internal module into the dependency it imports", async () => {
