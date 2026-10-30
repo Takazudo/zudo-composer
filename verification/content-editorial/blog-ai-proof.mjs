@@ -6,13 +6,15 @@
 // Apply and Undo each append one revision, and a lost acknowledgement followed
 // by a dev-server restart is recovered from the stored receipts without a
 // duplicate. Fake replies are not model evidence.
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startBlogHost } from "./blog-host.mjs";
 
 const port = Number(process.env.BLOG_AI_PORT ?? 4179);
+// When set, a failure leaves a screenshot, a Playwright trace and the dev-server log here.
 const artifacts = process.env.BLOG_PROOF_ARTIFACTS;
+if (artifacts) await mkdir(artifacts, { recursive: true });
 const checks = [];
 const check = (name) => { checks.push(name); console.log(`ok ${checks.length} - ${name}`); };
 const host = await startBlogHost({ port, assistant: { provider: "fake", permission: "apply" } });
@@ -49,6 +51,7 @@ await context.route("**/zc-slow-figure.png", async (route) => { await gate; awai
 await context.route("**/zc-missing-figure.png", (route) => route.fulfill({ status: 404, body: "" }));
 if (artifacts) await context.tracing.start({ screenshots: true, snapshots: true });
 const page = await context.newPage();
+let failed = false;
 const failures = [];
 // Errors from loads cut off by the simulated crash, or while the restarted server settles its
 // dependency graph, are not part of the journey; every other page error fails the proof.
@@ -149,7 +152,6 @@ try {
   if (after.revisions.length !== before.revisions.length || JSON.stringify(after.entry.values) !== JSON.stringify(before.entry.values)) throw new Error("Preparing or rendering wrote Content.");
   await expect(title).toHaveValue("The quiet hour, edited during render");
   check("C's Markdown renders as a visible heading through the Blog's own components, beside the diff and raw text, and nothing is written");
-  if (artifacts) await page.screenshot({ path: join(artifacts, "content-ai-ready.png"), fullPage: true });
 
   // Step 5–7: the Apply commits but its acknowledgement is lost, then the server restarts.
   await page.route("**/__zudo_composer_content_provider", async (route) => {
@@ -230,11 +232,15 @@ try {
   check("no page errors");
   console.log(`Blog Content-AI proof: ${checks.length}/${checks.length} checks passed`);
 } catch (error) {
+  failed = true;
   console.error(host.output().slice(-4000));
-  if (artifacts) await page.screenshot({ path: join(artifacts, "content-ai-failure.png"), fullPage: true }).catch(() => {});
+  if (artifacts) {
+    await page.screenshot({ path: join(artifacts, "content-ai-failure.png"), fullPage: true }).catch(() => {});
+    await writeFile(join(artifacts, "content-ai-server.log"), host.output());
+  }
   throw error;
 } finally {
-  if (artifacts) await context.tracing.stop({ path: join(artifacts, "content-ai-trace.zip") }).catch(() => {});
+  if (artifacts) await context.tracing.stop(failed ? { path: join(artifacts, "content-ai-trace.zip") } : {}).catch(() => {});
   await browser.close();
   await host.stop();
 }
