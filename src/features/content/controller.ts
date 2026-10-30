@@ -22,7 +22,9 @@ import {
   type ContentRecordRef,
   type ContentSnapshot,
   type ContentProvider,
+  type ContentStore,
 } from "../../content";
+import type { ContentEditorialBoundary, EditorialReceipt } from "../../content/editorial";
 import { createUuidIdFactory, type IdFactory } from "../../shared";
 import { createSaveQueue, type SaveQueue } from "../../shared/persistence";
 import type { AssetSummary } from "../../assets";
@@ -66,12 +68,14 @@ export interface ContentAuthoringState {
   incoming: readonly { owner: ContentGraphLocation; ordered: boolean }[];
   publicationState: "draft" | "published" | "published-pending" | "published-baseline-unavailable";
   conflictRecovery: { message: string; canReapply: boolean; authoritativeReady: boolean } | null;
+  /** The outcome of the last history action, kept across the Entry reload it causes. */
+  historyNotice: { entryId: string; text: string } | null;
 }
 
 const initialState: ContentAuthoringState = {
   viewId: null,
   phase: "idle", modelSelectionPending: false, entryCreationPending: false, models: [], providerId: "", providerLabel: "", modelDescriptions: {}, entryCounts: {}, incompleteCounts: {}, model: null, entries: [], usedFieldIds: [], entry: null,
-  workMode: "entries", saveStatus: "pristine", message: "", recoveryMessage: null, graphStatus: "idle", graphMessage: "", snapshots: [], incoming: [], publicationState: "draft", conflictRecovery: null,
+  workMode: "entries", saveStatus: "pristine", message: "", recoveryMessage: null, graphStatus: "idle", graphMessage: "", snapshots: [], incoming: [], publicationState: "draft", conflictRecovery: null, historyNotice: null,
 };
 
 function queueStatus(state: { status: Exclude<ContentSaveStatus, "pristine"> }): Exclude<ContentSaveStatus, "pristine"> {
@@ -383,7 +387,7 @@ export class ContentAuthoringController {
     // only change this one Entry's completeness, so the delta is exact.
     const model = this.current.model;
     const delta = model ? Number(this.completeness(updated).length > 0) - Number(this.completeness(entry).length > 0) : 0;
-    this.set({ ...this.current, entry: updated, entries: this.current.entries.map((item) => item.id === updated.id ? updated : item), publicationState: this.publicationState(updated),
+    this.set({ ...this.current, historyNotice: null, entry: updated, entries: this.current.entries.map((item) => item.id === updated.id ? updated : item), publicationState: this.publicationState(updated),
       ...(model && delta !== 0 ? { incompleteCounts: shiftCount(this.current.incompleteCounts, model.id, delta) } : {}),
       usedFieldIds: value === undefined || value === "" ? this.current.usedFieldIds : [...new Set([...this.current.usedFieldIds, fieldId])] });
   }
@@ -472,6 +476,38 @@ export class ContentAuthoringController {
     await applyContentInverseMutation(ownerStore, read.snapshots, edits);
     if (ownerStore === this.provider.store && inverse.source.recordId === this.current.model?.id) this.listRequestId++;
     await this.refreshGraph(target, entryRequestId);
+  }
+
+  /** History, compare and restore, when the open provider answers the editorial boundary. */
+  get editorial(): ContentEditorialBoundary | null {
+    const store = this.provider.store as ContentStore & { editorial?: ContentEditorialBoundary };
+    return store.editorial ?? null;
+  }
+
+  /** The open Entry's provider-qualified identity. */
+  entryRef(entry = this.current.entry): ContentEntryRef {
+    if (!entry) throw new Error("No Entry is open.");
+    return { providerId: this.provider.store.provider.id, modelId: entry.modelId, recordId: entry.id };
+  }
+
+  /**
+   * Restore a revision as a new working revision. Pending edits are saved
+   * first, so the restore is checked against everything already typed.
+   */
+  async restoreRevision(revisionId: string): Promise<EditorialReceipt> {
+    const editorial = this.editorial;
+    if (!editorial) throw new Error("This Content provider has no revision history.");
+    const entry = this.current.entry;
+    if (!entry) throw new Error("No Entry is open.");
+    await this.flushEditSessions();
+    const ref = this.entryRef(entry);
+    const view = await editorial.readEntry({ entry: ref, perspective: "working" });
+    const revision = await editorial.readRevision({ entry: ref, revisionId });
+    const receipt = await editorial.restoreRevision({ entry: ref, revisionId, expected: view.expected, operationKey: this.idFactory("restore") });
+    await this.reloadEntries();
+    if (this.current.entry?.id !== entry.id) await this.openEntry(entry.id);
+    this.set({ ...this.current, historyNotice: { entryId: entry.id, text: `Restored revision ${revision.sequence} as a new revision.` } });
+    return receipt;
   }
 
   async requestUnpublish(): Promise<void> {

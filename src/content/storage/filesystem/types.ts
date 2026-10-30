@@ -1,5 +1,6 @@
 import type { RecordMutationTokenSource, SafeRootFilesystemOperations } from "../../../shared/node-fs";
 import { CONTENT_ENTRY_SCHEMA_VERSION, CONTENT_MODEL_SCHEMA_VERSION } from "../../model";
+import type { ContentProvenance } from "../../library";
 
 /** Pointer/generation protocol version owned by the transactional record store. */
 export const CONTENT_RECORD_SCHEMA_VERSION = 1;
@@ -54,6 +55,6 @@ export interface FilesystemContentStoreOptions {
   newMutationToken?: RecordMutationTokenSource;
   /** Clock used when a provider-owned operation restamps `updatedAt`. */
   now?: () => string;
-  /** Trusted label recorded on revisions written by ordinary store mutations. */
-  revisionSource?: string;
+  /** Trusted provenance recorded on revisions written by ordinary store mutations. */
+  revisionProvenance?: ContentProvenance;
 }

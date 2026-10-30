@@ -9,6 +9,9 @@ import type { ContentEntryRecord } from "../../model";
 import { createFilesystemContentStore, type FilesystemContentStore } from "../filesystem";
 import { workspaceScopedRoot } from "../../../shared/workspace-scope";
 
+/** The local operator owns this single-user dev server; the Content editor is its only writer here. */
+const CONTENT_EDITOR_PROVENANCE = { actor: { id: "local-owner" }, source: "content-editor" };
+
 /**
  * The Content root, scoped to one workspace. Directory scoping lives in exactly
  * one module, and it is reached from here rather than from the plugin so the
@@ -16,16 +19,13 @@ import { workspaceScopedRoot } from "../../../shared/workspace-scope";
  * graph, which cannot import TypeScript.
  */
 export function createWorkspaceScopedContentStore(contentRoot: string, workspaceId: string) {
-  return createFilesystemContentStore({ contentRoot: workspaceScopedRoot(contentRoot, workspaceId) });
+  return createFilesystemContentStore({ contentRoot: workspaceScopedRoot(contentRoot, workspaceId), revisionProvenance: CONTENT_EDITOR_PROVENANCE });
 }
 export { CONTENT_FILE_PROVIDER_OPERATIONS } from "./types";
 
 export function isContentPersistenceError(value: unknown): boolean {
   return value instanceof ContentPersistenceError;
 }
-
-/** The local operator owns this single-user dev server; the Content editor is its only writer here. */
-const CONTENT_EDITOR_PROVENANCE = { actor: { id: "local-owner" }, source: "content-editor" } as const;
 
 /**
  * One editorial request from the Content editor. Refusals come back as an

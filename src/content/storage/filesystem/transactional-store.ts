@@ -197,11 +197,11 @@ export class TransactionalContentStore implements ContentStore {
   protected constructor(
     private readonly records: RecordTransactionStorage,
     private readonly now: () => string,
-    private readonly revisionSource: string,
+    private readonly revisionProvenance: ContentProvenance,
   ) {}
 
-  static async fromRecords(records: RecordTransactionStorage, now: () => string = () => new Date().toISOString(), revisionSource = "content-store"): Promise<TransactionalContentStore> {
-    const store = new this(records, now, revisionSource);
+  static async fromRecords(records: RecordTransactionStorage, now: () => string = () => new Date().toISOString(), revisionProvenance: ContentProvenance = { actor: null, source: "content-store" }): Promise<TransactionalContentStore> {
+    const store = new this(records, now, structuredClone(revisionProvenance));
     await store.open();
     return store;
   }
@@ -522,8 +522,8 @@ export class TransactionalContentStore implements ContentStore {
         parentId: parent?.id ?? null,
         values: structuredClone(entry.values),
         createdAt,
-        actor: revision?.provenance.actor ? { id: revision.provenance.actor.id } : null,
-        source: revision?.provenance.source ?? this.revisionSource,
+        actor: structuredClone((revision?.provenance ?? this.revisionProvenance).actor),
+        source: (revision?.provenance ?? this.revisionProvenance).source,
         operation: revision?.operation ?? { kind: operation === "remove-field" ? "remove-field" : "save", key: null },
         ...(revision?.restoredFrom ? { restoredFrom: revision.restoredFrom } : {}),
       });
