@@ -34,7 +34,7 @@ try {
   const response = await worker.dispatchFetch("http://worker.test/");
   assert.equal(response.status, 200);
   const data = await response.json();
-  assert.equal(data.report.scenarios.length, 14);
+  assert.equal(data.report.scenarios.length, 15);
   assert.equal(data.projection.status, "ready");
   assert.equal(JSON.stringify(data.projection.routes), JSON.stringify(neutralRoutes(compilation)), "Worker projection equals the Node static build routes");
   data.projection = { status: data.projection.status, routes: data.projection.routes.length, parity: "byte-identical" };
