@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "79635a7c1d40c44f9f5213ee9ad549bfb4aaf0e1",
-  "payloadSha256": "1dd43f5fd90cb6e8736b82979a97c980414854039f76966dd9c1ddfd9bfbb813",
-  "rawPackageJsonSha256": "4b90fcc9b8d966fc6210d66b891b10a1e1cb5f4c06fa0e5810614db7d2cdda69",
+  "packageOutputSha": "e07056934f8d77ae7d49ad9f84c4b8a03f92e0c2",
+  "payloadSha256": "26d2583223f3660d81f6acbf51f4c39a61cdfce26e0fd212f7473f01c332cddb",
+  "rawPackageJsonSha256": "13f8d8385081087e4d2f4fb9199cf5301b2401f5c1dc5c8905717fde1cb40593",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -30,9 +30,9 @@
     },
     {
       "path": "docs/assistant.md",
-      "bytes": 17279,
+      "bytes": 17447,
       "mode": 420,
-      "sha256": "25ce5d151c4f527783c6b0acc4c8b3d1fdaf3d283985042423398c657fb9a884"
+      "sha256": "0ffc8137fc251ceb80dc126a51b2e4561ed8821f6e352de65b03b0a31dad785c"
     },
     {
       "path": "docs/hosted-content.md",
@@ -42,9 +42,9 @@
     },
     {
       "path": "docs/native-editing.md",
-      "bytes": 16275,
+      "bytes": 16744,
       "mode": 420,
-      "sha256": "e0971df52367350649c7cbfc3870d920b96cba6975e73727a45c627c3523e3b5"
+      "sha256": "9313bdda055c0bb15d3cc76f2de76d9813cb4c4e4a02766ff9cd90a2ec9fe118"
     },
     {
       "path": "index.html",
@@ -1044,9 +1044,9 @@
     },
     {
       "path": "server/site-project-local/pack-source-graph.ts",
-      "bytes": 16563,
+      "bytes": 19184,
       "mode": 420,
-      "sha256": "5e18ebce8b11d9f54f992a855be00c6e8d55cd83a7adb906ba4ab5f6591074cd"
+      "sha256": "b72e2a99740266c74c7d685b0a48ebfb04218eb672344e17615f04c782a5c8ac"
     },
     {
       "path": "server/site-project-local/seed.ts",
