@@ -412,6 +412,8 @@ interface HostedEntryView {
     workingRevisionId: string | null;
     /** What identifies the shown values: a working revision, or the activated baseline for published values (never a revision id). */
     valuesIdentity: HostedValuesIdentity;
+    /** The identities this read was taken at; a command prepared from it quotes them as `expected`. */
+    expected: HostedIdentities;
 }
 type HostedValuesIdentity = {
     perspective: "working";
@@ -448,6 +450,13 @@ interface HostedFieldDifference {
     after?: JsonValue;
     /** True when the current definition no longer has this field. */
     removedFromDefinition: boolean;
+}
+/** A validated set-fields candidate that was not written. */
+interface HostedFieldPreview {
+    entry: ContentEntryRef;
+    expected: HostedIdentities;
+    values: Record<string, JsonValue>;
+    differences: HostedFieldDifference[];
 }
 interface HostedComparison {
     entry: ContentEntryRef;
@@ -503,6 +512,13 @@ interface HostedService {
         from: HostedRevisionTarget;
         to: HostedRevisionTarget;
     }): Promise<HostedComparison>;
+    /** Run set-fields validation against the pinned identities and return the candidate without writing anything. */
+    previewFields(actor: HostedActor, query: {
+        entry: ContentEntryRef;
+        values: Record<string, JsonValue>;
+        clear: string[];
+        expected: HostedIdentities;
+    }): Promise<HostedFieldPreview>;
     readPublicationStatus(actor: HostedActor): Promise<HostedPublicationOverview>;
     execute(actor: HostedActor, request: unknown): Promise<HostedResult>;
     readReceipt(actor: HostedActor, operationKey: string): Promise<HostedReceipt | null>;
@@ -1400,4 +1416,4 @@ declare function projectHostedSite(plan: HostedSitePlan, providers: HostedProvid
 declare function createHostedSiteProjector(plan: HostedSitePlan): HostedServiceOptions["project"];
 
 export { COMPOSER_PREVIEW_CHANNEL, COMPOSER_PREVIEW_PROTOCOL_VERSION, HostedContentError, canonicalSerialize, createHostedContentService, createHostedSiteProjector, hostedDocumentErrorMessage, hostedDocumentErrorSchema, hostedPreviewBindingSchema, hostedPreviewResponseSchema, hostedReadyMessage, hostedReadySchema, hostedRenderMessage, hostedRenderSchema, hostedRenderedMessage, hostedRenderedSchema, matchesHostedPreviewBinding, projectHostedSite, readHostedPreviewRequest, readHostedPreviewResponse };
-export type { ContentEntryRecord, ContentEntryRef, ContentFieldDefinition, ContentModelRecord, HostedActor, HostedAdoptionResult, HostedAsset, HostedCanonicalAdoption, HostedCollectionPermission, HostedCommand, HostedCommit, HostedComparison, HostedDatabase, HostedDocumentError, HostedDocumentRender, HostedDocumentRendered, HostedEditorialStatus, HostedEntryPage, HostedEntryView, HostedErrorCode, HostedFieldDifference, HostedFieldPermission, HostedHead, HostedIdentities, HostedModelPermission, HostedModelSummary, HostedPage, HostedPerspective, HostedPolicy, HostedPreviewBinding, HostedPreviewGuardFailure, HostedPreviewResponse, HostedProjectedRoute, HostedProjectionDiagnostic, HostedProvider, HostedPublication, HostedPublicationOverview, HostedPublicationStage, HostedRebaseChange, HostedRebaseDropReason, HostedReceipt, HostedRendererIdentity, HostedRestoreDiagnostic, HostedRestoreDiagnosticCode, HostedResult, HostedRevision, HostedRevisionOperation, HostedRevisionPage, HostedRevisionTarget, HostedService, HostedServiceOptions, HostedSitePlan, HostedSiteProjection, HostedSnapshot, HostedState, HostedStorage, HostedTransport, HostedValuesIdentity, MessageEventLike, MessagePoster, MessageTarget, PreviewPackIdentity };
+export type { ContentEntryRecord, ContentEntryRef, ContentFieldDefinition, ContentModelRecord, HostedActor, HostedAdoptionResult, HostedAsset, HostedCanonicalAdoption, HostedCollectionPermission, HostedCommand, HostedCommit, HostedComparison, HostedDatabase, HostedDocumentError, HostedDocumentRender, HostedDocumentRendered, HostedEditorialStatus, HostedEntryPage, HostedEntryView, HostedErrorCode, HostedFieldDifference, HostedFieldPermission, HostedFieldPreview, HostedHead, HostedIdentities, HostedModelPermission, HostedModelSummary, HostedPage, HostedPerspective, HostedPolicy, HostedPreviewBinding, HostedPreviewGuardFailure, HostedPreviewResponse, HostedProjectedRoute, HostedProjectionDiagnostic, HostedProvider, HostedPublication, HostedPublicationOverview, HostedPublicationStage, HostedRebaseChange, HostedRebaseDropReason, HostedReceipt, HostedRendererIdentity, HostedRestoreDiagnostic, HostedRestoreDiagnosticCode, HostedResult, HostedRevision, HostedRevisionOperation, HostedRevisionPage, HostedRevisionTarget, HostedService, HostedServiceOptions, HostedSitePlan, HostedSiteProjection, HostedSnapshot, HostedState, HostedStorage, HostedTransport, HostedValuesIdentity, MessageEventLike, MessagePoster, MessageTarget, PreviewPackIdentity };
