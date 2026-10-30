@@ -1,6 +1,6 @@
 import { readFile, readdir, realpath } from "node:fs/promises";
 import { isBuiltin } from "node:module";
-import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { BuildEnvironment, createIdResolver, parseAst, resolveConfig, transformWithOxc } from "vite";
 import { resolveComposerModules } from "../../plugins/module-resolution.mjs";
 import { tailwindResolverAlias } from "../../plugins/tailwind-plugin.mjs";
@@ -163,8 +163,12 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
   }
 
   // An installed file whose loads cannot be proven statically (a computed
-  // `import()` in a WASM loader, say) widens the editing attestation to every
-  // byte of its own installed package. Host-owned source still fails closed.
+  // `import()` in a WASM loader, say) may reach any file of its own installed
+  // package and any package that package declares. The editing attestation
+  // widens to exactly that closure: every byte is attested, every module in it
+  // is followed like a statically reached one (so its own imports, including
+  // further dependencies, are attested and recorded too), and an undeclared or
+  // missing dependency refuses the graph. Host-owned source still fails closed.
   async function widenToPackage(file: string, reason: string): Promise<void> {
     const segments = file.split(sep);
     const modulesIndex = segments.lastIndexOf("node_modules");
@@ -172,18 +176,48 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
     const hostOwned = !inHost.startsWith(`..${sep}`) && !isAbsolute(inHost) && !inHost.split(sep).includes("node_modules");
     if (!options.attestExternalFiles || modulesIndex === -1 || hostOwned) fail(reason);
     const scoped = segments[modulesIndex + 1]?.startsWith("@") ?? false;
-    const packageDir = segments.slice(0, modulesIndex + (scoped ? 3 : 2)).join(sep);
+    await widenPackageDir(segments.slice(0, modulesIndex + (scoped ? 3 : 2)).join(sep), reason);
+  }
+
+  async function widenPackageDir(packageDir: string, reason: string): Promise<void> {
     if (widened.has(packageDir)) return;
     widened.add(packageDir);
+    const segments = packageDir.split(sep);
+    await admitDependency(segments, segments.lastIndexOf("node_modules"), reason);
     const walk = async (directory: string): Promise<void> => {
       for (const entry of await readdir(directory, { withFileTypes: true })) {
         if (entry.name === "node_modules") continue;
         const path = join(directory, entry.name);
         if (entry.isDirectory()) await walk(path);
-        else if (entry.isFile()) attestedFiles.add(await realpath(path));
+        else if (entry.isFile()) {
+          const real = await realpath(path);
+          attestedFiles.add(real);
+          const extension = extname(real);
+          if ((SCRIPT_EXTENSIONS.has(extension) || extension === ".css") && !/\.d\.[cm]?ts$/.test(real) && !followed.has(real)) {
+            followed.add(real);
+            queue.push(real);
+          }
+        }
+        else fail(`${path} (in installed package ${packageDir}) is neither a regular file nor a directory; ${reason}`);
       }
     };
     await walk(packageDir);
+    let manifest: { dependencies?: unknown; optionalDependencies?: unknown; peerDependencies?: unknown; peerDependenciesMeta?: unknown };
+    try {
+      manifest = JSON.parse(await readFile(join(packageDir, "package.json"), "utf8"));
+    } catch (error) {
+      fail(`${join(packageDir, "package.json")} cannot be read: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const names = (value: unknown) => value !== null && typeof value === "object" ? Object.keys(value) : [];
+    const optional = new Set([...names(manifest.optionalDependencies), ...names(manifest.peerDependencies)]);
+    for (const name of [...new Set([...names(manifest.dependencies), ...optional])].sort(byCodePoint)) {
+      const found = await findInstalledPackage(packageDir, name);
+      if (found === undefined) {
+        if (optional.has(name)) continue;
+        fail(`${packageDir} declares "${name}", which is not installed where it can be reached; ${reason}`);
+      }
+      await widenPackageDir(found, `${reason} (via ${packageDir})`);
+    }
   }
 
   while (queue.length > 0) {
@@ -212,6 +246,20 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
     ...(options.attestExternalFiles ? { attestedFiles: [...attestedFiles].sort(byCodePoint) } : {}),
     dependencies: [...dependencies.values()].sort((a, b) => byCodePoint(a.name, b.name) || byCodePoint(a.version, b.version)),
   };
+}
+
+/** Node's lookup: `<ancestor>/node_modules/<name>` from the package directory upward. */
+async function findInstalledPackage(packageDir: string, name: string): Promise<string | undefined> {
+  for (let directory = packageDir; ; directory = dirname(directory)) {
+    if (basename(directory) !== "node_modules") {
+      const candidate = join(directory, "node_modules", ...name.split("/"));
+      try {
+        await readFile(join(candidate, "package.json"));
+        return candidate;
+      } catch { /* keep looking upward */ }
+    }
+    if (dirname(directory) === directory) return undefined;
+  }
 }
 
 function splitQuery(id: string): [string, string | undefined] {
