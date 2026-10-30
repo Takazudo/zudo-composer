@@ -285,3 +285,6 @@
 .sg-content-ai__note { margin: 0; color: var(--color-muted); font-size: var(--text-sm); }
 .sg-content-ai__proposal, .sg-content-ai__candidate { display: grid; gap: var(--sg-content-space-row-y); min-width: 0; font-size: var(--text-sm); }
 .sg-content-ai__value { margin: 0; padding: 0.5rem; border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface); white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.sg-content-ai__render { display: grid; gap: 0.25rem; min-width: 0; }
+.sg-content-ai__render iframe { inline-size: 100%; block-size: 28rem; border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface); }
+.sg-content-ai__raw > summary { cursor: pointer; }

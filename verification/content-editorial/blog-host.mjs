@@ -20,23 +20,34 @@ export async function startBlogHost({ port, assistant }) {
   if (assistant) {
     await writeFile(join(host, "zudo-composer.config.ts"), `import { defineComposerConfig } from "zudo-composer/config";\n\nexport default defineComposerConfig(${JSON.stringify({ pack: "demo-blog/components", assistant })});\n`);
   }
-  const child = spawn(process.execPath, [join(repository, "bin/zudo-composer.mjs"), "dev", "--root", host, "--port", String(port), "--strict-port"], { cwd: host, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, BROWSER: "none" } });
-  let output = "";
-  child.stdout.on("data", (chunk) => { output += chunk; });
-  child.stderr.on("data", (chunk) => { output += chunk; });
   const origin = `http://localhost:${port}`;
-  const deadline = Date.now() + 60_000;
-  for (;;) {
-    if (child.exitCode !== null) throw new Error(`dev server exited:\n${output}`);
-    if (/Local:\s+http/.test(stripVTControlCharacters(output))) break;
-    if (Date.now() > deadline) throw new Error(`dev server did not start:\n${output}`);
-    await new Promise((done) => setTimeout(done, 500));
-  }
+  let child, output = "";
+  // The same host directory is served again after a restart; nothing is carried over in memory.
+  const launch = async () => {
+    output += "\n--- dev server start ---\n";
+    child = spawn(process.execPath, [join(repository, "bin/zudo-composer.mjs"), "dev", "--root", host, "--port", String(port), "--strict-port"], { cwd: host, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, BROWSER: "none" } });
+    const started = output.length;
+    child.stdout.on("data", (chunk) => { output += chunk; });
+    child.stderr.on("data", (chunk) => { output += chunk; });
+    const deadline = Date.now() + 60_000;
+    for (;;) {
+      if (child.exitCode !== null) throw new Error(`dev server exited:\n${output}`);
+      if (/Local:\s+http/.test(stripVTControlCharacters(output.slice(started)))) break;
+      if (Date.now() > deadline) throw new Error(`dev server did not start:\n${output}`);
+      await new Promise((done) => setTimeout(done, 500));
+    }
+  };
+  const halt = async () => {
+    if (child.exitCode !== null) return;
+    child.kill("SIGTERM");
+    await new Promise((done) => { if (child.exitCode !== null) done(); else child.once("exit", done); });
+  };
+  await launch();
   return {
     origin, host, output: () => output,
+    async restart() { await halt(); await launch(); },
     async stop() {
-      child.kill("SIGTERM");
-      await new Promise((done) => { if (child.exitCode !== null) done(); else child.once("exit", done); });
+      await halt();
       await rm(parent, { recursive: true, force: true });
     },
   };

@@ -28,7 +28,7 @@ export interface NativePublishedContent {
   entries: readonly ContentEntryRecord[];
 }
 export interface NativeEditorialOptions {
-  store: Pick<TransactionalContentStore, "provider" | "readAll" | "editEntry" | "listRevisions" | "readRevision">;
+  store: Pick<TransactionalContentStore, "provider" | "readAll" | "editEntry" | "listRevisions" | "readRevision" | "readReceipt">;
   readPublished(): Promise<NativePublishedContent | null>;
   /** A submission still on its way to activation, when the host tracks one. */
   readSubmission?(): Promise<EditorialPublicationStatus["submission"]>;
@@ -187,6 +187,17 @@ export function createNativeContentEditorial(options: NativeEditorialOptions): C
         if (diagnostics.length) throw new EditorialError("restore-incompatible", "The revision cannot be restored under the current definition; nothing was written.", diagnostics);
         return structuredClone(revision.values);
       }, revision.id);
+    },
+    async readOperation(query) {
+      own(query.entry);
+      if (typeof query.operationKey !== "string" || !query.operationKey.trim()) throw new EditorialError("invalid-request", "An operation key is required.");
+      let found: ContentEditReceipt | null;
+      try { found = await store.readReceipt(provenance.actor?.id ?? null, query.operationKey); } catch (error) { throw translate(error); }
+      if (!found) return null;
+      if (found.entry.recordId !== query.entry.recordId || found.entry.modelId !== query.entry.modelId) throw new EditorialError("operation-key-reuse", "This operation key belongs to another Entry.");
+      // A receipt is keyed by actor only; the revision it appended names the source that wrote it.
+      if (found.revisionId && (await store.readRevision(found.revisionId))?.source !== provenance.source) throw new EditorialError("operation-key-reuse", "This operation key belongs to another source.");
+      return receipt(found);
     },
     async publicationStatus() {
       const published = await options.readPublished();

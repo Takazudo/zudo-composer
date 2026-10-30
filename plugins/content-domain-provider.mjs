@@ -7,7 +7,7 @@
 // belongs to `domain-file-provider-plugin.mjs`, so adding a domain is this file
 // plus one line in the plugin's descriptor list.
 
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { appModuleId } from "./roots.mjs";
 import { COMPONENT_PACK_ID } from "./component-pack-plugin.mjs";
 
@@ -83,11 +83,11 @@ const OPERATIONS = {
  */
 export const CONTENT_EDITORIAL_OPERATIONS = [
   "editorial-read", "editorial-fields", "editorial-revisions", "editorial-revision", "editorial-compare",
-  "editorial-validate", "editorial-save", "editorial-restore", "editorial-publication",
+  "editorial-validate", "editorial-save", "editorial-restore", "editorial-publication", "editorial-operation",
 ];
 
 /** Bounded Article title/body proposals through the host's Assistant provider. */
-export const CONTENT_AI_OPERATIONS = ["content-ai-status", "content-ai-scope", "content-ai-prepare", "content-ai-apply", "content-ai-undo"];
+export const CONTENT_AI_OPERATIONS = ["content-ai-status", "content-ai-scope", "content-ai-prepare", "content-ai-read", "content-ai-apply", "content-ai-undo"];
 
 /**
  * @param {{contentRoot?: string, release?: {workspaceRoot?: string, packIdentity?: unknown, stylesPath?: string}}} [options]
@@ -114,10 +114,12 @@ export default function contentDomainProvider(options = {}) {
       const contentAiHost = () => contentAi ??= (async () => {
         if (!release || !server) return null;
         const { loadHostConfig } = await import("../server/host-context.mjs");
-        const config = (await loadHostConfig(release.workspaceRoot ?? process.cwd())).assistant;
+        const hostConfig = await loadHostConfig(release.workspaceRoot ?? process.cwd());
+        const config = hostConfig.assistant;
         if (!config) return null;
         const factory = await server.ssrLoadModule(appModuleId("server/content-ai/proposer-factory.ts"));
-        return { proposer: await factory.createContentAiProposer(config), canApply: config.permission === "apply" };
+        // Private to this host installation; never published or exported.
+        return { proposer: await factory.createContentAiProposer(config), canApply: config.permission === "apply", proposalRoot: join(hostConfig.paths.data, "content-ai") };
       })();
       return {
         isDomainError: module.isContentPersistenceError,

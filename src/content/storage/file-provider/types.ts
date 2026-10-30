@@ -27,9 +27,9 @@ export const CONTENT_FILE_PROVIDER_OPERATIONS = [
  */
 export const CONTENT_EDITORIAL_WIRE_OPERATIONS = [
   "editorial-read", "editorial-fields", "editorial-revisions", "editorial-revision", "editorial-compare",
-  "editorial-validate", "editorial-save", "editorial-restore", "editorial-publication",
+  "editorial-validate", "editorial-save", "editorial-restore", "editorial-publication", "editorial-operation",
 ] as const;
-export const CONTENT_AI_WIRE_OPERATIONS = ["content-ai-status", "content-ai-scope", "content-ai-prepare", "content-ai-apply", "content-ai-undo"] as const;
+export const CONTENT_AI_WIRE_OPERATIONS = ["content-ai-status", "content-ai-scope", "content-ai-prepare", "content-ai-read", "content-ai-apply", "content-ai-undo"] as const;
 export type ContentEditorialWireOperation = (typeof CONTENT_EDITORIAL_WIRE_OPERATIONS)[number] | (typeof CONTENT_AI_WIRE_OPERATIONS)[number];
 
 export type ContentWireOperation = FileProviderTransportOperation<(typeof CONTENT_FILE_PROVIDER_OPERATIONS)[number] | ContentEditorialWireOperation | ContentPersistenceOperation>;

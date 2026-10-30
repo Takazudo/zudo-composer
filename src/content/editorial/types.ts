@@ -119,6 +119,11 @@ export interface ContentEditorialBoundary {
   /** Writes the revision's values as a new working revision; publication intent, the activated publication and history are kept. */
   restoreRevision(request: { entry: ContentEntryRef; revisionId: string; expected: string; operationKey: string }): Promise<EditorialReceipt>;
   publicationStatus(): Promise<EditorialPublicationStatus>;
+  /**
+   * The committed receipt of this actor's operation key, or null when none was
+   * committed. Never writes, so a caller can tell recovery from a fresh request.
+   */
+  readOperation(query: { entry: ContentEntryRef; operationKey: string }): Promise<EditorialReceipt | null>;
 }
 
 /** One field of the Entry's current definition. */

@@ -4,7 +4,8 @@
 // The plugin graph cannot use `instanceof`, so the domain-error predicate is
 // exported from here rather than reimplemented as a duck-type check.
 import { ContentPersistenceError } from "../../library";
-import { createContentAiService, createNativeContentEditorial, EditorialError, type ContentAiProposal, type ContentAiProposer, type EditorialReceipt } from "../../editorial";
+import { createContentAiService, createNativeContentEditorial, EditorialError, type ContentAiProposalStore, type ContentAiProposer } from "../../editorial";
+import { openContentAiProposalStore } from "../filesystem/content-ai-proposals";
 import type { ContentEntryRecord, ContentEntryRef } from "../../model";
 import { createFilesystemContentStore, type FilesystemContentStore } from "../filesystem";
 import { workspaceScopedRoot } from "../../../shared/workspace-scope";
@@ -65,6 +66,7 @@ export async function runContentEditorial(
       case "editorial-save": return { ok: true, value: await boundary.saveFields(input) };
       case "editorial-restore": return { ok: true, value: await boundary.restoreRevision(input) };
       case "editorial-publication": return { ok: true, value: await boundary.publicationStatus() };
+      case "editorial-operation": return { ok: true, value: await boundary.readOperation(input) };
       default: throw new EditorialError("invalid-request", "Unknown editorial operation.");
     }
   } catch (error) {
@@ -74,16 +76,18 @@ export async function runContentEditorial(
 }
 
 type ActivatedReader = Parameters<typeof runContentEditorial>[1];
-const contentAiProposals = new Map<string, Map<string, ContentAiProposal & { receipt?: EditorialReceipt }>>();
+const proposalStores = new Map<string, Promise<ContentAiProposalStore>>();
 
 /**
  * One Content-AI request from the Content editor. The proposer comes from the
  * host's configured Assistant provider; without one, Content-AI is unavailable.
+ * Proposals are recorded under the host's private data directory, so Apply and
+ * Undo stay recoverable across a restart.
  */
 export async function runContentAi(
   store: FilesystemContentStore,
   readActivated: ActivatedReader,
-  host: () => Promise<{ proposer: ContentAiProposer; canApply: boolean } | null>,
+  host: () => Promise<{ proposer: ContentAiProposer; canApply: boolean; proposalRoot: string } | null>,
   operation: string,
   payload: unknown,
 ): Promise<{ ok: true; value: unknown } | { ok: false; error: { code: string; message: string; diagnostics: unknown[] } }> {
@@ -91,20 +95,22 @@ export async function runContentAi(
     const configured = await host();
     if (operation === "content-ai-status") return { ok: true, value: configured ? { available: true, provider: configured.proposer.label, canApply: configured.canApply } : { available: false } };
     if (!configured) throw new EditorialError("configuration-required", "Content-AI needs an Assistant provider in zudo-composer.config.ts.");
-    let proposals = contentAiProposals.get(store.root);
-    if (!proposals) contentAiProposals.set(store.root, proposals = new Map());
+    let proposals = proposalStores.get(configured.proposalRoot);
+    if (!proposals) proposalStores.set(configured.proposalRoot, proposals = openContentAiProposalStore(configured.proposalRoot));
     const service = createContentAiService({
       boundary: (provenance) => createNativeContentEditorial({ store, provenance, readPublished: () => readPublishedFrom(store, readActivated) }),
       actor: CONTENT_EDITOR_PROVENANCE.actor,
+      owner: `native:${store.root}`,
       proposer: configured.proposer,
+      store: await proposals,
       createId: () => globalThis.crypto.randomUUID(),
-      proposals,
       canApply: configured.canApply,
     });
     const input = (payload ?? {}) as never;
     switch (operation) {
       case "content-ai-scope": return { ok: true, value: await service.scope((input as { entry: ContentEntryRef }).entry) };
       case "content-ai-prepare": return { ok: true, value: await service.prepare(input) };
+      case "content-ai-read": return { ok: true, value: await service.read(input) };
       case "content-ai-apply": return { ok: true, value: await service.apply(input) };
       case "content-ai-undo": return { ok: true, value: await service.undo(input) };
       default: throw new EditorialError("invalid-request", "Unknown Content-AI operation.");
