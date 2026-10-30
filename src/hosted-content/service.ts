@@ -301,7 +301,7 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
     const valuesIdentity: HostedValuesIdentity = perspective === "working"
       ? { perspective, draftRevision: head.state.draftRevision, revisionId: workingRevisionId }
       : { perspective, baseline: head.state.baseline, integrationFence: head.state.integrationFence };
-    return copy({ entry: target, perspective, status: editorialStatus(head, target), lifecycle: entry.lifecycle, generation: entry.generation, updatedAt: entry.updatedAt, values: entry.values, workingRevisionId, valuesIdentity });
+    return copy({ entry: target, perspective, status: editorialStatus(head, target), lifecycle: entry.lifecycle, generation: entry.generation, updatedAt: entry.updatedAt, values: entry.values, workingRevisionId, valuesIdentity, expected: identity(head.state) });
   }
   const perspectiveProviders = (head: HostedHead, perspective: HostedPerspective): HostedProvider[] => perspective === "working" ? head.state.providers : head.baselineProviders;
   /** Current read permissions apply to every perspective and to historical data. */
@@ -317,6 +317,19 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
     if ("revisionId" in at) return (await readRevisionFor(target, at.revisionId)).values;
     // An Entry absent from a perspective compares as empty, so every value shows as added or removed.
     return lookup(perspectiveProviders(head, at.perspective), target)?.values ?? {};
+  }
+  /** Field-level differences in definition order, then fields the current definition no longer has. */
+  function differencesFor(providers: HostedProvider[], target: ContentEntryRef, before: Record<string, JsonValue>, after: Record<string, JsonValue>): HostedFieldDifference[] {
+    const fields = providers.find(provider => provider.providerId === target.providerId)?.models.find(model => model.id === target.modelId)?.document.fields ?? [];
+    const known = new Set(fields.map(field => field.id));
+    const removed = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(fieldId => !known.has(fieldId)).sort();
+    return [...fields.map(field => ({ fieldId: field.id, key: field.key, label: field.label, removedFromDefinition: false })),
+      ...removed.map(fieldId => ({ fieldId, key: fieldId, label: fieldId, removedFromDefinition: true }))].flatMap(field => {
+      const previous = before[field.fieldId], next = after[field.fieldId];
+      if (sameValue(previous, next)) return [];
+      return [{ ...field, change: previous === undefined ? "added" as const : next === undefined ? "removed" as const : "changed" as const,
+        ...(previous !== undefined ? { before: previous } : {}), ...(next !== undefined ? { after: next } : {}) }];
+    });
   }
   /** Prepare from detached reads, then commit conditionally; a refused commit is retried from fresh reads. */
   async function mutate<T>(work: (head: HostedHead) => Promise<{ value: T; write?: Omit<HostedCommit, "expectedVersion"> }>): Promise<T> {
@@ -387,17 +400,19 @@ export function createHostedContentService(supplied: HostedServiceOptions): Host
       const head = await options.storage.readHead();
       assertReadable(head, query.entry);
       const [before, after] = [await targetValues(head, query.entry, query.from), await targetValues(head, query.entry, query.to)];
-      const fields = head.state.providers.find(provider => provider.providerId === query.entry.providerId)?.models.find(model => model.id === query.entry.modelId)?.document.fields ?? [];
-      const known = new Set(fields.map(field => field.id));
-      const removed = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(fieldId => !known.has(fieldId)).sort();
-      const differences: HostedFieldDifference[] = [...fields.map(field => ({ fieldId: field.id, key: field.key, label: field.label, removedFromDefinition: false })),
-        ...removed.map(fieldId => ({ fieldId, key: fieldId, label: fieldId, removedFromDefinition: true }))].flatMap(field => {
-        const previous = before[field.fieldId], next = after[field.fieldId];
-        if (sameValue(previous, next)) return [];
-        return [{ ...field, change: previous === undefined ? "added" as const : next === undefined ? "removed" as const : "changed" as const,
-          ...(previous !== undefined ? { before: previous } : {}), ...(next !== undefined ? { after: next } : {}) }];
-      });
-      return copy({ entry: query.entry, from: query.from, to: query.to, differences });
+      return copy({ entry: query.entry, from: query.from, to: query.to, differences: differencesFor(head.state.providers, query.entry, before, after) });
+    },
+    async previewFields(actor, request) {
+      const query = parseHostedQuery("preview", request);
+      await authorize(actor);
+      const head = copy(await options.storage.readHead());
+      checkExpected(head.state, query.expected);
+      assertDefinitions(head);
+      const before = copy(findEntry(head.state.providers, query.entry).values);
+      setFields(head.state.providers, query.entry, query.values, query.clear);
+      checkGraph(head.state.providers);
+      const after = findEntry(head.state.providers, query.entry).values;
+      return copy({ entry: query.entry, expected: identity(head.state), values: after, differences: differencesFor(head.state.providers, query.entry, before, after) });
     },
     async readPublicationStatus(actor) {
       await authorize(actor);

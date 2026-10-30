@@ -8,6 +8,8 @@
 // plus one line in the plugin's descriptor list.
 
 import { resolve } from "node:path";
+import { appModuleId } from "./roots.mjs";
+import { COMPONENT_PACK_ID } from "./component-pack-plugin.mjs";
 
 export const CONTENT_DOMAIN = "content";
 
@@ -74,19 +76,50 @@ const OPERATIONS = {
   "start-fresh": (store) => store.startFresh(),
 };
 
-/** @param {{contentRoot?: string}} [options] */
+/**
+ * History, compare and restore for the Content editor, answered by the shared
+ * editorial boundary over the same store. Each returns an `{ok}` envelope so a
+ * refusal keeps its field diagnostics on the wire.
+ */
+export const CONTENT_EDITORIAL_OPERATIONS = [
+  "editorial-read", "editorial-revisions", "editorial-revision", "editorial-compare",
+  "editorial-validate", "editorial-save", "editorial-restore", "editorial-publication",
+];
+
+/**
+ * @param {{contentRoot?: string, release?: {workspaceRoot?: string, packIdentity?: unknown, stylesPath?: string}}} [options]
+ */
 export default function contentDomainProvider(options = {}) {
   return {
     domain: CONTENT_DOMAIN,
     entryModule: "src/content/storage/file-provider/dev-server-entry.ts",
     /** @param {string} workspaceRoot */
     resolveRoot: (workspaceRoot) => resolveContentRoot(workspaceRoot, options.contentRoot),
-    /** @param {any} module @param {string} root */
-    bind: (module, root) => ({
-      isDomainError: module.isContentPersistenceError,
-      createStore: (workspaceId) => module.createWorkspaceScopedContentStore(root, workspaceId),
-      operations: OPERATIONS,
-    }),
+    /** @param {any} module @param {string} root @param {any} [server] */
+    bind: (module, root, server) => {
+      // Published values come only from the activated SiteProject release, read
+      // the same way the delivery source reads it.
+      const release = options.release;
+      const readActivated = release && server
+        ? async () => {
+          const reader = await server.ssrLoadModule(appModuleId("server/site-project-local/dev-reader.ts"));
+          const pack = (await server.ssrLoadModule(COMPONENT_PACK_ID)).componentPack;
+          return reader.readActivatedSiteRelease({ ...release, pack });
+        }
+        : async () => null;
+      return {
+        isDomainError: module.isContentPersistenceError,
+        createStore: (workspaceId) => module.createWorkspaceScopedContentStore(root, workspaceId),
+        operations: {
+          ...OPERATIONS,
+          ...Object.fromEntries(CONTENT_EDITORIAL_OPERATIONS.map((operation) => [
+            operation,
+            /** @param {any} store @param {unknown} payload */
+            (store, payload) => module.runContentEditorial(store, readActivated, operation, payload),
+          ])),
+        },
+      };
+    },
   };
 }
 

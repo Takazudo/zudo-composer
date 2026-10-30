@@ -152,6 +152,8 @@ export interface HostedEntryView {
   workingRevisionId: string | null;
   /** What identifies the shown values: a working revision, or the activated baseline for published values (never a revision id). */
   valuesIdentity: HostedValuesIdentity;
+  /** The identities this read was taken at; a command prepared from it quotes them as `expected`. */
+  expected: HostedIdentities;
 }
 export type HostedValuesIdentity =
   | { perspective: "working"; draftRevision: string; revisionId: string | null }
@@ -167,6 +169,8 @@ export interface HostedFieldDifference {
   /** True when the current definition no longer has this field. */
   removedFromDefinition: boolean;
 }
+/** A validated set-fields candidate that was not written. */
+export interface HostedFieldPreview { entry: ContentEntryRef; expected: HostedIdentities; values: Record<string, JsonValue>; differences: HostedFieldDifference[] }
 export interface HostedComparison { entry: ContentEntryRef; from: HostedRevisionTarget; to: HostedRevisionTarget; differences: HostedFieldDifference[] }
 export type HostedRestoreDiagnosticCode = "field-removed" | "invalid-value" | "forbidden" | "collection-owned";
 export interface HostedRestoreDiagnostic { entry: ContentEntryRef; fieldId: string; code: HostedRestoreDiagnosticCode; message: string }
@@ -188,6 +192,8 @@ export interface HostedService {
   listRevisions(actor: HostedActor, query: { entry: ContentEntryRef } & HostedPage): Promise<HostedRevisionPage>;
   readRevision(actor: HostedActor, revisionId: string): Promise<HostedRevision>;
   compareRevisions(actor: HostedActor, query: { entry: ContentEntryRef; from: HostedRevisionTarget; to: HostedRevisionTarget }): Promise<HostedComparison>;
+  /** Run set-fields validation against the pinned identities and return the candidate without writing anything. */
+  previewFields(actor: HostedActor, query: { entry: ContentEntryRef; values: Record<string, JsonValue>; clear: string[]; expected: HostedIdentities }): Promise<HostedFieldPreview>;
   readPublicationStatus(actor: HostedActor): Promise<HostedPublicationOverview>;
   execute(actor: HostedActor, request: unknown): Promise<HostedResult>;
   readReceipt(actor: HostedActor, operationKey: string): Promise<HostedReceipt | null>;

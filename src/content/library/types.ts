@@ -1,3 +1,4 @@
+import type { JsonValue } from "@zudo-composer/component-contract";
 import type { RecordId } from "../../shared";
 import type {
   ContentCompletenessDiagnostic,
@@ -39,6 +40,7 @@ export const CONTENT_PERSISTENCE_OPERATIONS = [
   "initialize", "list-models", "get-model", "put-model", "delete-model",
   "count-entries", "get-entry", "page-entries", "scan-entries",
   "put-entry", "delete-entry", "remove-field", "seed", "clear",
+  "edit-entry", "list-revisions", "read-revision",
 ] as const;
 export type ContentPersistenceOperation = (typeof CONTENT_PERSISTENCE_OPERATIONS)[number];
 
@@ -51,6 +53,8 @@ export const CONTENT_PERSISTENCE_ERROR_CODES = [
   // The mutation reached disk but its durability could not be proven. Never a
   // plain failure, and never safe to retry blindly.
   "commit-uncertain", "unknown",
+  // An operation key already accepted for a different request.
+  "operation-key-reuse",
 ] as const;
 export type ContentPersistenceErrorCode = (typeof CONTENT_PERSISTENCE_ERROR_CODES)[number];
 
@@ -105,6 +109,49 @@ export interface ContentStore {
   seed(seed: ContentSeed): Promise<void>;
   clear(): Promise<void>;
 }
+
+/** Who wrote a revision. Supplied by trusted server code, never by a request body. */
+export interface ContentProvenance { actor: { id: string } | null; source: string }
+export type ContentRevisionOperationKind = "initial" | "save" | "remove-field" | "set-fields" | "restore-revision";
+/**
+ * One immutable working revision of one Entry, committed with the Entry change
+ * that produced it. History is never pruned by an ordinary mutation.
+ */
+export interface ContentRevisionRecord {
+  id: string;
+  entry: ContentEntryRef;
+  /** 1-based and contiguous per Entry; the newest revision has the highest sequence. */
+  sequence: number;
+  parentId: string | null;
+  values: Record<RecordId, JsonValue>;
+  createdAt: string;
+  actor: { id: string } | null;
+  source: string;
+  operation: { kind: ContentRevisionOperationKind; key: string | null };
+  restoredFrom?: string;
+}
+/** The durable answer to one keyed edit; a retry with the same key and request returns it unchanged. */
+export interface ContentEditReceipt {
+  actorId: string | null;
+  operationKey: string;
+  fingerprint: string;
+  entry: ContentEntryRef;
+  /** The revision the edit appended, or the unchanged head when the values already matched. */
+  revisionId: string | null;
+  mutationToken: number;
+}
+export interface ContentEntryEdit {
+  entry: ContentEntryRef;
+  expectedMutationToken: number;
+  operation: { kind: "set-fields" | "restore-revision"; key: string };
+  provenance: ContentProvenance;
+  /** Digest of the complete request, so a reused key with a different request is refused. */
+  fingerprint: string;
+  restoredFrom?: string;
+  /** Runs under the store lock against the current values; throwing refuses the edit without writing. */
+  values(current: ContentEntryRecord, model: ContentModelRecord): Record<RecordId, JsonValue>;
+}
+export interface ContentEntryEditResult { receipt: ContentEditReceipt; replayed: boolean; snapshot: ContentSnapshot }
 
 export interface ContentSnapshot extends ContentSeed { providerId: string; mutationToken: number }
 export type ContentMutationOperation =
