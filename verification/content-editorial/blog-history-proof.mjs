@@ -1,3 +1,4 @@
+/* global console, process */
 // Browser proof: an ordinary Article workflow in the Blog host's own Content
 // editor, against a disposable copy of the host served by `zudo-composer dev`.
 // Edit, history, compare, restore, reload; then the bytes on disk.

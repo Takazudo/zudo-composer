@@ -1,3 +1,4 @@
+/* global process, setTimeout */
 // A disposable copy of the Blog demo host, served by the real `zudo-composer
 // dev` command. Nothing is written under packages/demo-blog.
 import { spawn } from "node:child_process";
