@@ -7,6 +7,7 @@ import { Button, Chip, DataTable, Field, Input, Select, Switch, Textarea, type D
 import { createContentValueSchema, isContentFieldKey, type ContentEntryRecord, type ContentFieldDefinition, type ContentFieldKind } from "../../content";
 import type { ContentAuthoringController, ContentAuthoringState } from "./controller";
 import { FieldKindPicker, contentFieldKindPresentation } from "./field-kind-picker";
+import { ArticleAiPanel } from "./article-ai-panel";
 import { EntryHistory } from "./entry-history";
 import { MarkdownEditor } from "./markdown-editor";
 import { deriveSlug } from "./slug";
@@ -452,6 +453,7 @@ export function ContentEntryAuthor({ state, controller, run, renderAssetPicker, 
           </div>
         </dl>
       </section>
+      <ArticleAiPanel controller={controller} state={state} entry={entry} fields={allFields} />
       <EntryHistory controller={controller} entry={entry} fields={allFields} refreshKey={`${entry.updatedAt}:${state.saveStatus}`} notice={state.historyNotice} />
     </div>
   );

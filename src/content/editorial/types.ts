@@ -109,6 +109,8 @@ export class EditorialError extends Error {
 export interface ContentEditorialBoundary {
   readonly backend: "native" | "hosted";
   readEntry(query: { entry: ContentEntryRef; perspective: EditorialPerspective }): Promise<EditorialEntryView>;
+  /** The Entry model's current field definitions. */
+  readFields(query: { entry: ContentEntryRef }): Promise<EditorialField[]>;
   listRevisions(query: { entry: ContentEntryRef; cursor?: string; limit?: number }): Promise<EditorialRevisionPage>;
   readRevision(query: { entry: ContentEntryRef; revisionId: string }): Promise<EditorialRevision>;
   compare(query: { entry: ContentEntryRef; from: EditorialRevisionTarget; to: EditorialRevisionTarget }): Promise<EditorialComparison>;
@@ -117,6 +119,14 @@ export interface ContentEditorialBoundary {
   /** Writes the revision's values as a new working revision; publication intent, the activated publication and history are kept. */
   restoreRevision(request: { entry: ContentEntryRef; revisionId: string; expected: string; operationKey: string }): Promise<EditorialReceipt>;
   publicationStatus(): Promise<EditorialPublicationStatus>;
+  /**
+   * The committed receipt of this actor's operation key, or null when none was
+   * committed. Never writes, so a caller can tell recovery from a fresh request.
+   */
+  readOperation(query: { entry: ContentEntryRef; operationKey: string }): Promise<EditorialReceipt | null>;
 }
+
+/** One field of the Entry's current definition. */
+export interface EditorialField { id: string; key: string; label: string; kind: string; required: boolean }
 
 export interface EditorialProvenance { actor: { id: string } | null; source: string }

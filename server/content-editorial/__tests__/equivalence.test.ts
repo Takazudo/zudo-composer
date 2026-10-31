@@ -10,7 +10,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CONTENT_PROVIDERS, type ContentModelRecord, type ContentEntryRecord } from "../../../src/content";
 import { createNativeContentEditorial } from "../../../src/content/editorial";
 import { runEditorialScenario, type EditorialScenarioHarness } from "../../../src/content/editorial/scenario";
+import { runContentAiScenario } from "../../../src/content/editorial/ai-scenario";
 import { createFilesystemContentStore, type FilesystemContentStore } from "../../../src/content/storage/filesystem";
+import { openContentAiProposalStore } from "../../../src/content/storage/filesystem/content-ai-proposals";
 import { createHostedContentService } from "../../../src/hosted-content/service";
 import { createHostedContentEditorial } from "../../../src/hosted-content/editorial";
 import { canonicalSerialize } from "../../../src/hosted-content/canonical";
@@ -139,5 +141,15 @@ describe("shared Content editorial boundary", () => {
   it("local SQLite Hosted Content passes the same scenario", async () => {
     const steps = await runEditorialScenario(await hostedHarness(), check);
     expect(steps.map((step) => step.step)).toEqual(["publish-a", "save-b", "prepare-c", "apply-c", "restore-b", "stale-apply", "incompatible-restore"]);
+  });
+
+  it("native project-file Content passes the Content-AI journey", async () => {
+    const proposals = join(await scratch("native-proposals-"), "content-ai");
+    expect((await runContentAiScenario(await nativeHarness(), check, { openProposals: () => openContentAiProposalStore(proposals) })).map((step) => step.step)).toEqual(["prepare", "apply", "undo", "crash-window", "guards"]);
+  });
+
+  it("local SQLite Hosted Content passes the same Content-AI journey", async () => {
+    const proposals = join(await scratch("hosted-proposals-"), "content-ai");
+    expect((await runContentAiScenario(await hostedHarness(), check, { openProposals: () => openContentAiProposalStore(proposals) })).map((step) => step.step)).toEqual(["prepare", "apply", "undo", "crash-window", "guards"]);
   });
 });

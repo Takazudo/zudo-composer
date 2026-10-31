@@ -2,18 +2,24 @@
 // Browser proof: an ordinary Article workflow in the Blog host's own Content
 // editor, against a disposable copy of the host served by `zudo-composer dev`.
 // Edit, history, compare, restore, reload; then the bytes on disk.
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startBlogHost } from "./blog-host.mjs";
 
 const port = Number(process.env.BLOG_HISTORY_PORT ?? 4179);
+// When set, a failure leaves a screenshot, a Playwright trace and the dev-server log here.
+const artifacts = process.env.BLOG_PROOF_ARTIFACTS;
+if (artifacts) await mkdir(artifacts, { recursive: true });
 const checks = [];
 const check = (name) => { checks.push(name); console.log(`ok ${checks.length} - ${name}`); };
 const host = await startBlogHost({ port });
 const browser = await chromium.launch();
+const context = await browser.newContext({ viewport: { width: 1400, height: 1000 } });
+if (artifacts) await context.tracing.start({ screenshots: true, snapshots: true });
+const page = await context.newPage();
+let failed = false;
 try {
-  const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   const failures = [];
   page.on("pageerror", (error) => failures.push(error.message));
   await page.goto(`${host.origin}/content`);
@@ -72,9 +78,15 @@ try {
   check("no page errors");
   console.log(`Blog Content history proof: ${checks.length}/${checks.length} checks passed`);
 } catch (error) {
+  failed = true;
   console.error(host.output().slice(-4000));
+  if (artifacts) {
+    await page.screenshot({ path: join(artifacts, "content-history-failure.png"), fullPage: true }).catch(() => {});
+    await writeFile(join(artifacts, "content-history-server.log"), host.output());
+  }
   throw error;
 } finally {
+  if (artifacts) await context.tracing.stop(failed ? { path: join(artifacts, "content-history-trace.zip") } : {}).catch(() => {});
   await browser.close();
   await host.stop();
 }

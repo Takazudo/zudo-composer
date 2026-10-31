@@ -62,6 +62,11 @@ export function createHostedContentEditorial(options: HostedEditorialOptions): C
   return {
     backend: "hosted",
     readEntry: (query) => call(async () => view(await service.readEntry(hostedActor, query))),
+    readFields: (query) => call(async () => {
+      const model = (await service.listModels(hostedActor)).find((item) => item.providerId === query.entry.providerId && item.model.id === query.entry.modelId);
+      if (!model) throw new EditorialError("not-found", "Entry model is unavailable.");
+      return model.model.document.fields.map((field) => ({ id: field.id, key: field.key, label: field.label, kind: field.kind, required: field.required }));
+    }),
     listRevisions: (query) => call(async () => {
       const page = await service.listRevisions(hostedActor, { entry: query.entry, ...(query.cursor ? { cursor: query.cursor } : {}), ...(query.limit ? { limit: query.limit } : {}) });
       return { revisions: page.revisions.map(revision), nextCursor: page.nextCursor };
@@ -86,6 +91,14 @@ export function createHostedContentEditorial(options: HostedEditorialOptions): C
     restoreRevision: (request) => call(async () => {
       const result = await service.execute(hostedActor, { kind: "restore-revision", operationKey: request.operationKey, expected: identities(request.expected), entry: request.entry, revisionId: request.revisionId });
       return receipt(request.operationKey, request.entry, result);
+    }),
+    readOperation: (query) => call(async () => {
+      const found = await service.readReceipt(hostedActor, query.operationKey);
+      if (!found) return null;
+      // The revision the operation appended is the one that names its key in this Entry's history.
+      const revisionId = await findByKey(query.entry, query.operationKey);
+      if (!revisionId) throw new EditorialError("operation-key-reuse", "This operation key belongs to another Entry.");
+      return { operationKey: query.operationKey, entry: query.entry, revisionId, expected: expectedOf(found.result.state) };
     }),
     publicationStatus: () => call(async () => {
       const status = await service.readPublicationStatus(hostedActor);

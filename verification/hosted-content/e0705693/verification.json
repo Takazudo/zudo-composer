@@ -1,0 +1,288 @@
+{
+  "installedToolSha": "e07056934f8d77ae7d49ad9f84c4b8a03f92e0c2",
+  "node": "v22.22.0",
+  "packageManager": "pnpm@11.5.2",
+  "contractSha": "c0b452da075b66757c60bd0d721a47062d4354d0",
+  "contractProtocol": 2,
+  "peerPreact": "10.29.8",
+  "commands": [
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "/home/user/zc-a/scripts/install-hosted-consumer.mjs",
+        "e07056934f8d77ae7d49ad9f84c4b8a03f92e0c2",
+        "/tmp/claude-0/hosted-e07/work"
+      ],
+      "cwd": "/home/user/zc-a",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/tmp/claude-0/hosted-e07/work/work/install-browser-bundle"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/tmp/claude-0/hosted-e07/work/work/install-browser-transport.sqlite",
+        "/tmp/claude-0/hosted-e07/work/work/install-browser-transport"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/tmp/claude-0/hosted-e07/work/work/install-render.sqlite"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/tmp/claude-0/hosted-e07/work/work/install-publication-render"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work/renderer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/tmp/claude-0/hosted-e07/work/work/frozen-browser-bundle"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/tmp/claude-0/hosted-e07/work/work/frozen-browser-transport.sqlite",
+        "/tmp/claude-0/hosted-e07/work/work/frozen-browser-transport"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/tmp/claude-0/hosted-e07/work/work/frozen-render.sqlite"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/tmp/claude-0/hosted-e07/work/work/frozen-publication-render"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "playwright",
+        "install",
+        "--with-deps",
+        "chromium"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-proof.mjs",
+        "/tmp/claude-0/hosted-e07/work/work/browser.sqlite"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-broad-proof.mjs",
+        "/tmp/claude-0/hosted-e07/work/work/browser-broad.sqlite",
+        "/tmp/claude-0/hosted-e07/work/work/browser-broad"
+      ],
+      "cwd": "/tmp/claude-0/hosted-e07/work",
+      "outcome": "passed"
+    }
+  ],
+  "payloadSha256": "64762f597fe730c181fb0defe1ac5f6c2c346bf0fefc121cda7a18c9fcf080ae",
+  "lockDigests": {
+    "package.json": "0e2e4aa0e68b39ad03b6cd4dbd2abe3b1b4dd278fa4f348da8604bc0f3bf678a",
+    "pnpm-lock.yaml": "d394b7ef58ebf8fc461c77f0a458e7410f77033f5987deae7db5d53d2a203b86",
+    "renderer/package.json": "037daf6cb0ac28bfd438836a8f4deb2c1e5717347e2199d82a0cc8bc7938e4b7",
+    "renderer/pnpm-lock.yaml": "ab6c47105cf36c2a91dc2c3cb084ab8a73e6456da15057c5536bf6352aee2649"
+  },
+  "independentInstall": "passed",
+  "frozenReinstall": "passed",
+  "worker": "passed",
+  "browserBundle": "passed",
+  "nodeBoundary": "passed",
+  "sqlite": "passed",
+  "httpTransport": "passed",
+  "staticRenderer": "passed",
+  "browser": "passed"
+}

@@ -1,8 +1,10 @@
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
+import { createModuleEvaluator } from "../../module-evaluator.mjs";
+import { enforceComputedLoadBoundary } from "../load-boundary";
 import { collectPackSourceGraph } from "../pack-source-graph";
 
 async function host(files: Record<string, string>): Promise<string> {
@@ -176,6 +178,99 @@ describe("collectPackSourceGraph", () => {
     const root = await host({ "pack.ts": source });
     await writeFile(join(root, "..", "outside.ts"), "export {};\n");
     await expect(collect(root)).rejects.toThrow(message);
+  });
+
+  it("attests a whole installed package whose loads cannot be proven, for editing", async () => {
+    const root = await host({
+      "node_modules/@scope/wasm/package.json": JSON.stringify({ name: "@scope/wasm", version: "5.1.5", exports: "./index.js" }),
+      "node_modules/@scope/wasm/index.js": 'export const load = (specifier) => import(specifier);\nexport const glue = new URL("./glue.mjs", import.meta.url);\n',
+      "node_modules/@scope/wasm/glue.mjs": "export {};\n",
+      "node_modules/@scope/wasm/wasm/unreached.wasm": "bytes",
+      "node_modules/@scope/wasm/node_modules/nested/index.js": "export {};\n",
+      "pack.ts": 'import { load } from "@scope/wasm";\nexport { load };\n',
+    });
+    const graph = await collectPackSourceGraph({ hostRoot: root, entryPath: join(root, "pack.ts"), sourceModules: [], attestExternalFiles: true });
+    const installed = (graph.attestedFiles ?? []).map(path => path.split(sep).join("/")).filter(path => path.includes("/@scope/wasm/")).map(path => path.split("/@scope/wasm/")[1]);
+    expect(installed.sort()).toEqual(["glue.mjs", "index.js", "package.json", "wasm/unreached.wasm"]);
+    expect(graph.dependencies).toContainEqual({ name: "@scope/wasm", version: "5.1.5" });
+  });
+
+  const installedUnder = (graph: { attestedFiles?: readonly string[] }, marker: string) =>
+    (graph.attestedFiles ?? []).map(path => path.split(sep).join("/")).filter(path => path.includes(marker)).map(path => path.slice(path.lastIndexOf(marker) + marker.length)).sort();
+  const computedLoader = {
+    "node_modules/@scope/wasm/package.json": JSON.stringify({ name: "@scope/wasm", version: "5.1.5", exports: "./index.js", dependencies: { nested: "1.0.0", sibling: "2.0.0" }, optionalDependencies: { absent: "1.0.0" } }),
+    "node_modules/@scope/wasm/index.js": "export const load = (specifier) => import(specifier);\n",
+    "node_modules/@scope/wasm/internal/lazy.js": 'import { phantom } from "phantom";\nexport { phantom };\n',
+    "node_modules/@scope/wasm/node_modules/nested/package.json": JSON.stringify({ name: "nested", version: "1.0.0", exports: "./index.js", dependencies: { deep: "3.0.0" } }),
+    "node_modules/@scope/wasm/node_modules/nested/index.js": 'export * from "./more.js";\n',
+    "node_modules/@scope/wasm/node_modules/nested/more.js": "export const more = 1;\n",
+    "node_modules/@scope/wasm/node_modules/nested/node_modules/deep/package.json": JSON.stringify({ name: "deep", version: "3.0.0", exports: "./index.js" }),
+    "node_modules/@scope/wasm/node_modules/nested/node_modules/deep/index.js": "export const deep = 1;\n",
+    "node_modules/sibling/package.json": JSON.stringify({ name: "sibling", version: "2.0.0", exports: "./index.js" }),
+    "node_modules/sibling/index.js": "export const sibling = 1;\n",
+    "node_modules/phantom/package.json": JSON.stringify({ name: "phantom", version: "9.0.0", exports: "./index.js" }),
+    "node_modules/phantom/index.js": "export const phantom = 1;\n",
+    "pack.ts": 'import { load } from "@scope/wasm";\nexport { load };\n',
+  };
+
+  it("attests a computed load's nested and sibling declared dependencies, transitively", async () => {
+    const root = await host(computedLoader);
+    const graph = await collectPackSourceGraph({ hostRoot: root, entryPath: join(root, "pack.ts"), sourceModules: [], attestExternalFiles: true });
+    expect(installedUnder(graph, "/@scope/wasm/node_modules/nested/").filter(path => !path.startsWith("node_modules/"))).toEqual(["index.js", "more.js", "package.json"]);
+    expect(installedUnder(graph, "/nested/node_modules/deep/")).toEqual(["index.js", "package.json"]);
+    expect(installedUnder(graph, "/node_modules/sibling/")).toEqual(["index.js", "package.json"]);
+    expect(graph.dependencies.map(({ name }) => name)).toEqual(expect.arrayContaining(["@scope/wasm", "nested", "deep", "sibling"]));
+  });
+
+  it("confines an installed computed loader to attested files when it loads an undeclared nested or sibling target", async () => {
+    const root = await host({
+      ...computedLoader,
+      "node_modules/@scope/wasm/glue.mjs": "export const glue = \"own\";\n",
+      "node_modules/@scope/wasm/node_modules/undeclared/package.json": JSON.stringify({ name: "undeclared", version: "1.0.0", exports: "./index.js" }),
+      "node_modules/@scope/wasm/node_modules/undeclared/index.js": "export const undeclared = 1;\n",
+      "node_modules/stray/package.json": JSON.stringify({ name: "stray", version: "1.0.0", exports: "./index.js" }),
+      "node_modules/stray/index.js": "export const stray = 1;\n",
+      "loose.js": "export const loose = 1;\n",
+    });
+    const graph = await collectPackSourceGraph({ hostRoot: root, entryPath: join(root, "pack.ts"), sourceModules: [], attestExternalFiles: true });
+    expect(graph.confinedPackages).toEqual([await realpath(join(root, "node_modules/@scope/wasm"))]);
+    // The attestation itself never lists the undeclared targets, so only load-time confinement can cover them.
+    expect(installedUnder(graph, "/wasm/node_modules/undeclared/")).toEqual([]);
+    expect(installedUnder(graph, "/node_modules/stray/")).toEqual([]);
+    enforceComputedLoadBoundary(graph);
+    const file = (path: string) => pathToFileURL(join(root, path)).href;
+    // Evaluate the pack exactly as editing does: the installed loader is externalized to native Node loading.
+    const { load } = await createModuleEvaluator(root)(join(root, "pack.ts")) as { load: (specifier: string) => Promise<Record<string, unknown>> };
+    await expect(load(file("node_modules/@scope/wasm/glue.mjs"))).resolves.toMatchObject({ glue: "own" });
+    await expect(load(file("node_modules/@scope/wasm/node_modules/nested/more.js"))).resolves.toMatchObject({ more: 1 });
+    await expect(load("sibling")).resolves.toMatchObject({ sibling: 1 });
+    await expect(load(file("node_modules/@scope/wasm/node_modules/undeclared/index.js"))).rejects.toThrow(/did not attest/);
+    await expect(load("undeclared")).rejects.toThrow(/did not attest/);
+    await expect(load("stray")).rejects.toThrow(/did not attest/);
+    await expect(load(file("loose.js"))).rejects.toThrow(/did not attest/);
+    await expect(load("data:text/javascript,export default 1")).rejects.toThrow(/did not attest/);
+    await expect(load("node:path")).resolves.toHaveProperty("join");
+  });
+
+  it("follows a dynamically reachable internal module into the dependency it imports", async () => {
+    const root = await host(computedLoader);
+    const graph = await collectPackSourceGraph({ hostRoot: root, entryPath: join(root, "pack.ts"), sourceModules: [], attestExternalFiles: true });
+    expect(installedUnder(graph, "/@scope/wasm/")).toContain("internal/lazy.js");
+    expect(installedUnder(graph, "/node_modules/phantom/")).toEqual(["index.js"]);
+    expect(graph.dependencies).toContainEqual({ name: "phantom", version: "9.0.0" });
+  });
+
+  it("refuses a computed load whose declared dependency is not installed, or whose reachable module does not resolve", async () => {
+    const missing = await host(computedLoader);
+    await rm(join(missing, "node_modules/sibling"), { recursive: true, force: true });
+    await expect(collectPackSourceGraph({ hostRoot: missing, entryPath: join(missing, "pack.ts"), sourceModules: [], attestExternalFiles: true })).rejects.toThrow(/declares "sibling", which is not installed/);
+    const unresolved = await host({ ...computedLoader, "node_modules/@scope/wasm/internal/lazy.js": 'import "not-installed";\n' });
+    await expect(collectPackSourceGraph({ hostRoot: unresolved, entryPath: join(unresolved, "pack.ts"), sourceModules: [], attestExternalFiles: true })).rejects.toThrow(/"not-installed" in ".*internal\/lazy\.js" does not resolve/);
+  });
+
+  it("still fails closed on an unprovable load in host-owned source while attesting installed files", async () => {
+    const root = await host({ "pack.ts": "const name = './x'; export const load = () => import(name);" });
+    await expect(collectPackSourceGraph({ hostRoot: root, entryPath: join(root, "pack.ts"), sourceModules: [], attestExternalFiles: true })).rejects.toThrow(/dynamic import\(\)/);
   });
 
   it("fails closed on a CSS escape and on a symlink leaving the host", async () => {
