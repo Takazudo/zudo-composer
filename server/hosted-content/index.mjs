@@ -1,5 +1,7 @@
 import { a as isValueValidForField, c as isSafeRecordId, d as isPlainObject, f as HostedContentError, i as isContentAssetUse, l as cloneJson, n as canonicalSerialize, o as validateContentEntryRecord, r as buildContentGraphIndex, s as validateContentModelRecord, t as createHostedContentService, u as isJsonSafe } from "./chunks/service-Dg4ntUcp.mjs";
 import { a as hostedReadyMessage, c as hostedRenderSchema, d as matchesHostedPreviewBinding, f as readHostedPreviewRequest, h as COMPOSER_PREVIEW_PROTOCOL_VERSION, i as hostedPreviewResponseSchema, l as hostedRenderedMessage, m as COMPOSER_PREVIEW_CHANNEL, n as hostedDocumentErrorSchema, o as hostedReadySchema, p as readHostedPreviewResponse, r as hostedPreviewBindingSchema, s as hostedRenderMessage, t as hostedDocumentErrorMessage, u as hostedRenderedSchema } from "./chunks/preview-D3orPTyN.mjs";
+import { t as EditorialError } from "./chunks/types-nfgY3xip.mjs";
+import { a as createMemoryContentAiProposalStore, i as createFakeContentAiProposer, n as contentAiCandidateDigest, r as createContentAiService, t as CONTENT_AI_FIELD_KEYS } from "./chunks/ai-Zzw-Xxvt.mjs";
 import { parser } from "@lezer/markdown";
 import { ContractValidationError, RESERVED_PERSISTED_KEYS, componentPackManifestSchema, validateFieldValue } from "@zudo-composer/component-contract";
 //#region src/composer/model/types.ts
@@ -5206,4 +5208,309 @@ function createHostedSiteProjector(plan) {
 	return async (providers) => JSON.parse(JSON.stringify(await projectHostedSite(fixed, providers)));
 }
 //#endregion
-export { COMPOSER_PREVIEW_CHANNEL, COMPOSER_PREVIEW_PROTOCOL_VERSION, HostedContentError, canonicalSerialize, createHostedContentService, createHostedSiteProjector, hostedDocumentErrorMessage, hostedDocumentErrorSchema, hostedPreviewBindingSchema, hostedPreviewResponseSchema, hostedReadyMessage, hostedReadySchema, hostedRenderMessage, hostedRenderSchema, hostedRenderedMessage, hostedRenderedSchema, matchesHostedPreviewBinding, projectHostedSite, readHostedPreviewRequest, readHostedPreviewResponse };
+//#region src/hosted-content/editorial.ts
+function createHostedContentEditorial(options) {
+	const actor = options.provenance.actor;
+	if (!actor) throw new EditorialError("forbidden", "Hosted Content requires an authenticated actor.");
+	const hostedActor = { id: actor.id };
+	const service = options.service(options.provenance.source);
+	const expectedOf = (identities) => canonicalSerialize({
+		draftRevision: identities.draftRevision,
+		baseline: identities.baseline,
+		definition: identities.definition
+	});
+	function identities(expected) {
+		try {
+			const parsed = JSON.parse(expected);
+			if (parsed && typeof parsed.draftRevision === "string" && typeof parsed.definition === "string" && parsed.baseline) return parsed;
+		} catch {}
+		throw new EditorialError("invalid-request", "Malformed precondition.");
+	}
+	async function call(work) {
+		try {
+			return await work();
+		} catch (error) {
+			throw translate(error);
+		}
+	}
+	function view(value) {
+		return {
+			entry: value.entry,
+			perspective: value.perspective,
+			status: value.status,
+			lifecycle: value.lifecycle,
+			updatedAt: value.updatedAt,
+			values: value.values,
+			workingRevisionId: value.workingRevisionId,
+			valuesIdentity: value.valuesIdentity.perspective === "working" ? {
+				perspective: "working",
+				token: value.valuesIdentity.draftRevision,
+				revisionId: value.valuesIdentity.revisionId
+			} : {
+				perspective: "published",
+				release: canonicalSerialize(value.valuesIdentity.baseline),
+				fence: value.valuesIdentity.integrationFence
+			},
+			expected: expectedOf(value.expected)
+		};
+	}
+	const revision = (value) => ({
+		id: value.id,
+		entry: value.entry,
+		sequence: value.sequence,
+		parentId: value.parentId,
+		values: value.values,
+		createdAt: value.createdAt,
+		actor: value.actor,
+		source: value.source,
+		operation: value.operation,
+		...value.restoredFrom ? { restoredFrom: value.restoredFrom } : {}
+	});
+	const target = (value) => "revisionId" in value ? { revisionId: value.revisionId } : { perspective: value.perspective };
+	async function receipt(operationKey, entry, result) {
+		const head = (await service.listRevisions(hostedActor, {
+			entry,
+			limit: 1
+		})).revisions[0];
+		return {
+			operationKey,
+			entry,
+			revisionId: head && head.operation.key === operationKey ? head.id : await findByKey(entry, operationKey) ?? head?.id ?? null,
+			expected: expectedOf(result.state)
+		};
+	}
+	async function findByKey(entry, operationKey) {
+		let cursor;
+		do {
+			const page = await service.listRevisions(hostedActor, {
+				entry,
+				limit: 100,
+				...cursor ? { cursor } : {}
+			});
+			const found = page.revisions.find((item) => item.operation.key === operationKey);
+			if (found) return found.id;
+			cursor = page.nextCursor ?? void 0;
+		} while (cursor);
+		return null;
+	}
+	return {
+		backend: "hosted",
+		readEntry: (query) => call(async () => view(await service.readEntry(hostedActor, query))),
+		readFields: (query) => call(async () => {
+			const model = (await service.listModels(hostedActor)).find((item) => item.providerId === query.entry.providerId && item.model.id === query.entry.modelId);
+			if (!model) throw new EditorialError("not-found", "Entry model is unavailable.");
+			return model.model.document.fields.map((field) => ({
+				id: field.id,
+				key: field.key,
+				label: field.label,
+				kind: field.kind,
+				required: field.required
+			}));
+		}),
+		listRevisions: (query) => call(async () => {
+			const page = await service.listRevisions(hostedActor, {
+				entry: query.entry,
+				...query.cursor ? { cursor: query.cursor } : {},
+				...query.limit ? { limit: query.limit } : {}
+			});
+			return {
+				revisions: page.revisions.map(revision),
+				nextCursor: page.nextCursor
+			};
+		}),
+		readRevision: (query) => call(async () => {
+			const value = await service.readRevision(hostedActor, query.revisionId);
+			if (canonicalSerialize(value.entry) !== canonicalSerialize(query.entry)) throw new EditorialError("not-found", "Revision is unavailable.");
+			return revision(value);
+		}),
+		compare: (query) => call(async () => {
+			const value = await service.compareRevisions(hostedActor, {
+				entry: query.entry,
+				from: target(query.from),
+				to: target(query.to)
+			});
+			return {
+				entry: value.entry,
+				from: query.from,
+				to: query.to,
+				differences: value.differences
+			};
+		}),
+		validateFields: (request) => call(async () => {
+			const value = await service.previewFields(hostedActor, {
+				entry: request.entry,
+				values: request.values,
+				clear: request.clear,
+				expected: identities(request.expected)
+			});
+			return {
+				entry: value.entry,
+				expected: expectedOf(value.expected),
+				values: value.values,
+				differences: value.differences
+			};
+		}),
+		saveFields: (request) => call(async () => {
+			const result = await service.execute(hostedActor, {
+				kind: "set-fields",
+				operationKey: request.operationKey,
+				expected: identities(request.expected),
+				entry: request.entry,
+				values: request.values,
+				clear: request.clear
+			});
+			return receipt(request.operationKey, request.entry, result);
+		}),
+		restoreRevision: (request) => call(async () => {
+			const result = await service.execute(hostedActor, {
+				kind: "restore-revision",
+				operationKey: request.operationKey,
+				expected: identities(request.expected),
+				entry: request.entry,
+				revisionId: request.revisionId
+			});
+			return receipt(request.operationKey, request.entry, result);
+		}),
+		readOperation: (query) => call(async () => {
+			const found = await service.readReceipt(hostedActor, query.operationKey);
+			if (!found) return null;
+			const revisionId = await findByKey(query.entry, query.operationKey);
+			if (!revisionId) throw new EditorialError("operation-key-reuse", "This operation key belongs to another Entry.");
+			return {
+				operationKey: query.operationKey,
+				entry: query.entry,
+				revisionId,
+				expected: expectedOf(found.result.state)
+			};
+		}),
+		publicationStatus: () => call(async () => {
+			const status = await service.readPublicationStatus(hostedActor);
+			return {
+				activated: {
+					release: canonicalSerialize(status.activated.baseline),
+					fence: status.activated.integrationFence
+				},
+				submission: status.submission ? {
+					id: status.submission.publicationId,
+					status: status.submission.status
+				} : null,
+				artifact: status.artifact,
+				deployed: status.deployed
+			};
+		})
+	};
+}
+function translate(error) {
+	if (!(error instanceof HostedContentError)) return error;
+	return new EditorialError({
+		"invalid-request": "invalid-request",
+		"invalid-value": "invalid-value",
+		forbidden: "forbidden",
+		"not-found": "not-found",
+		"revision-conflict": "revision-conflict",
+		"baseline-conflict": "revision-conflict",
+		"definition-conflict": "revision-conflict",
+		"operation-key-reuse": "operation-key-reuse",
+		"restore-incompatible": "restore-incompatible",
+		"configuration-required": "configuration-required"
+	}[error.code] ?? "unavailable", error.message, (error.restoreDiagnostics ?? []).map((item) => ({
+		fieldId: item.fieldId,
+		code: item.code,
+		message: item.message
+	})));
+}
+//#endregion
+//#region src/content/editorial/ai-operations.ts
+function shape(payload, required, optional = []) {
+	if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new EditorialError("invalid-request", "Malformed Content-AI request.");
+	const value = payload;
+	for (const key of Object.keys(value)) if (!required.includes(key) && !optional.includes(key)) throw new EditorialError("invalid-request", `Content-AI requests do not accept "${key}".`);
+	for (const key of required) if (!(key in value)) throw new EditorialError("invalid-request", `Content-AI request is missing "${key}".`);
+	return value;
+}
+function entryOf(value) {
+	const entry = shape(value, [
+		"providerId",
+		"modelId",
+		"recordId"
+	]);
+	if (![
+		entry.providerId,
+		entry.modelId,
+		entry.recordId
+	].every((part) => typeof part === "string" && part.length > 0 && part.length <= 200)) throw new EditorialError("invalid-request", "Malformed Entry reference.");
+	return {
+		providerId: entry.providerId,
+		modelId: entry.modelId,
+		recordId: entry.recordId
+	};
+}
+var text = (value, label) => {
+	if (typeof value !== "string") throw new EditorialError("invalid-request", `Malformed ${label}.`);
+	return value;
+};
+/** One Content-AI request. Editorial refusals become wire errors; anything else is a host fault and is rethrown. */
+async function runContentAiOperation(host, operation, payload) {
+	try {
+		if (operation === "content-ai-status") return {
+			ok: true,
+			value: await host.status()
+		};
+		switch (operation) {
+			case "content-ai-scope": {
+				const input = shape(payload, ["entry"]);
+				return {
+					ok: true,
+					value: await (await host.service()).scope(entryOf(input.entry))
+				};
+			}
+			case "content-ai-prepare": {
+				const input = shape(payload, ["entry", "instruction"]);
+				return {
+					ok: true,
+					value: await (await host.service()).prepare({
+						entry: entryOf(input.entry),
+						instruction: text(input.instruction, "instruction")
+					})
+				};
+			}
+			case "content-ai-read": {
+				const input = shape(payload, ["proposalId"]);
+				return {
+					ok: true,
+					value: await (await host.service()).read({ proposalId: text(input.proposalId, "proposal id") })
+				};
+			}
+			case "content-ai-apply": {
+				const input = shape(payload, ["proposalId"], ["renderedCandidate"]);
+				return {
+					ok: true,
+					value: await (await host.service()).apply({
+						proposalId: text(input.proposalId, "proposal id"),
+						...input.renderedCandidate === void 0 ? {} : { renderedCandidate: text(input.renderedCandidate, "rendered candidate") }
+					})
+				};
+			}
+			case "content-ai-undo": {
+				const input = shape(payload, ["proposalId"]);
+				return {
+					ok: true,
+					value: await (await host.service()).undo({ proposalId: text(input.proposalId, "proposal id") })
+				};
+			}
+			default: throw new EditorialError("invalid-request", "Unknown Content-AI operation.");
+		}
+	} catch (error) {
+		if (error instanceof EditorialError) return {
+			ok: false,
+			error: {
+				code: error.code,
+				message: error.message,
+				diagnostics: error.diagnostics
+			}
+		};
+		throw error;
+	}
+}
+//#endregion
+export { COMPOSER_PREVIEW_CHANNEL, COMPOSER_PREVIEW_PROTOCOL_VERSION, CONTENT_AI_FIELD_KEYS, EditorialError, HostedContentError, canonicalSerialize, contentAiCandidateDigest, createContentAiService, createFakeContentAiProposer, createHostedContentEditorial, createHostedContentService, createHostedSiteProjector, createMemoryContentAiProposalStore, hostedDocumentErrorMessage, hostedDocumentErrorSchema, hostedPreviewBindingSchema, hostedPreviewResponseSchema, hostedReadyMessage, hostedReadySchema, hostedRenderMessage, hostedRenderSchema, hostedRenderedMessage, hostedRenderedSchema, matchesHostedPreviewBinding, projectHostedSite, readHostedPreviewRequest, readHostedPreviewResponse, runContentAiOperation };

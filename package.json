@@ -58,6 +58,10 @@
     "./hosted-content/preview": {
       "types": "./server/hosted-content/preview.d.mts",
       "default": "./server/hosted-content/preview.mjs"
+    },
+    "./hosted-content/node": {
+      "types": "./server/hosted-content/node.d.mts",
+      "default": "./server/hosted-content/node.mjs"
     }
   },
   "files": [
@@ -151,6 +155,7 @@
     "test:browser:dev": "node scripts/run-dev-browser.mjs",
     "test:browser:content-history": "node verification/content-editorial/blog-history-proof.mjs",
     "test:browser:content-ai": "node verification/content-editorial/blog-ai-proof.mjs",
+    "test:browser:content-ai:real-cli": "node scripts/content-ai/verify-real-cli.mjs",
     "test:browser:site-project": "node scripts/run-site-project-browser.mjs",
     "test:browser:demo-editor": "node scripts/run-demo-editor-browser.mjs",
     "test:browser:demos": "node scripts/run-demos-browser.mjs",

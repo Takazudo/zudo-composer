@@ -98,9 +98,18 @@ export async function runContentAiScenario(harness: EditorialScenarioHarness, ch
   await service().apply({ proposalId: third.id, renderedCandidate: third.candidateDigest });
   const later = await working();
   await human().saveFields({ entry, expected: later.expected, values: { title: "Human title after AI" }, clear: [], operationKey: "human-after-ai" });
+  check((await refused(() => service({ canApply: false }).undo({ proposalId: third.id }))).code, "forbidden", "C8. a propose-only host cannot freshly undo");
   check((await refused(() => service().undo({ proposalId: third.id }))).code, "revision-conflict", "C8. Undo never silently overwrites a later human edit");
   check((await working()).values.title, "Human title after AI", "C8. the human edit survives");
   check(await service().apply({ proposalId: third.id }), { receipt: (await service().read({ proposalId: third.id })).applied, recovered: true }, "C8. the committed Apply stays recoverable after later edits");
   steps.push({ step: "guards", detail: await count() });
+
+  // Inference down: no new proposal, but saved Content, history and committed operations stay readable.
+  const offline = service({ proposer: null });
+  check((await refused(() => offline.prepare({ entry, instruction: "anything" }))).code, "unavailable", "C9. without a provider nothing new is prepared");
+  check((await offline.read({ proposalId: proposal.id })).undone, undone, "C9. without a provider committed operations are still read back");
+  check(await offline.apply({ proposalId: crashed.id }), { receipt: committed, recovered: true }, "C9. without a provider a committed Apply is still recovered");
+  check((await working()).values.title, "Human title after AI", "C9. without a provider the saved Content is unchanged");
+  steps.push({ step: "provider-unavailable", detail: await count() });
   return steps;
 }

@@ -1415,5 +1415,378 @@ declare function projectHostedSite(plan: HostedSitePlan, providers: HostedProvid
 /** A `project` service callback whose render data is the JSON projection of the whole site. */
 declare function createHostedSiteProjector(plan: HostedSitePlan): HostedServiceOptions["project"];
 
-export { COMPOSER_PREVIEW_CHANNEL, COMPOSER_PREVIEW_PROTOCOL_VERSION, HostedContentError, canonicalSerialize, createHostedContentService, createHostedSiteProjector, hostedDocumentErrorMessage, hostedDocumentErrorSchema, hostedPreviewBindingSchema, hostedPreviewResponseSchema, hostedReadyMessage, hostedReadySchema, hostedRenderMessage, hostedRenderSchema, hostedRenderedMessage, hostedRenderedSchema, matchesHostedPreviewBinding, projectHostedSite, readHostedPreviewRequest, readHostedPreviewResponse };
-export type { ContentEntryRecord, ContentEntryRef, ContentFieldDefinition, ContentModelRecord, HostedActor, HostedAdoptionResult, HostedAsset, HostedCanonicalAdoption, HostedCollectionPermission, HostedCommand, HostedCommit, HostedComparison, HostedDatabase, HostedDocumentError, HostedDocumentRender, HostedDocumentRendered, HostedEditorialStatus, HostedEntryPage, HostedEntryView, HostedErrorCode, HostedFieldDifference, HostedFieldPermission, HostedFieldPreview, HostedHead, HostedIdentities, HostedModelPermission, HostedModelSummary, HostedPage, HostedPerspective, HostedPolicy, HostedPreviewBinding, HostedPreviewGuardFailure, HostedPreviewResponse, HostedProjectedRoute, HostedProjectionDiagnostic, HostedProvider, HostedPublication, HostedPublicationOverview, HostedPublicationStage, HostedRebaseChange, HostedRebaseDropReason, HostedReceipt, HostedRendererIdentity, HostedRestoreDiagnostic, HostedRestoreDiagnosticCode, HostedResult, HostedRevision, HostedRevisionOperation, HostedRevisionPage, HostedRevisionTarget, HostedService, HostedServiceOptions, HostedSitePlan, HostedSiteProjection, HostedSnapshot, HostedState, HostedStorage, HostedTransport, HostedValuesIdentity, MessageEventLike, MessagePoster, MessageTarget, PreviewPackIdentity };
+type EditorialPerspective = "working" | "published";
+/** `new`: absent from the activated publication. `published`: working values equal it. `changed`: they differ. */
+type EditorialStatus = "new" | "published" | "changed";
+/** What identifies the shown values: a working revision, or the activated publication (never a revision id). */
+type EditorialValuesIdentity = {
+    perspective: "working";
+    token: string;
+    revisionId: string | null;
+} | {
+    perspective: "published";
+    release: string;
+    fence: number;
+};
+interface EditorialEntryView {
+    entry: ContentEntryRef;
+    perspective: EditorialPerspective;
+    status: EditorialStatus;
+    /** Publication intent recorded on the working Entry. */
+    lifecycle: ContentEntryRecord["lifecycle"];
+    updatedAt: string;
+    values: Record<string, JsonValue>;
+    /** Head of the Entry's working history, the same in both perspectives; null before history begins. */
+    workingRevisionId: string | null;
+    valuesIdentity: EditorialValuesIdentity;
+    /** Opaque precondition a save or restore quotes back; any newer write makes it stale. */
+    expected: string;
+}
+interface EditorialRevision {
+    id: string;
+    entry: ContentEntryRef;
+    sequence: number;
+    parentId: string | null;
+    values: Record<string, JsonValue>;
+    createdAt: string;
+    actor: {
+        id: string;
+    } | null;
+    source: string;
+    operation: {
+        kind: string;
+        key: string | null;
+    };
+    restoredFrom?: string;
+}
+interface EditorialRevisionPage {
+    revisions: EditorialRevision[];
+    nextCursor: string | null;
+}
+type EditorialRevisionTarget = {
+    revisionId: string;
+} | {
+    perspective: EditorialPerspective;
+};
+interface EditorialFieldDifference {
+    fieldId: string;
+    key: string;
+    label: string;
+    change: "added" | "removed" | "changed";
+    before?: JsonValue;
+    after?: JsonValue;
+    /** True when the current definition no longer has this field. */
+    removedFromDefinition: boolean;
+}
+interface EditorialComparison {
+    entry: ContentEntryRef;
+    from: EditorialRevisionTarget;
+    to: EditorialRevisionTarget;
+    differences: EditorialFieldDifference[];
+}
+interface EditorialFieldsRequest {
+    entry: ContentEntryRef;
+    /** The `expected` of the view the change was prepared against. */
+    expected: string;
+    values: Record<string, JsonValue>;
+    clear: string[];
+}
+/** A candidate validated against the pinned precondition; nothing was written. */
+interface EditorialValidation {
+    entry: ContentEntryRef;
+    expected: string;
+    values: Record<string, JsonValue>;
+    differences: EditorialFieldDifference[];
+}
+interface EditorialReceipt {
+    operationKey: string;
+    entry: ContentEntryRef;
+    /** The revision the operation appended, or the unchanged head when nothing changed. */
+    revisionId: string | null;
+    /** The precondition after this operation, for a follow-up such as an undo. */
+    expected: string;
+}
+interface EditorialPublicationStatus {
+    /** The activated publication that `published` reads return. */
+    activated: {
+        release: string | null;
+        fence: number;
+    };
+    /** The newest submission still on its way, when the backend tracks one. */
+    submission: {
+        id: string;
+        status: string;
+    } | null;
+    artifact: string | null;
+    deployed: boolean;
+}
+type EditorialFieldDiagnosticCode = "field-removed" | "invalid-value" | "forbidden" | "collection-owned";
+interface EditorialFieldDiagnostic {
+    fieldId: string;
+    code: EditorialFieldDiagnosticCode;
+    message: string;
+}
+type EditorialErrorCode = "invalid-request" | "not-found" | "forbidden" | "invalid-value" | "revision-conflict" | "operation-key-reuse" | "restore-incompatible" | "configuration-required" | "unavailable";
+declare class EditorialError extends Error {
+    readonly code: EditorialErrorCode;
+    readonly diagnostics: EditorialFieldDiagnostic[];
+    readonly name = "EditorialError";
+    constructor(code: EditorialErrorCode, message: string, diagnostics?: EditorialFieldDiagnostic[]);
+}
+/**
+ * Bound by trusted server code to one actor and one source label, so
+ * provenance never comes from a request body.
+ */
+interface ContentEditorialBoundary {
+    readonly backend: "native" | "hosted";
+    readEntry(query: {
+        entry: ContentEntryRef;
+        perspective: EditorialPerspective;
+    }): Promise<EditorialEntryView>;
+    /** The Entry model's current field definitions. */
+    readFields(query: {
+        entry: ContentEntryRef;
+    }): Promise<EditorialField[]>;
+    listRevisions(query: {
+        entry: ContentEntryRef;
+        cursor?: string;
+        limit?: number;
+    }): Promise<EditorialRevisionPage>;
+    readRevision(query: {
+        entry: ContentEntryRef;
+        revisionId: string;
+    }): Promise<EditorialRevision>;
+    compare(query: {
+        entry: ContentEntryRef;
+        from: EditorialRevisionTarget;
+        to: EditorialRevisionTarget;
+    }): Promise<EditorialComparison>;
+    validateFields(request: EditorialFieldsRequest): Promise<EditorialValidation>;
+    saveFields(request: EditorialFieldsRequest & {
+        operationKey: string;
+    }): Promise<EditorialReceipt>;
+    /** Writes the revision's values as a new working revision; publication intent, the activated publication and history are kept. */
+    restoreRevision(request: {
+        entry: ContentEntryRef;
+        revisionId: string;
+        expected: string;
+        operationKey: string;
+    }): Promise<EditorialReceipt>;
+    publicationStatus(): Promise<EditorialPublicationStatus>;
+    /**
+     * The committed receipt of this actor's operation key, or null when none was
+     * committed. Never writes, so a caller can tell recovery from a fresh request.
+     */
+    readOperation(query: {
+        entry: ContentEntryRef;
+        operationKey: string;
+    }): Promise<EditorialReceipt | null>;
+}
+/** One field of the Entry's current definition. */
+interface EditorialField {
+    id: string;
+    key: string;
+    label: string;
+    kind: string;
+    required: boolean;
+}
+interface EditorialProvenance {
+    actor: {
+        id: string;
+    } | null;
+    source: string;
+}
+
+interface HostedEditorialOptions {
+    /** The site's service for a trusted source label; every service shares the site's storage. */
+    service(source: string): HostedService;
+    provenance: EditorialProvenance;
+}
+declare function createHostedContentEditorial(options: HostedEditorialOptions): ContentEditorialBoundary;
+
+/** Field keys and kinds Content-AI may write. Anything else is refused. */
+declare const CONTENT_AI_FIELD_KEYS: readonly ["title", "body"];
+interface ContentAiProposerInput {
+    instruction: string;
+    /** Only the scoped fields, with their current working values. */
+    fields: {
+        key: string;
+        label: string;
+        kind: string;
+        value: string;
+    }[];
+    signal: AbortSignal;
+}
+type ContentAiProposerOutput = {
+    kind: "proposal";
+    values: Record<string, string>;
+    summary: string;
+} | {
+    kind: "refusal";
+    message: string;
+};
+interface ContentAiProposer {
+    readonly label: string;
+    propose(input: ContentAiProposerInput): Promise<ContentAiProposerOutput>;
+}
+interface ContentAiProposal {
+    id: string;
+    entry: ContentEntryRef;
+    /** The precondition the proposal was validated against; Apply quotes it unchanged. */
+    expected: string;
+    summary: string;
+    /** Field id → proposed value, scoped fields only. */
+    values: Record<string, string>;
+    differences: EditorialFieldDifference[];
+    /** The exact working values Apply would write. */
+    candidate: Record<string, unknown>;
+    /** SHA-256 of the entry, precondition and candidate: what a rendered preview must acknowledge. */
+    candidateDigest: string;
+    operationKey: string;
+    provider: string;
+    createdAt: string;
+    /** After this a fresh Apply is refused; a committed Apply or Undo stays recoverable. */
+    expiresAt: string;
+}
+type ContentAiPrepareResult = {
+    status: "proposed";
+    proposal: ContentAiProposal;
+} | {
+    status: "refused";
+    message: string;
+};
+/**
+ * The immutable record of one prepared proposal. It is persisted before the
+ * proposal is acknowledged, holds no editable Content, and is never updated:
+ * whether it was applied or undone is read back from the owning backend's
+ * receipts, so a crash between a commit and its response loses nothing.
+ */
+interface ContentAiProposalRecord {
+    schemaVersion: 1;
+    /** The trusted backend scope (store or site) the proposal belongs to; never taken from a request. */
+    owner: string;
+    actorId: string | null;
+    proposal: ContentAiProposal;
+}
+interface ContentAiProposalStore {
+    /** Create-only: an existing id is never overwritten. */
+    create(record: ContentAiProposalRecord): Promise<void>;
+    read(id: string): Promise<ContentAiProposalRecord | null>;
+}
+/** A proposal with what the backend has committed for it. */
+interface ContentAiOperation {
+    proposal: ContentAiProposal;
+    applied: EditorialReceipt | null;
+    undone: EditorialReceipt | null;
+}
+interface ContentAiOutcome {
+    receipt: EditorialReceipt;
+    recovered: boolean;
+}
+interface ContentAiServiceOptions {
+    /** The owning backend's boundary bound to the given provenance. */
+    boundary(provenance: EditorialProvenance): ContentEditorialBoundary;
+    actor: {
+        id: string;
+    } | null;
+    /** Trusted backend scope; a proposal recorded under another owner or actor is not found. */
+    owner: string;
+    /**
+     * The inference provider, or null while none is usable. Reads, recovery of
+     * committed operations, Apply of an already prepared proposal and Undo
+     * never call it, so they keep working without one.
+     */
+    proposer: ContentAiProposer | null;
+    store: ContentAiProposalStore;
+    createId(): string;
+    now?(): Date;
+    /** How long a prepared proposal may be freshly applied; default 24 hours. */
+    ttlMs?: number;
+    /** False when the host permits proposals but no fresh Apply or Undo; committed ones stay recoverable. */
+    canApply?: boolean;
+}
+interface ContentAiService {
+    scope(entry: ContentEntryRef): Promise<EditorialField[]>;
+    prepare(request: {
+        entry: ContentEntryRef;
+        instruction: string;
+        signal?: AbortSignal;
+    }): Promise<ContentAiPrepareResult>;
+    /** The proposal and its committed Apply/Undo receipts; never writes and never calls the model. */
+    read(request: {
+        proposalId: string;
+    }): Promise<ContentAiOperation>;
+    /**
+     * Recovers the committed Apply when there is one. Otherwise a fresh Apply
+     * needs `renderedCandidate` to equal the proposal's candidate digest.
+     */
+    apply(request: {
+        proposalId: string;
+        renderedCandidate?: string;
+    }): Promise<ContentAiOutcome>;
+    undo(request: {
+        proposalId: string;
+    }): Promise<ContentAiOutcome>;
+}
+declare function contentAiCandidateDigest(value: {
+    entry: ContentEntryRef;
+    expected: string;
+    candidate: Record<string, unknown>;
+}): Promise<string>;
+declare function createContentAiService(options: ContentAiServiceOptions): ContentAiService;
+/** A process-local proposal store for tests and hosts that opt out of durability. */
+declare function createMemoryContentAiProposalStore(records?: Map<string, ContentAiProposalRecord>): ContentAiProposalStore;
+/**
+ * Offline deterministic proposer for local trials and tests. It never contacts
+ * a model, and its output is not evidence of model behavior.
+ */
+declare function createFakeContentAiProposer(): ContentAiProposer;
+
+/**
+ * Whether inference can run now. `ready` means the provider's own local check
+ * passed, not that a model call has succeeded; `unknown` is never reported as
+ * signed in.
+ */
+type ContentAiInference = {
+    state: "ready";
+    detail: string;
+    version?: string | null;
+} | {
+    state: "unavailable";
+    code: string;
+    message: string;
+} | {
+    state: "unknown";
+    message: string;
+};
+/** `configured` says the host set up Content-AI; `inference` says whether a new proposal can be prepared now. */
+type ContentAiStatus = {
+    configured: false;
+} | {
+    configured: true;
+    provider: string;
+    canApply: boolean;
+    inference: ContentAiInference;
+};
+type ContentAiWireOperation = "content-ai-status" | "content-ai-scope" | "content-ai-prepare" | "content-ai-read" | "content-ai-apply" | "content-ai-undo";
+type ContentAiWireResult = {
+    ok: true;
+    value: unknown;
+} | {
+    ok: false;
+    error: {
+        code: EditorialErrorCode;
+        message: string;
+        diagnostics: EditorialFieldDiagnostic[];
+    };
+};
+interface ContentAiOperationHost {
+    status(): Promise<ContentAiStatus>;
+    /** Built per request with the host's trusted actor, owner, store, proposer and permission. */
+    service(): Promise<ContentAiService>;
+}
+/** One Content-AI request. Editorial refusals become wire errors; anything else is a host fault and is rethrown. */
+declare function runContentAiOperation(host: ContentAiOperationHost, operation: string, payload: unknown): Promise<ContentAiWireResult>;
+
+export { COMPOSER_PREVIEW_CHANNEL, COMPOSER_PREVIEW_PROTOCOL_VERSION, CONTENT_AI_FIELD_KEYS, EditorialError, HostedContentError, canonicalSerialize, contentAiCandidateDigest, createContentAiService, createFakeContentAiProposer, createHostedContentEditorial, createHostedContentService, createHostedSiteProjector, createMemoryContentAiProposalStore, hostedDocumentErrorMessage, hostedDocumentErrorSchema, hostedPreviewBindingSchema, hostedPreviewResponseSchema, hostedReadyMessage, hostedReadySchema, hostedRenderMessage, hostedRenderSchema, hostedRenderedMessage, hostedRenderedSchema, matchesHostedPreviewBinding, projectHostedSite, readHostedPreviewRequest, readHostedPreviewResponse, runContentAiOperation };
+export type { ContentAiInference, ContentAiOperation, ContentAiOperationHost, ContentAiOutcome, ContentAiPrepareResult, ContentAiProposal, ContentAiProposalRecord, ContentAiProposalStore, ContentAiProposer, ContentAiProposerInput, ContentAiProposerOutput, ContentAiService, ContentAiServiceOptions, ContentAiStatus, ContentAiWireOperation, ContentAiWireResult, ContentEditorialBoundary, ContentEntryRecord, ContentEntryRef, ContentFieldDefinition, ContentModelRecord, EditorialEntryView, EditorialErrorCode, EditorialField, EditorialFieldDiagnostic, EditorialFieldDifference, EditorialPerspective, EditorialProvenance, EditorialReceipt, EditorialRevision, HostedActor, HostedAdoptionResult, HostedAsset, HostedCanonicalAdoption, HostedCollectionPermission, HostedCommand, HostedCommit, HostedComparison, HostedDatabase, HostedDocumentError, HostedDocumentRender, HostedDocumentRendered, HostedEditorialOptions, HostedEditorialStatus, HostedEntryPage, HostedEntryView, HostedErrorCode, HostedFieldDifference, HostedFieldPermission, HostedFieldPreview, HostedHead, HostedIdentities, HostedModelPermission, HostedModelSummary, HostedPage, HostedPerspective, HostedPolicy, HostedPreviewBinding, HostedPreviewGuardFailure, HostedPreviewResponse, HostedProjectedRoute, HostedProjectionDiagnostic, HostedProvider, HostedPublication, HostedPublicationOverview, HostedPublicationStage, HostedRebaseChange, HostedRebaseDropReason, HostedReceipt, HostedRendererIdentity, HostedRestoreDiagnostic, HostedRestoreDiagnosticCode, HostedResult, HostedRevision, HostedRevisionOperation, HostedRevisionPage, HostedRevisionTarget, HostedService, HostedServiceOptions, HostedSitePlan, HostedSiteProjection, HostedSnapshot, HostedState, HostedStorage, HostedTransport, HostedValuesIdentity, MessageEventLike, MessagePoster, MessageTarget, PreviewPackIdentity };

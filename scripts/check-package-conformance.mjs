@@ -160,6 +160,7 @@ const expectedRootExports = {
   './hosted-content/testing': { types: './server/hosted-content/testing.d.mts', default: './server/hosted-content/testing.mjs' },
   './hosted-content/editor.css': './server/hosted-content/editor.css',
   './hosted-content/preview': { types: './server/hosted-content/preview.d.mts', default: './server/hosted-content/preview.mjs' },
+  './hosted-content/node': { types: './server/hosted-content/node.d.mts', default: './server/hosted-content/node.mjs' },
 };
 assert(JSON.stringify(rootPackageJson.exports) === JSON.stringify(expectedRootExports), 'the root package exports map changed');
 

@@ -871,5 +871,118 @@ interface HostedContentEditorHandle {
 /** Mount only the policy projection. Location paths/queries never select local authoring tools. */
 declare function mountHostedContentEditor(container: HTMLElement, options: HostedContentEditorOptions): HostedContentEditorHandle;
 
-export { HostedContentSession, HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost, hostedEditorLabels, hostedEditorLabelsJa, hostedErrorMessages, hostedErrorMessagesJa, mountHostedContentEditor };
-export type { HostedContentEditorHandle, HostedContentEditorOptions, HostedControlLabels, HostedEditorLabels, HostedEditorSelection, HostedEditorSessionState, HostedFieldMount, HostedFieldRenderContext, HostedFieldRenderer, HostedPreviewAdapter, HostedPreviewController, HostedPreviewControllerOptions, HostedPreviewHostOptions, HostedPreviewLocation, HostedPreviewRenderContext, HostedPreviewState, HostedRecoveryCheckpoint, HostedSessionOptions };
+interface EditorialFieldDifference {
+    fieldId: string;
+    key: string;
+    label: string;
+    change: "added" | "removed" | "changed";
+    before?: JsonValue;
+    after?: JsonValue;
+    /** True when the current definition no longer has this field. */
+    removedFromDefinition: boolean;
+}
+interface EditorialReceipt {
+    operationKey: string;
+    entry: ContentEntryRef;
+    /** The revision the operation appended, or the unchanged head when nothing changed. */
+    revisionId: string | null;
+    /** The precondition after this operation, for a follow-up such as an undo. */
+    expected: string;
+}
+/** One field of the Entry's current definition. */
+interface EditorialField {
+    id: string;
+    key: string;
+    label: string;
+    kind: string;
+    required: boolean;
+}
+
+interface ContentAiProposal {
+    id: string;
+    entry: ContentEntryRef;
+    /** The precondition the proposal was validated against; Apply quotes it unchanged. */
+    expected: string;
+    summary: string;
+    /** Field id → proposed value, scoped fields only. */
+    values: Record<string, string>;
+    differences: EditorialFieldDifference[];
+    /** The exact working values Apply would write. */
+    candidate: Record<string, unknown>;
+    /** SHA-256 of the entry, precondition and candidate: what a rendered preview must acknowledge. */
+    candidateDigest: string;
+    operationKey: string;
+    provider: string;
+    createdAt: string;
+    /** After this a fresh Apply is refused; a committed Apply or Undo stays recoverable. */
+    expiresAt: string;
+}
+type ContentAiPrepareResult = {
+    status: "proposed";
+    proposal: ContentAiProposal;
+} | {
+    status: "refused";
+    message: string;
+};
+/** A proposal with what the backend has committed for it. */
+interface ContentAiOperation {
+    proposal: ContentAiProposal;
+    applied: EditorialReceipt | null;
+    undone: EditorialReceipt | null;
+}
+interface ContentAiOutcome {
+    receipt: EditorialReceipt;
+    recovered: boolean;
+}
+
+/**
+ * Whether inference can run now. `ready` means the provider's own local check
+ * passed, not that a model call has succeeded; `unknown` is never reported as
+ * signed in.
+ */
+type ContentAiInference = {
+    state: "ready";
+    detail: string;
+    version?: string | null;
+} | {
+    state: "unavailable";
+    code: string;
+    message: string;
+} | {
+    state: "unknown";
+    message: string;
+};
+/** `configured` says the host set up Content-AI; `inference` says whether a new proposal can be prepared now. */
+type ContentAiStatus = {
+    configured: false;
+} | {
+    configured: true;
+    provider: string;
+    canApply: boolean;
+    inference: ContentAiInference;
+};
+type ContentAiWireOperation = "content-ai-status" | "content-ai-scope" | "content-ai-prepare" | "content-ai-read" | "content-ai-apply" | "content-ai-undo";
+
+interface RemoteContentAi {
+    status(): Promise<ContentAiStatus>;
+    scope(entry: ContentEntryRef): Promise<EditorialField[]>;
+    prepare(request: {
+        entry: ContentEntryRef;
+        instruction: string;
+    }): Promise<ContentAiPrepareResult>;
+    read(request: {
+        proposalId: string;
+    }): Promise<ContentAiOperation>;
+    apply(request: {
+        proposalId: string;
+        renderedCandidate?: string;
+    }): Promise<ContentAiOutcome>;
+    undo(request: {
+        proposalId: string;
+    }): Promise<ContentAiOutcome>;
+}
+/** The browser half of Content-AI. Provenance and the proposer stay on the server. */
+declare function createRemoteContentAi(call: (operation: ContentAiWireOperation, payload: unknown) => Promise<unknown>): RemoteContentAi;
+
+export { HostedContentSession, HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost, createRemoteContentAi, hostedEditorLabels, hostedEditorLabelsJa, hostedErrorMessages, hostedErrorMessagesJa, mountHostedContentEditor };
+export type { HostedContentEditorHandle, HostedContentEditorOptions, HostedControlLabels, HostedEditorLabels, HostedEditorSelection, HostedEditorSessionState, HostedFieldMount, HostedFieldRenderContext, HostedFieldRenderer, HostedPreviewAdapter, HostedPreviewController, HostedPreviewControllerOptions, HostedPreviewHostOptions, HostedPreviewLocation, HostedPreviewRenderContext, HostedPreviewState, HostedRecoveryCheckpoint, HostedSessionOptions, RemoteContentAi };
