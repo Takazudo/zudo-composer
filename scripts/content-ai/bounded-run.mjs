@@ -30,16 +30,17 @@ export function markedProcesses(runId) {
 const signalGroup = (pid, signal) => { try { process.kill(-pid, signal); return true; } catch { return false; } };
 
 /**
- * @param {{ command: string, args: string[], cwd?: string, env?: NodeJS.ProcessEnv, message?: unknown, deadlineAt: number, graceMs: number,
+ * `cancel` (the person's Ctrl+C) stops the run the same way as the deadline.
+ * @param {{ command: string, args: string[], cwd?: string, env?: NodeJS.ProcessEnv, message?: unknown, deadlineAt: number, graceMs: number, cancel?: AbortSignal,
  *   onMessage?: (message: any) => void, onOutput?: (text: string) => void }} options
- * @returns {Promise<{ ended: "completed" | "deadline", cleanup: "clean" | "forced", phase: string | null, done: any, exitCode: number | null,
+ * @returns {Promise<{ ended: "completed" | "deadline" | "cancelled", cleanup: "clean" | "forced", phase: string | null, done: any, exitCode: number | null,
  *   signal: NodeJS.Signals | null, strays: number, remaining: number[], runId: string, pid: number }>}
  */
-export function runBoundedChild({ command, args, cwd, env = process.env, message, deadlineAt, graceMs, onMessage, onOutput }) {
+export function runBoundedChild({ command, args, cwd, env = process.env, message, deadlineAt, graceMs, cancel, onMessage, onOutput }) {
   const runId = randomUUID();
   const child = spawn(command, args, { cwd, env: { ...env, [RUN_MARKER]: runId }, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe", "ipc"] });
   const pid = /** @type {number} */ (child.pid);
-  /** @type {"completed" | "deadline"} */ let ended = "completed";
+  /** @type {"completed" | "deadline" | "cancelled"} */ let ended = "completed";
   /** @type {"clean" | "forced"} */ let cleanup = "clean";
   /** @type {string | null} */ let phase = null;
   /** @type {string | null} */ let expiredIn = null;
@@ -67,6 +68,7 @@ export function runBoundedChild({ command, args, cwd, env = process.env, message
   if (message !== undefined) child.send(/** @type {any} */ (message));
   // The phase is frozen when the deadline fires; the child reports "cleanup" afterwards.
   later(deadlineAt - Date.now(), () => { if (leaderGone || done) return; ended = "deadline"; expiredIn = phase; stop(); });
+  cancel?.addEventListener("abort", () => { if (leaderGone || ended !== "completed") return; ended = "cancelled"; expiredIn = phase; stop(); }, { once: true });
 
   return exited.then(async (/** @type {any} */ exit) => {
     for (const timer of timers) clearTimeout(timer);
@@ -77,6 +79,6 @@ export function runBoundedChild({ command, args, cwd, env = process.env, message
     const strays = markedProcesses(runId);
     for (const stray of strays) { try { process.kill(stray, "SIGKILL"); } catch { /* already gone */ } }
     if (strays.length) { cleanup = "forced"; await new Promise(resolve => setTimeout(resolve, 200)); }
-    return { ended, cleanup, phase: ended === "deadline" ? expiredIn : phase, done, exitCode: exit.code, signal: exit.signal, strays: strays.length, remaining: markedProcesses(runId), runId, pid };
+    return { ended, cleanup, phase: ended === "completed" ? phase : expiredIn, done, exitCode: exit.code, signal: exit.signal, strays: strays.length, remaining: markedProcesses(runId), runId, pid };
   });
 }

@@ -88,6 +88,15 @@ describe("runBoundedChild", () => {
     expect(alive(outcome.pid)).toBe(false);
   });
 
+  it("stops the group when the person cancels, before the deadline", async () => {
+    const file = await script("cancel.mjs", `process.send({ type: "phase", name: "provider" }); process.once("SIGTERM", () => process.exit(1)); setInterval(() => {}, 1000);`);
+    const cancel = new AbortController();
+    setTimeout(() => cancel.abort(), 300);
+    const outcome = await runBoundedChild({ command: process.execPath, args: [file], deadlineAt: Date.now() + 30_000, graceMs: 1_000, cancel: cancel.signal });
+    expect(outcome).toMatchObject({ ended: "cancelled", phase: "provider", cleanup: "clean", remaining: [] });
+    expect(alive(outcome.pid)).toBe(false);
+  });
+
   it("kills a child that ignores the deadline's SIGTERM after the grace period", async () => {
     const file = await script("deaf.mjs", `process.on("SIGTERM", () => {}); process.send({ type: "phase", name: "render" }); setInterval(() => {}, 1000);`);
     const outcome = await runBoundedChild({ command: process.execPath, args: [file], deadlineAt: Date.now() + 500, graceMs: 500 });

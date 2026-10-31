@@ -1,4 +1,5 @@
 // @ts-check
+/* global AbortController */
 // Opt-in real-CLI acceptance for Content-AI, ONE provider at a time, through the
 // independently installed Article CMS: the host's Node process runs the CLI with
 // the person's normal sign-in, and a real browser drives the host admin. A real
@@ -122,7 +123,10 @@ const scrubPaths = [temporary, consumer, repo];
 const scrub = createScrubber(scrubPaths);
 const log = (/** @type {string} */ line) => console.log(`content-ai-real-cli: ${line}`);
 
-// The run is its own process group (host, browser, provider); its CLI inherits the run marker.
+// The run is its own process group (host, browser, provider); its CLI inherits the run marker. The group is
+// detached from this terminal, so Ctrl+C here stops it the same way the deadline does.
+const interrupted = new AbortController();
+for (const signal of /** @type {const} */ (["SIGINT", "SIGTERM"])) process.once(signal, () => interrupted.abort());
 /** @type {any[]} */ const steps = [];
 /** @type {any} */ let inference = null;
 let modelCalls = 0;
@@ -130,7 +134,7 @@ const outcome = await runBoundedChild({
   command: process.execPath, args: [join(repo, "scripts/content-ai/real-cli-runner.mjs")], cwd: hostDir,
   env: { ...process.env, ...(fault === "slow-provider" ? { FAKE_CLAUDE_MODE: "hang", FAKE_CODEX_MODE: "hang" } : {}) },
   message: { hostDir, data, provider, executable, model: options.model ?? null, timeoutMs, deadlineAt, instruction: INSTRUCTION, budget: MODEL_CALL_BUDGET, scrubPaths, fault },
-  deadlineAt, graceMs,
+  deadlineAt, graceMs, cancel: interrupted.signal,
   onMessage: message => {
     if (message?.type === "step") steps.push(message.step);
     if (message?.type === "inference") inference = message.inference;
@@ -140,6 +144,10 @@ const outcome = await runBoundedChild({
 });
 const done = outcome.done;
 const expired = outcome.ended === "deadline";
+if (outcome.ended === "cancelled") {
+  steps.push({ name: outcome.phase ?? "startup", status: "fail", durationMs: 0, details: {}, error: `Interrupted during ${outcome.phase ?? "startup"}; the run's processes were stopped.` });
+  log(`interrupted during ${outcome.phase ?? "startup"} — run stopped (${outcome.cleanup} cleanup)`);
+}
 if (expired) {
   steps.push({ name: outcome.phase ?? "startup", status: "fail", durationMs: 0, details: {}, error: `The ${maxMinutes}-minute run limit expired during ${outcome.phase ?? "startup"}; the run's processes were stopped.` });
   log(`deadline: expired during ${outcome.phase ?? "startup"} — run stopped (${outcome.cleanup} cleanup)`);
@@ -149,7 +157,7 @@ if (outcome.cleanup === "forced" && !expired) {
   log(`cleanup: exceeded its ${graceMs} ms grace period and was ended`);
 }
 const blockedReason = !expired && done?.exitCode === 3 ? done.blockedReason : null;
-const exitCode = expired || outcome.cleanup === "forced" || !done ? 1 : done.exitCode;
+const exitCode = outcome.ended !== "completed" || outcome.cleanup === "forced" || !done ? 1 : done.exitCode;
 const version = String(inference?.version ?? "unknown").replace(/[^A-Za-z0-9._-]+/g, "_");
 const result = {
   label,
@@ -161,6 +169,7 @@ const result = {
   provider: { kind: provider, executable: basename(executable), model: options.model ?? null, version: inference?.version ?? null },
   composer: { sha, installedHostedContentMatchesCheckout: true },
   modelCalls,
+  ...(outcome.ended === "cancelled" ? { interruptedIn: outcome.phase ?? "startup" } : {}),
   deadline: { maxMinutes, expired, timedOutPhase: expired ? outcome.phase ?? "startup" : outcome.cleanup === "forced" ? "cleanup" : null, cleanup: outcome.cleanup, graceMs,
     ownedProcessesStopped: outcome.remaining.length === 0, straysKilled: outcome.strays },
   ranAt: new Date().toISOString(),

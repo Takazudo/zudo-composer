@@ -22,6 +22,7 @@ const cases = [
   { name: "candidate render that never finishes", fault: "stall-render", exit: 1, outcome: "fail", timedOutPhase: "render-and-apply", cleanup: null },
   { name: "slow provider (fake CLI that never replies)", fault: "slow-provider", exit: 1, outcome: "fail", timedOutPhase: "prepare-title-only", cleanup: null },
   { name: "cleanup that exceeds its grace period", fault: "stall-cleanup", maxMinutes: 5, exit: 1, outcome: "fail", timedOutPhase: "cleanup", cleanup: "forced" },
+  { name: "Ctrl+C while a render never finishes", fault: "stall-render", interruptAfterMs: 10_000, maxMinutes: 5, exit: 1, outcome: "fail", timedOutPhase: null, cleanup: null, interruptedIn: "render-and-apply" },
 ].filter(entry => !values.only || entry.fault === values.only || (values.only === "normal" && !entry.fault));
 
 /** Scratch directories this command creates, so a case can prove its own was removed. */
@@ -40,9 +41,11 @@ for (const entry of cases) {
   child.stderr.on("data", chunk => { output += chunk; });
   // The test's own bound: well past the deadline and grace, so a run that ignores them is caught.
   const bound = maxMinutes * 60_000 + GRACE_MS + 30_000;
-  const killer = setTimeout(() => child.kill("SIGKILL"), bound);
+  const killer = setTimeout(() => child.kill("SIGKILL"), entry.interruptAfterMs ? entry.interruptAfterMs + GRACE_MS + 30_000 : bound);
+  const interrupt = entry.interruptAfterMs ? setTimeout(() => child.kill("SIGINT"), entry.interruptAfterMs) : null;
   const code = await new Promise(resolve => child.once("exit", resolve));
   clearTimeout(killer);
+  if (interrupt) clearTimeout(interrupt);
   const elapsed = Date.now() - started;
   /** @type {any} */ let result = null;
   try {
@@ -56,8 +59,9 @@ for (const entry of cases) {
     assert.equal(result.deadline.ownedProcessesStopped, true, "no process of the run is left");
     assert.equal(result.modelCalls <= 1, true);
     assert.match(result.label, /dry run/);
-    assert.ok(elapsed <= maxMinutes * 60_000 + GRACE_MS + 10_000, `ended in ${elapsed} ms`);
-    if (entry.fault && entry.fault !== "stall-cleanup") {
+    assert.ok(elapsed <= (entry.interruptAfterMs ?? maxMinutes * 60_000) + GRACE_MS + 10_000, `ended in ${elapsed} ms`);
+    if (entry.interruptAfterMs) assert.equal(result.interruptedIn, entry.interruptedIn);
+    if (entry.fault && entry.fault !== "stall-cleanup" && !entry.interruptAfterMs) {
       assert.equal(result.deadline.expired, true);
       assert.ok(result.steps.some((/** @type {any} */ step) => step.status === "fail" && step.error.includes(entry.timedOutPhase)), "the failed step names the phase");
       assert.ok(elapsed >= maxMinutes * 60_000 - 1_000, "it ran until the deadline, not shorter");

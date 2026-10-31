@@ -355,12 +355,13 @@ pnpm test:browser:content-ai:real-cli -- --provider claude-cli --consumer <consu
   call are cancelled (the CLI's own process group is killed) and the browser and
   host are closed; whatever is still running after a 15 s grace period is
   killed, and on Linux so is any process carrying the run's environment marker.
-  Nothing outside the run is signalled. The result is then written as `fail`
+  Nothing outside the run is signalled, and Ctrl+C stops the run the same way
+  (recorded as `interruptedIn`). The result is then written as `fail`
   with `deadline.timedOutPhase` naming the step (or `cleanup` when cleanup
   overran its grace), and the scratch host is removed unless `--keep`.
   `node scripts/content-ai/verify-real-cli-deadline.mjs --consumer <dir>` checks
   this with the fake CLI and proof-only stalls (a request that never answers, a
-  render that never finishes, a provider that never replies, a stuck cleanup)
+  render that never finishes, a provider that never replies, a stuck cleanup, Ctrl+C)
   and runs in CI; a fake dry run may run in CI, a real run never does.
 - Steps: provider status → publish A, save B → prepare → rendered candidate →
   Apply → restart, reload and recover the Apply → Undo → restart and recover
