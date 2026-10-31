@@ -21,11 +21,11 @@ importers:
         specifier: 5.1.5
         version: 5.1.5(@takazudo/zfb@5.1.5)
       '@takazudo/zudo-doc':
-        specifier: 9.1.0
-        version: 9.1.0(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb-md-wasm@5.1.5)(@takazudo/zfb-runtime@5.1.5(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@types/node@22.20.4)(diff@8.0.4)(zod@4.6.5)
+        specifier: 9.1.1
+        version: 9.1.1(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb-md-wasm@5.1.5)(@takazudo/zfb-runtime@5.1.5(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@types/node@22.20.4)(diff@8.0.4)(zod@4.6.5)
       '@takazudo/zudo-sg':
-        specifier: ^0.8.0
-        version: 0.8.0(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@takazudo/zudo-doc@9.1.0(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb-md-wasm@5.1.5)(@takazudo/zfb-runtime@5.1.5(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@types/node@22.20.4)(diff@8.0.4)(zod@4.6.5))
+        specifier: ^0.8.1
+        version: 0.8.1(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@takazudo/zudo-doc@9.1.1(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb-md-wasm@5.1.5)(@takazudo/zfb-runtime@5.1.5(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@types/node@22.20.4)(diff@8.0.4)(zod@4.6.5))
       '@zudo-composer/component-contract':
         specifier: git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0
         version: https://codeload.github.com/Takazudo/zudo-composer/tar.gz/c0b452da075b66757c60bd0d721a47062d4354d0
@@ -721,8 +721,8 @@ packages:
     engines: {node: '>=24.0.0', pnpm: '>=10.0.0'}
     hasBin: true
 
-  '@takazudo/zudo-doc@9.1.0':
-    resolution: {integrity: sha512-TvzO3nPgFW7kB6v5XDWtXv94UEQvD97zS/qj7ohFAQdjVKn4CUaKKUEIct1hAu9iNKEABH4b/Mu5W1/UnbAA5Q==}
+  '@takazudo/zudo-doc@9.1.1':
+    resolution: {integrity: sha512-lHnpKM8gDnt2dUC8BCdZcF69fQhH3uSlKtJ39SgRqKSecxOSCoE0MQFl+pNK1vz2tf5IctYJDqCNgkxjTjK7dQ==}
     engines: {node: '>=24'}
     hasBin: true
     peerDependencies:
@@ -749,13 +749,13 @@ packages:
       katex:
         optional: true
 
-  '@takazudo/zudo-sg@0.8.0':
-    resolution: {integrity: sha512-ixQuh8+nqIHpJSYRcbj3zXQxCZNnVSGAA0mrzUEUNekYwRiA5j5DcU8o0Sl+f07rk2Vz+VdqYWnnYHv2SRlwHA==}
+  '@takazudo/zudo-sg@0.8.1':
+    resolution: {integrity: sha512-kopYbrMriwE76wBNgpykz+VpTpt7sGGgXZzEvtebW7UqXHzYmRxpzClaG5xEOjd1zBeby7KbOdaIO+FxuILKiw==}
     hasBin: true
     peerDependencies:
       '@takazudo/zdtp': ^0.9.0
       '@takazudo/zfb': ^5.1.5
-      '@takazudo/zudo-doc': ^9.1.0
+      '@takazudo/zudo-doc': ^9.1.1
 
   '@types/debug@4.1.13':
     resolution: {integrity: sha512-KSVgmQmzMwPlmtljOomayoR89W4FynCAi3E8PPs7vmDVPe84hT+vGPKkJfThkmXs0x0jAaa9U8uW8bbfyS2fWw==}
@@ -1778,7 +1778,7 @@ snapshots:
       '@takazudo/zfb-linux-x64-gnu': 5.1.5
       '@takazudo/zfb-win32-x64-msvc': 5.1.5
 
-  '@takazudo/zudo-doc@9.1.0(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb-md-wasm@5.1.5)(@takazudo/zfb-runtime@5.1.5(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@types/node@22.20.4)(diff@8.0.4)(zod@4.6.5)':
+  '@takazudo/zudo-doc@9.1.1(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb-md-wasm@5.1.5)(@takazudo/zfb-runtime@5.1.5(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@types/node@22.20.4)(diff@8.0.4)(zod@4.6.5)':
     dependencies:
       '@inquirer/prompts': 8.7.5(@types/node@22.20.4)
       '@takazudo/zfb': 5.1.5
@@ -1800,7 +1800,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  '@takazudo/zudo-sg@0.8.0(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@takazudo/zudo-doc@9.1.0(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb-md-wasm@5.1.5)(@takazudo/zfb-runtime@5.1.5(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@types/node@22.20.4)(diff@8.0.4)(zod@4.6.5))':
+  '@takazudo/zudo-sg@0.8.1(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@takazudo/zudo-doc@9.1.1(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb-md-wasm@5.1.5)(@takazudo/zfb-runtime@5.1.5(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@types/node@22.20.4)(diff@8.0.4)(zod@4.6.5))':
     dependencies:
       '@codemirror/commands': 6.11.1
       '@codemirror/lang-css': 6.3.1
@@ -1811,7 +1811,7 @@ snapshots:
       '@lezer/highlight': 1.2.5
       '@takazudo/zdtp': 0.9.0(@takazudo/zfb@5.1.5)
       '@takazudo/zfb': 5.1.5
-      '@takazudo/zudo-doc': 9.1.0(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb-md-wasm@5.1.5)(@takazudo/zfb-runtime@5.1.5(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@types/node@22.20.4)(diff@8.0.4)(zod@4.6.5)
+      '@takazudo/zudo-doc': 9.1.1(@takazudo/zdtp@0.9.0(@takazudo/zfb@5.1.5))(@takazudo/zfb-md-wasm@5.1.5)(@takazudo/zfb-runtime@5.1.5(@takazudo/zfb@5.1.5))(@takazudo/zfb@5.1.5)(@types/node@22.20.4)(diff@8.0.4)(zod@4.6.5)
       postcss: 8.5.29
 
   '@types/debug@4.1.13':
