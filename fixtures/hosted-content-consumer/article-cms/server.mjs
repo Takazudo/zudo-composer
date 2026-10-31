@@ -40,8 +40,9 @@ const delay = milliseconds => new Promise(done => setTimeout(done, milliseconds)
  * whose next response is lost after it ran, as a dropped connection would lose it, and `faults.haltAfterDrop` then
  * stops serving as a crash would. All are proof-only.
  *
- * `ai` is the host's explicit Content-AI choice: `null` turns it off; `{ provider }` is one provider from
- * `createContentAiProvider` (or a host's own). `sessions` maps a bearer token to one host account; a request
+ * `ai` is the host's explicit Content-AI choice: `{ provider }` is one provider from `createContentAiProvider`
+ * (or a host's own); `null` or `{ provider: null }` turns new inference off. Off never closes the durable
+ * proposal store: saved proposals, candidate renders, guarded Apply/Undo and committed-operation recovery stay. `sessions` maps a bearer token to one host account; a request
  * without one is the local editor who started this loopback host.
  */
 export async function startArticleCms({ directory, port = 0, faults = {}, ai = null, sessions = {} } = {}) {
@@ -50,9 +51,10 @@ export async function startArticleCms({ directory, port = 0, faults = {}, ai = n
   await mkdir(directory, { recursive: true });
   // Seeds only an empty database; a normal start never resets or reseeds existing data.
   await initializeSqliteDatabase(database, createArticleSeed());
-  const proposals = ai ? openArticleProposalStore(database) : null;
+  const proposals = openArticleProposalStore(database), provider = ai?.provider ?? null;
   const localEditor = { actorId: articleActor.id, role: "write" };
-  for (const value of Object.values(sessions)) if (!Object.hasOwn(articleAccounts, value.actorId) || articleAccounts[value.actorId].role !== value.role) throw new Error("A session must name a host account with its own role");
+  // A session names a host account with its own role or, when the host has narrowed it, propose-only.
+  for (const value of Object.values(sessions)) if (!Object.hasOwn(articleAccounts, value.actorId) || ![articleAccounts[value.actorId].role, "propose"].includes(value.role)) throw new Error("A session must name a host account with its own role or propose-only");
   const withService = async (work, session = localEditor) => {
     const handle = openSqliteHandle(database);
     try { return await work(createArticleService(handle.storage, { role: session.role }), handle.storage); } finally { handle.close(); }
@@ -111,7 +113,7 @@ export async function startArticleCms({ directory, port = 0, faults = {}, ai = n
   async function contentAi(session, operation, payload) {
     const handle = openSqliteHandle(database);
     try {
-      const service = createArticleContentAi({ storage: handle.storage, session, provider: ai.provider, store: proposals });
+      const service = createArticleContentAi({ storage: handle.storage, session, provider, store: proposals });
       // A rendered candidate is acknowledged by its render identity, which this host recomputes for the
       // proposal, route, renderer and definition it serves now; only then does the service see the digest.
       if (operation === "content-ai-apply" && payload && typeof payload === "object" && typeof payload.renderedCandidate === "string") {
@@ -120,8 +122,9 @@ export async function startArticleCms({ directory, port = 0, faults = {}, ai = n
         payload = { ...payload, renderedCandidate: payload.renderedCandidate === identity ? proposal.candidateDigest : "unrendered" };
       }
       return await runContentAiOperation({
-        status: async () => ({ configured: true, provider: ai.provider?.label ?? "None", canApply: session.role === "write",
-          inference: ai.provider ? await ai.provider.inference() : { state: "unavailable", code: "not-configured", message: "This host was started without an AI provider." } }),
+        status: async () => ({ configured: true, provider: provider?.label ?? "Off", canApply: session.role === "write",
+          // Off is reported without probing anything: no provider process exists in this host.
+          inference: provider ? await provider.inference() : { state: "unavailable", code: "off", message: "New AI proposals are off on this host (started with --ai off). Saved proposals and committed results stay available." } }),
         service: async () => service,
       }, operation, payload);
     } catch (error) {
@@ -132,7 +135,7 @@ export async function startArticleCms({ directory, port = 0, faults = {}, ai = n
   async function candidate(session, proposalId) {
     const handle = openSqliteHandle(database);
     try {
-      const service = createArticleContentAi({ storage: handle.storage, session, provider: ai.provider, store: proposals });
+      const service = createArticleContentAi({ storage: handle.storage, session, provider, store: proposals });
       const { proposal } = await service.read({ proposalId });
       const current = await createHostedContentEditorial({ service: source => createArticleService(handle.storage, { source, role: session.role }), provenance: { actor: { id: session.actorId }, source: "article-admin" } })
         .readEntry({ entry: proposal.entry, perspective: "working" });
@@ -157,7 +160,6 @@ export async function startArticleCms({ directory, port = 0, faults = {}, ai = n
       if (request.headers.authorization !== undefined && (!bearer || !Object.hasOwn(sessions, bearer))) { send(401, { code: "forbidden", message: "Unknown session" }); return; }
       const session = bearer ? sessions[bearer] : localEditor, actor = { id: session.actorId };
       if (path === "/api/ai" || path === "/api/ai/candidate") {
-        if (!ai) { send(404, { code: "not-found", message: "Content-AI is not enabled on this host" }); return; }
         if (faults.aiDelayMs) await delay(faults.aiDelayMs);
         if (request.method === "GET" && path === "/api/ai/candidate") {
           const result = await candidate(session, url.searchParams.get("id"));
@@ -242,7 +244,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const running = await startArticleCms({ directory: values.data, port: Number(values.port), ai: provider ? { provider } : null });
   const inference = provider ? await provider.inference() : null;
   console.log([`Article CMS (local only; nothing here is deployed): ${running.url}/`, `Data:       ${running.database}`,
-    `Content-AI: ${provider ? `${provider.label} — ${inference.state === "ready" ? inference.detail : `${inference.state}: ${inference.message}`}` : "off"}`,
+    `Content-AI: ${provider ? `${provider.label} — ${inference.state === "ready" ? inference.detail : `${inference.state}: ${inference.message}`}` : "off — no new proposals; saved proposals, their Apply/Undo and recovery stay available"}`,
     "Press Ctrl+C to stop. Data is kept."].join("\n"));
-  process.on("SIGINT", () => { void running.close().then(() => process.exit(0)); });
+  for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { void running.close().then(() => process.exit(0)); });
 }

@@ -32,7 +32,7 @@ export async function runArticleAiHttpProof({ directory } = {}) {
   const check = (name, condition) => { assert.ok(condition, name); evidence.checks.push(name); };
   const fake = await countingProvider();
   let host = await startArticleCms({ directory: root, ai: { provider: fake.provider }, sessions });
-  const restart = async (ai = { provider: fake.provider }) => { await host.close(); host = await startArticleCms({ directory: root, ai, sessions }); };
+  const restart = async (ai = { provider: fake.provider }, withSessions = sessions) => { await host.close(); host = await startArticleCms({ directory: root, ai, sessions: withSessions }); };
   const request = async (path, { body, token, headers = {} } = {}) => {
     const response = await fetch(`${host.url}${path}`, { method: body === undefined ? "GET" : "POST",
       headers: { ...(body === undefined ? {} : { "content-type": "application/json" }), ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
@@ -185,10 +185,31 @@ export async function runArticleAiHttpProof({ directory } = {}) {
     check("with the provider down, saved Content and committed operations stay readable", (await value("content-ai-read", { proposalId: proposal.id })).undone?.revisionId === afterUndo[0].id
       && (await value("content-ai-apply", { proposalId: applied.id })).recovered && (await working()).values.title === "Human title after AI");
 
+    // The host later narrows an account to propose-only: committed results stay recoverable, fresh writes stop.
+    await restart();
+    const granted = await proposed("before the permission change", tokens.second);
+    await value("content-ai-apply", { proposalId: granted.id, renderedCandidate: (await candidate(granted.id, tokens.second)).identity }, tokens.second);
+    const pendingGrant = await proposed("never applied", tokens.second);
+    const pendingIdentity = (await candidate(pendingGrant.id, tokens.second)).identity;
+    const beforeNarrowing = await history();
+    await restart(undefined, { ...sessions, [tokens.second]: { actorId: "second-editor", role: "propose" } });
+    check("after write permission is withdrawn the account still reads and recovers its committed Apply", (await value("content-ai-status", {}, tokens.second)).canApply === false
+      && (await value("content-ai-read", { proposalId: granted.id }, tokens.second)).applied?.revisionId === beforeNarrowing[0].id
+      && (await value("content-ai-apply", { proposalId: granted.id }, tokens.second)).recovered === true);
+    check("after write permission is withdrawn a fresh Apply or Undo is refused and writes nothing", (await ai("content-ai-apply", { proposalId: pendingGrant.id, renderedCandidate: pendingIdentity }, tokens.second)).error?.code === "forbidden"
+      && (await ai("content-ai-undo", { proposalId: granted.id }, tokens.second)).error?.code === "forbidden" && JSON.stringify(await history()) === JSON.stringify(beforeNarrowing));
+
+    // Off disables new inference only; the proposal endpoints and committed results stay.
+    await restart(null);
+    const off = await value("content-ai-status", {});
+    check("off reports inference off and keeps proposals and committed results readable", off.inference.code === "off"
+      && (await ai("content-ai-prepare", { entry: welcome, instruction: "x" })).error?.code === "unavailable"
+      && (await value("content-ai-apply", { proposalId: granted.id }, tokens.second)).recovered === true && (await candidate(pendingGrant.id, tokens.second)).status === 200);
+
     // A normal restart never reseeds.
     const kept = await history();
     await restart();
-    check("a normal restart keeps every revision and proposal", JSON.stringify(await history()) === JSON.stringify(kept) && rows().length === 6);
+    check("a normal restart keeps every revision and proposal", JSON.stringify(await history()) === JSON.stringify(kept) && rows().length === 8);
     evidence.revisions = kept.length;
     evidence.modelCalls = fake.counter.calls;
     return evidence;

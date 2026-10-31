@@ -155,7 +155,7 @@ export async function runArticleAiBrowserProof({ directory, artifacts } = {}) {
     // The provider stops being usable: no new proposals, but saved results and history remain visible.
     await restart(await createContentAiProvider({ provider: "claude-cli", executable: "/nonexistent/claude-for-content-ai" }));
     await page.reload(); await open();
-    await page.locator('[data-ai-inference="unavailable"]').waitFor();
+    await page.locator('[data-ai-inference="not-installed"]').waitFor();
     await proposalIn("applied").waitFor();
     check("an unavailable provider disables Prepare and keeps the applied result and history visible", await page.getByRole("button", { name: "Prepare proposal" }).isDisabled()
       && await page.locator(".article-history li").count() === (await history()).length);

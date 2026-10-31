@@ -22,3 +22,6 @@ body { margin: 0; font-family: system-ui, sans-serif; color: #1c2730; background
 .article-ai-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .article-ai-note { color: #4a5864; margin: 0; }
 .article-ai-error, .article-ai-inference { color: #b00020; margin: 0; }
+.article-ai-inference[data-ai-inference="off"] { color: inherit; }
+.article-ai-uncertain { border-left: 3px solid #b26a00; padding-left: 8px; }
+.article-ai-uncertain p { margin: 0 0 4px; }

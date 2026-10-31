@@ -23,7 +23,7 @@ const lostConnection = error => error instanceof TypeError;
  * `frame` is the host's candidate preview frame (render/clear by identity); `handle` returns the Article editor.
  */
 export function mountArticleAiPanel(container, { h, entry, handle, frame, fieldLabel, onCommitted }) {
-  const ui = { status: null, proposal: null, applied: null, undone: null, recovered: null, busy: null, error: "", notice: "", render: { state: "idle" }, stale: false, disposed: false };
+  const ui = { status: null, proposal: null, applied: null, undone: null, recovered: null, uncertain: null, busy: null, error: "", notice: "", render: { state: "idle" }, stale: false, disposed: false };
   let generation = 0;
   const instruction = h("textarea", { rows: "2", id: `ai-instruction-${entry.recordId}`, "aria-label": "Instruction", maxlength: "2000" });
   instruction.addEventListener("input", () => draw());
@@ -50,19 +50,24 @@ export function mountArticleAiPanel(container, { h, entry, handle, frame, fieldL
     applying: "Applying…", undoing: "Undoing…", recovering: "The connection was lost. Checking what the host committed…",
     applied: "Applied as a new revision.", undone: "Undone; the previous values were restored as a new revision.",
   };
+  const uncertainText = kind => `An earlier ${kind === "apply" ? "Apply" : "Undo"} was sent but its answer never arrived, and the host shows no committed result for it yet. It is never resent automatically; check again, or act again yourself — the same operation can only commit once.`;
 
   function draw() {
     if (ui.disposed) return;
     const current = phase(), inference = ui.status?.configured ? ui.status.inference : null;
     const blockedByEditor = editorBusy();
-    const canPrepare = !ui.busy && inference?.state !== "unavailable" && instruction.value.trim() && !blockedByEditor;
+    // Prepare needs a known, usable provider; off, unavailable or a status that never loaded keeps it disabled.
+    const canPrepare = !ui.busy && (inference?.state === "ready" || inference?.state === "unknown") && instruction.value.trim() && !blockedByEditor;
     intro.replaceChildren(...[h("p", { class: "article-ai-note" }, `Edits only the Title and Body. Nothing is written until you apply it, and publishing stays separate. Provider: ${ui.status?.configured ? ui.status.provider : "…"}.`),
-      inference && inference.state !== "ready" ? h("p", { role: "status", class: "article-ai-inference", "data-ai-inference": inference.state }, `New proposals are unavailable: ${inference.message}`) : null,
+      inference && inference.state !== "ready" ? h("p", { role: "status", class: "article-ai-inference", "data-ai-inference": inference.state === "unavailable" ? inference.code : inference.state }, `New proposals are unavailable: ${inference.message}`) : null,
       blockedByEditor ? h("p", { class: "article-ai-note", "data-ai-blocked": "editor" }, "Save your edits first; AI proposals work on saved content.") : null].filter(Boolean));
     actions.replaceChildren(h("div", { class: "article-ai-actions" }, h("button", { type: "button", disabled: !canPrepare, onclick: () => { void prepare(); } }, ui.proposal && ["stale", "expired"].includes(current) ? "Prepare again" : "Prepare proposal")));
     const children = [];
     if (ui.error) children.push(h("p", { role: "alert", class: "article-ai-error" }, ui.error));
     if (ui.notice) children.push(h("p", { role: "alert", class: "article-ai-error" }, ui.notice));
+    if (ui.uncertain && ui.proposal) children.push(h("div", { class: "article-ai-uncertain", "data-ai-uncertain": ui.uncertain },
+      h("p", { role: "status" }, uncertainText(ui.uncertain)),
+      h("button", { type: "button", disabled: !!ui.busy, onclick: () => { void checkAgain(); } }, "Check again")));
     const proposal = ui.proposal;
     if (proposal) {
       const recovered = ui.recovered ? " (recovered the committed operation)" : "";
@@ -104,7 +109,7 @@ export function mountArticleAiPanel(container, { h, entry, handle, frame, fieldL
     ui.render = { state: "idle" }; ui.stale = false;
   }
   async function prepare() {
-    ui.busy = "preparing"; ui.error = ""; ui.notice = ""; ui.recovered = null; generation++; draw();
+    ui.busy = "preparing"; ui.error = ""; ui.notice = ""; ui.recovered = null; ui.uncertain = null; generation++; draw();
     try {
       const result = await remote.prepare({ entry, instruction: instruction.value });
       if (ui.disposed) return;
@@ -123,7 +128,7 @@ export function mountArticleAiPanel(container, { h, entry, handle, frame, fieldL
   }
   async function run(kind) {
     const proposal = ui.proposal;
-    ui.busy = kind === "apply" ? "applying" : "undoing"; ui.error = ""; ui.recovered = null; draw();
+    ui.busy = kind === "apply" ? "applying" : "undoing"; ui.error = ""; ui.recovered = null; ui.uncertain = null; draw();
     writePointer(entry, { proposalId: proposal.id, pending: kind });
     let unreachable = false;
     try {
@@ -136,28 +141,46 @@ export function mountArticleAiPanel(container, { h, entry, handle, frame, fieldL
       if (lostConnection(error)) {
         // The request may have committed. Keep the pointer and read the result back instead of resending blindly.
         ui.busy = "recovering"; draw();
-        try { await readBack(); writePointer(entry, { proposalId: proposal.id, pending: null }); ui.recovered = kind; await onCommitted(); }
+        try { await reconcile(proposal.id, kind); }
         catch { unreachable = true; ui.error = "The host is unreachable. Reload when it is back; the operation will be recovered, not repeated."; }
-      } else ui.error = `Not ${kind === "apply" ? "applied" : "undone"}: ${error.message}`;
+      } else { ui.error = `Not ${kind === "apply" ? "applied" : "undone"}: ${error.message}`; writePointer(entry, { proposalId: proposal.id, pending: null }); }
     } finally { ui.busy = null; }
     draw();
     if (!ui.applied && !unreachable) await renderCandidate();
   }
-  /** After a reload: read the proposal back and finish an Apply or Undo whose answer was lost. */
+  /**
+   * Reads what the host committed for a pending Apply or Undo. Only a committed receipt settles it; a read
+   * without one leaves the pointer pending, because the lost request could still commit. Never resends.
+   */
+  async function reconcile(proposalId, kind) {
+    await readBack(proposalId);
+    if (kind === "apply" ? ui.applied : ui.undone) {
+      ui.recovered = kind; ui.uncertain = null;
+      writePointer(entry, { proposalId, pending: null });
+      await onCommitted();
+    } else { ui.uncertain = kind; writePointer(entry, { proposalId, pending: kind }); }
+  }
+  async function checkAgain() {
+    const kind = ui.uncertain, proposalId = ui.proposal?.id;
+    if (!kind || !proposalId) return;
+    ui.busy = "recovering"; ui.error = ""; draw();
+    try { await reconcile(proposalId, kind); }
+    catch (error) { ui.error = lostConnection(error) ? "The host is unreachable; nothing was resent." : `The saved proposal could not be read: ${error.message}`; }
+    finally { ui.busy = null; }
+    draw();
+    if (ui.proposal && !ui.applied) await renderCandidate();
+  }
+  /** After a reload: read the proposal back and settle an Apply or Undo whose answer was lost, read-only. */
   async function restore() {
     const pointer = readPointer(entry);
     if (!pointer) return;
     try {
-      await readBack(pointer.proposalId);
-      if (pointer.pending === "apply" && !ui.applied || pointer.pending === "undo" && ui.applied && !ui.undone) {
-        // Recovery sends no render and calls no model: only an operation the host already committed is returned.
-        const outcome = await (pointer.pending === "apply" ? remote.apply({ proposalId: pointer.proposalId }) : remote.undo({ proposalId: pointer.proposalId })).catch(() => null);
-        if (outcome?.recovered) { ui.recovered = pointer.pending; await readBack(); await onCommitted(); }
-      } else if (pointer.pending) ui.recovered = pointer.pending;
-      writePointer(entry, { proposalId: pointer.proposalId, pending: null });
+      if (pointer.pending) await reconcile(pointer.proposalId, pointer.pending);
+      else await readBack(pointer.proposalId);
     } catch (error) {
-      ui.proposal = null;
-      if (error?.code === "not-found") writePointer(entry, null); else ui.error = `The saved proposal could not be read: ${error.message}`;
+      // Only a definite "no such proposal for this account" forgets the pointer; any other failure keeps it.
+      if (error?.code === "not-found") { ui.proposal = null; writePointer(entry, null); }
+      else { ui.proposal = null; ui.error = `The saved proposal could not be read: ${error.message}`; }
     }
   }
 
