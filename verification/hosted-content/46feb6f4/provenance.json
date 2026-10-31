@@ -1,0 +1,6 @@
+{
+  "packageOutputSha": "46feb6f47da4477b05730d3a87cef7e59dfc6c3a",
+  "source": "Unmodified local run of corepack pnpm hosted:installed <C> <scratch> in the Claude Code cloud container (Node 24.22.1, pnpm 11.5.2) with PLAYWRIGHT_BROWSERS_PATH pointing at the pinned Chromium 1234 install. C is the Content-AI for independent hosts change (public portable/browser/Node Content-AI API and the Article CMS AI panel). packed-payload-inventory.json is a copy of verification/hosted-content/current-payload.json written with HEAD at C; this evidence-only commit leaves the packed payload byte-identical, as check-hosted-payload --check proves.",
+  "browser": "passed (pinned Chromium 1234)",
+  "contentAi": "Article CMS Content-AI ran with the offline fake provider only (HTTP proof in install and frozen phases, browser proof once). It is protocol and UI evidence, not model inference."
+}

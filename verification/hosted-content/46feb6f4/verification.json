@@ -1,0 +1,327 @@
+{
+  "installedToolSha": "46feb6f47da4477b05730d3a87cef7e59dfc6c3a",
+  "node": "v24.22.1",
+  "packageManager": "pnpm@11.5.2",
+  "contractSha": "c0b452da075b66757c60bd0d721a47062d4354d0",
+  "contractProtocol": 2,
+  "peerPreact": "10.29.8",
+  "commands": [
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "/home/user/zudo-composer/scripts/install-hosted-consumer.mjs",
+        "46feb6f47da4477b05730d3a87cef7e59dfc6c3a",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f"
+      ],
+      "cwd": "/home/user/zudo-composer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/install-browser-bundle"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/install-browser-transport.sqlite",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/install-browser-transport"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/install-render.sqlite"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/install-publication-render"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "article-cms/ai-http-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/install-article-ai-http"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/renderer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/frozen-browser-bundle"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/frozen-browser-transport.sqlite",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/frozen-browser-transport"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/frozen-render.sqlite"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/frozen-publication-render"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "article-cms/ai-http-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/frozen-article-ai-http"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "playwright",
+        "install",
+        "--with-deps",
+        "chromium"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "browser-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/browser.sqlite"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "browser-broad-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/browser-broad.sqlite",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/browser-broad"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "article-cms/proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/article-cms"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "article-cms/ai-proof.mjs",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/article-cms-ai",
+        "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f/work/article-cms-ai-artifacts"
+      ],
+      "cwd": "/home/user/zudo-composer/.artifacts/hosted-consumer-46feb6f",
+      "outcome": "passed"
+    }
+  ],
+  "payloadSha256": "47081bcd7ec4b547297b70d23291be5c90d1788d2f95c05b1885857c1bb19db7",
+  "lockDigests": {
+    "package.json": "907bdf90d99c267ac0e944464918ba556b989f37ec7cd5ca15af01fa1b8865ed",
+    "pnpm-lock.yaml": "28740654d39d5c67f98a65c502c919afa4003ec5888d3232c11c0e3ae189e2cd",
+    "renderer/package.json": "4edf3704f6e223404c3adc4929a6704491b716d116e77004b48efab4ce581e10",
+    "renderer/pnpm-lock.yaml": "b02e5202221b16de059ce822411a7f0020f9ba24f623b19e943c4debcab90e24"
+  },
+  "independentInstall": "passed",
+  "frozenReinstall": "passed",
+  "worker": "passed",
+  "browserBundle": "passed",
+  "nodeBoundary": "passed",
+  "sqlite": "passed",
+  "httpTransport": "passed",
+  "staticRenderer": "passed",
+  "articleContentAiHttp": "passed (offline fake provider over loopback HTTP and SQLite)",
+  "browser": "passed",
+  "articleContentAiBrowser": "passed (offline fake provider; not model evidence)"
+}
