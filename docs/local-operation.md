@@ -145,7 +145,8 @@ corepack pnpm hosted:local -- --dir <path> --port <n>   # default 127.0.0.1:4179
 
 `fixtures/hosted-content-consumer/article-cms/` is a host-customized Article
 admin built only from public imports (`zudo-composer/hosted-content`,
-`/hosted-content/editor` and `/hosted-content/editor.css`). The host owns the
+`/hosted-content/editor`, `/hosted-content/editor.css` and, for its Node server,
+`/hosted-content/node`). The host owns the
 Article model and its presentation metadata, the policy, the projection, the
 navigation, the article list with editorial status, the working and published
 views, the history panel (compare and restore), the publication panel and one
@@ -157,8 +158,18 @@ It runs from an independently installed consumer, never from this checkout:
 
 ```sh
 node scripts/install-hosted-consumer.mjs <full-sha> <dir>   # once, needs network
-cd <dir> && node article-cms/server.mjs [data-dir] [port]   # default .zudo-local/article-cms, 4180
+cd <dir> && node article-cms/server.mjs --data .zudo-local/article-cms --ai fake   # port 4180
 ```
+
+`--data` and `--ai` are required, so the storage location and the Content-AI
+provider are always explicit: `off`, `fake` (offline, deterministic),
+`claude-cli` or `codex-cli` (your installed, already signed-in CLI, run by this
+Node process; add `--executable`, `--model` or `--timeout-ms` as needed). The
+start banner prints the data file and the provider's current status. The admin's
+AI panel prepares a title/body proposal, shows its field differences and the
+candidate rendered as the real article, and applies or undoes it as one revision
+in the same history as manual edits. See
+[Content-AI for an independent host](./hosted-content.md#content-ai-for-an-independent-host).
 
 Data is one SQLite file plus local artifacts under the data directory. Submit
 writes a local artifact and activates it as the local baseline; nothing is
@@ -217,8 +228,8 @@ candidate and its digest, the operation key, creation and expiry times) is
 stored create-only before the editor sees it, under `<dataDir>/content-ai/`
 beside the native Content files. The service takes its proposal store as a
 dependency, and the shared scenario runs it against local SQLite Hosted
-Content too; a hosted site would supply its own durable store, which is
-outside this local tool. A record is never changed; whether it was applied or
+Content too, with both this file store and the Article CMS host's own
+create-only SQLite store. A hosted site supplies its own durable store. A record is never changed; whether it was applied or
 undone is read back from the Content store's own receipts.
 
 **Review.** The editor shows the changed fields, the raw candidate text and
@@ -267,8 +278,15 @@ from the id. Proposals belong to their backend scope and actor; another
 workspace, backend or actor gets "not found".
 
 A provider decline is shown as a refusal. Publication stays the existing
-explicit step, `permission: "propose"` disables Apply, and the composition
-Assistant keeps its refusals of Content-owned values.
+explicit step, `permission: "propose"` disables a fresh Apply and a fresh Undo
+(committed ones stay recoverable), and the composition Assistant keeps its
+refusals of Content-owned values.
+
+**Provider status.** The editor separates "configured" from "can run now": a
+CLI that is missing, too old, signed out or undeterminable is shown with its
+reason, Prepare is disabled while it is unavailable, and saved proposals,
+their committed results and the Entry's history stay readable. An
+undeterminable sign-in is never shown as signed in.
 
 `pnpm exec vitest run server/content-editorial` runs the decisive scenario
 and the Content-AI scenario against both native files and local SQLite
@@ -281,9 +299,45 @@ lost Undo acknowledgement followed by a retry and a restart. CI runs both in
 the `content-browser` job. These use fake replies and are not evidence of
 model behavior.
 
+### Content-AI real-CLI acceptance
+
+`pnpm test:browser:content-ai:real-cli` is the Content-AI-specific opt-in
+check; the composition Assistant's `test:browser:assistant:real-cli` does not
+cover Content-AI. It runs one provider at a time through the independently
+installed Article CMS, with your normal CLI sign-in, and never in CI:
+
+```sh
+pnpm hosted:install <pushed sha of this checkout> <consumer dir>   # once; needs network
+pnpm test:browser:content-ai:real-cli -- --provider claude-cli --consumer <consumer dir> --plan
+pnpm test:browser:content-ai:real-cli -- --provider claude-cli --consumer <consumer dir> --yes
+```
+
+- `--plan` prints the target data, provider, the one planned model call and
+  the limits, and runs nothing; without `--yes` nothing runs either.
+- The consumer's installed hosted-content payload must equal this checkout.
+  The scratch host is a fresh copy of the checkout's `article-cms` fixture over
+  that consumer's `node_modules`, with its own SQLite data in a temp dir; no
+  existing workspace or data is opened.
+- Exactly one model call (one title-only proposal for the "welcome" article);
+  a second call is refused, every step runs once, and there is no retry until
+  success and no fallback to the fake. `--timeout-ms` bounds the reply
+  (default 180000) and `--max-minutes` the run (default 10).
+- Steps: provider status → publish A, save B → prepare → rendered candidate →
+  Apply → restart, reload and recover the Apply → Undo → restart and recover
+  the Undo. They are judged by the changed field (title only), the saved
+  values, the unchanged body, summary, author and published values, AI
+  provenance, and receipt/history invariants — never by the wording, and the
+  model call count must stay 1 through every recovery.
+- A provider that is not ready records `blocked` (exit 3) without a model
+  call. Results go to `verification/content-ai/real-cli/`; a dry run with the
+  repository fake CLI (`--executable scripts/fixtures/assistant/fake-claude-cli.mjs
+  --allow-fake-executable`) is labelled as such and written to
+  `test-results/content-ai-real-cli-dry-run/` only.
+
 **Still outstanding:** a Content-AI journey with a real model through
 `claude-cli`, `codex-cli` or `anthropic` (the **Real CLI usage** row above)
-and the **Physical device** row. Neither is claimed by the fake lanes.
+and the **Physical device** row. Neither is claimed by the fake lanes or a
+dry run.
 
 ## Production delivery is stopped
 

@@ -211,6 +211,13 @@ existing `pnpm sg:build-site` entry point remains unchanged.
   `ZUDO_ASSISTANT_LIVE_MAX_USD`; otherwise it records `blocked` and exits 3.
   `--plan` lists every input first. Never substitute a Claude Code login or
   inject replies. See `verification/assistant/README.md`.
+- Content-AI real-CLI lane: `corepack pnpm test:browser:content-ai:real-cli
+  -- --provider claude-cli|codex-cli --consumer <installed consumer>` is opt-in
+  and never part of CI or `check`. It drives the independently installed
+  Article CMS with the person's normal CLI sign-in, makes exactly one model
+  call, and needs `--yes`; `--plan` lists every input first. The composition
+  Assistant's real-CLI lane is not Content-AI evidence. See
+  `docs/local-operation.md`.
 - Consumer boundary: the ledger must contain zero entries. Scan actual creator
   templates and complete generated output before packed dependency rewriting.
 - Host install: `corepack pnpm smoke:host-install` packs the tool and contract,

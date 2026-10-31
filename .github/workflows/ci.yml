@@ -184,6 +184,13 @@ jobs:
         run: node scripts/check-hosted-payload.mjs --check verification/hosted-content/current-payload.json
       - name: Verify exact retained package-output commit
         run: node scripts/verify-retained-hosted-consumer.mjs .artifacts/hosted-consumer
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: article-cms-content-ai-results
+          path: .artifacts/hosted-consumer/work/article-cms-ai-artifacts/
+          retention-days: 7
+          if-no-files-found: ignore
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
