@@ -1,5 +1,6 @@
 import type { RecordMutationTokenSource, SafeRootFilesystemOperations } from "../../../shared/node-fs";
 import { CONTENT_ENTRY_SCHEMA_VERSION, CONTENT_MODEL_SCHEMA_VERSION } from "../../model";
+import type { ContentProvenance } from "../../library";
 
 /** Pointer/generation protocol version owned by the transactional record store. */
 export const CONTENT_RECORD_SCHEMA_VERSION = 1;
@@ -8,6 +9,14 @@ export const CONTENT_RECORD_SCHEMA_VERSION = 1;
 export const CONTENT_MODEL_RECORD_PREFIX = "model-";
 export const CONTENT_ENTRY_RECORD_PREFIX = "entry-";
 export const CONTENT_META_RECORD_ID = "meta";
+/**
+ * Working history and edit receipts live beside the records they describe, so
+ * every commit carries them forward and no generation swap can drop them. They
+ * add record kinds without changing the layout marker: an existing workspace
+ * opens as it is, and its history begins with its first edit.
+ */
+export const CONTENT_REVISION_RECORD_PREFIX = "revision-";
+export const CONTENT_RECEIPT_RECORD_PREFIX = "receipt-";
 
 /**
  * Longest Content id that still yields a path-safe prefixed record id. Both
@@ -46,4 +55,6 @@ export interface FilesystemContentStoreOptions {
   newMutationToken?: RecordMutationTokenSource;
   /** Clock used when a provider-owned operation restamps `updatedAt`. */
   now?: () => string;
+  /** Trusted provenance recorded on revisions written by ordinary store mutations. */
+  revisionProvenance?: ContentProvenance;
 }

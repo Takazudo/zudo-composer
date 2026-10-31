@@ -269,3 +269,22 @@
 @media (prefers-reduced-motion: reduce) {
   .sg-content-app *, .sg-content-app--state * { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+.sg-content-history__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sg-content-space-inline); }
+.sg-content-history__status { margin: 0; color: var(--color-muted); font-size: var(--text-sm); }
+.sg-content-history__refusal { padding: var(--sg-content-space-row-y) var(--sg-content-space-region); border: 1px solid var(--color-danger, var(--color-border)); border-radius: var(--radius-DEFAULT); font-size: var(--text-sm); }
+.sg-content-history__refusal p, .sg-content-history__refusal ul { margin: 0; }
+.sg-content-history__list { display: grid; gap: var(--sg-content-space-row-y); margin: 0; padding: 0; list-style: none; }
+.sg-content-history__item { display: grid; gap: var(--sg-content-space-row-y); min-width: 0; padding: var(--sg-content-space-row-y) var(--sg-content-space-region); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface); font-size: var(--text-sm); }
+.sg-content-history__summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sg-content-space-inline); }
+.sg-content-history__summary time { color: var(--color-muted); }
+.sg-content-history__actions { display: flex; flex-wrap: wrap; gap: var(--sg-content-space-inline); }
+.sg-content-history__diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.sg-content-history__diff th, .sg-content-history__diff td { padding: 0.25rem 0.5rem; border-top: 1px solid var(--color-border); text-align: start; vertical-align: top; overflow-wrap: anywhere; }
+.sg-content-history__same { margin: 0; color: var(--color-muted); }
+.sg-content-ai__note { margin: 0; color: var(--color-muted); font-size: var(--text-sm); }
+.sg-content-ai__proposal, .sg-content-ai__candidate { display: grid; gap: var(--sg-content-space-row-y); min-width: 0; font-size: var(--text-sm); }
+.sg-content-ai__value { margin: 0; padding: 0.5rem; border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface); white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.sg-content-ai__render { display: grid; gap: 0.25rem; min-width: 0; }
+.sg-content-ai__render iframe { inline-size: 100%; block-size: 28rem; border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface); }
+.sg-content-ai__raw > summary { cursor: pointer; }

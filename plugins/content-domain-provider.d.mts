@@ -13,4 +13,10 @@ export function resolveContentRoot(
   env?: Record<string, string | undefined>,
 ): string;
 
-export default function contentDomainProvider(options?: { contentRoot?: string }): DomainProviderDescriptor;
+export const CONTENT_EDITORIAL_OPERATIONS: readonly string[];
+export const CONTENT_AI_OPERATIONS: readonly string[];
+
+export default function contentDomainProvider(options?: {
+  contentRoot?: string;
+  release?: { workspaceRoot?: string; packIdentity?: unknown; stylesPath?: string };
+}): DomainProviderDescriptor;

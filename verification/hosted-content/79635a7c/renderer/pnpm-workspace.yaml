@@ -1,0 +1,11 @@
+packages: []
+autoInstallPeers: false
+strictPeerDependencies: true
+allowBuilds:
+  '@zudo-composer/component-contract': true
+  esbuild: true
+  workerd: true
+minimumReleaseAgeExclude:
+  - '@takazudo/zudo-sg@0.8.0'
+  - '@takazudo/zdtp@0.9.0'
+  - '@takazudo/zudo-doc@9.1.0'

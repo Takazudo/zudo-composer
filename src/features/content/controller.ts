@@ -22,7 +22,9 @@ import {
   type ContentRecordRef,
   type ContentSnapshot,
   type ContentProvider,
+  type ContentStore,
 } from "../../content";
+import { EditorialError, sameEditorialValue, type ContentAiPrepareResult, type ContentAiProposal, type ContentEditorialBoundary, type EditorialReceipt, type RemoteContentAi } from "../../content/editorial";
 import { createUuidIdFactory, type IdFactory } from "../../shared";
 import { createSaveQueue, type SaveQueue } from "../../shared/persistence";
 import type { AssetSummary } from "../../assets";
@@ -66,12 +68,36 @@ export interface ContentAuthoringState {
   incoming: readonly { owner: ContentGraphLocation; ordered: boolean }[];
   publicationState: "draft" | "published" | "published-pending" | "published-baseline-unavailable";
   conflictRecovery: { message: string; canReapply: boolean; authoritativeReady: boolean } | null;
+  /** The outcome of the last history action, kept across the Entry reload it causes. */
+  historyNotice: { entryId: string; text: string } | null;
+  /** The open Entry's latest AI proposal and what became of it. */
+  aiSession: ContentAiSession | null;
+}
+
+/**
+ * One Entry's AI proposal as the editor sees it. `applied` and `undone` come
+ * from the backend's receipts, so a reload or restart reads them back rather
+ * than trusting memory. `render` is the rendered-candidate approval: only an
+ * acknowledgement for the current token and the proposal's exact digest
+ * makes a fresh Apply available.
+ */
+export interface ContentAiSession {
+  entryId: string;
+  result: ContentAiPrepareResult;
+  applied: EditorialReceipt | null;
+  undone: EditorialReceipt | null;
+  /** Which outcome was found already committed rather than performed now. */
+  recovered: "apply" | "undo" | null;
+  /** Restored from the browser's proposal reference after a reload. */
+  restored: boolean;
+  render: { token: number; status: "rendering" | "ready" | "failed" | "blocked"; digest: string | null; message: string };
+  pending: "applying" | "undoing" | null;
 }
 
 const initialState: ContentAuthoringState = {
   viewId: null,
   phase: "idle", modelSelectionPending: false, entryCreationPending: false, models: [], providerId: "", providerLabel: "", modelDescriptions: {}, entryCounts: {}, incompleteCounts: {}, model: null, entries: [], usedFieldIds: [], entry: null,
-  workMode: "entries", saveStatus: "pristine", message: "", recoveryMessage: null, graphStatus: "idle", graphMessage: "", snapshots: [], incoming: [], publicationState: "draft", conflictRecovery: null,
+  workMode: "entries", saveStatus: "pristine", message: "", recoveryMessage: null, graphStatus: "idle", graphMessage: "", snapshots: [], incoming: [], publicationState: "draft", conflictRecovery: null, historyNotice: null, aiSession: null,
 };
 
 function queueStatus(state: { status: Exclude<ContentSaveStatus, "pristine"> }): Exclude<ContentSaveStatus, "pristine"> {
@@ -102,6 +128,8 @@ export class ContentAuthoringController {
   private conflictDraft: { baseModel: ContentModelRecord | null; baseEntry: ContentEntryRecord | null; localModel: ContentModelRecord | null; localEntry: ContentEntryRecord | null; authoritativeModel: ContentModelRecord | null; authoritativeEntry: ContentEntryRecord | null; unreconcilablePaths: readonly string[] } | null = null;
   /** Invalidates an in-flight completeness sweep when the library reloads under it. */
   private scanGeneration = 0;
+  /** Identifies the candidate render whose acknowledgement may still approve Apply. */
+  private aiRenderToken = 0;
 
   constructor(readonly provider: ContentProvider, options: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; assetProvider?: ContentAssetCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> } = {}) {
     this.idFactory = options.idFactory ?? createUuidIdFactory();
@@ -383,7 +411,7 @@ export class ContentAuthoringController {
     // only change this one Entry's completeness, so the delta is exact.
     const model = this.current.model;
     const delta = model ? Number(this.completeness(updated).length > 0) - Number(this.completeness(entry).length > 0) : 0;
-    this.set({ ...this.current, entry: updated, entries: this.current.entries.map((item) => item.id === updated.id ? updated : item), publicationState: this.publicationState(updated),
+    this.set({ ...this.current, historyNotice: null, entry: updated, entries: this.current.entries.map((item) => item.id === updated.id ? updated : item), publicationState: this.publicationState(updated),
       ...(model && delta !== 0 ? { incompleteCounts: shiftCount(this.current.incompleteCounts, model.id, delta) } : {}),
       usedFieldIds: value === undefined || value === "" ? this.current.usedFieldIds : [...new Set([...this.current.usedFieldIds, fieldId])] });
   }
@@ -472,6 +500,157 @@ export class ContentAuthoringController {
     await applyContentInverseMutation(ownerStore, read.snapshots, edits);
     if (ownerStore === this.provider.store && inverse.source.recordId === this.current.model?.id) this.listRequestId++;
     await this.refreshGraph(target, entryRequestId);
+  }
+
+  /** History, compare and restore, when the open provider answers the editorial boundary. */
+  get editorial(): ContentEditorialBoundary | null {
+    const store = this.provider.store as ContentStore & { editorial?: ContentEditorialBoundary };
+    return store.editorial ?? null;
+  }
+
+  /** The open Entry's provider-qualified identity. */
+  entryRef(entry = this.current.entry): ContentEntryRef {
+    if (!entry) throw new Error("No Entry is open.");
+    return { providerId: this.provider.store.provider.id, modelId: entry.modelId, recordId: entry.id };
+  }
+
+  /**
+   * Restore a revision as a new working revision. Pending edits are saved
+   * first, so the restore is checked against everything already typed.
+   */
+  async restoreRevision(revisionId: string): Promise<EditorialReceipt> {
+    const editorial = this.editorial;
+    if (!editorial) throw new Error("This Content provider has no revision history.");
+    const entry = this.current.entry;
+    if (!entry) throw new Error("No Entry is open.");
+    await this.flushEditSessions();
+    const ref = this.entryRef(entry);
+    const view = await editorial.readEntry({ entry: ref, perspective: "working" });
+    const revision = await editorial.readRevision({ entry: ref, revisionId });
+    const receipt = await editorial.restoreRevision({ entry: ref, revisionId, expected: view.expected, operationKey: this.idFactory("restore") });
+    await this.reloadEntries();
+    if (this.current.entry?.id !== entry.id) await this.openEntry(entry.id);
+    this.set({ ...this.current, historyNotice: { entryId: entry.id, text: `Restored revision ${revision.sequence} as a new revision.` } });
+    return receipt;
+  }
+
+  /** Bounded Content-AI, when the open provider offers it. */
+  get contentAi(): RemoteContentAi | null {
+    const store = this.provider.store as ContentStore & { contentAi?: RemoteContentAi };
+    return store.contentAi ?? null;
+  }
+
+  /** Prepare a proposal against everything already typed; nothing is written. */
+  async prepareAiProposal(instruction: string): Promise<ContentAiPrepareResult> {
+    const contentAi = this.contentAi;
+    if (!contentAi) throw new Error("Content-AI is unavailable for this provider.");
+    const entry = this.current.entry;
+    if (!entry) throw new Error("No Entry is open.");
+    await this.flushEditSessions();
+    const ref = this.entryRef(entry);
+    const result = await contentAi.prepare({ entry: ref, instruction });
+    this.set({ ...this.current, aiSession: this.newAiSession(entry.id, result) });
+    if (result.status === "proposed") writeAiReference(ref, result.proposal.id); else writeAiReference(ref, null);
+    return result;
+  }
+
+  discardAiProposal(): void {
+    const session = this.current.aiSession;
+    if (session && this.current.entry?.id === session.entryId) writeAiReference(this.entryRef(), null);
+    this.set({ ...this.current, aiSession: null });
+  }
+
+  /**
+   * After a reload, read the proposal this browser last prepared for the open
+   * Entry, with whatever the backend committed for it. No model is called.
+   */
+  async restoreAiProposal(): Promise<boolean> {
+    const contentAi = this.contentAi;
+    const entry = this.current.entry;
+    if (!contentAi || !entry || this.current.aiSession?.entryId === entry.id) return false;
+    const ref = this.entryRef(entry);
+    const proposalId = readAiReference(ref);
+    if (!proposalId) return false;
+    let operation;
+    try { operation = await contentAi.read({ proposalId }); }
+    catch (error) {
+      // Only a proposal this backend no longer knows is forgotten; a transient failure keeps the reference for the next reload.
+      if (error instanceof EditorialError && (error.code === "not-found" || error.code === "invalid-request")) writeAiReference(ref, null);
+      return false;
+    }
+    if (this.current.entry?.id !== entry.id || this.current.aiSession?.entryId === entry.id) return false;
+    this.set({ ...this.current, aiSession: { ...this.newAiSession(entry.id, { status: "proposed", proposal: operation.proposal }), applied: operation.applied, undone: operation.undone, recovered: operation.undone ? "undo" : operation.applied ? "apply" : null, restored: true } });
+    return true;
+  }
+
+  /** A candidate frame starts rendering; any earlier acknowledgement stops counting. */
+  beginCandidateRender(proposalId: string): number {
+    const token = ++this.aiRenderToken;
+    this.updateAiSession(proposalId, (session) => ({ ...session, render: { token, status: "rendering", digest: null, message: "" } }));
+    return token;
+  }
+
+  /** Only the frame's current token can approve, and only for the proposal's exact candidate. */
+  recordCandidateRender(token: number, proposalId: string, outcome: { status: "ready"; digest: string } | { status: "failed" | "blocked"; message: string }): void {
+    this.updateAiSession(proposalId, (session) => {
+      if (session.render.token !== token) return session;
+      if (outcome.status === "ready") {
+        const proposal = session.result.status === "proposed" ? session.result.proposal : null;
+        if (!proposal || outcome.digest !== proposal.candidateDigest) return { ...session, render: { token, status: "failed", digest: null, message: "The rendered candidate is not this proposal's candidate." } };
+        return { ...session, render: { token, status: "ready", digest: outcome.digest, message: "" } };
+      }
+      return { ...session, render: { token, status: outcome.status, digest: null, message: outcome.message } };
+    });
+  }
+
+  /**
+   * Apply or undo a prepared proposal, then show the Entry as stored. A fresh
+   * Apply needs the current candidate rendered and the Entry unchanged since
+   * Prepare; an operation the backend already committed is recovered instead.
+   */
+  async runAiProposal(action: "apply" | "undo", proposalId: string): Promise<EditorialReceipt> {
+    const contentAi = this.contentAi;
+    if (!contentAi) throw new Error("Content-AI is unavailable for this provider.");
+    const entry = this.current.entry;
+    if (!entry) throw new Error("No Entry is open.");
+    const session = this.current.aiSession;
+    const proposal = session?.entryId === entry.id && session.result.status === "proposed" && session.result.proposal.id === proposalId ? session.result.proposal : null;
+    if (!session || !proposal) throw new Error("This proposal is no longer open; prepare it again.");
+    this.updateAiSession(proposalId, (value) => ({ ...value, pending: action === "apply" ? "applying" : "undoing" }));
+    try {
+      await this.flushEditSessions();
+      let outcome;
+      if (action === "apply") {
+        const approved = session.render.status === "ready" && session.render.digest === proposal.candidateDigest && !aiProposalStale(this.current.entry, proposal);
+        if (approved) outcome = await contentAi.apply({ proposalId, renderedCandidate: proposal.candidateDigest });
+        else {
+          // Without an approved render only a recovery is possible: ask the backend whether this Apply already committed.
+          const committed = (await contentAi.read({ proposalId })).applied;
+          if (!committed) throw new Error(aiProposalStale(this.current.entry, proposal) ? "The Entry changed after this proposal was prepared; prepare it again." : "Apply needs a successful render of this exact candidate first.");
+          outcome = { receipt: committed, recovered: true };
+        }
+      } else outcome = await contentAi.undo({ proposalId });
+      await this.reloadEntries();
+      if (this.current.entry?.id !== entry.id) await this.openEntry(entry.id);
+      this.set({ ...this.current, historyNotice: { entryId: entry.id, text: action === "apply" ? "Applied the AI proposal as a new revision." : "Undid the AI proposal as a new revision." } });
+      this.updateAiSession(proposalId, (value) => ({ ...value, pending: null, recovered: outcome.recovered ? action : null,
+        ...(action === "apply" ? { applied: outcome.receipt } : { undone: outcome.receipt }) }));
+      return outcome.receipt;
+    } catch (error) {
+      this.updateAiSession(proposalId, (value) => ({ ...value, pending: null }));
+      throw error;
+    }
+  }
+
+  private newAiSession(entryId: string, result: ContentAiPrepareResult): ContentAiSession {
+    return { entryId, result, applied: null, undone: null, recovered: null, restored: false, pending: null, render: { token: ++this.aiRenderToken, status: "rendering", digest: null, message: "" } };
+  }
+
+  private updateAiSession(proposalId: string, update: (session: ContentAiSession) => ContentAiSession): void {
+    const session = this.current.aiSession;
+    if (!session || session.result.status !== "proposed" || session.result.proposal.id !== proposalId) return;
+    const next = update(session);
+    if (next !== session) this.set({ ...this.current, aiSession: next });
   }
 
   async requestUnpublish(): Promise<void> {
@@ -903,4 +1082,29 @@ function entryLabel(entry: ContentEntryRecord, model: ContentModelRecord): strin
   const preferred = model.document.fields.find((field) => field.kind === "text" && (field.key === "title" || field.key === "name")) ?? model.document.fields.find((field) => field.kind === "text");
   const value = preferred && entry.values[preferred.id];
   return typeof value === "string" && value.trim() ? value : `Untitled Entry · ${entry.id}`;
+}
+
+/**
+ * True once the Entry no longer holds the values the proposal was prepared
+ * from: the candidate with each proposed field put back to its prior value.
+ */
+export function aiProposalStale(entry: ContentEntryRecord | null, proposal: ContentAiProposal): boolean {
+  if (!entry || entry.id !== proposal.entry.recordId) return true;
+  const base: Record<string, unknown> = { ...proposal.candidate };
+  for (const difference of proposal.differences) {
+    if (difference.before === undefined) delete base[difference.fieldId]; else base[difference.fieldId] = difference.before;
+  }
+  return !sameEditorialValue(entry.values, base);
+}
+
+/** Per-browser pointer to the last proposal for an Entry, so its outcome survives a reload. */
+const aiReferenceKey = (ref: ContentEntryRef) => `zudo-composer.content-ai.${ref.providerId}/${ref.modelId}/${ref.recordId}`;
+function readAiReference(ref: ContentEntryRef): string | null {
+  try { const value = JSON.parse(globalThis.localStorage?.getItem(aiReferenceKey(ref)) ?? "null") as { proposalId?: unknown } | null; return typeof value?.proposalId === "string" ? value.proposalId : null; } catch { return null; }
+}
+function writeAiReference(ref: ContentEntryRef, proposalId: string | null): void {
+  try {
+    if (proposalId) globalThis.localStorage?.setItem(aiReferenceKey(ref), JSON.stringify({ proposalId }));
+    else globalThis.localStorage?.removeItem(aiReferenceKey(ref));
+  } catch { /* Storage is a convenience; the proposal itself is durable on the server. */ }
 }

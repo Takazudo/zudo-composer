@@ -30,6 +30,7 @@ const querySchemas = {
   revisions: z.object({ entry: ref, ...pageSchema }).strict(),
   revision: token,
   compare: z.object({ entry: ref, from: target, to: target }).strict(),
+  preview: z.object({ entry: ref, values, clear: z.array(token).max(200), expected }).strict(),
 };
 /** Editorial reads are validated like commands, so every entry point shares one shape. */
 export function parseHostedQuery<K extends keyof typeof querySchemas>(kind: K, request: unknown): z.infer<(typeof querySchemas)[K]> {

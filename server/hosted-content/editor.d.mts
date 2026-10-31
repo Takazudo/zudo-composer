@@ -316,6 +316,8 @@ interface HostedEntryView {
     workingRevisionId: string | null;
     /** What identifies the shown values: a working revision, or the activated baseline for published values (never a revision id). */
     valuesIdentity: HostedValuesIdentity;
+    /** The identities this read was taken at; a command prepared from it quotes them as `expected`. */
+    expected: HostedIdentities;
 }
 type HostedValuesIdentity = {
     perspective: "working";

@@ -32,6 +32,7 @@ import { loadContentEntryRecord, loadContentModelRecord } from "../../model";
 import type { ContentEntryRecord, ContentLoadOutcome, ContentModelRecord, ContentValidationIssue } from "../../model";
 import { isPlainObject, isSafeRecordId } from "../../../shared";
 import { DomainFileProviderClient, readDomainFileProviderConfig } from "../../../shared/file-provider";
+import { createRemoteContentAi, createRemoteContentEditorial } from "../../editorial/remote";
 import { contentFileProviderErrorAdapter } from "./error-adapter";
 import { CONTENT_FILE_PROVIDER_DOMAIN } from "./types";
 import type {
@@ -157,6 +158,14 @@ export class FileProviderContentStore implements ContentFileProviderStore {
   async readAll(): Promise<ContentSnapshot> {
     return decodeSnapshot(await this.client.call("read-all"), "read-all");
   }
+
+  /** History, compare and restore over the same endpoint; the payload is the editorial envelope. */
+  readonly editorial = createRemoteContentEditorial((operation, payload) =>
+    this.client.call(operation, payload, { mutates: operation === "editorial-save" || operation === "editorial-restore" }));
+
+  /** Bounded Article title/body proposals; Apply and Undo write through the same history path. */
+  readonly contentAi = createRemoteContentAi((operation, payload) =>
+    this.client.call(operation, payload, { mutates: operation === "content-ai-apply" || operation === "content-ai-undo" }));
 
   async transact(mutation: ContentMutation): Promise<ContentSnapshot> {
     return decodeSnapshot(await this.client.call("transact", mutation, { mutates: true }), "transact");

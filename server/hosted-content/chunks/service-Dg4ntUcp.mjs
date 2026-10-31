@@ -722,6 +722,12 @@ var querySchemas = {
 		entry: ref$1,
 		from: target,
 		to: target
+	}).strict(),
+	preview: z.object({
+		entry: ref$1,
+		values,
+		clear: z.array(token).max(200),
+		expected
 	}).strict()
 };
 /** Editorial reads are validated like commands, so every entry point shares one shape. */
@@ -1293,7 +1299,8 @@ function createHostedContentService(supplied) {
 			updatedAt: entry.updatedAt,
 			values: entry.values,
 			workingRevisionId,
-			valuesIdentity
+			valuesIdentity,
+			expected: identity(head.state)
 		});
 	}
 	const perspectiveProviders = (head, perspective) => perspective === "working" ? head.state.providers : head.baselineProviders;
@@ -1309,6 +1316,32 @@ function createHostedContentService(supplied) {
 	async function targetValues(head, target, at) {
 		if ("revisionId" in at) return (await readRevisionFor(target, at.revisionId)).values;
 		return lookup(perspectiveProviders(head, at.perspective), target)?.values ?? {};
+	}
+	/** Field-level differences in definition order, then fields the current definition no longer has. */
+	function differencesFor(providers, target, before, after) {
+		const fields = providers.find((provider) => provider.providerId === target.providerId)?.models.find((model) => model.id === target.modelId)?.document.fields ?? [];
+		const known = new Set(fields.map((field) => field.id));
+		const removed = [.../* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])].filter((fieldId) => !known.has(fieldId)).sort();
+		return [...fields.map((field) => ({
+			fieldId: field.id,
+			key: field.key,
+			label: field.label,
+			removedFromDefinition: false
+		})), ...removed.map((fieldId) => ({
+			fieldId,
+			key: fieldId,
+			label: fieldId,
+			removedFromDefinition: true
+		}))].flatMap((field) => {
+			const previous = before[field.fieldId], next = after[field.fieldId];
+			if (sameValue(previous, next)) return [];
+			return [{
+				...field,
+				change: previous === void 0 ? "added" : next === void 0 ? "removed" : "changed",
+				...previous !== void 0 ? { before: previous } : {},
+				...next !== void 0 ? { after: next } : {}
+			}];
+		});
 	}
 	/** Prepare from detached reads, then commit conditionally; a refused commit is retried from fresh reads. */
 	async function mutate(work) {
@@ -1395,34 +1428,28 @@ function createHostedContentService(supplied) {
 			const head = await options.storage.readHead();
 			assertReadable(head, query.entry);
 			const [before, after] = [await targetValues(head, query.entry, query.from), await targetValues(head, query.entry, query.to)];
-			const fields = head.state.providers.find((provider) => provider.providerId === query.entry.providerId)?.models.find((model) => model.id === query.entry.modelId)?.document.fields ?? [];
-			const known = new Set(fields.map((field) => field.id));
-			const removed = [.../* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])].filter((fieldId) => !known.has(fieldId)).sort();
-			const differences = [...fields.map((field) => ({
-				fieldId: field.id,
-				key: field.key,
-				label: field.label,
-				removedFromDefinition: false
-			})), ...removed.map((fieldId) => ({
-				fieldId,
-				key: fieldId,
-				label: fieldId,
-				removedFromDefinition: true
-			}))].flatMap((field) => {
-				const previous = before[field.fieldId], next = after[field.fieldId];
-				if (sameValue(previous, next)) return [];
-				return [{
-					...field,
-					change: previous === void 0 ? "added" : next === void 0 ? "removed" : "changed",
-					...previous !== void 0 ? { before: previous } : {},
-					...next !== void 0 ? { after: next } : {}
-				}];
-			});
 			return copy({
 				entry: query.entry,
 				from: query.from,
 				to: query.to,
-				differences
+				differences: differencesFor(head.state.providers, query.entry, before, after)
+			});
+		},
+		async previewFields(actor, request) {
+			const query = parseHostedQuery("preview", request);
+			await authorize(actor);
+			const head = copy(await options.storage.readHead());
+			checkExpected(head.state, query.expected);
+			assertDefinitions(head);
+			const before = copy(findEntry(head.state.providers, query.entry).values);
+			setFields(head.state.providers, query.entry, query.values, query.clear);
+			checkGraph(head.state.providers);
+			const after = findEntry(head.state.providers, query.entry).values;
+			return copy({
+				entry: query.entry,
+				expected: identity(head.state),
+				values: after,
+				differences: differencesFor(head.state.providers, query.entry, before, after)
 			});
 		},
 		async readPublicationStatus(actor) {

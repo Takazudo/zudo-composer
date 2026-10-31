@@ -7,13 +7,17 @@ description: The continuous-integration and deployment workflows that verify and
 ## CI jobs and artifacts
 
 `.github/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
-current job names are `validate`, `packed-host-matrix`, `packed-host-install`,
+current job names are `validate`, `package-handoffs`, `assistant-browser`,
+`hosted-content-consumer`, `packed-host-matrix`, `packed-host-install`,
 `demo-sites-build`, `demo-editors-build`, `demo-editors-batch`,
 `doc-site-build`, and four styleguide artifact jobs.
 
 | Job | Shape | Main responsibility and artifact |
 | --- | --- | --- |
 | `validate` | One Ubuntu job, 45-minute budget | Frozen install, repository gates, contract gates, unit/build checks, host/dev/SiteProject/browser lanes, static-site/editor artifact verification, and demo browser proof. On failure it may upload `playwright-results`. |
+| `package-handoffs` | One Ubuntu job, 25-minute budget | Exposes the action's pnpm to isolated hosts, frozen installs, then runs `contract:external-install` and `ui:external-install`. These network-bound exact Git installs left `validate` so a slow remote cannot exhaust its budget. |
+| `assistant-browser` | One Ubuntu job, 30-minute budget | Frozen installs, installs Chromium, then runs `test:browser:assistant` followed by `test:browser:assistant:local-host` serially. Both use only the dev server, never build output. On failure it may upload `assistant-playwright-results`. |
+| `hosted-content-consumer` | One Ubuntu job | Checks the public entries, compares the packed payload with the recorded package-output commit, and runs the retained exact-SHA consumer proof. |
 | `packed-host-matrix` | One Ubuntu discovery job | Runs `packed-host-matrix --github-output` and exposes the disk-discovered host matrix. It does not run the host proof itself. |
 | `packed-host-install` | Fail-fast-disabled matrix from the previous job | Gives every discovered host its own isolated packed-install job and runs `smoke:host-install -- --host <name>`. |
 | `demo-sites-build` | Fail-fast-disabled `sample`, `shop`, `landing`, `blog` matrix | Builds and verifies each static `dist-site`, then uploads `demo-site-<site>-<sha>`. |

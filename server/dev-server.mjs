@@ -108,7 +108,7 @@ export async function resolveComposerDevConfig(options = {}) {
                 sitemaps: paths.sitemaps,
               },
             }),
-            contentDomainProvider({ contentRoot: paths.content }),
+            contentDomainProvider({ contentRoot: paths.content, release: { workspaceRoot, packIdentity: componentPack.identity, stylesPath: paths.styles } }),
             mappingDomainProvider({ mappingsRoot: paths.mappings }),
             sitemapperDomainProvider({ sitemapsRoot: paths.sitemaps }),
           ],
