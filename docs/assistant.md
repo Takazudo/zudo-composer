@@ -242,11 +242,19 @@ collection slots filled through Mapping, shared or published templates,
 positions inside a Markdown field, and arbitrary tables or components a theme
 does not define. A request is never silently moved to another position.
 
+Content-owned Article title and body are edited by the separate **Content-AI**
+proposal in the Content editor, which uses the same `assistant` provider
+setting. Its rendered candidate review, durable proposals and lost-response
+recovery are described in
+[local operation](./local-operation.md#content-ai-proposals); the two remain
+separate tools.
+
 ## Storage and recovery
 
 Assistant data is private authoring state under the host data directory:
 `<dataDir>/assistant` (conversations, run events, Memory, name, attached
-materials) and `<dataDir>/edit-drafts` (shared drafts). It is keyed by the
+materials), `<dataDir>/edit-drafts` (shared drafts) and `<dataDir>/content-ai`
+(immutable Content-AI proposal records). It is keyed by the
 host's real path and the `WorkspaceRecord.id`, never by a display name, and is
 never part of SiteProject JSON, generated JSX, assets, site builds or visitor
 routes. Files with an unknown schema are preserved and reported, not replaced.
@@ -266,9 +274,9 @@ Evidence classes are kept separate; none stands in for another.
 | --- | --- | --- |
 | Provider contract (fake) | `pnpm test` (`server/assistant/__tests__/`) | The same multi-page propose → Apply → receipt retry → Undo, Memory, refusal, unknown-tool and Stop flow passes for the in-process fake and for fake `claude`/`codex` executables that are really spawned; reply validation, process runner (stdin, UTF-8 chunking, size caps, process-tree Stop/timeout) and probe states. |
 | Fake browser | `pnpm test:browser:assistant` (port 4177) | Real dev server, renderers and UI on disposable hosts seeded from Orrery, Margin Notes, Nightjar Supply and the native-edit fixture against a loopback scripted Messages API. |
-| Local host lifecycle | `pnpm test:browser:assistant:local-host` | `pnpm assistant:local` creates, reuses and restarts a host; Memory, conversation and applied change survive restart; reset is explicit. Fake provider. |
+| Local host lifecycle | `pnpm test:browser:assistant:local-host` (free loopback port; CI) | `pnpm assistant:local` on the native-edit fixture: refusals, reuse, provider switch without reset, explicit `--reset`. Then Sample Studio, Orrery, Margin Notes and Nightjar Supply one at a time: real pack, styles and assets on Home; a field edit becomes a draft with Current/Draft annotations while saved JSON/JSX stay unchanged; shared-template and Mapping-owned text is refused; Apply → receipt → reload; restart keeps conversation, Memory and the applied change with no cross-demo leakage; Undo restores; `packages/demo-*` untouched. Fake provider. |
 | Real CLI binary harness | `pnpm assistant:claude-harness`, `pnpm assistant:codex-harness -- --codex <path>` (opt-in, never CI) | The installed binary with Composer's exact profile against a loopback **scripted** model endpoint: output protocol, refused built-in tools/writes, error mapping, Stop. Evidence: `verification/assistant/cli-harness/`. **Not model inference.** |
-| Real CLI usage | `pnpm test:browser:assistant:real-cli -- --provider claude-cli\|codex-cli --yes` (opt-in, uses your normal sign-in) | Natural-language edit → candidate → preview → Apply → reload → Undo, Memory, Stop, restart and out-of-scope refusal with a real model. Evidence: `verification/assistant/real-cli/`. |
+| Real CLI usage | `pnpm test:browser:assistant:real-cli -- --provider claude-cli\|codex-cli --yes` (opt-in, uses your normal sign-in) | Natural-language edit → candidate → preview → Apply → reload → Undo, Memory, Stop, restart and out-of-scope refusal with a real model, then one bounded real-demo smoke (`--demo sample\|landing\|blog\|webshop`, default `sample`) in its own disposable host: proposal, Draft preview, Apply, restart, Undo. Evidence: `verification/assistant/real-cli/`. |
 | Live Messages API | `pnpm test:browser:assistant:live` | The API provider with a dedicated credential and approved spend cap; records `blocked` without them. |
 
 Fake success is never reported as real CLI use, and harness success is never

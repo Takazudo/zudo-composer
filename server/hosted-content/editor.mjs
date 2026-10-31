@@ -880,6 +880,7 @@ var rejectionCodes = /* @__PURE__ */ new Set([
 	"operation-key-reuse",
 	"publication-busy",
 	"incomplete",
+	"restore-incompatible",
 	"configuration-required"
 ]);
 function rejectionCode(error) {
@@ -1215,6 +1216,35 @@ var HostedContentSession = class {
 			collectionId,
 			entries
 		});
+	}
+	/**
+	* Restore an exact revision as a new working revision through the guarded service command. Retained edits are
+	* saved first, so a restore never overwrites unsaved work; a definite refusal writes nothing and leaves no
+	* operation to review, because the request carried no local edits.
+	*/
+	async restoreRevision(entry, revisionId) {
+		await this.flush();
+		if (this.creationDraft || this.invalidInputs.size) throw new Error("Save or cancel the new item before restoring");
+		this.revision++;
+		this.reviewed = null;
+		this.options.preview?.invalidate?.();
+		try {
+			const result = await this.command({
+				kind: "restore-revision",
+				entry,
+				revisionId
+			});
+			this.presentationRevision++;
+			this.emit();
+			return result;
+		} catch (error) {
+			if (this.pending?.request.kind === "restore-revision" && this.pending.rejected) {
+				this.pending = null;
+				await this.persist();
+				this.emit();
+			}
+			throw error;
+		}
 	}
 	/** A clean refresh may adopt a confirmed integration; dirty edits need explicit review. */
 	async refresh() {
@@ -2182,6 +2212,7 @@ var hostedErrorMessages = {
 	"operation-key-reuse": "This save was already used for different content. Reload and try again.",
 	"publication-busy": "A submission is already in progress.",
 	incomplete: "Complete the required content before submitting.",
+	"restore-incompatible": "This version no longer fits the current fields. Nothing was changed.",
 	"configuration-required": "The site settings changed. Your changes are retained until the site is updated.",
 	unavailable: "The service is busy. Your changes are retained; try again."
 };
@@ -2196,11 +2227,39 @@ var hostedErrorMessagesJa = {
 	"operation-key-reuse": "この保存操作は別の内容で使用済みです。再読み込みしてからもう一度お試しください。",
 	"publication-busy": "すでに公開申請が進行中です。",
 	incomplete: "申請する前に必須の内容を入力してください。",
+	"restore-incompatible": "この版は現在の項目設定に合わないため復元できません。何も変更されていません。",
 	"configuration-required": "サイトの設定が更新されました。サイトの更新が終わるまで変更内容は保持されます。",
 	unavailable: "混み合っています。変更内容は保持されています。もう一度お試しください。"
 };
 //#endregion
 //#region src/hosted-content/editor.tsx
+var defaultViews = /* @__PURE__ */ new WeakMap();
+function renderDefaultInto(context, element) {
+	const draw = (next) => render(defaultViews.get(next)(), element);
+	draw(context);
+	return {
+		update: draw,
+		destroy: () => render(null, element)
+	};
+}
+function CustomField({ renderer, context }) {
+	const host = useRef(null), mounted = useRef(null), latest = useRef(context);
+	latest.current = context;
+	useEffect(() => {
+		mounted.current = renderer.mount(host.current, latest.current);
+		return () => {
+			mounted.current?.destroy();
+			mounted.current = null;
+		};
+	}, [renderer]);
+	useEffect(() => {
+		mounted.current?.update(context);
+	});
+	return /* @__PURE__ */ jsx("div", {
+		ref: host,
+		class: "hosted-content-editor__custom"
+	});
+}
 var sameRef = (a, b) => a.providerId === b.providerId && a.modelId === b.modelId && a.recordId === b.recordId;
 var refKey = (ref) => JSON.stringify([
 	ref.providerId,
@@ -2341,35 +2400,56 @@ function mountHostedContentEditor(container, options) {
 					class: "hosted-content-editor__fields",
 					children: fields.map((field) => {
 						const allowed = modelPermission.fields.find((permission) => permission.fieldId === field.id);
+						const change = (next) => {
+							if (next === void 0 && !allowed.clear) {
+								setActionError(new Error(labels.cannotClear));
+								return;
+							}
+							setActionError(null);
+							session.edit(selection.entry, field.id, next);
+						};
+						const control = () => /* @__PURE__ */ jsx(HostedFieldControl, {
+							schema: field,
+							field,
+							value: item.entry.values[field.id],
+							permission: allowed,
+							identity: `${refKey(selection.entry)}/${field.id}`,
+							hasIncompleteInput: (prefix) => state.invalidInputs.some((controlId) => controlId === prefix || controlId.startsWith(`${prefix}/`)),
+							onIncompleteNumber: (controlId, raw) => {
+								session.setIncompleteInput(controlId, raw !== null);
+								setActionError(raw === null ? null : new Error(labels.cannotClear));
+							},
+							label: field.label,
+							content,
+							policy: options.policy,
+							labels,
+							onChange: change
+						});
+						const renderer = options.fieldRenderers?.find((candidate) => candidate.matches(field, selection.entry));
+						let custom = null;
+						if (renderer) {
+							const context = {
+								entry: selection.entry,
+								field,
+								permission: allowed,
+								value: item.entry.values[field.id],
+								disabled: busy,
+								labels,
+								setValue: change,
+								renderDefault: (element) => renderDefaultInto(context, element)
+							};
+							defaultViews.set(context, control);
+							custom = /* @__PURE__ */ jsx(CustomField, {
+								renderer,
+								context
+							});
+						}
 						return /* @__PURE__ */ jsxs("div", {
 							class: "hosted-content-editor__field",
 							"data-hosted-field": field.id,
 							children: [
 								/* @__PURE__ */ jsx("span", { children: field.label }),
-								/* @__PURE__ */ jsx(HostedFieldControl, {
-									schema: field,
-									field,
-									value: item.entry.values[field.id],
-									permission: allowed,
-									identity: `${refKey(selection.entry)}/${field.id}`,
-									hasIncompleteInput: (prefix) => state.invalidInputs.some((controlId) => controlId === prefix || controlId.startsWith(`${prefix}/`)),
-									onIncompleteNumber: (controlId, raw) => {
-										session.setIncompleteInput(controlId, raw !== null);
-										setActionError(raw === null ? null : new Error(labels.cannotClear));
-									},
-									label: field.label,
-									content,
-									policy: options.policy,
-									labels,
-									onChange: (next) => {
-										if (next === void 0 && !allowed.clear) {
-											setActionError(new Error(labels.cannotClear));
-											return;
-										}
-										setActionError(null);
-										session.edit(selection.entry, field.id, next);
-									}
-								}),
+								custom ?? control(),
 								fieldClearable(field, allowed) ? /* @__PURE__ */ jsx("button", {
 									type: "button",
 									class: "hosted-content-editor__clear",
@@ -2679,6 +2759,14 @@ function mountHostedContentEditor(container, options) {
 		preview,
 		submit: () => session.submit(),
 		refreshPublication: () => session.refreshPublication(),
+		get selection() {
+			return selection;
+		},
+		restore(entry, revisionId) {
+			if (disposed) return Promise.reject(/* @__PURE__ */ new Error("Editor presentation is disposed"));
+			if (!permittedRef(options, entry, session.state.content)) return Promise.reject(/* @__PURE__ */ new Error("Entry is not permitted"));
+			return session.restoreRevision(entry, revisionId);
+		},
 		dispose() {
 			if (disposed) return;
 			disposed = true;

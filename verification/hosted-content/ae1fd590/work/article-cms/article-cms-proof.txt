@@ -1,0 +1,32 @@
+{
+  "proof": "article-cms",
+  "checks": 24,
+  "revisions": 8,
+  "node": "v22.22.0"
+}
+PASS admin imports only public tool entries and host files
+PASS browser bundle has no Node built-ins
+PASS browser bundle reaches the tool only through its emitted public entries
+PASS host list reads presentation columns and editorial status
+PASS custom title counter wraps the built-in control
+PASS counter follows typing
+PASS preview renders the saved snapshot
+PASS publication reports submission, activation, artifact and no deployment separately
+PASS local artifact holds the reviewed A
+PASS working reads B
+PASS published view reads the activated A
+PASS history lists initial, A and B newest first
+PASS diff names the changed field with both values
+PASS restore appended C with restoredFrom and kept A and B
+PASS restore kept the published A and the activated baseline
+PASS stale save is refused and the local value is retained
+PASS explicit reapply saves the retained value over the newer record
+PASS stale restore is refused over HTTP
+PASS incompatible restore answers diagnostics and writes nothing
+PASS standard form has no host counter
+PASS standard and custom forms share records, commands and history
+PASS a retried request replays without a second revision
+PASS restart keeps history, working and published
+PASS no page errors
+Independent hosted consumer verified: ae1fd59089ad184d7c23ce3d9c8127121fcf316e
+exit 0

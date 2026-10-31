@@ -95,7 +95,7 @@ describe("Worker-safe hosted site projection", () => {
   it("serves as the trusted service projection so the snapshot carries the neutral route data", async () => {
     const project = fixedSite(), [provider] = candidate(project);
     const providers = [{ ...provider!, entries: provider!.entries.filter((entry) => entry.id !== "faq-new") }];
-    const memory = createMemoryHostedStorage({ state: { draftRevision: "r0", baseline: { gitSha: "g0", contentDigest: "c0" }, definition: "d0", integrationFence: 0, providers }, baselineProviders: structuredClone(providers), receipts: [], snapshots: [], publications: [] });
+    const memory = createMemoryHostedStorage({ state: { draftRevision: "r0", baseline: { gitSha: "g0", contentDigest: "c0" }, definition: "d0", integrationFence: 0, providers }, baselineProviders: structuredClone(providers), receipts: [], snapshots: [], publications: [], revisions: [] });
     let id = 0;
     const service = createHostedContentService({ siteId: "projection", definition: "d0", storage: memory.storage, authorize: () => undefined,
       policy: { models: [{ providerId: provider!.providerId, modelId: "page", entryIds: ["home"], fields: [{ fieldId: fieldId(providers[0]!, "page", "title"), replace: true }] }], collections: [], assets: [] },

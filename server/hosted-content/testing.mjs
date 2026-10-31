@@ -1,6 +1,12 @@
-import { t as createHostedContentService } from "./chunks/service-C7HjhuDT.mjs";
+import { t as createHostedContentService } from "./chunks/service-Dg4ntUcp.mjs";
 //#region src/hosted-content/testing.ts
 var receiptKey = (actorId, operationKey) => JSON.stringify([actorId, operationKey]);
+var entryKey = (entry) => JSON.stringify([
+	entry.providerId,
+	entry.modelId,
+	entry.recordId
+]);
+var sequenceKey = (revision) => JSON.stringify([entryKey(revision.entry), revision.sequence]);
 function load(seed) {
 	const database = clone(seed);
 	return {
@@ -12,7 +18,8 @@ function load(seed) {
 		},
 		receipts: new Map(database.receipts.map((item) => [receiptKey(item.actorId, item.operationKey), item])),
 		snapshots: new Map(database.snapshots.map((item) => [item.id, item])),
-		publications: new Map(database.publications.map((item) => [item.id, item]))
+		publications: new Map(database.publications.map((item) => [item.id, item])),
+		revisions: new Map((database.revisions ?? []).map((item) => [item.id, item]))
 	};
 }
 function dumpData(data) {
@@ -22,7 +29,8 @@ function dumpData(data) {
 		activePublicationId: data.head.activePublicationId,
 		receipts: [...data.receipts.values()],
 		snapshots: [...data.snapshots.values()],
-		publications: [...data.publications.values()]
+		publications: [...data.publications.values()],
+		revisions: [...data.revisions.values()].sort((left, right) => entryKey(left.entry).localeCompare(entryKey(right.entry)) || left.sequence - right.sequence)
 	});
 }
 /** The conditional write every adapter must implement atomically. */
@@ -30,12 +38,20 @@ function applyCommit(data, change) {
 	if (data.head.version !== change.expectedVersion || change.head.version === change.expectedVersion) return null;
 	if (change.receipt && data.receipts.has(receiptKey(change.receipt.actorId, change.receipt.operationKey))) return null;
 	if (change.snapshot && data.snapshots.has(change.snapshot.id)) return null;
+	const sequences = new Set([...data.revisions.values()].map(sequenceKey)), ids = new Set(data.revisions.keys());
+	for (const revision of change.revisions ?? []) {
+		if (ids.has(revision.id) || sequences.has(sequenceKey(revision))) return null;
+		ids.add(revision.id);
+		sequences.add(sequenceKey(revision));
+	}
 	const next = {
 		head: clone(change.head),
 		receipts: new Map(data.receipts),
 		snapshots: new Map(data.snapshots),
-		publications: new Map(data.publications)
+		publications: new Map(data.publications),
+		revisions: new Map(data.revisions)
 	};
+	for (const revision of change.revisions ?? []) next.revisions.set(revision.id, clone(revision));
 	if (change.receipt) next.receipts.set(receiptKey(change.receipt.actorId, change.receipt.operationKey), clone(change.receipt));
 	if (change.snapshot) next.snapshots.set(change.snapshot.id, clone(change.snapshot));
 	if (change.publication) next.publications.set(change.publication.id, clone(change.publication));
@@ -54,6 +70,12 @@ function memoryReads(read) {
 		},
 		async readPublication(publicationId) {
 			return clone(read().publications.get(publicationId) ?? null);
+		},
+		async readRevision(revisionId) {
+			return clone(read().revisions.get(revisionId) ?? null);
+		},
+		async listRevisions(entry, page) {
+			return clone([...read().revisions.values()].filter((revision) => entryKey(revision.entry) === entryKey(entry) && (page.beforeSequence === void 0 || revision.sequence < page.beforeSequence)).sort((left, right) => right.sequence - left.sequence).slice(0, page.limit));
 		}
 	};
 }
@@ -287,7 +309,8 @@ function createHostedContentConformanceSeed() {
 		baselineProviders: clone(providers),
 		receipts: [],
 		snapshots: [],
-		publications: []
+		publications: [],
+		revisions: []
 	};
 }
 function createHostedContentConformancePolicy() {
@@ -478,7 +501,7 @@ async function runHostedContentConformance(factory) {
 	});
 	await scenario("competing-reorder", async (_backend, a, _b, one, two) => {
 		const initial = await one.readState(actor);
-		const created = await one.execute(actor, {
+		const first = await one.execute(actor, {
 			kind: "create-entry",
 			operationKey: "reorder-create",
 			expected: identities(initial),
@@ -486,25 +509,41 @@ async function runHostedContentConformance(factory) {
 			values: {},
 			before: null
 		});
-		assert(created.createdEntry, "reorder fixture created");
+		const created = await one.execute(actor, {
+			kind: "create-entry",
+			operationKey: "reorder-create-2",
+			expected: identities(first.state),
+			collectionId: "lesson-faqs",
+			values: {},
+			before: null
+		});
+		assert(first.createdEntry && created.createdEntry, "reorder fixture created");
 		const request = {
 			kind: "reorder",
 			operationKey: "reorder-a",
 			expected: identities(created.state),
 			collectionId: "lesson-faqs",
-			entries: [created.createdEntry, faq]
+			entries: [
+				first.createdEntry,
+				faq,
+				created.createdEntry
+			]
 		};
 		const winner = {
 			...request,
 			operationKey: "reorder-b",
-			entries: [faq, created.createdEntry]
+			entries: [
+				created.createdEntry,
+				first.createdEntry,
+				faq
+			]
 		};
 		const gate = a.holdNextCommit();
-		const first = one.execute(actor, request);
+		const held = one.execute(actor, request);
 		await gate.entered;
 		await two.execute(actor, winner);
 		gate.release();
-		await errorCode(() => first, "revision-conflict");
+		await errorCode(() => held, "revision-conflict");
 		equal(value(await two.readState(actor), lesson, "faqs"), winner.entries, "winning reorder exact IDs and order");
 	});
 	for (const fault of ["before-commit", "receipt-persistence"]) await scenario(`rollback-${fault}`, async (_backend, a, _b, one, two) => {
@@ -555,6 +594,19 @@ async function runHostedContentConformance(factory) {
 			head: changed,
 			snapshot
 		}), "existing snapshot id is refused");
+		const [latest] = await a.storage.listRevisions(lesson, { limit: 1 });
+		assert(latest, "the save recorded a revision");
+		const fresh = (sequence) => ({
+			...latest,
+			id: "atomic-fresh-revision",
+			parentId: latest.id,
+			sequence
+		});
+		assert(!await a.storage.commit({
+			expectedVersion: head.version,
+			head: changed,
+			revisions: [fresh(latest.sequence + 1), fresh(latest.sequence + 2)]
+		}), "a fresh revision id repeated within one commit is refused");
 		equal(await b.dump(), before, "refused commits write nothing, including the head");
 		assert(await a.storage.commit({
 			expectedVersion: head.version,
@@ -929,6 +981,47 @@ async function runHostedContentConformance(factory) {
 		await errorCode(() => one.execute(actor, edit(adopted.state, "old-definition-edit", "stale")), "configuration-required");
 		const resumed = await upgraded.execute(actor, edit(adopted.state, "definition-resume", "再開"));
 		equal(value(resumed.state, lesson, "title"), "再開", "editing resumes under the adopted definition");
+		const history = (await upgraded.listRevisions(actor, { entry: lesson })).revisions;
+		equal(history.map((revision) => [
+			revision.operation.kind,
+			revision.definition,
+			revision.values.price
+		]), [
+			[
+				"set-fields",
+				"definition-v2",
+				void 0
+			],
+			[
+				"adopt-canonical-baseline",
+				"definition-v2",
+				void 0
+			],
+			[
+				"set-fields",
+				"definition-v1",
+				300
+			],
+			[
+				"initial",
+				"definition-v1",
+				100
+			]
+		], "adoption is recorded as its own revision");
+		let incompatible;
+		try {
+			await upgraded.execute(actor, {
+				kind: "restore-revision",
+				operationKey: "definition-restore",
+				expected: identities(resumed.state),
+				entry: lesson,
+				revisionId: history[2].id
+			});
+		} catch (error) {
+			incompatible = error;
+		}
+		equal(incompatible?.restoreDiagnostics?.map((item) => [item.fieldId, item.code]), [["price", "field-removed"]], "a value for a removed field is reported, never dropped");
+		equal(value((await a.dump()).state, lesson, "title"), "再開", "a refused restore keeps the draft");
 	});
 	await scenario("external-integration-conflict", async (_backend, a, _b, one, two) => {
 		const initial = await one.readState(actor);
@@ -983,6 +1076,304 @@ async function runHostedContentConformance(factory) {
 		}), "baseline-conflict");
 		equal(await a.dump(), before, "late integration evidence for the conflicted publication changes nothing");
 		equal(await one.readSnapshot(actor, snapshot.id), snapshot, "conflicted publication keeps its exact snapshot");
+	});
+	await scenario("editorial-perspectives-and-history", async (backend, a, _b, one, two) => {
+		const initial = await one.readState(actor);
+		const savedA = await one.execute(actor, edit(initial, "history-a", "A"));
+		const reviewed = (await one.execute(actor, {
+			kind: "capture-snapshot",
+			operationKey: "history-capture",
+			expected: identities(savedA.state)
+		})).snapshot;
+		const publication = (await one.execute(actor, {
+			kind: "begin-publication",
+			operationKey: "history-submit",
+			expected: identities(savedA.state),
+			snapshotId: reviewed.id
+		})).publication;
+		const submitted = await two.readPublicationStatus(actor);
+		equal([
+			submitted.submission?.status,
+			submitted.activated.baseline,
+			submitted.deployed
+		], [
+			"submitted",
+			initial.baseline,
+			false
+		], "submission is reported apart from activation");
+		await two.execute(actor, edit(savedA.state, "history-b", "B"));
+		await one.recordConfirmedIntegration({
+			publicationId: publication.id,
+			snapshotId: reviewed.id,
+			expectedBaseline: publication.expectedBaseline,
+			gitSha: "1".repeat(40),
+			contentDigest: reviewed.digest
+		});
+		const integrated = await two.readPublicationStatus(actor);
+		equal([
+			integrated.submission?.status,
+			integrated.activated.baseline.gitSha,
+			integrated.artifact,
+			integrated.deployed
+		], [
+			"integrated",
+			"1".repeat(40),
+			null,
+			false
+		], "activation is reported without a deployment");
+		await one.recordStatus({
+			publicationId: publication.id,
+			snapshotId: reviewed.id,
+			statusVersion: 9,
+			status: "deployed",
+			facts: { artifact: "artifact-a" }
+		});
+		equal([(await two.readPublicationStatus(actor)).artifact, (await two.readPublicationStatus(actor)).deployed], ["artifact-a", true], "artifact and deployment are separate host facts");
+		const working = await two.readEntry(actor, {
+			perspective: "working",
+			entry: lesson
+		});
+		const published = await two.readEntry(actor, {
+			perspective: "published",
+			entry: lesson
+		});
+		equal([
+			working.values.title,
+			working.status,
+			published.values.title,
+			published.status
+		], [
+			"B",
+			"changed",
+			"A",
+			"changed"
+		], "working reads B while published reads the activated A");
+		const headRevision = (await two.listRevisions(actor, {
+			entry: lesson,
+			limit: 1
+		})).revisions[0].id;
+		equal([
+			working.workingRevisionId,
+			published.workingRevisionId,
+			working.valuesIdentity,
+			published.valuesIdentity
+		], [
+			headRevision,
+			headRevision,
+			{
+				perspective: "working",
+				draftRevision: (await two.readState(actor)).draftRevision,
+				revisionId: headRevision
+			},
+			{
+				perspective: "published",
+				baseline: integrated.activated.baseline,
+				integrationFence: integrated.activated.integrationFence
+			}
+		], "published values are identified by the activated baseline, never by the newest working revision");
+		equal((await two.readEntry(actor, {
+			perspective: "working",
+			entry: faq
+		})).status, "published", "an unchanged Entry is published");
+		const page = await two.listEntries(actor, {
+			perspective: "published",
+			providerId: "content",
+			modelId: "lesson"
+		});
+		equal([page.entries.map((entry) => entry.values.title), page.nextCursor], [["A"], null], "published lists read the baseline");
+		const models = await two.listModels(actor);
+		equal(models.map((model) => [
+			model.model.id,
+			model.workingEntries,
+			model.publishedEntries
+		]), [[
+			"lesson",
+			1,
+			1
+		], [
+			"faq",
+			1,
+			1
+		]], "model list is bounded to the policy");
+		const history = await two.listRevisions(actor, { entry: lesson });
+		equal(history.revisions.map((revision) => [
+			revision.sequence,
+			revision.operation.kind,
+			revision.values.title
+		]), [
+			[
+				3,
+				"set-fields",
+				"B"
+			],
+			[
+				2,
+				"set-fields",
+				"A"
+			],
+			[
+				1,
+				"initial",
+				"日本語の講座"
+			]
+		], "history is newest first, from the prior values");
+		const [revisionB, revisionA, original] = history.revisions;
+		equal([
+			revisionB.parentId,
+			revisionA.parentId,
+			original.parentId
+		], [
+			revisionA.id,
+			original.id,
+			null
+		], "each revision names its parent");
+		equal([
+			revisionA.actor,
+			original.actor,
+			revisionA.operation.key,
+			revisionA.definition
+		], [
+			{ id: actor.id },
+			null,
+			"history-a",
+			"definition-v1"
+		], "revisions carry trusted actor, operation and definition");
+		equal(await two.readRevision(actor, revisionA.id), revisionA, "keyed revision read is exact");
+		const firstPage = await two.listRevisions(actor, {
+			entry: lesson,
+			limit: 2
+		});
+		const secondPage = await two.listRevisions(actor, {
+			entry: lesson,
+			limit: 2,
+			cursor: firstPage.nextCursor
+		});
+		equal([
+			firstPage.revisions.length,
+			firstPage.nextCursor,
+			secondPage.revisions.map((revision) => revision.id),
+			secondPage.nextCursor
+		], [
+			2,
+			"2",
+			[original.id],
+			null
+		], "history pages by sequence");
+		const diff = await two.compareRevisions(actor, {
+			entry: lesson,
+			from: { revisionId: revisionA.id },
+			to: { perspective: "working" }
+		});
+		equal(diff.differences, [{
+			fieldId: "title",
+			key: "title",
+			label: "Title",
+			removedFromDefinition: false,
+			change: "changed",
+			before: "A",
+			after: "B"
+		}], "field comparison names the changed field");
+		const beforeNoOp = await a.dump();
+		const current = await two.readState(actor);
+		await two.execute(actor, edit(current, "history-noop", "B"));
+		const afterNoOp = await a.dump();
+		equal([afterNoOp.revisions.length, afterNoOp.state], [beforeNoOp.revisions.length, beforeNoOp.state], "a no-op save writes no revision and keeps the draft");
+		const restore = {
+			kind: "restore-revision",
+			operationKey: "history-restore",
+			expected: identities(current),
+			entry: lesson,
+			revisionId: revisionA.id
+		};
+		a.faultNextCommit("lost-acknowledgement");
+		let lost = false;
+		try {
+			await one.execute(actor, restore);
+		} catch {
+			lost = true;
+		}
+		assert(lost, "restore acknowledgement loss surfaces uncertainty");
+		const restored = await two.execute(actor, clone(restore));
+		equal(await two.execute(actor, clone(restore)), restored, "restore retry replays its receipt");
+		const restoredHistory = (await two.listRevisions(actor, { entry: lesson })).revisions;
+		equal(restoredHistory.map((revision) => revision.sequence), [
+			4,
+			3,
+			2,
+			1
+		], "restore appends exactly one revision and keeps the rest");
+		equal([
+			restoredHistory[0].values,
+			restoredHistory[0].restoredFrom,
+			restoredHistory[0].parentId,
+			restoredHistory[0].operation.kind
+		], [
+			revisionA.values,
+			revisionA.id,
+			revisionB.id,
+			"restore-revision"
+		], "restoring A from B creates C");
+		equal([
+			value(restored.state, lesson, "title"),
+			restored.state.baseline.gitSha,
+			(await two.readEntry(actor, {
+				perspective: "published",
+				entry: lesson
+			})).values.title
+		], [
+			"A",
+			"1".repeat(40),
+			"A"
+		], "restore keeps the active baseline");
+		equal(restored.state.providers[0].entries.find((entry) => entry.id === lesson.recordId).lifecycle, current.providers[0].entries.find((entry) => entry.id === lesson.recordId).lifecycle, "restore keeps lifecycle intent");
+		const stale = await a.dump();
+		await errorCode(() => two.execute(actor, edit(current, "history-stale", "lost")), "revision-conflict");
+		await errorCode(() => two.execute(actor, {
+			kind: "restore-revision",
+			operationKey: "history-stale-restore",
+			expected: identities(current),
+			entry: lesson,
+			revisionId: revisionA.id
+		}), "revision-conflict");
+		equal(await a.dump(), stale, "stale save and restore keep stored work");
+		const createdState = (await two.execute(actor, {
+			kind: "create-entry",
+			operationKey: "history-create",
+			expected: identities(restored.state),
+			collectionId: "lesson-faqs",
+			values: {
+				question: "Q",
+				answer: "A"
+			},
+			before: null
+		})).state;
+		const beforeRestore = await a.dump();
+		let incompatible;
+		try {
+			await two.execute(actor, {
+				kind: "restore-revision",
+				operationKey: "history-incompatible",
+				expected: identities(createdState),
+				entry: lesson,
+				revisionId: original.id
+			});
+		} catch (error) {
+			incompatible = error;
+		}
+		const diagnostics = incompatible?.restoreDiagnostics;
+		equal([incompatible?.code, diagnostics?.map((item) => [item.fieldId, item.code])], ["restore-incompatible", [["faqs", "collection-owned"]]], "incompatible history reports diagnostics");
+		equal(await a.dump(), beforeRestore, "an incompatible restore writes nothing");
+		await backend.restart();
+		const reopened = await backend.open();
+		const recovered = createHostedConformanceService(reopened.storage, "history-restart");
+		equal((await recovered.listRevisions(actor, { entry: lesson })).revisions, (await reopened.dump()).revisions.filter((revision) => revision.entry.recordId === lesson.recordId).reverse(), "history survives restart");
+		equal([(await recovered.readEntry(actor, {
+			perspective: "working",
+			entry: lesson
+		})).values.title, (await recovered.readEntry(actor, {
+			perspective: "published",
+			entry: lesson
+		})).values.title], ["A", "A"], "perspectives survive restart");
 	});
 	return report;
 }

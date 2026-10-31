@@ -82,6 +82,16 @@ prepare all four artifacts with `corepack pnpm demo:build-editors`, then run
 [Browser lanes](./browser-lanes.mdx) before starting a lane alongside a
 development server.
 
+## AI editing a demo
+
+To try the AI Assistant on a demo without touching its tracked sources, run
+`corepack pnpm assistant:local -- --host <sample|landing|blog|webshop>` from
+the repository root. It seeds an editable copy of that demo once under
+`.zudo-local/assistant/<host>/`, reuses it on every later start, and only
+`--reset` starts over. The demo table, requests to try, providers and the
+editable-data boundary are in the
+[local operation guide](https://github.com/Takazudo/zudo-composer/blob/main/docs/local-operation.md#ai-editing-host).
+
 ## CMS and generated files
 
 The root `.gitignore` ignores runtime data under `/cms/*`, then explicitly

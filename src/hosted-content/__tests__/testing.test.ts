@@ -9,6 +9,7 @@ describe("public hosted Content conformance runner", () => {
       "rollback-before-commit", "rollback-receipt-persistence", "conditional-commit-atomicity", "commit-retry-after-bookkeeping", "lost-create-ack-restart",
       "coherent-immutable-capture", "two-integrations-existing-entry", "two-integrations-new-entry",
       "external-baseline-adoption", "definition-change-adoption", "external-integration-conflict",
+      "editorial-perspectives-and-history",
     ]);
     expect(result.assertions).toBeGreaterThan(70);
   });

@@ -4,10 +4,12 @@ import { z } from "zod";
 var HostedContentError = class extends Error {
 	code;
 	diagnostics;
-	constructor(code, message, diagnostics) {
+	restoreDiagnostics;
+	constructor(code, message, diagnostics, restoreDiagnostics) {
 		super(message);
 		this.code = code;
 		this.diagnostics = diagnostics;
+		this.restoreDiagnostics = restoreDiagnostics;
 		this.name = "HostedContentError";
 	}
 };
@@ -624,7 +626,7 @@ function canonicalSerialize(value) {
 //#endregion
 //#region src/hosted-content/validation.ts
 var token = z.string().min(1).max(256);
-var ref = z.object({
+var ref$1 = z.object({
 	providerId: token,
 	modelId: token,
 	recordId: token
@@ -654,7 +656,7 @@ var commandSchema = z.discriminatedUnion("kind", [
 	z.object({
 		...base,
 		kind: z.literal("set-fields"),
-		entry: ref,
+		entry: ref$1,
 		values,
 		clear: z.array(token).max(200)
 	}).strict(),
@@ -663,20 +665,20 @@ var commandSchema = z.discriminatedUnion("kind", [
 		kind: z.literal("create-entry"),
 		collectionId: token,
 		values,
-		before: ref.nullable()
+		before: ref$1.nullable()
 	}).strict(),
 	z.object({
 		...base,
 		kind: z.literal("add-entry"),
 		collectionId: token,
-		entry: ref,
-		before: ref.nullable()
+		entry: ref$1,
+		before: ref$1.nullable()
 	}).strict(),
 	z.object({
 		...base,
 		kind: z.literal("reorder"),
 		collectionId: token,
-		entries: z.array(ref).max(1e3)
+		entries: z.array(ref$1).max(1e3)
 	}).strict(),
 	z.object({
 		...base,
@@ -686,8 +688,54 @@ var commandSchema = z.discriminatedUnion("kind", [
 		...base,
 		kind: z.literal("begin-publication"),
 		snapshotId: token
+	}).strict(),
+	z.object({
+		...base,
+		kind: z.literal("restore-revision"),
+		entry: ref$1,
+		revisionId: token
 	}).strict()
 ]);
+var pageSchema = {
+	cursor: token.optional(),
+	limit: z.number().int().min(1).max(100).optional()
+};
+var perspective = z.enum(["working", "published"]);
+var target = z.union([z.object({ revisionId: token }).strict(), z.object({ perspective }).strict()]);
+var querySchemas = {
+	entries: z.object({
+		perspective,
+		providerId: token,
+		modelId: token,
+		...pageSchema
+	}).strict(),
+	entry: z.object({
+		perspective,
+		entry: ref$1
+	}).strict(),
+	revisions: z.object({
+		entry: ref$1,
+		...pageSchema
+	}).strict(),
+	revision: token,
+	compare: z.object({
+		entry: ref$1,
+		from: target,
+		to: target
+	}).strict(),
+	preview: z.object({
+		entry: ref$1,
+		values,
+		clear: z.array(token).max(200),
+		expected
+	}).strict()
+};
+/** Editorial reads are validated like commands, so every entry point shares one shape. */
+function parseHostedQuery(kind, request) {
+	const parsed = querySchemas[kind].safeParse(request);
+	if (!parsed.success) throw new HostedContentError("invalid-request", "Malformed hosted query.");
+	return parsed.data;
+}
 function parseHostedCommand(request) {
 	let count = 0, bytes = 0;
 	const stack = [{
@@ -845,6 +893,36 @@ var rank = {
 	deployed: 4
 };
 var commitAttempts = 16;
+var defaultPageSize = 50;
+var ref = (providerId, entry) => ({
+	providerId,
+	modelId: entry.modelId,
+	recordId: entry.id
+});
+function lookup(providers, target) {
+	return providers.find((provider) => provider.providerId === target.providerId)?.entries.find((entry) => entry.id === target.recordId && entry.modelId === target.modelId);
+}
+/** Entries whose values differ, including created ones; lifecycle-only changes are not content changes. */
+function changedEntries(before, after) {
+	return after.flatMap((provider) => provider.entries.flatMap((next) => {
+		const entry = ref(provider.providerId, next), previous = lookup(before, entry);
+		return previous && sameValue(previous.values, next.values) ? [] : [{
+			entry,
+			previous,
+			next
+		}];
+	}));
+}
+function editorialStatus(head, target) {
+	const published = lookup(head.baselineProviders, target), working = lookup(head.state.providers, target);
+	if (!published) return "new";
+	return working && !sameValue(working.values, published.values) ? "changed" : "published";
+}
+function parseCursor(cursor) {
+	if (cursor === void 0) return void 0;
+	if (!/^[1-9]\d{0,15}$/.test(cursor)) fail("invalid-request", "Malformed cursor.");
+	return Number(cursor);
+}
 /** Trusted, site-bound service. Host callbacks are privileged; never expose them as client verbs. */
 function createHostedContentService(supplied) {
 	const options = {
@@ -1122,6 +1200,149 @@ function createHostedContentService(supplied) {
 			dropped
 		};
 	}
+	/**
+	* The revisions one commit appends: an `initial` revision of the prior values when an Entry has no history yet,
+	* then one revision per changed Entry. The head CAS and the (entry, sequence) uniqueness both refuse a racing append.
+	*/
+	async function revisionsFor(head, after, definition, actor, operation, restoredFrom) {
+		const revisions = [], source = options.source ?? "hosted-content", createdAt = options.now();
+		for (const { entry, previous, next } of changedEntries(head.state.providers, after)) {
+			let parent = (await options.storage.listRevisions(entry, { limit: 1 }))[0] ?? null;
+			if (!parent && previous) {
+				parent = {
+					id: options.createId(),
+					entry: copy(entry),
+					sequence: 1,
+					parentId: null,
+					values: copy(previous.values),
+					definition: head.state.definition,
+					createdAt,
+					actor: null,
+					source,
+					operation: {
+						kind: "initial",
+						key: null
+					}
+				};
+				revisions.push(parent);
+			}
+			revisions.push({
+				id: options.createId(),
+				entry: copy(entry),
+				sequence: (parent?.sequence ?? 0) + 1,
+				parentId: parent?.id ?? null,
+				values: copy(next.values),
+				definition,
+				createdAt,
+				actor: actor ? { id: actor.id } : null,
+				source,
+				operation,
+				...restoredFrom ? { restoredFrom } : {}
+			});
+		}
+		for (const revision of revisions) if (await options.storage.readRevision(revision.id)) fail("configuration-required", "Host ID factory returned an existing revision identity.");
+		return revisions;
+	}
+	/** Apply a revision's values as ordinary validated field changes, or refuse with every incompatibility. */
+	function restoreValues(providers, target, values) {
+		if (!permitted(providers, target)) fail("forbidden", "Entry is outside the hosted policy.");
+		const permission = modelPermission(target), entry = findEntry(providers, target);
+		const model = providers.find((provider) => provider.providerId === target.providerId)?.models.find((item) => item.id === target.modelId) ?? fail("not-found", "Entry model is unavailable.");
+		const diagnostics = [], set = {}, clear = [];
+		const diagnose = (fieldId, code, message) => diagnostics.push({
+			entry: copy(target),
+			fieldId,
+			code,
+			message
+		});
+		for (const fieldId of [.../* @__PURE__ */ new Set([...Object.keys(entry.values), ...Object.keys(values)])].sort()) {
+			const previous = entry.values[fieldId], next = Object.hasOwn(values, fieldId) ? values[fieldId] : void 0;
+			if (sameValue(previous, next)) continue;
+			const field = model.document.fields.find((item) => item.id === fieldId);
+			if (!field) {
+				diagnose(fieldId, "field-removed", "The current definition no longer has this field.");
+				continue;
+			}
+			if (options.policy.collections.some((collection) => contentEntryRefKey(collection.owner) === contentEntryRefKey(target) && collection.fieldId === fieldId)) {
+				diagnose(fieldId, "collection-owned", "Collection membership changes only through its collection operation.");
+				continue;
+			}
+			try {
+				assertFieldChange(field, permission.fields.find((item) => item.fieldId === fieldId), previous, next, options.policy, fieldId, options.validateMarkdown);
+			} catch (error) {
+				if (!(error instanceof HostedContentError)) throw error;
+				diagnose(fieldId, error.code === "forbidden" ? "forbidden" : "invalid-value", error.message);
+				continue;
+			}
+			if (next === void 0) clear.push(fieldId);
+			else set[fieldId] = next;
+		}
+		if (diagnostics.length) throw new HostedContentError("restore-incompatible", "The revision cannot be restored under the current definition and policy; nothing was written.", void 0, diagnostics);
+		if (Object.keys(set).length || clear.length) setFields(providers, target, set, clear);
+	}
+	function entryView(head, perspective, entry, target, workingRevisionId) {
+		const valuesIdentity = perspective === "working" ? {
+			perspective,
+			draftRevision: head.state.draftRevision,
+			revisionId: workingRevisionId
+		} : {
+			perspective,
+			baseline: head.state.baseline,
+			integrationFence: head.state.integrationFence
+		};
+		return copy({
+			entry: target,
+			perspective,
+			status: editorialStatus(head, target),
+			lifecycle: entry.lifecycle,
+			generation: entry.generation,
+			updatedAt: entry.updatedAt,
+			values: entry.values,
+			workingRevisionId,
+			valuesIdentity,
+			expected: identity(head.state)
+		});
+	}
+	const perspectiveProviders = (head, perspective) => perspective === "working" ? head.state.providers : head.baselineProviders;
+	/** Current read permissions apply to every perspective and to historical data. */
+	function assertReadable(head, target) {
+		if (!visible(head.state.providers, target)) fail("forbidden", "Entry is outside the hosted policy.");
+	}
+	async function readRevisionFor(target, revisionId) {
+		const revision = await options.storage.readRevision(revisionId);
+		if (!revision || contentEntryRefKey(revision.entry) !== contentEntryRefKey(target)) fail("not-found", "Revision is unavailable.");
+		return revision;
+	}
+	async function targetValues(head, target, at) {
+		if ("revisionId" in at) return (await readRevisionFor(target, at.revisionId)).values;
+		return lookup(perspectiveProviders(head, at.perspective), target)?.values ?? {};
+	}
+	/** Field-level differences in definition order, then fields the current definition no longer has. */
+	function differencesFor(providers, target, before, after) {
+		const fields = providers.find((provider) => provider.providerId === target.providerId)?.models.find((model) => model.id === target.modelId)?.document.fields ?? [];
+		const known = new Set(fields.map((field) => field.id));
+		const removed = [.../* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])].filter((fieldId) => !known.has(fieldId)).sort();
+		return [...fields.map((field) => ({
+			fieldId: field.id,
+			key: field.key,
+			label: field.label,
+			removedFromDefinition: false
+		})), ...removed.map((fieldId) => ({
+			fieldId,
+			key: fieldId,
+			label: fieldId,
+			removedFromDefinition: true
+		}))].flatMap((field) => {
+			const previous = before[field.fieldId], next = after[field.fieldId];
+			if (sameValue(previous, next)) return [];
+			return [{
+				...field,
+				change: previous === void 0 ? "added" : next === void 0 ? "removed" : "changed",
+				...previous !== void 0 ? { before: previous } : {},
+				...next !== void 0 ? { after: next } : {}
+			}];
+		});
+	}
 	/** Prepare from detached reads, then commit conditionally; a refused commit is retried from fresh reads. */
 	async function mutate(work) {
 		for (let attempt = 0; attempt < commitAttempts; attempt++) {
@@ -1149,6 +1370,108 @@ function createHostedContentService(supplied) {
 		async readState(actor) {
 			await authorize(actor);
 			return publicState((await options.storage.readHead()).state);
+		},
+		async listModels(actor) {
+			await authorize(actor);
+			const head = await options.storage.readHead();
+			return copy(publicProviders(head.state.providers).flatMap((provider) => provider.models.map((model) => ({
+				providerId: provider.providerId,
+				model,
+				workingEntries: provider.entries.filter((entry) => entry.modelId === model.id).length,
+				publishedEntries: head.baselineProviders.find((item) => item.providerId === provider.providerId)?.entries.filter((entry) => entry.modelId === model.id && visible(head.state.providers, ref(provider.providerId, entry))).length ?? 0
+			}))));
+		},
+		async listEntries(actor, request) {
+			const query = parseHostedQuery("entries", request);
+			await authorize(actor);
+			const head = await options.storage.readHead(), limit = query.limit ?? defaultPageSize;
+			const entries = (perspectiveProviders(head, query.perspective).find((provider) => provider.providerId === query.providerId)?.entries ?? []).filter((entry) => entry.modelId === query.modelId && visible(head.state.providers, ref(query.providerId, entry)) && (query.cursor === void 0 || entry.id > query.cursor)).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+			const page = entries.slice(0, limit);
+			return {
+				entries: await Promise.all(page.map(async (entry) => entryView(head, query.perspective, entry, ref(query.providerId, entry), (await options.storage.listRevisions(ref(query.providerId, entry), { limit: 1 }))[0]?.id ?? null))),
+				nextCursor: entries.length > limit ? page.at(-1).id : null
+			};
+		},
+		async readEntry(actor, request) {
+			const query = parseHostedQuery("entry", request);
+			await authorize(actor);
+			const head = await options.storage.readHead();
+			assertReadable(head, query.entry);
+			const entry = lookup(perspectiveProviders(head, query.perspective), query.entry) ?? fail("not-found", `Entry has no ${query.perspective} version.`);
+			return entryView(head, query.perspective, entry, query.entry, (await options.storage.listRevisions(query.entry, { limit: 1 }))[0]?.id ?? null);
+		},
+		async listRevisions(actor, request) {
+			const query = parseHostedQuery("revisions", request);
+			await authorize(actor);
+			assertReadable(await options.storage.readHead(), query.entry);
+			const limit = query.limit ?? defaultPageSize, beforeSequence = parseCursor(query.cursor);
+			const revisions = await options.storage.listRevisions(query.entry, {
+				...beforeSequence ? { beforeSequence } : {},
+				limit: limit + 1
+			});
+			const page = revisions.slice(0, limit);
+			return copy({
+				revisions: page,
+				nextCursor: revisions.length > limit ? String(page.at(-1).sequence) : null
+			});
+		},
+		async readRevision(actor, request) {
+			const revisionId = parseHostedQuery("revision", request);
+			await authorize(actor);
+			const head = await options.storage.readHead(), revision = await options.storage.readRevision(revisionId);
+			if (!revision || !visible(head.state.providers, revision.entry)) fail("not-found", "Revision is unavailable.");
+			return copy(revision);
+		},
+		async compareRevisions(actor, request) {
+			const query = parseHostedQuery("compare", request);
+			await authorize(actor);
+			const head = await options.storage.readHead();
+			assertReadable(head, query.entry);
+			const [before, after] = [await targetValues(head, query.entry, query.from), await targetValues(head, query.entry, query.to)];
+			return copy({
+				entry: query.entry,
+				from: query.from,
+				to: query.to,
+				differences: differencesFor(head.state.providers, query.entry, before, after)
+			});
+		},
+		async previewFields(actor, request) {
+			const query = parseHostedQuery("preview", request);
+			await authorize(actor);
+			const head = copy(await options.storage.readHead());
+			checkExpected(head.state, query.expected);
+			assertDefinitions(head);
+			const before = copy(findEntry(head.state.providers, query.entry).values);
+			setFields(head.state.providers, query.entry, query.values, query.clear);
+			checkGraph(head.state.providers);
+			const after = findEntry(head.state.providers, query.entry).values;
+			return copy({
+				entry: query.entry,
+				expected: identity(head.state),
+				values: after,
+				differences: differencesFor(head.state.providers, query.entry, before, after)
+			});
+		},
+		async readPublicationStatus(actor) {
+			await authorize(actor);
+			const head = await options.storage.readHead();
+			const publication = head.activePublicationId ? await options.storage.readPublication(head.activePublicationId) : null;
+			return copy({
+				activated: {
+					baseline: head.state.baseline,
+					definition: head.state.definition,
+					integrationFence: head.state.integrationFence
+				},
+				submission: publication ? {
+					publicationId: publication.id,
+					snapshotId: publication.snapshotId,
+					status: publication.status,
+					statusVersion: publication.statusVersion,
+					...publication.message !== void 0 ? { message: publication.message } : {}
+				} : null,
+				artifact: publication?.facts?.artifact ?? null,
+				deployed: publication?.status === "deployed"
+			});
 		},
 		async readReceipt(actor, operationKey) {
 			const trusted = copy(actor);
@@ -1178,6 +1501,8 @@ function createHostedContentService(supplied) {
 				if (replay) return { value: replay };
 				checkExpected(head.state, command.expected);
 				assertDefinitions(head);
+				const before = copy(head.state.providers);
+				let restoredFrom;
 				let createdEntry, snapshot, captured, publication;
 				switch (command.kind) {
 					case "set-fields":
@@ -1188,6 +1513,12 @@ function createHostedContentService(supplied) {
 					case "reorder":
 						createdEntry = changeCollection(head.state.providers, command);
 						break;
+					case "restore-revision": {
+						const revision = await readRevisionFor(command.entry, command.revisionId);
+						restoreValues(head.state.providers, command.entry, revision.values);
+						restoredFrom = revision.id;
+						break;
+					}
 					case "capture-snapshot": {
 						const providers = deliveryProviders(head), assets = copy(options.policy.assets), diagnostics = checkGraph(providers);
 						const renderData = copy(await options.project(copy(providers), copy(assets)));
@@ -1228,9 +1559,23 @@ function createHostedContentService(supplied) {
 						break;
 					}
 				}
+				let revisions = [];
 				if (command.kind !== "capture-snapshot" && command.kind !== "begin-publication") {
-					checkGraph(head.state.providers);
-					head.state.draftRevision = options.createId();
+					revisions = await revisionsFor({
+						...head,
+						state: {
+							...head.state,
+							providers: before
+						}
+					}, head.state.providers, head.state.definition, authenticated, {
+						kind: command.kind,
+						key: command.operationKey
+					}, restoredFrom);
+					if (!revisions.length) head.state.providers = before;
+					else {
+						checkGraph(head.state.providers);
+						head.state.draftRevision = options.createId();
+					}
 				}
 				const result = {
 					state: publicState(head.state),
@@ -1249,7 +1594,8 @@ function createHostedContentService(supplied) {
 							result: copy(result)
 						},
 						...captured ? { snapshot: captured } : {},
-						...publication ? { publication } : {}
+						...publication ? { publication } : {},
+						...revisions.length ? { revisions } : {}
 					}
 				};
 			});
@@ -1365,11 +1711,18 @@ function createHostedContentService(supplied) {
 					dropped: rebased.dropped
 				};
 				if (!input.apply) return { value };
+				const revisions = await revisionsFor(head, state.providers, state.definition, null, {
+					kind: "adopt-canonical-baseline",
+					key: null
+				});
 				head.state = state;
 				head.baselineProviders = copy(input.providers);
 				return {
 					value,
-					write: { head }
+					write: {
+						head,
+						...revisions.length ? { revisions } : {}
+					}
 				};
 			});
 		}

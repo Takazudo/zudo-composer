@@ -21,12 +21,25 @@ export const CONTENT_FILE_PROVIDER_OPERATIONS = [
   "initialize", "start-fresh",
 ] as const;
 
-export type ContentWireOperation = FileProviderTransportOperation<(typeof CONTENT_FILE_PROVIDER_OPERATIONS)[number]>;
+/**
+ * History, compare and restore for the Content editor. They are answered by
+ * the shared editorial boundary over the same store, not by store methods.
+ */
+export const CONTENT_EDITORIAL_WIRE_OPERATIONS = [
+  "editorial-read", "editorial-fields", "editorial-revisions", "editorial-revision", "editorial-compare",
+  "editorial-validate", "editorial-save", "editorial-restore", "editorial-publication", "editorial-operation",
+] as const;
+export const CONTENT_AI_WIRE_OPERATIONS = ["content-ai-status", "content-ai-scope", "content-ai-prepare", "content-ai-read", "content-ai-apply", "content-ai-undo"] as const;
+export type ContentEditorialWireOperation = (typeof CONTENT_EDITORIAL_WIRE_OPERATIONS)[number] | (typeof CONTENT_AI_WIRE_OPERATIONS)[number];
+
+export type ContentWireOperation = FileProviderTransportOperation<(typeof CONTENT_FILE_PROVIDER_OPERATIONS)[number] | ContentEditorialWireOperation | ContentPersistenceOperation>;
 
 /** `start-fresh` is an initialization entry point, not a store operation. */
 export function contentPersistenceOperationOf(operation: ContentWireOperation): ContentPersistenceOperation {
   if (operation === "transaction") return "transact";
-  return operation === "start-fresh" ? "clear" : operation;
+  if (operation === "editorial-save" || operation === "editorial-restore" || operation === "content-ai-apply" || operation === "content-ai-undo") return "edit-entry";
+  if (operation.startsWith("editorial-") || operation.startsWith("content-ai-")) return "read-revision";
+  return operation === "start-fresh" ? "clear" : operation as ContentPersistenceOperation;
 }
 
 export type ContentFileProviderConfig = FileProviderConfig;

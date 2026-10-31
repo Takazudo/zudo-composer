@@ -18,7 +18,7 @@ export class FilesystemContentStore extends TransactionalContentStore {
       ...(options.randomToken === undefined ? {} : { randomToken: options.randomToken }),
       ...(options.newMutationToken === undefined ? {} : { newMutationToken: options.newMutationToken }),
     });
-    return this.fromRecords(records, options.now);
+    return this.fromRecords(records, options.now, options.revisionProvenance);
   }
 }
 export function createFilesystemContentStore(options: FilesystemContentStoreOptions): Promise<FilesystemContentStore> { return FilesystemContentStore.create(options); }

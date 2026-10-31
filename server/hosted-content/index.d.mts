@@ -247,6 +247,12 @@ type HostedCommand = HostedCommandBase & ({
 } | {
     kind: "begin-publication";
     snapshotId: string;
+}
+/** Writes the revision's values as a new working revision; lifecycle, baseline and history are kept. */
+ | {
+    kind: "restore-revision";
+    entry: ContentEntryRef;
+    revisionId: string;
 });
 interface HostedResult {
     state: HostedState;
@@ -261,6 +267,31 @@ interface HostedReceipt {
     fingerprint: string;
     result: HostedResult;
 }
+type HostedRevisionOperation = "initial" | "set-fields" | "create-entry" | "add-entry" | "reorder" | "restore-revision" | "adopt-canonical-baseline";
+/**
+ * One immutable working revision of one Entry. It is written in the same atomic commit as the Entry change and
+ * its receipt, and it is never updated or pruned: history is retained for the life of the storage.
+ */
+interface HostedRevision {
+    id: string;
+    entry: ContentEntryRef;
+    /** 1-based and contiguous per Entry; the newest revision has the highest sequence. */
+    sequence: number;
+    parentId: string | null;
+    values: Record<string, JsonValue>;
+    /** The hosted definition the values were written under. */
+    definition: string;
+    createdAt: string;
+    /** The authenticated actor, or null when the values came from canonical content rather than an edit here. */
+    actor: HostedActor | null;
+    /** Trusted host label for the entry point, from the service options; never a request value. */
+    source: string;
+    operation: {
+        kind: HostedRevisionOperation;
+        key: string | null;
+    };
+    restoredFrom?: string;
+}
 /** Complete logical content of one site's storage, for seeding and fixture inspection only. The service never loads it whole. */
 interface HostedDatabase {
     state: HostedState;
@@ -269,6 +300,7 @@ interface HostedDatabase {
     receipts: HostedReceipt[];
     snapshots: HostedSnapshot[];
     publications: HostedPublication[];
+    revisions: HostedRevision[];
 }
 /** The one mutable row. Its size is bounded by the working and baseline content, never by history. */
 interface HostedHead {
@@ -278,13 +310,14 @@ interface HostedHead {
     baselineProviders: HostedProvider[];
     activePublicationId: string | null;
 }
-/** One conditional write. Receipts and snapshots are insert-only; a publication replaces the row with its id. */
+/** One conditional write. Receipts, snapshots and revisions are insert-only; a publication replaces the row with its id. */
 interface HostedCommit {
     expectedVersion: string;
     head: HostedHead;
     receipt?: HostedReceipt;
     snapshot?: HostedSnapshot;
     publication?: HostedPublication;
+    revisions?: HostedRevision[];
 }
 /**
  * Narrow keyed reads plus one atomic conditional commit, e.g. a single D1 `batch()`.
@@ -296,9 +329,15 @@ interface HostedStorage {
     readReceipt(actorId: string, operationKey: string): Promise<HostedReceipt | null>;
     readSnapshot(snapshotId: string): Promise<HostedSnapshot | null>;
     readPublication(publicationId: string): Promise<HostedPublication | null>;
+    readRevision(revisionId: string): Promise<HostedRevision | null>;
+    /** One Entry's revisions, newest first, below `beforeSequence` when given; never more than `limit`. */
+    listRevisions(entry: ContentEntryRef, page: {
+        beforeSequence?: number;
+        limit: number;
+    }): Promise<HostedRevision[]>;
     /**
      * Write everything or nothing. Resolve false, writing nothing, when the stored head version differs from
-     * `expectedVersion` or the receipt (actorId, operationKey) or snapshot id already exists. Throw only when the
+     * `expectedVersion` or the receipt (actorId, operationKey), snapshot id, revision id or revision (entry, sequence) already exists. Throw only when the
      * outcome is unknown or storage failed; a throw after a durable write is recovered through the receipt.
      */
     commit(change: HostedCommit): Promise<boolean>;
@@ -319,6 +358,8 @@ interface HostedServiceOptions {
     project(providers: HostedProvider[], assets: HostedAsset[]): JsonValue | Promise<JsonValue>;
     validateSubmission(snapshot: HostedSnapshot): void | Promise<void>;
     validateMarkdown?(value: string): void;
+    /** Trusted label recorded on every revision this service writes, e.g. "article-admin". Defaults to "hosted-content". */
+    source?: string;
 }
 /** Privileged host evidence that canonical Git content changed outside a publication. */
 interface HostedCanonicalAdoption {
@@ -349,8 +390,136 @@ interface HostedAdoptionResult {
         reason: HostedRebaseDropReason;
     })[];
 }
+/** `working` is the retained draft; `published` is the active canonical baseline, never a lifecycle filter of the draft. */
+type HostedPerspective = "working" | "published";
+/** `new`: absent from the active baseline. `published`: working values equal it. `changed`: working values differ from it. */
+type HostedEditorialStatus = "new" | "published" | "changed";
+interface HostedModelSummary {
+    providerId: string;
+    model: ContentModelRecord;
+    workingEntries: number;
+    publishedEntries: number;
+}
+interface HostedEntryView {
+    entry: ContentEntryRef;
+    perspective: HostedPerspective;
+    status: HostedEditorialStatus;
+    lifecycle: ContentEntryRecord["lifecycle"];
+    generation: number;
+    updatedAt: string;
+    values: Record<string, JsonValue>;
+    /** Head of the Entry's working history, the same in both perspectives; null before history begins. Guards history and restore. */
+    workingRevisionId: string | null;
+    /** What identifies the shown values: a working revision, or the activated baseline for published values (never a revision id). */
+    valuesIdentity: HostedValuesIdentity;
+    /** The identities this read was taken at; a command prepared from it quotes them as `expected`. */
+    expected: HostedIdentities;
+}
+type HostedValuesIdentity = {
+    perspective: "working";
+    draftRevision: string;
+    revisionId: string | null;
+} | {
+    perspective: "published";
+    baseline: HostedState["baseline"];
+    integrationFence: number;
+};
+interface HostedPage {
+    cursor?: string;
+    limit?: number;
+}
+interface HostedEntryPage {
+    entries: HostedEntryView[];
+    nextCursor: string | null;
+}
+interface HostedRevisionPage {
+    revisions: HostedRevision[];
+    nextCursor: string | null;
+}
+type HostedRevisionTarget = {
+    revisionId: string;
+} | {
+    perspective: HostedPerspective;
+};
+interface HostedFieldDifference {
+    fieldId: string;
+    key: string;
+    label: string;
+    change: "added" | "removed" | "changed";
+    before?: JsonValue;
+    after?: JsonValue;
+    /** True when the current definition no longer has this field. */
+    removedFromDefinition: boolean;
+}
+/** A validated set-fields candidate that was not written. */
+interface HostedFieldPreview {
+    entry: ContentEntryRef;
+    expected: HostedIdentities;
+    values: Record<string, JsonValue>;
+    differences: HostedFieldDifference[];
+}
+interface HostedComparison {
+    entry: ContentEntryRef;
+    from: HostedRevisionTarget;
+    to: HostedRevisionTarget;
+    differences: HostedFieldDifference[];
+}
+type HostedRestoreDiagnosticCode = "field-removed" | "invalid-value" | "forbidden" | "collection-owned";
+interface HostedRestoreDiagnostic {
+    entry: ContentEntryRef;
+    fieldId: string;
+    code: HostedRestoreDiagnosticCode;
+    message: string;
+}
+/** Each stage is reported separately; none implies the next. */
+interface HostedPublicationOverview {
+    /** The active canonical baseline that `published` reads return. */
+    activated: {
+        baseline: HostedIdentities["baseline"];
+        definition: string;
+        integrationFence: number;
+    };
+    /** The newest accepted submission, if any. */
+    submission: {
+        publicationId: string;
+        snapshotId: string;
+        status: HostedPublicationStage;
+        statusVersion: number;
+        message?: string;
+    } | null;
+    /** Host-recorded `artifact` fact of that submission, e.g. a local artifact id; null until the host records one. */
+    artifact: string | null;
+    deployed: boolean;
+}
 interface HostedService {
     readState(actor: HostedActor): Promise<HostedState>;
+    listModels(actor: HostedActor): Promise<HostedModelSummary[]>;
+    listEntries(actor: HostedActor, query: {
+        perspective: HostedPerspective;
+        providerId: string;
+        modelId: string;
+    } & HostedPage): Promise<HostedEntryPage>;
+    readEntry(actor: HostedActor, query: {
+        perspective: HostedPerspective;
+        entry: ContentEntryRef;
+    }): Promise<HostedEntryView>;
+    listRevisions(actor: HostedActor, query: {
+        entry: ContentEntryRef;
+    } & HostedPage): Promise<HostedRevisionPage>;
+    readRevision(actor: HostedActor, revisionId: string): Promise<HostedRevision>;
+    compareRevisions(actor: HostedActor, query: {
+        entry: ContentEntryRef;
+        from: HostedRevisionTarget;
+        to: HostedRevisionTarget;
+    }): Promise<HostedComparison>;
+    /** Run set-fields validation against the pinned identities and return the candidate without writing anything. */
+    previewFields(actor: HostedActor, query: {
+        entry: ContentEntryRef;
+        values: Record<string, JsonValue>;
+        clear: string[];
+        expected: HostedIdentities;
+    }): Promise<HostedFieldPreview>;
+    readPublicationStatus(actor: HostedActor): Promise<HostedPublicationOverview>;
     execute(actor: HostedActor, request: unknown): Promise<HostedResult>;
     readReceipt(actor: HostedActor, operationKey: string): Promise<HostedReceipt | null>;
     readSnapshot(actor: HostedActor, snapshotId: string): Promise<HostedSnapshot>;
@@ -374,17 +543,39 @@ interface HostedService {
     adoptCanonicalBaseline(evidence: HostedCanonicalAdoption): Promise<HostedAdoptionResult>;
 }
 /** `unavailable` means storage kept refusing a commit; nothing was written and the exact request may be retried. */
-type HostedErrorCode = "invalid-request" | "invalid-value" | "forbidden" | "not-found" | "revision-conflict" | "baseline-conflict" | "definition-conflict" | "operation-key-reuse" | "publication-busy" | "incomplete" | "configuration-required" | "unavailable";
+type HostedErrorCode = "invalid-request" | "invalid-value" | "forbidden" | "not-found" | "revision-conflict" | "baseline-conflict" | "definition-conflict" | "operation-key-reuse" | "publication-busy" | "incomplete" | "restore-incompatible" | "configuration-required" | "unavailable";
 declare class HostedContentError extends Error {
     readonly code: HostedErrorCode;
     readonly diagnostics?: ContentCompletenessDiagnostic[] | undefined;
-    constructor(code: HostedErrorCode, message: string, diagnostics?: ContentCompletenessDiagnostic[] | undefined);
+    readonly restoreDiagnostics?: HostedRestoreDiagnostic[] | undefined;
+    constructor(code: HostedErrorCode, message: string, diagnostics?: ContentCompletenessDiagnostic[] | undefined, restoreDiagnostics?: HostedRestoreDiagnostic[] | undefined);
 }
 interface HostedTransport {
     readState(): Promise<HostedState>;
     execute(request: HostedCommand): Promise<HostedResult>;
     readReceipt(operationKey: string): Promise<HostedReceipt | null>;
     getPublication(publicationId: string): Promise<HostedPublication>;
+    /** Editorial reads; a transport without them supports only the single-entry editor. */
+    listModels?(): Promise<HostedModelSummary[]>;
+    listEntries?(query: {
+        perspective: HostedPerspective;
+        providerId: string;
+        modelId: string;
+    } & HostedPage): Promise<HostedEntryPage>;
+    readEntry?(query: {
+        perspective: HostedPerspective;
+        entry: ContentEntryRef;
+    }): Promise<HostedEntryView>;
+    listRevisions?(query: {
+        entry: ContentEntryRef;
+    } & HostedPage): Promise<HostedRevisionPage>;
+    readRevision?(revisionId: string): Promise<HostedRevision>;
+    compareRevisions?(query: {
+        entry: ContentEntryRef;
+        from: HostedRevisionTarget;
+        to: HostedRevisionTarget;
+    }): Promise<HostedComparison>;
+    readPublicationStatus?(): Promise<HostedPublicationOverview>;
 }
 
 /** Trusted, site-bound service. Host callbacks are privileged; never expose them as client verbs. */
@@ -1225,4 +1416,4 @@ declare function projectHostedSite(plan: HostedSitePlan, providers: HostedProvid
 declare function createHostedSiteProjector(plan: HostedSitePlan): HostedServiceOptions["project"];
 
 export { COMPOSER_PREVIEW_CHANNEL, COMPOSER_PREVIEW_PROTOCOL_VERSION, HostedContentError, canonicalSerialize, createHostedContentService, createHostedSiteProjector, hostedDocumentErrorMessage, hostedDocumentErrorSchema, hostedPreviewBindingSchema, hostedPreviewResponseSchema, hostedReadyMessage, hostedReadySchema, hostedRenderMessage, hostedRenderSchema, hostedRenderedMessage, hostedRenderedSchema, matchesHostedPreviewBinding, projectHostedSite, readHostedPreviewRequest, readHostedPreviewResponse };
-export type { ContentEntryRecord, ContentEntryRef, ContentModelRecord, HostedActor, HostedAdoptionResult, HostedAsset, HostedCanonicalAdoption, HostedCollectionPermission, HostedCommand, HostedCommit, HostedDatabase, HostedDocumentError, HostedDocumentRender, HostedDocumentRendered, HostedErrorCode, HostedFieldPermission, HostedHead, HostedIdentities, HostedModelPermission, HostedPolicy, HostedPreviewBinding, HostedPreviewGuardFailure, HostedPreviewResponse, HostedProjectedRoute, HostedProjectionDiagnostic, HostedProvider, HostedPublication, HostedPublicationStage, HostedRebaseChange, HostedRebaseDropReason, HostedReceipt, HostedRendererIdentity, HostedResult, HostedService, HostedServiceOptions, HostedSitePlan, HostedSiteProjection, HostedSnapshot, HostedState, HostedStorage, HostedTransport, MessageEventLike, MessagePoster, MessageTarget, PreviewPackIdentity };
+export type { ContentEntryRecord, ContentEntryRef, ContentFieldDefinition, ContentModelRecord, HostedActor, HostedAdoptionResult, HostedAsset, HostedCanonicalAdoption, HostedCollectionPermission, HostedCommand, HostedCommit, HostedComparison, HostedDatabase, HostedDocumentError, HostedDocumentRender, HostedDocumentRendered, HostedEditorialStatus, HostedEntryPage, HostedEntryView, HostedErrorCode, HostedFieldDifference, HostedFieldPermission, HostedFieldPreview, HostedHead, HostedIdentities, HostedModelPermission, HostedModelSummary, HostedPage, HostedPerspective, HostedPolicy, HostedPreviewBinding, HostedPreviewGuardFailure, HostedPreviewResponse, HostedProjectedRoute, HostedProjectionDiagnostic, HostedProvider, HostedPublication, HostedPublicationOverview, HostedPublicationStage, HostedRebaseChange, HostedRebaseDropReason, HostedReceipt, HostedRendererIdentity, HostedRestoreDiagnostic, HostedRestoreDiagnosticCode, HostedResult, HostedRevision, HostedRevisionOperation, HostedRevisionPage, HostedRevisionTarget, HostedService, HostedServiceOptions, HostedSitePlan, HostedSiteProjection, HostedSnapshot, HostedState, HostedStorage, HostedTransport, HostedValuesIdentity, MessageEventLike, MessagePoster, MessageTarget, PreviewPackIdentity };

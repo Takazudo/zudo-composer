@@ -25,7 +25,7 @@ export function editorFixture(options: { numericResults?: boolean; nestedNumeric
     createContentEntryRecord("faq", { question: "First question", answer: "First answer" }, { id: "faq-a", timestamp: stamp }),
     createContentEntryRecord("faq", { question: "Detached question", answer: "Detached answer" }, { id: "faq-detached", timestamp: stamp }),
     createContentEntryRecord("faq", { question: "Private question", answer: "Hidden" }, { id: "private", timestamp: stamp })] }];
-  const memory = createMemoryHostedStorage({ state: { draftRevision: "r0", baseline: { gitSha: "g0", contentDigest: "c0" }, definition: "d0", integrationFence: 0, providers }, baselineProviders: structuredClone(providers), snapshots: [], receipts: [], publications: [] });
+  const memory = createMemoryHostedStorage({ state: { draftRevision: "r0", baseline: { gitSha: "g0", contentDigest: "c0" }, definition: "d0", integrationFence: 0, providers }, baselineProviders: structuredClone(providers), snapshots: [], receipts: [], publications: [], revisions: [] });
   const policy: HostedPolicy = {
     models: [{ providerId: "content", modelId: "page", entryIds: ["home"], fields: [
       ...["title", "price", "enabled", "summary", "date", "url", "color", "choice", "notes"].map((fieldId) => ({ fieldId, replace: true, clear: true })),
