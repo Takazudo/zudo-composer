@@ -563,12 +563,6 @@ saved Content, history, proposals and committed operations stay readable, and a
 prepared proposal can still be applied or undone. Messages never include
 credentials or the home directory, and there is no fallback to another provider.
 
-Turning inference off is the same, with no provider at all: keep the proposal
-store and the endpoint, pass `proposer: null`, and report
-`{ state: "unavailable", code: "off" }` without starting or probing a CLI. The
-Article CMS does this with `--ai off`; its saved proposals, their Apply and Undo
-and every recovery keep working on the same data directory.
-
 ### The Article CMS reference host
 
 `fixtures/hosted-content-consumer/article-cms/` is the independently installed
