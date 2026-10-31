@@ -58,6 +58,8 @@ await writeFile(join(consumer, "tool-payload-inventory.json"), JSON.stringify(in
 run("corepack", ["pnpm", "exec", "zudo-composer", "--help"]);
 run("corepack", ["pnpm", "exec", "tsc", "-p", "tsconfig.worker.json", "--pretty", "false"]);
 run("corepack", ["pnpm", "exec", "tsc", "-p", "tsconfig.browser.json", "--pretty", "false"]);
+run("corepack", ["pnpm", "exec", "tsc", "-p", "tsconfig.content-ai.json", "--pretty", "false"]);
+run(process.execPath, ["content-ai-entries.mjs"]);
 run(process.execPath, ["worker-proof.mjs"]);
 run(process.execPath, ["browser-bundle-proof.mjs", join(consumer, "work/install-browser-bundle")]);
 run(process.execPath, ["node-proof.mjs"]);
@@ -65,6 +67,7 @@ run(process.execPath, ["durable-proof.mjs"]);
 run(process.execPath, ["browser-transport-proof.mjs", join(consumer, "work/install-browser-transport.sqlite"), join(consumer, "work/install-browser-transport")]);
 run(process.execPath, ["render-proof.mjs", join(consumer, "work/install-render.sqlite")]);
 run(process.execPath, ["publication-render-proof.mjs", join(consumer, "work/install-publication-render")]);
+run(process.execPath, ["article-cms/ai-http-proof.mjs", join(consumer, "work/install-article-ai-http")]);
 await rm(join(consumer, "node_modules"), { recursive: true, force: true });
 await rm(join(consumer, "renderer/node_modules"), { recursive: true, force: true });
 run("corepack", ["pnpm", "install", "--frozen-lockfile"]);
@@ -73,6 +76,8 @@ assert.deepEqual(await installedInventory(), inventory, "Frozen reinstall must p
 run("corepack", ["pnpm", "exec", "zudo-composer", "--help"]);
 run("corepack", ["pnpm", "exec", "tsc", "-p", "tsconfig.worker.json", "--pretty", "false"]);
 run("corepack", ["pnpm", "exec", "tsc", "-p", "tsconfig.browser.json", "--pretty", "false"]);
+run("corepack", ["pnpm", "exec", "tsc", "-p", "tsconfig.content-ai.json", "--pretty", "false"]);
+run(process.execPath, ["content-ai-entries.mjs"]);
 run(process.execPath, ["worker-proof.mjs"]);
 run(process.execPath, ["browser-bundle-proof.mjs", join(consumer, "work/frozen-browser-bundle")]);
 run(process.execPath, ["node-proof.mjs"]);
@@ -80,11 +85,16 @@ run(process.execPath, ["durable-proof.mjs"]);
 run(process.execPath, ["browser-transport-proof.mjs", join(consumer, "work/frozen-browser-transport.sqlite"), join(consumer, "work/frozen-browser-transport")]);
 run(process.execPath, ["render-proof.mjs", join(consumer, "work/frozen-render.sqlite")]);
 run(process.execPath, ["publication-render-proof.mjs", join(consumer, "work/frozen-publication-render")]);
+run(process.execPath, ["article-cms/ai-http-proof.mjs", join(consumer, "work/frozen-article-ai-http")]);
 if (!noBrowser) {
   run("corepack", ["pnpm", "exec", "playwright", "install", "--with-deps", "chromium"]);
   run(process.execPath, ["browser-proof.mjs", join(consumer, "work/browser.sqlite")]);
   run(process.execPath, ["browser-broad-proof.mjs", join(consumer, "work/browser-broad.sqlite"), join(consumer, "work/browser-broad")]);
   run(process.execPath, ["article-cms/proof.mjs", join(consumer, "work/article-cms")]);
+  // Fake-provider Content-AI in the real browser; a failure leaves its trace, screenshot and host log here.
+  run(process.execPath, ["article-cms/ai-proof.mjs", join(consumer, "work/article-cms-ai"), join(consumer, "work/article-cms-ai-artifacts")]);
+  // The documented launcher as separate processes on one data directory: fake, then off (recovery without inference), then fake.
+  run(process.execPath, ["article-cms/ai-launcher-proof.mjs", join(consumer, "work/article-cms-ai-launcher"), join(consumer, "work/article-cms-ai-artifacts")]);
 }
 /** @type {Record<string, string>} */
 const lockDigests = {};
@@ -95,5 +105,9 @@ await writeFile(join(consumer, "verification.json"), JSON.stringify({ installedT
   contractSha: "c0b452da075b66757c60bd0d721a47062d4354d0", contractProtocol: 2, peerPreact: "10.29.8", commands,
   payloadSha256: inventory.sha256, lockDigests,
   independentInstall: "passed", frozenReinstall: "passed", worker: "passed", browserBundle: "passed", nodeBoundary: "passed", sqlite: "passed", httpTransport: "passed", staticRenderer: "passed",
-  browser: noBrowser ? "not run (--no-browser); real browser acceptance remains unverified" : "passed" }, null, 2) + "\n");
+  contentAiEntries: "passed (types and runtime: hosted-content, /editor, /editor.css, /preview, /testing, /node; /browser not exported)",
+  articleContentAiHttp: "passed (offline fake provider over loopback HTTP and SQLite)",
+  browser: noBrowser ? "not run (--no-browser); real browser acceptance remains unverified" : "passed",
+  articleContentAiBrowser: noBrowser ? "not run (--no-browser)" : "passed (offline fake provider; not model evidence)",
+  articleContentAiLauncher: noBrowser ? "not run (--no-browser)" : "passed (server.mjs subprocesses: --ai fake, off, fake on one data directory; not model evidence)" }, null, 2) + "\n");
 console.log(`Independent hosted consumer verified${noBrowser ? " except real browser acceptance" : ""}: ${sha}`);

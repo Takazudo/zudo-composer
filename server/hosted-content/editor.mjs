@@ -1,3 +1,4 @@
+import { t as EditorialError } from "./chunks/types-nfgY3xip.mjs";
 import { HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost } from "./preview.mjs";
 import { createContext, h, render } from "preact";
 import { useContext, useEffect, useRef, useState } from "preact/hooks";
@@ -2777,4 +2778,41 @@ function mountHostedContentEditor(container, options) {
 	};
 }
 //#endregion
-export { HostedContentSession, HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost, hostedEditorLabels, hostedEditorLabelsJa, hostedErrorMessages, hostedErrorMessagesJa, mountHostedContentEditor };
+//#region src/content/editorial/remote.ts
+var CODES = [
+	"invalid-request",
+	"not-found",
+	"forbidden",
+	"invalid-value",
+	"revision-conflict",
+	"operation-key-reuse",
+	"restore-incompatible",
+	"configuration-required",
+	"unavailable"
+];
+function unwrap(result) {
+	if (result && typeof result === "object" && "ok" in result) {
+		if (result.ok === true && "value" in result) return result.value;
+		const error = result.error;
+		if (error && typeof error.message === "string") {
+			const code = CODES.includes(error.code) ? error.code : "unavailable";
+			const diagnostics = Array.isArray(error.diagnostics) ? error.diagnostics.filter((item) => !!item && typeof item === "object" && typeof item.fieldId === "string") : [];
+			throw new EditorialError(code, error.message, diagnostics);
+		}
+	}
+	throw new EditorialError("unavailable", "The local Content provider returned a malformed editorial response.");
+}
+/** The browser half of Content-AI. Provenance and the proposer stay on the server. */
+function createRemoteContentAi(call) {
+	const send = async (operation, payload = {}) => unwrap(await call(operation, payload));
+	return {
+		status: () => send("content-ai-status"),
+		scope: (entry) => send("content-ai-scope", { entry }),
+		prepare: (request) => send("content-ai-prepare", request),
+		read: (request) => send("content-ai-read", request),
+		apply: (request) => send("content-ai-apply", request),
+		undo: (request) => send("content-ai-undo", request)
+	};
+}
+//#endregion
+export { HostedContentSession, HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost, createRemoteContentAi, hostedEditorLabels, hostedEditorLabelsJa, hostedErrorMessages, hostedErrorMessagesJa, mountHostedContentEditor };

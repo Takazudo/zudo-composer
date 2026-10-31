@@ -1,12 +1,14 @@
 // The Article CMS host's own content definition, policy and trusted service. Host code, never tool code:
 // the tool contributes only createHostedContentService and its public types.
 import { createHash, randomUUID } from "node:crypto";
-import { canonicalSerialize, createHostedContentService } from "zudo-composer/hosted-content";
+import { HostedContentError, canonicalSerialize, createHostedContentService } from "zudo-composer/hosted-content";
 import { projectArticles } from "./render.mjs";
 
 const timestamp = "2026-10-30T00:00:00.000Z";
 export const articleProvider = "articles";
 export const articleActor = { id: "article-editor" };
+// The host's own accounts. `propose` may read and prepare AI proposals but never write Content.
+export const articleAccounts = { "article-editor": { role: "write" }, "second-editor": { role: "write" }, "article-reviewer": { role: "propose" } };
 export const articleIndex = { providerId: articleProvider, modelId: "front-page", recordId: "front" };
 export const articleRef = recordId => ({ providerId: articleProvider, modelId: "article", recordId });
 export const titleLimit = 80;
@@ -49,11 +51,19 @@ export function createArticlePolicy() {
   };
 }
 
-export function createArticleService(storage) {
-  return createHostedContentService({ siteId: "article-cms", definition: createArticleSeed().state.definition, storage, policy: createArticlePolicy(),
-    source: "article-admin",
-    authorize(actor) { if (actor.id !== articleActor.id) throw new Error("Unauthorized article editor"); },
+export const articleSiteId = "article-cms";
+
+/**
+ * The site's service for one trusted source label. A `propose` account gets the same reads and no writes,
+ * so a fresh Apply or Undo is refused by the Content owner itself, not only by the AI service.
+ */
+export function createArticleService(storage, { source = "article-admin", role = "write" } = {}) {
+  const service = createHostedContentService({ siteId: articleSiteId, definition: createArticleSeed().state.definition, storage, policy: createArticlePolicy(),
+    source,
+    authorize(actor) { if (!Object.hasOwn(articleAccounts, actor.id)) throw new Error("Unauthorized article editor"); },
     digest: async value => createHash("sha256").update(value).digest("hex"), createId: randomUUID, now: () => new Date().toISOString(),
     project: providers => projectArticles(providers),
     validateSubmission(snapshot) { if (snapshot.renderData?.kind !== "article-site-v1") throw new Error("Wrong article projection"); } });
+  if (role === "write") return service;
+  return { ...service, async execute() { throw new HostedContentError("forbidden", "This account may read and prepare AI proposals but not change Content."); } };
 }

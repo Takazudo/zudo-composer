@@ -1,6 +1,7 @@
 // The browser half of the native editorial boundary: every method is one
 // request to the dev server, which answers it with the same native adapter the
 // scenario tests run.
+import type { ContentAiStatus, ContentAiWireOperation } from "./ai-operations";
 import { EditorialError, type ContentEditorialBoundary, type EditorialErrorCode, type EditorialFieldDiagnostic } from "./types";
 
 export type EditorialWireOperation =
@@ -40,9 +41,8 @@ export function createRemoteContentEditorial(call: EditorialWireCall): ContentEd
   };
 }
 
-export type ContentAiWireOperation = "content-ai-status" | "content-ai-scope" | "content-ai-prepare" | "content-ai-read" | "content-ai-apply" | "content-ai-undo";
 export interface RemoteContentAi {
-  status(): Promise<{ available: false } | { available: true; provider: string; canApply: boolean }>;
+  status(): Promise<ContentAiStatus>;
   scope(entry: import("../model").ContentEntryRef): Promise<import("./types").EditorialField[]>;
   prepare(request: { entry: import("../model").ContentEntryRef; instruction: string }): Promise<import("./ai").ContentAiPrepareResult>;
   read(request: { proposalId: string }): Promise<import("./ai").ContentAiOperation>;

@@ -13,20 +13,16 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
-import { basename, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdtemp, readFile, readdir, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join, relative } from "node:path";
 import { parseArgs } from "node:util";
 import { chromium, expect } from "@playwright/test";
 import { frame, lastReply, send } from "./browser-helpers.mjs";
 import { freePort, launchLocalHost } from "./launch-local-host.mjs";
 import { LOCAL_DEMOS } from "./local-demo-journeys.mjs";
+import { DRY_LABEL, REAL_LABEL, ciRefusal, createScrubber, repo, selectCliExecutable, writeNumberedResult, writesUnderVerification } from "./real-cli-shared.mjs";
 
-const repo = fileURLToPath(new URL("../..", import.meta.url));
-const FAKES = { "claude-cli": join(repo, "scripts/fixtures/assistant/fake-claude-cli.mjs"), "codex-cli": join(repo, "scripts/fixtures/assistant/fake-codex-cli.mjs") };
-const REAL_LABEL = "normal-login real CLI inference";
-const DRY_LABEL = "fake executable dry run — not real CLI evidence";
 const USAGE = `Usage: node scripts/assistant/verify-real-cli.mjs --provider claude-cli|codex-cli [--executable <name|/abs/path>] [--model <id>] [--demo sample|landing|blog|webshop] [--keep] [--yes]
   --demo                   the real demo for the bounded smoke journey (default sample)
   --yes                    required to start (real CLI calls spend your normal CLI plan/quota)
@@ -48,21 +44,17 @@ const refuse = message => { console.error(`${message}\n${USAGE}`); process.exit(
 if (options.help) { console.log(USAGE); process.exit(0); }
 const provider = /** @type {"claude-cli" | "codex-cli"} */ (options.provider);
 if (provider !== "claude-cli" && provider !== "codex-cli") refuse("--provider must be claude-cli or codex-cli.");
-if (process.env.CI && process.env.CI !== "false") refuse("Refusing to run with CI set: this check uses a person's normal CLI sign-in and is never a CI lane.");
+const inCi = ciRefusal();
+if (inCi) refuse(inCi);
 const demo = LOCAL_DEMOS.find(candidate => candidate.host === options.demo);
 if (!demo) refuse(`--demo must be one of ${LOCAL_DEMOS.map(candidate => candidate.host).join(", ")}.`);
-const requested = options.executable ?? (provider === "claude-cli" ? "claude" : "codex");
-// A path is made absolute (the server accepts only a bare command name or an absolute path).
-const executable = requested.includes("/") ? resolve(requested) : requested;
-const isFake = existsSync(executable) && Object.values(FAKES).includes(await realpath(executable));
-if (isFake && !options["allow-fake-executable"]) refuse("That executable is a test fake; pass --allow-fake-executable for a dry run.");
-if (options["allow-fake-executable"] && !isFake) refuse("--allow-fake-executable accepts only scripts/fixtures/assistant/fake-claude-cli.mjs or fake-codex-cli.mjs.");
-if (isFake && (await realpath(executable)) !== FAKES[provider]) refuse(`The fake executable does not match --provider ${provider}.`);
-const dryRun = isFake;
+const selected = await selectCliExecutable({ provider, requested: options.executable, allowFake: options["allow-fake-executable"] });
+if ("refusal" in selected) refuse(selected.refusal);
+const { executable, dryRun } = /** @type {{ executable: string, dryRun: boolean }} */ (selected);
 const label = dryRun ? DRY_LABEL : REAL_LABEL;
 const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
 const outDir = options["out-dir"] ? join(process.cwd(), options["out-dir"]) : dryRun ? join(repo, "test-results/assistant-real-cli-dry-run") : join(repo, "verification/assistant/real-cli");
-if (dryRun && relative(join(repo, "verification"), outDir).split(/[\\/]/)[0] !== "..") refuse("A dry run never writes under verification/.");
+if (dryRun && writesUnderVerification(outDir)) refuse("A dry run never writes under verification/.");
 
 // Natural phrasing for a real model; the fake policy only understands its own fixed forms.
 const TARGET = "Verified through the Assistant";
@@ -99,7 +91,7 @@ const dir = join(temporary, "host");
 const port = await freePort();
 const data = join(dir, "cms");
 const composition = join(data, "compositions/workspace-v1-native-proof/composition-home.composition.json");
-const scrub = (/** @type {string} */ text) => text.replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "gu"), "").split(temporary).join("<tmp>").split(repo.replace(/\/$/, "")).join("<repo>").split(homedir()).join("~");
+const scrub = createScrubber([temporary, repo]);
 const log = (/** @type {string} */ line) => console.log(`real-cli: ${line}`);
 
 /** @typedef {{ name: string, status: "pass" | "fail" | "blocked", durationMs: number, details: Record<string, unknown>, error?: string }} StepResult */
@@ -431,11 +423,7 @@ const result = {
   ranAt: new Date().toISOString(),
   steps,
 };
-await mkdir(outDir, { recursive: true });
-// Earlier results (failures included) are kept; a rerun at the same version and commit gets a numbered name.
-let file = join(outDir, `${provider}-${version}-${sha.slice(0, 8)}.json`);
-for (let index = 2; existsSync(file); index++) file = join(outDir, `${provider}-${version}-${sha.slice(0, 8)}-${index}.json`);
-await writeFile(file, `${JSON.stringify(result, null, 2)}\n`);
+const file = await writeNumberedResult(outDir, `${provider}-${version}-${sha.slice(0, 8)}`, result);
 if (options.keep) log(`kept disposable host at ${dir}`);
 else await rm(temporary, { recursive: true, force: true });
 log(`${result.outcome} (${label}); result: ${relative(repo, file)}`);

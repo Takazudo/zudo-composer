@@ -88,13 +88,18 @@ export interface ContentAiServiceOptions {
   actor: { id: string } | null;
   /** Trusted backend scope; a proposal recorded under another owner or actor is not found. */
   owner: string;
-  proposer: ContentAiProposer;
+  /**
+   * The inference provider, or null while none is usable. Reads, recovery of
+   * committed operations, Apply of an already prepared proposal and Undo
+   * never call it, so they keep working without one.
+   */
+  proposer: ContentAiProposer | null;
   store: ContentAiProposalStore;
   createId(): string;
   now?(): Date;
   /** How long a prepared proposal may be freshly applied; default 24 hours. */
   ttlMs?: number;
-  /** False when the host permits proposals but never Apply. */
+  /** False when the host permits proposals but no fresh Apply or Undo; committed ones stay recoverable. */
   canApply?: boolean;
 }
 
@@ -145,9 +150,11 @@ export function createContentAiService(options: ContentAiServiceOptions): Conten
     async prepare(request) {
       const instruction = typeof request.instruction === "string" ? request.instruction.trim() : "";
       if (!instruction || instruction.length > MAX_INSTRUCTION) throw new EditorialError("invalid-request", `Describe the change in 1 to ${MAX_INSTRUCTION} characters.`);
+      const proposer = options.proposer;
+      if (!proposer) throw new EditorialError("unavailable", "No AI provider is available on this host. Saved Content, history and committed AI operations stay readable.");
       const fields = await scope(request.entry);
       const pinned = await ai.readEntry({ entry: request.entry, perspective: "working" });
-      const output = await options.proposer.propose({
+      const output = await proposer.propose({
         instruction,
         fields: fields.map((field) => ({ key: field.key, label: field.label, kind: field.kind, value: typeof pinned.values[field.id] === "string" ? pinned.values[field.id] as string : "" })),
         signal: request.signal ?? new AbortController().signal,
@@ -171,7 +178,7 @@ export function createContentAiService(options: ContentAiServiceOptions): Conten
         id, entry: structuredClone(request.entry), expected: pinned.expected, summary: output.summary, values,
         differences: validation.differences, candidate: validation.values,
         candidateDigest: await contentAiCandidateDigest({ entry: request.entry, expected: pinned.expected, candidate: validation.values }),
-        operationKey: `content-ai:${id}`, provider: options.proposer.label,
+        operationKey: `content-ai:${id}`, provider: proposer.label,
         createdAt: createdAt.toISOString(), expiresAt: new Date(createdAt.getTime() + ttl).toISOString(),
       };
       // Durable before it is acknowledged, so its operation can always be recovered.
@@ -202,6 +209,7 @@ export function createContentAiService(options: ContentAiServiceOptions): Conten
       if (!applied?.revisionId) throw new EditorialError("invalid-request", "This proposal has not been applied.");
       const committed = await ai.readOperation({ entry: proposal.entry, operationKey: undoKey(proposal) });
       if (committed) return { receipt: committed, recovered: true };
+      if (options.canApply === false) throw new EditorialError("forbidden", "This host permits AI proposals but not Undo.");
       const revision = await ai.readRevision({ entry: proposal.entry, revisionId: applied.revisionId });
       if (revision.source !== "content-ai" || revision.operation.key !== proposal.operationKey || !revision.parentId) {
         throw new EditorialError("invalid-request", "Only the revision this proposal applied can be undone.");

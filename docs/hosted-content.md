@@ -17,6 +17,7 @@ import { mountHostedContentEditor, hostedEditorLabelsJa } from "zudo-composer/ho
 import "zudo-composer/hosted-content/editor.css";
 import { createHostedPreviewHost } from "zudo-composer/hosted-content/preview";
 import { runHostedContentConformance } from "zudo-composer/hosted-content/testing";
+import { createContentAiProvider } from "zudo-composer/hosted-content/node";
 ```
 
 | Entry | Runs in | Contents |
@@ -26,9 +27,17 @@ import { runHostedContentConformance } from "zudo-composer/hosted-content/testin
 | `zudo-composer/hosted-content/editor.css` | Browser | Explicit stylesheet; the editor never injects CSS itself |
 | `zudo-composer/hosted-content/preview` | Browser, framework-free | `createHostedPreviewController` (parent), `createHostedPreviewHost` (visitor frame), `createHostedPreviewFullscreen`; no Preact, CodeMirror or CSS |
 | `zudo-composer/hosted-content/testing` | Node test runner | `runHostedContentConformance`, `createMemoryHostedConformanceFactory`, `createMemoryHostedStorage`, the conformance seed and policy builders |
+| `zudo-composer/hosted-content/node` | Node only | `createContentAiProvider`: the explicit Content-AI provider (`fake`, `claude-cli`, `codex-cli`) a host runs in its own Node process; see [Content-AI for an independent host](#content-ai-for-an-independent-host) |
+
+The portable entry also carries the Content-AI pieces a host needs:
+`createHostedContentEditorial`, `createContentAiService`,
+`runContentAiOperation`, `contentAiCandidateDigest`, `EditorialError`,
+`createMemoryContentAiProposalStore`, `createFakeContentAiProposer` and their
+types. The editor entry adds the browser client `createRemoteContentAi`.
 
 Every entry ships `.d.mts` declarations. They use DOM types only, with no Node
-ambient types. `zudo-composer/site-build` remains the Node compilation boundary;
+ambient types; the `node` entry runs only in Node but its declarations do not
+require Node types either. `zudo-composer/site-build` remains the Node compilation boundary;
 `zudo-composer/site-project` remains types only. No provider credentials,
 filesystem implementation or full application controller enters the new entries.
 The portable entry compiles the pure Site Project compiler into its projection
@@ -470,6 +479,115 @@ Duplicate/older callbacks cannot regress the baseline or clear newer work.
 The host enforces the exact canonical Git base separately: Git and the database
 do not share a transaction. Recover remote success after a host crash from the
 original operation's exact commit/content evidence; do not blindly resubmit.
+
+## Content-AI for an independent host
+
+Content-AI proposes new text for an Article's `title` and `body` and nothing
+else. A host that installs Composer can offer it from its own admin with the
+public entries above; no private source, deep import or full Content controller
+is involved. Three choices stay separate and independent:
+
+- **Content backend** — where authoritative Content lives. One editing session
+  has one authoritative backend; here it is the site's Hosted Content service.
+- **Perspective** — `working` or `published`. Switching it never moves or
+  publishes data.
+- **AI provider** — who generates proposals (`fake`, `claude-cli`, `codex-cli`).
+  Changing it never resets Content, history or proposals.
+
+### What the host owns
+
+Authentication and actor resolution, the backend and site, the policy, the
+durable proposal store, the real renderer, and publication and delivery. A
+request names only an Entry, an instruction or a proposal id;
+`runContentAiOperation` refuses any other field, so actor, source, paths,
+provider and site never come from a request or a model reply.
+
+```ts
+import { createContentAiService, createHostedContentEditorial, runContentAiOperation } from "zudo-composer/hosted-content";
+import { createContentAiProvider } from "zudo-composer/hosted-content/node";
+
+const provider = await createContentAiProvider({ provider: "claude-cli" }); // chosen at startup, never per request
+const service = createContentAiService({
+  boundary: (provenance) => createHostedContentEditorial({ service: (source) => siteService(storage, source, account), provenance }),
+  actor: { id: account.id },              // from the host's own session
+  owner: `my-cms:site:${siteId}`,         // the host's trusted scope
+  proposer: provider.proposer,            // or null while no provider is usable
+  store: proposalStore,                   // the host's durable create-only store
+  createId: () => crypto.randomUUID(),
+  canApply: account.canWrite,             // false: proposals only, no fresh Apply or Undo
+});
+const answer = await runContentAiOperation({ status, service: async () => service }, body.operation, body.payload);
+```
+
+In the browser, `createRemoteContentAi(call)` from `zudo-composer/hosted-content/editor`
+sends `{ operation, payload }` to that endpoint and turns refusals back into
+`EditorialError`s. The CLI runs only in the host's Node process, never in a
+browser or a Worker.
+
+### Proposal store contract
+
+`ContentAiProposalStore` has two methods. `create(record)` is create-only: an
+existing id is refused, never replaced. `read(id)` returns the record or null.
+A record holds the proposal (its precondition, candidate and digest), its
+`owner` and `actorId`, and no editable Content. Whether it was applied or undone
+is read from the Hosted Content receipts, so a crash between a commit and its
+response loses nothing. A proposal recorded under another owner (site) or actor
+answers exactly like a missing one.
+
+### Rendered candidate and Apply
+
+The host renders the candidate with the renderer it uses for its own pages and
+artifacts, overlaying the proposal's validated candidate on the working Content
+in memory; nothing is saved. Tie the render to the proposal, its candidate
+digest, the route, the renderer and the definition, and pass
+`renderedCandidate` to Apply only when the latest render of exactly that
+candidate completed. A late, failed or superseded render, an Article switch, a
+newer proposal or a page reload never counts as approval.
+
+A fresh Apply and a fresh Undo each check the account's current write
+permission, the expiry and the precondition. A human edit after the proposal
+makes Apply refuse; a human edit after Apply makes Undo refuse instead of
+overwriting it. Recovery is separate: `apply` and `undo` first return an
+operation that already committed, without a render, a permission to write or a
+model call, and `read` reports the proposal with its committed receipts.
+
+### Provider status
+
+`provider.inference()` separates a provider that is configured from one that
+can run now: `ready` (the CLI's own local check passed; no model call has been
+made), `unavailable` with the provider's code (`not-installed`,
+`not-logged-in`, `unsupported-version`, `unsupported-platform`, …) or
+`unknown` when the sign-in could not be determined. Unknown is never reported as
+signed in. Without a usable provider only `prepare` is refused (`unavailable`);
+saved Content, history, proposals and committed operations stay readable, and a
+prepared proposal can still be applied or undone. Messages never include
+credentials or the home directory, and there is no fallback to another provider.
+
+### The Article CMS reference host
+
+`fixtures/hosted-content-consumer/article-cms/` is the independently installed
+reference. It adds an AI panel to the existing admin (instruction, field
+differences, the candidate rendered by `renderArticlesHtml` in its own frame,
+Apply and Undo), keeps proposals in its SQLite file
+(`article_content_ai_proposal`, create-only, scoped by site and account), and
+recovers an Apply or Undo whose response was lost after a reload or restart.
+Start it with an explicit data directory and provider:
+
+```sh
+cd <installed consumer> && node article-cms/server.mjs --data .zudo-local/article-cms --ai fake
+# --ai off|fake|claude-cli|codex-cli [--executable <name|/abs/path>] [--model <id>] [--timeout-ms <n>] [--port <n>]
+```
+
+A normal start never reseeds or resets existing data. `article-cms/ai-http-proof.mjs`
+(loopback HTTP: lost responses with restarts, delays, accounts, sites,
+restricted fields, an unavailable provider) and `article-cms/ai-proof.mjs`
+(Chromium) run in `pnpm hosted:installed` with the offline fake provider. The
+opt-in real-CLI acceptance is `pnpm test:browser:content-ai:real-cli` in the
+Composer repository (described in its `docs/local-operation.md`); it never runs
+in CI.
+
+This is a local Node, SQLite and loopback-HTTP proof. It is not a verified
+remote production backend, and there is no synchronization between backends.
 
 ## Unsupported features
 

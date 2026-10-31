@@ -178,6 +178,7 @@ persistence and production providers remain host-owned.
 | `zudo-composer/hosted-content/editor` and `/editor.css` | Browser editor (Preact peer), English and Japanese label sets |
 | `zudo-composer/hosted-content/preview` | Framework-free iframe controller and receiver |
 | `zudo-composer/hosted-content/testing` | Storage conformance runner for a host's adapter |
+| `zudo-composer/hosted-content/node` | Node-only Content-AI provider selection (`fake`, `claude-cli`, `codex-cli`) for a host's own server |
 
 The service exposes six finite commands, opaque draft revisions, keyed storage
 reads with one conditional commit (mappable to a D1 `batch()`), and

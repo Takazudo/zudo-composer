@@ -2,9 +2,17 @@
 // same provider the Assistant uses, never a substitute. The model can only
 // call `propose_article_fields` or `decline`; its arguments are validated
 // before the Content-AI service validates them again through the backend.
+import { homedir } from "node:os";
 import { z } from "zod";
 import type { ContentAiProposer, ContentAiProposerOutput } from "../../src/content/editorial/ai";
-import type { ModelProvider } from "../assistant/provider";
+import { EditorialError } from "../../src/content/editorial/types";
+import { ProviderError, type ModelProvider, type ProviderTurn } from "../assistant/provider";
+
+/** Provider text shown to an author never carries the local home directory. */
+export function redactLocalPaths(text: string): string {
+  const home = homedir();
+  return home && home !== "/" ? text.split(home).join("~") : text;
+}
 
 const SYSTEM = [
   "You edit one Article in a content management system.",
@@ -22,16 +30,23 @@ export function createModelContentAiProposer(provider: ModelProvider, label: str
     label,
     async propose({ instruction, fields, signal }): Promise<ContentAiProposerOutput> {
       const properties = Object.fromEntries(fields.map((field) => [field.key, { type: "string", description: `New ${field.label} (${field.kind}).` }]));
-      const turn = await provider.turn({
-        system: SYSTEM,
-        signal,
-        onText: () => undefined,
-        tools: [
-          { name: "propose_article_fields", description: "Propose new text for the provided Article fields.", inputSchema: { type: "object", additionalProperties: false, required: ["summary"], properties: { ...properties, summary: { type: "string" } } } },
-          { name: "decline", description: "Decline the instruction.", inputSchema: { type: "object", additionalProperties: false, required: ["reason"], properties: { reason: { type: "string" } } } },
-        ],
-        messages: [{ role: "user", content: [{ type: "text", text: JSON.stringify({ instruction, fields: fields.map(({ key, label: fieldLabel, kind, value }) => ({ key, label: fieldLabel, kind, value })) }) }] }],
-      });
+      let turn: ProviderTurn;
+      try {
+        turn = await provider.turn({
+          system: SYSTEM,
+          signal,
+          onText: () => undefined,
+          tools: [
+            { name: "propose_article_fields", description: "Propose new text for the provided Article fields.", inputSchema: { type: "object", additionalProperties: false, required: ["summary"], properties: { ...properties, summary: { type: "string" } } } },
+            { name: "decline", description: "Decline the instruction.", inputSchema: { type: "object", additionalProperties: false, required: ["reason"], properties: { reason: { type: "string" } } } },
+          ],
+          messages: [{ role: "user", content: [{ type: "text", text: JSON.stringify({ instruction, fields: fields.map(({ key, label: fieldLabel, kind, value }) => ({ key, label: fieldLabel, kind, value })) }) }] }],
+        });
+      } catch (error) {
+        // An unusable model is a refusal to prepare, never a Content fault; the provider's code stays visible.
+        if (error instanceof ProviderError) throw new EditorialError("unavailable", redactLocalPaths(`${label} could not prepare a proposal (${error.code}): ${error.message}`));
+        throw error;
+      }
       if (turn.stopReason === "refusal") return { kind: "refusal", message: "The model declined this change." };
       const call = turn.content.find((block) => block.type === "tool_use");
       if (!call || call.type !== "tool_use") return { kind: "refusal", message: "The model returned no proposal." };
