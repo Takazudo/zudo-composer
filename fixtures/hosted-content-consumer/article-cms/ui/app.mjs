@@ -108,7 +108,7 @@ function workingPreview(frame) {
 }
 
 async function main() {
-  const policy = await request("/api/policy");
+  const [policy, host] = await Promise.all([request("/api/policy"), request("/api/host")]);
   const models = await transport.listModels();
   const article = models.find(item => item.model.id === modelId).model;
   const view = article.document.presentation?.views.find(item => item.id === "list");
@@ -136,7 +136,8 @@ async function main() {
   const perspectiveButton = perspective => h("button", { type: "button", "aria-pressed": String(ui.perspective === perspective), onclick: () => { ui.perspective = perspective; void render(); } },
     perspective === "working" ? "Working" : "Published");
   const nav = h("nav", { class: "article-nav", "aria-label": "Article CMS" });
-  app.replaceChildren(h("header", { class: "article-header" }, h("strong", {}, "Article CMS"), h("span", { class: "article-local" }, "Local only — nothing here is deployed."), nav),
+  app.replaceChildren(h("header", { class: "article-header" }, h("strong", {}, "Article CMS"), h("span", { class: "article-local" }, "Local only — nothing here is deployed."),
+    h("span", { class: "article-backend", "data-backend": host.backend }, `Backend: ${host.label}`), nav),
     h("div", { class: "article-layout" }, h("aside", {}, h("h2", {}, "Articles"), list, moreEntries), main, h("aside", {}, history, publication, h("h2", {}, "Preview"), previewStatus, preview,
       h("h2", {}, "AI candidate"), candidateStatus, candidatePreview)));
 

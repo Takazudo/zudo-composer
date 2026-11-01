@@ -8,17 +8,15 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { build } from "esbuild";
-import { EditorialError, createHostedContentEditorial, runContentAiOperation } from "zudo-composer/hosted-content";
 import { createContentAiProvider } from "zudo-composer/hosted-content/node";
 import { initializeSqliteDatabase, openSqliteHandle } from "../sqlite-storage.mjs";
-import { articleAccounts, articleActor, createArticlePolicy, createArticleSeed, createArticleService } from "./article-data.mjs";
-import { articleCandidateRender, candidateRenderIdentity, createArticleContentAi, openArticleProposalStore } from "./content-ai.mjs";
-import { projectArticles, renderArticlesHtml } from "./render.mjs";
+import { articleErrorResponse, createArticleApi, invalidRequest } from "./api.mjs";
+import { readArticleCandidate, runArticleContentAi } from "./article-core.mjs";
+import { articleAccounts, articleActor, createArticleSeed, createArticleService } from "./article-data.mjs";
+import { candidateRenderIdentity, openArticleProposalStore } from "./content-ai.mjs";
+import { renderArticlesHtml } from "./render.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const conflicts = new Set(["revision-conflict", "baseline-conflict", "definition-conflict", "operation-key-reuse", "publication-busy"]);
-const shell = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Article CMS</title><link rel="stylesheet" href="/app.css"></head><body><div id="app"></div><script type="module" src="/app.js"></script></body></html>`;
 
 /** Bundles the host admin from its public imports only; the bytes are what the browser receives. */
 export async function buildArticleUi() {
@@ -29,8 +27,6 @@ export async function buildArticleUi() {
   return { files, metafile: result.metafile };
 }
 
-const editorialStatus = { "invalid-request": 400, "invalid-value": 400, forbidden: 403, "not-found": 404, "revision-conflict": 409, "operation-key-reuse": 409,
-  "restore-incompatible": 422, "configuration-required": 503, unavailable: 503 };
 const delay = milliseconds => new Promise(done => setTimeout(done, milliseconds));
 
 /**
@@ -104,44 +100,24 @@ export async function startArticleCms({ directory, port = 0, faults = {}, ai = n
     const chunks = []; let length = 0;
     for await (const chunk of request) {
       length += chunk.length;
-      if (length > 1_000_000) throw Object.assign(new Error("Request exceeds size limit"), { code: "invalid-request" });
+      if (length > 1_000_000) throw invalidRequest("Request exceeds size limit");
       chunks.push(chunk);
     }
-    try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { throw Object.assign(new Error("Request body is not JSON"), { code: "invalid-request" }); }
+    try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { throw invalidRequest("Request body is not JSON"); }
   };
-  /** One Content-AI operation for the resolved session. Status and reads never call the model. */
-  async function contentAi(session, operation, payload) {
-    const handle = openSqliteHandle(database);
-    try {
-      const service = createArticleContentAi({ storage: handle.storage, session, provider, store: proposals });
-      // A rendered candidate is acknowledged by its render identity, which this host recomputes for the
-      // proposal, route, renderer and definition it serves now; only then does the service see the digest.
-      if (operation === "content-ai-apply" && payload && typeof payload === "object" && typeof payload.renderedCandidate === "string") {
-        const { proposal } = await service.read({ proposalId: payload.proposalId });
-        const identity = candidateRenderIdentity({ proposal, definition: (await handle.storage.readHead()).state.definition });
-        payload = { ...payload, renderedCandidate: payload.renderedCandidate === identity ? proposal.candidateDigest : "unrendered" };
-      }
-      return await runContentAiOperation({
-        status: async () => ({ configured: true, provider: provider?.label ?? "Off", canApply: session.role === "write",
-          // Off is reported without probing anything: no provider process exists in this host.
-          inference: provider ? await provider.inference() : { state: "unavailable", code: "off", message: "New AI proposals are off on this host (started with --ai off). Saved proposals and committed results stay available." } }),
-        service: async () => service,
-      }, operation, payload);
-    } catch (error) {
-      if (error instanceof EditorialError) return { ok: false, error: { code: error.code, message: error.message, diagnostics: error.diagnostics } };
-      throw error;
-    } finally { handle.close(); }
-  }
-  async function candidate(session, proposalId) {
-    const handle = openSqliteHandle(database);
-    try {
-      const service = createArticleContentAi({ storage: handle.storage, session, provider, store: proposals });
-      const { proposal } = await service.read({ proposalId });
-      const current = await createHostedContentEditorial({ service: source => createArticleService(handle.storage, { source, role: session.role }), provenance: { actor: { id: session.actorId }, source: "article-admin" } })
-        .readEntry({ entry: proposal.entry, perspective: "working" });
-      return await articleCandidateRender({ storage: handle.storage, proposal, current });
-    } finally { handle.close(); }
-  }
+  // Content-AI runs in this Node process; one SQLite handle per operation. Status and reads never call the model.
+  const aiContext = (session, storage) => ({ storage, session, provider, store: proposals, serviceFor: source => createArticleService(storage, { source, role: session.role }),
+    identityOf: async input => candidateRenderIdentity(input) });
+  const withHandle = async work => { const handle = openSqliteHandle(database); try { return await work(handle.storage); } finally { handle.close(); } };
+  const api = createArticleApi({
+    files,
+    host: { backend: "node-sqlite", label: "Node + SQLite", local: true, deployed: false, ai: provider ? provider.label : "Off" },
+    withService: (session, work) => withService(work, session),
+    contentAi: (session, operation, payload) => withHandle(storage => runArticleContentAi({ ...aiContext(session, storage), operation, payload })),
+    candidate: (session, proposalId) => withHandle(storage => readArticleCandidate({ ...aiContext(session, storage), proposalId })),
+    artifact: id => readFile(join(artifacts, id, "index.html"), "utf8").catch(() => null),
+    submitted: id => { advance(id).catch(() => undefined); },
+  });
 
   let hosts = new Set(), halted = false;
   const server = createServer(async (request, response) => {
@@ -158,64 +134,20 @@ export async function startArticleCms({ directory, port = 0, faults = {}, ai = n
       // Authentication is the host's: a bearer token names one of its sessions; the request never names an actor.
       const bearer = /^Bearer ([A-Za-z0-9_-]{16,128})$/.exec(request.headers.authorization ?? "")?.[1];
       if (request.headers.authorization !== undefined && (!bearer || !Object.hasOwn(sessions, bearer))) { send(401, { code: "forbidden", message: "Unknown session" }); return; }
-      const session = bearer ? sessions[bearer] : localEditor, actor = { id: session.actorId };
-      if (path === "/api/ai" || path === "/api/ai/candidate") {
-        if (faults.aiDelayMs) await delay(faults.aiDelayMs);
-        if (request.method === "GET" && path === "/api/ai/candidate") {
-          const result = await candidate(session, url.searchParams.get("id"));
-          send(200, result); return;
-        }
-        if (request.method !== "POST") { send(405, { code: "invalid-request", message: "Use POST" }); return; }
-        const body = await readBody(request);
-        if (!body || typeof body !== "object" || typeof body.operation !== "string" || Object.keys(body).some(key => key !== "operation" && key !== "payload")) throw Object.assign(new Error("Malformed Content-AI request"), { code: "invalid-request" });
-        const result = await contentAi(session, body.operation, body.payload ?? {});
-        if (faults.dropAiResponse === body.operation) {
-          // The operation ran and committed whatever it committed; only its response is lost.
-          faults.dropAiResponse = null; requestLog.push(`POST /api/ai ${body.operation} response dropped`);
-          request.socket.destroy();
-          if (faults.haltAfterDrop) { halted = true; server.closeAllConnections?.(); }
-          return;
-        }
-        send(200, result); return;
+      const session = bearer ? sessions[bearer] : localEditor;
+      if (faults.aiDelayMs && path.startsWith("/api/ai")) await delay(faults.aiDelayMs);
+      const result = await api({ method: request.method, path, searchParams: url.searchParams, session, readJson: () => readBody(request) });
+      if (result.aiOperation && faults.dropAiResponse === result.aiOperation) {
+        // The operation ran and committed whatever it committed; only its response is lost.
+        faults.dropAiResponse = null; requestLog.push(`POST /api/ai ${result.aiOperation} response dropped`);
+        request.socket.destroy();
+        if (faults.haltAfterDrop) { halted = true; server.closeAllConnections?.(); }
+        return;
       }
-      const q = () => { try { return JSON.parse(url.searchParams.get("q") ?? "null"); } catch { throw Object.assign(new Error("Query is not JSON"), { code: "invalid-request" }); } };
-      if (request.method === "GET" && path === "/") { send(200, shell, "text/html; charset=utf-8"); return; }
-      if (request.method === "GET" && files.has(path)) { send(200, files.get(path), path.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8"); return; }
-      if (request.method === "GET" && path.startsWith("/artifacts/")) {
-        const id = path.split("/")[2] ?? "";
-        const html = /^[A-Za-z0-9-]{1,80}$/.test(id) ? await readFile(join(artifacts, id, "index.html"), "utf8").catch(() => null) : null;
-        if (html === null) { send(404, { code: "not-found", message: "No such artifact" }); return; }
-        send(200, html, "text/html; charset=utf-8"); return;
-      }
-      const reads = {
-        "/api/policy": () => createArticlePolicy(),
-        "/api/state": service => service.readState(actor),
-        "/api/receipt": service => service.readReceipt(actor, url.searchParams.get("key")),
-        "/api/publication": service => service.getPublication(actor, url.searchParams.get("id")),
-        "/api/models": service => service.listModels(actor),
-        "/api/entries": service => service.listEntries(actor, q()),
-        "/api/entry": service => service.readEntry(actor, q()),
-        "/api/revisions": service => service.listRevisions(actor, q()),
-        "/api/revision": service => service.readRevision(actor, url.searchParams.get("id")),
-        "/api/compare": service => service.compareRevisions(actor, q()),
-        "/api/publication-status": service => service.readPublicationStatus(actor),
-        // Host-owned: the activated baseline projected for the published preview, with its identity.
-        "/api/published-site": async (_service, storage) => {
-          const head = await storage.readHead();
-          return { baseline: head.state.baseline, integrationFence: head.state.integrationFence, renderData: projectArticles(head.baselineProviders) };
-        },
-      };
-      if (request.method === "GET" && reads[path]) { send(200, await withService(reads[path], session)); return; }
-      if (request.method === "POST" && path === "/api/execute") {
-        const command = await readBody(request);
-        const result = await withService(service => service.execute(actor, command), session);
-        if (result.publication?.status === "submitted") advance(result.publication.id).catch(() => undefined);
-        send(200, result); return;
-      }
-      send(404, { code: "not-found", message: "Not found" });
+      send(result.status, result.body, result.type);
     } catch (error) {
-      const status = error instanceof EditorialError ? editorialStatus[error.code] ?? 500 : conflicts.has(error.code) ? 409 : error.code === "restore-incompatible" ? 422 : error.code === "forbidden" ? 403 : error.code ? 400 : 500;
-      if (!response.headersSent) send(status, { code: error.code ?? "article-host-error", message: error.message, diagnostics: error.diagnostics, restoreDiagnostics: error.restoreDiagnostics });
+      const { status, body } = articleErrorResponse(error);
+      if (!response.headersSent) send(status, body);
     }
   });
   await new Promise((ready, reject) => { server.once("error", reject); server.listen(port, "127.0.0.1", ready); });

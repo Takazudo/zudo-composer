@@ -13,6 +13,7 @@ Access, D1, a Git publisher or a deployment.
 | **Browser demos** | Browser tab memory; a reload starts over | The hosted demo editors and static sites | [hosted demo](./hosted-demo.md) |
 | **Local AI** | The workspace filesystem (`.zudo-local/assistant/<host>/`) | The authoring server with the AI Assistant | [AI editing host](#ai-editing-host) |
 | **Local Hosted Content** | SQLite, served over loopback HTTP, with local artifacts | The public Hosted Content service, editor and renderer | [Hosted Content host](#hosted-content-host), [Article CMS](#article-cms-consumer) |
+| **Local Worker/D1 Hosted Content** | A local D1 database inside the pinned local workerd, persisted in a host-owned directory | The same Article CMS composed as a Worker | [Article CMS on a local Worker and D1](#article-cms-on-a-local-worker-and-d1) |
 | **Production Hosted Content** | The host's own store, for example D1 | Contracts only here: the host owns auth, storage and delivery | [Hosted Content adapters](./hosted-content.md) |
 
 Three choices are independent of each other and of the mode:
@@ -212,6 +213,41 @@ selection or the content changes; Submit stays disabled until the current saved
 content is previewed again. The list and history load further pages on request. `node article-cms/proof.mjs`
 drives the whole journey in Chromium and is part of `pnpm hosted:installed`.
 
+### Article CMS on a local Worker and D1
+
+The same Article CMS also runs as a Worker against a local D1 database, from the
+same installed consumer. It serves the same admin bytes and the same HTTP
+contract (`article-cms/api.mjs`) as the Node host; only the composition root
+differs. The header names the active backend.
+
+```sh
+cd <consumer dir>
+node article-cms/worker-host.mjs --data .zudo-local/article-cms-d1 --ai fake   # port 4181
+node article-cms/worker-host.mjs --data .zudo-local/article-cms-d1 --ai off
+```
+
+- **Local only.** The launcher bundles the admin and the Worker once, starts
+  the consumer's pinned workerd through Miniflare, and keeps the D1 state in
+  `<data>/d1-state`. It needs no Cloudflare login, refuses remote bindings
+  (`remote: true`) and remote flags, and is not in any deploy target registry.
+- **One store per database.** The first start initializes the schema and seeds
+  an absent database; later starts reopen it and never reset or reseed it. Each
+  backend keeps its own directory. Nothing is copied, merged or synchronized
+  between SQLite and D1, and an editing session uses one backend.
+- **AI.** `fake` (deterministic test provider, never model evidence) or `off`.
+  Real Claude/Codex CLIs stay on the Node host; the Worker never runs or
+  tunnels a local CLI.
+- **Session.** An explicitly local fixture session: the trusted
+  `ARTICLE_HOST` binding must say `sessionMode: "local-fixture"`, or the Worker
+  refuses every request. It is not production login and has no anonymous-owner
+  fallback.
+- **Publication.** The artifact HTML and its digest are stored in D1, then
+  activated as the local baseline; a stop after verification resumes on a later
+  request after a restart. Nothing is deployed.
+
+The adapter, its limits and outcome classes, and the proofs are described in
+[`fixtures/hosted-content-consumer/D1.md`](../fixtures/hosted-content-consumer/D1.md).
+
 ## Kinds of evidence
 
 | Kind | Talks to | Proves | Does not prove |
@@ -220,6 +256,7 @@ drives the whole journey in Chromium and is part of `pnpm hosted:installed`.
 | **Real binary harness** | The installed CLI, with a loopback **scripted** model endpoint | The CLI's protocol, the restricted profile (refused tools and writes), error mapping and Stop on that version | Model behavior or inference quality |
 | **Real CLI usage** | Your installed CLI with your normal sign-in, and its model | The whole journey with a real model, per CLI | Production delivery or another CLI/version/OS |
 | **Physical device** | A real phone or tablet browser on the local network | Touch, viewport and on-device behavior of the same journeys | Anything the other rows already cover |
+| **Local Worker/D1** | The pinned local workerd and its D1 implementation | The D1 adapter's atomicity, refusals, uncertain outcomes and restart behavior; the Worker host's HTTP contract | Production D1, the network between a Worker and D1, replicas or Cloudflare-side failures |
 | **Production check** | Hosted services | Not part of local operation; deferred | — |
 
 Each row proves something different: a fake or scripted run never stands in

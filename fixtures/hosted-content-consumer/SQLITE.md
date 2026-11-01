@@ -27,8 +27,9 @@ The report identifies three different proofs:
   before commit; replace a process after a lost creation acknowledgement;
   and complete two integrations while preserving newer created-entry edits.
 
-These are SQLite and fake results. Pinsel must run the same public runner
-against its actual D1 adapter; this fixture makes no D1 verification claim.
+These are SQLite and fake results. The separate local D1 proofs are described
+in [D1.md](./D1.md); a downstream host such as Pinsel must still run the same
+public runner against its own D1 adapter.
 
 ## SQLite transaction boundary
 

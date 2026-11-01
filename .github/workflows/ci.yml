@@ -168,7 +168,7 @@ jobs:
 
   hosted-content-consumer:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
@@ -215,6 +215,9 @@ jobs:
             .artifacts/hosted-consumer/work/*/browser-transport-evidence.json
             .artifacts/hosted-consumer/work/*/browser-bundle-evidence.json
             .artifacts/hosted-consumer/work/*/browser-checkpoint-metafile.json
+            .artifacts/hosted-consumer/work/*-d1/d1-proof-report.json
+            .artifacts/hosted-consumer/work/article-journey/journey-report.json
+            .artifacts/hosted-consumer/work/article-journey-artifacts/
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
