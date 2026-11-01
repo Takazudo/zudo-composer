@@ -1,0 +1,284 @@
+{
+  "label": "Browser/HTTP journeys (fake provider; not model evidence)",
+  "runtime": {
+    "miniflare": "5.20261006.1-alpha",
+    "workerd": "1.20261006.1",
+    "compatibilityDate": "2026-10-01"
+  },
+  "node": "v24.22.1",
+  "backends": {
+    "node-sqlite": {
+      "checks": 27,
+      "revisions": 10,
+      "persistence": "/tmp/claude-0/verify-bac350a/work/article-journey/node-sqlite/articles.sqlite",
+      "restarts": [
+        {
+          "reason": "after lost Apply acknowledgement",
+          "ai": "fake",
+          "persistence": "/tmp/claude-0/verify-bac350a/work/article-journey/node-sqlite/articles.sqlite"
+        },
+        {
+          "reason": "after lost Undo acknowledgement",
+          "ai": "fake",
+          "persistence": "/tmp/claude-0/verify-bac350a/work/article-journey/node-sqlite/articles.sqlite"
+        },
+        {
+          "reason": "inference off",
+          "ai": "off",
+          "persistence": "/tmp/claude-0/verify-bac350a/work/article-journey/node-sqlite/articles.sqlite"
+        },
+        {
+          "reason": "fake inference re-enabled",
+          "ai": "fake",
+          "persistence": "/tmp/claude-0/verify-bac350a/work/article-journey/node-sqlite/articles.sqlite"
+        },
+        {
+          "reason": "write permission withdrawn",
+          "ai": "fake",
+          "persistence": "/tmp/claude-0/verify-bac350a/work/article-journey/node-sqlite/articles.sqlite"
+        }
+      ]
+    },
+    "worker-d1": {
+      "checks": 27,
+      "revisions": 10,
+      "persistence": "/tmp/claude-0/verify-bac350a/work/article-journey/worker-d1/d1-state",
+      "restarts": [
+        {
+          "reason": "after lost Apply acknowledgement",
+          "ai": "fake",
+          "persistence": "/tmp/claude-0/verify-bac350a/work/article-journey/worker-d1/d1-state"
+        },
+        {
+          "reason": "after lost Undo acknowledgement",
+          "ai": "fake",
+          "persistence": "/tmp/claude-0/verify-bac350a/work/article-journey/worker-d1/d1-state"
+        },
+        {
+          "reason": "inference off",
+          "ai": "off",
+          "persistence": "/tmp/claude-0/verify-bac350a/work/article-journey/worker-d1/d1-state"
+        },
+        {
+          "reason": "fake inference re-enabled",
+          "ai": "fake",
+          "persistence": "/tmp/claude-0/verify-bac350a/work/article-journey/worker-d1/d1-state"
+        },
+        {
+          "reason": "write permission withdrawn",
+          "ai": "fake",
+          "persistence": "/tmp/claude-0/verify-bac350a/work/article-journey/worker-d1/d1-state"
+        }
+      ]
+    }
+  },
+  "equivalent": {
+    "checks": [
+      "1–2. published A, working B, artifact recorded and nothing deployed",
+      "the local artifact renders A",
+      "the admin header names the active backend and local-only status",
+      "a delayed candidate render does not authorize Apply",
+      "3. one proposal was prepared (one fake-provider call)",
+      "4. the candidate C renders through the Article renderer",
+      "4. working B, published A and history are unchanged while reviewing",
+      "a failed candidate render does not authorize Apply",
+      "a human edit after Prepare makes Apply stale",
+      "6. a lost Apply acknowledgement stays pending, not applied or failed",
+      "7–8. after restart and reload the original Apply is recovered once",
+      "8. recovery made no model call",
+      "5. applied C is one edit and published stays A",
+      "9–10. Undo is recovered once and restores B2 as a new revision",
+      "11. with inference off the saved operation and history remain and Prepare is disabled",
+      "12. re-enabling fake inference keeps every revision",
+      "a superseded candidate render does not authorize Apply",
+      "an independent browser context reads the applied value",
+      "a human edit after Apply (another context) prevents destructive Undo",
+      "an unknown outcome remains pending (Check again), not fabricated success or failure",
+      "after permission withdrawal the account reads and recovers its committed Apply",
+      "after permission withdrawal fresh Apply, Undo and saves are refused and write nothing",
+      "an unknown session is refused",
+      "another actor cannot read this account's proposal",
+      "a session for another site is refused",
+      "a second publication activates its reviewed snapshot and keeps the newer draft",
+      "no page errors"
+    ],
+    "observations": {
+      "11": {
+        "inference": "off",
+        "history": [
+          {
+            "kind": "restore-revision",
+            "source": "content-ai",
+            "title": "Article B2",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "set-fields",
+            "source": "content-ai",
+            "title": "Article B2 — tighter",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "set-fields",
+            "source": "article-admin",
+            "title": "Article B2",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "set-fields",
+            "source": "article-admin",
+            "title": "Article B",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "set-fields",
+            "source": "article-admin",
+            "title": "Article A",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "initial",
+            "source": "article-admin",
+            "title": "Welcome to the journal",
+            "actor": null
+          }
+        ]
+      },
+      "1-2": {
+        "working": "Article B",
+        "published": "Article A",
+        "deployed": false,
+        "history": [
+          {
+            "kind": "set-fields",
+            "source": "article-admin",
+            "title": "Article B",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "set-fields",
+            "source": "article-admin",
+            "title": "Article A",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "initial",
+            "source": "article-admin",
+            "title": "Welcome to the journal",
+            "actor": null
+          }
+        ]
+      },
+      "3-4": {
+        "candidate": "Article B — tighter",
+        "working": "Article B",
+        "published": "Article A",
+        "historyUnchanged": true
+      },
+      "5-8": {
+        "working": "Article B2 — tighter",
+        "published": "Article A",
+        "history": [
+          {
+            "kind": "set-fields",
+            "source": "content-ai",
+            "title": "Article B2 — tighter",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "set-fields",
+            "source": "article-admin",
+            "title": "Article B2",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "set-fields",
+            "source": "article-admin",
+            "title": "Article B",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "set-fields",
+            "source": "article-admin",
+            "title": "Article A",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "initial",
+            "source": "article-admin",
+            "title": "Welcome to the journal",
+            "actor": null
+          }
+        ]
+      },
+      "9-10": {
+        "working": "Article B2",
+        "history": [
+          {
+            "kind": "restore-revision",
+            "source": "content-ai",
+            "title": "Article B2",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "set-fields",
+            "source": "content-ai",
+            "title": "Article B2 — tighter",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "set-fields",
+            "source": "article-admin",
+            "title": "Article B2",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "set-fields",
+            "source": "article-admin",
+            "title": "Article B",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "set-fields",
+            "source": "article-admin",
+            "title": "Article A",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "initial",
+            "source": "article-admin",
+            "title": "Welcome to the journal",
+            "actor": null
+          }
+        ]
+      },
+      "contexts": {
+        "history": [
+          {
+            "kind": "set-fields",
+            "source": "article-admin",
+            "title": "Human title from the second context",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "set-fields",
+            "source": "content-ai",
+            "title": "Article B2 — again",
+            "actor": "article-editor"
+          },
+          {
+            "kind": "restore-revision",
+            "source": "content-ai",
+            "title": "Article B2",
+            "actor": "article-editor"
+          }
+        ]
+      },
+      "publication-2": {
+        "published": "Human title from the second context — before narrowing",
+        "working": "Draft after the second capture",
+        "deployed": false
+      }
+    }
+  }
+}

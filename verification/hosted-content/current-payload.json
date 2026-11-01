@@ -1,6 +1,6 @@
 {
-  "packageOutputSha": "46feb6f47da4477b05730d3a87cef7e59dfc6c3a",
-  "payloadSha256": "ec6bbf7b0a5f2585f567eddde384985f174cfa5e9117ed2961e98c5fcbbfed7e",
+  "packageOutputSha": "bac350afa149a206f7077af9bda357988161c5ca",
+  "payloadSha256": "94045b276a5576cfad62d1d409a7521b89a33573f87ee40537c3c1356884f378",
   "rawPackageJsonSha256": "bedc05aaf44d88f1197b0b3dca7ebb2dc573151891a29a23b5ee900c5bbe1c3a",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
@@ -36,9 +36,9 @@
     },
     {
       "path": "docs/hosted-content.md",
-      "bytes": 47341,
+      "bytes": 47813,
       "mode": 420,
-      "sha256": "3a8bda653334fe29abea33481d108ccb17ee397d041d47823c87012eefa7ff4e"
+      "sha256": "6fbf9dfd69bd4048c8bf7f98537a19d1be0938c5b8d075901efcf119d90c13af"
     },
     {
       "path": "docs/native-editing.md",
@@ -882,9 +882,9 @@
     },
     {
       "path": "server/hosted-content/index.d.mts",
-      "bytes": 62860,
+      "bytes": 63102,
       "mode": 420,
-      "sha256": "3ebf166cfdd8ee8b59ef5f85e460029595498f69e592f7ac560be5463d89b2f7"
+      "sha256": "7a38909bcb016036a02c2565da2bb0fa99aec9f537f0c13444411c8954abae89"
     },
     {
       "path": "server/hosted-content/index.mjs",
@@ -918,15 +918,15 @@
     },
     {
       "path": "server/hosted-content/testing.d.mts",
-      "bytes": 19837,
+      "bytes": 20079,
       "mode": 420,
-      "sha256": "42b4fdabd8715269d59e8e143be723874f8100e4ffca469a0036c2b0cd3e09fd"
+      "sha256": "2124fd9457b1adab7fbab0752d27a0b35dee996ef557a88c57af701e2bfac63a"
     },
     {
       "path": "server/hosted-content/testing.mjs",
-      "bytes": 46547,
+      "bytes": 50957,
       "mode": 420,
-      "sha256": "dc1ccf517dd71cabec238f20f89efd030e8578b97986db8b2b5601ab255a4c06"
+      "sha256": "01bdad0a7bf0b4a277ce757a30fb6bfe8c36b5ffc400f1be5d0be3e4ff958216"
     },
     {
       "path": "server/module-evaluator.d.mts",
@@ -3630,15 +3630,15 @@
     },
     {
       "path": "src/hosted-content/testing.ts",
-      "bytes": 49667,
+      "bytes": 54532,
       "mode": 420,
-      "sha256": "23cc847f79c8cb19f15be857db490b7acd0fa699e85349ede3ba78bf6327800d"
+      "sha256": "f29488903bce6257cedc2dd188fd93174a75ef4cb80d8211be4c760c5f0f0e7e"
     },
     {
       "path": "src/hosted-content/types.ts",
-      "bytes": 16125,
+      "bytes": 16363,
       "mode": 420,
-      "sha256": "1d7e6a51cec60d517821af4e9f566fab42ad06d99af6d90cd677d18441916275"
+      "sha256": "d965e7f1888ef7f62f8ca0f370e891a3334b6412ad85f65ce8e99d353de684d8"
     },
     {
       "path": "src/hosted-content/validation.ts",

@@ -1,0 +1,441 @@
+{
+  "installedToolSha": "bac350afa149a206f7077af9bda357988161c5ca",
+  "node": "v24.22.1",
+  "packageManager": "pnpm@11.5.2",
+  "contractSha": "c0b452da075b66757c60bd0d721a47062d4354d0",
+  "contractProtocol": 2,
+  "peerPreact": "10.29.8",
+  "commands": [
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "/home/user/zudo-composer/scripts/install-hosted-consumer.mjs",
+        "bac350afa149a206f7077af9bda357988161c5ca",
+        "/tmp/claude-0/verify-bac350a"
+      ],
+      "cwd": "/home/user/zudo-composer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.content-ai.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "content-ai-entries.mjs"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/install-browser-bundle"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/install-browser-transport.sqlite",
+        "/tmp/claude-0/verify-bac350a/work/install-browser-transport"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/install-render.sqlite"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/install-publication-render"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "article-cms/ai-http-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/install-article-ai-http"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "d1-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/install-d1"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "article-cms/worker-host-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/install-worker-host"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a/renderer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.content-ai.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "content-ai-entries.mjs"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/frozen-browser-bundle"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/frozen-browser-transport.sqlite",
+        "/tmp/claude-0/verify-bac350a/work/frozen-browser-transport"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/frozen-render.sqlite"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/frozen-publication-render"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "article-cms/ai-http-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/frozen-article-ai-http"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "d1-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/frozen-d1"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "article-cms/worker-host-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/frozen-worker-host"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "playwright",
+        "install",
+        "--with-deps",
+        "chromium"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "browser-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/browser.sqlite"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "browser-broad-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/browser-broad.sqlite",
+        "/tmp/claude-0/verify-bac350a/work/browser-broad"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "article-cms/proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/article-cms"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "article-cms/ai-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/article-cms-ai",
+        "/tmp/claude-0/verify-bac350a/work/article-cms-ai-artifacts"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "article-cms/ai-launcher-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/article-cms-ai-launcher",
+        "/tmp/claude-0/verify-bac350a/work/article-cms-ai-artifacts"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node24/bin/node",
+      "args": [
+        "article-cms/journey-proof.mjs",
+        "/tmp/claude-0/verify-bac350a/work/article-journey",
+        "/tmp/claude-0/verify-bac350a/work/article-journey-artifacts"
+      ],
+      "cwd": "/tmp/claude-0/verify-bac350a",
+      "outcome": "passed"
+    }
+  ],
+  "payloadSha256": "637a8152dabff0981b003cab5ab4b81807cb82dd71ea3785269efd5672a6297b",
+  "lockDigests": {
+    "package.json": "b23e649019b47f104d3b0cd8112919204075bdcf5118e9989b1ed8b68315f7c3",
+    "pnpm-lock.yaml": "b804c2b4f6895f0083ccc98b10cadc60e00c44c5b7ce77e0809a13d0ac776e6e",
+    "renderer/package.json": "26ff6ab0c5a8f5b3101657c91e0029aff1b1e11722937d093b036ce4472d3f4c",
+    "renderer/pnpm-lock.yaml": "d9ccf3324be9931ed991d11e2a4c71ba9eb52431752a582ae5981c431dd1a284"
+  },
+  "independentInstall": "passed",
+  "frozenReinstall": "passed",
+  "worker": "passed",
+  "browserBundle": "passed",
+  "nodeBoundary": "passed",
+  "sqlite": "passed",
+  "httpTransport": "passed",
+  "staticRenderer": "passed",
+  "contentAiEntries": "passed (types and runtime: hosted-content, /editor, /editor.css, /preview, /testing, /node; /browser not exported)",
+  "articleContentAiHttp": "passed (offline fake provider over loopback HTTP and SQLite)",
+  "browser": "passed",
+  "articleContentAiBrowser": "passed (offline fake provider; not model evidence)",
+  "articleContentAiLauncher": "passed (server.mjs subprocesses: --ai fake, off, fake on one data directory; not model evidence)",
+  "evidenceLanes": {
+    "memoryServiceConformance": "passed (worker-proof.mjs: shared runner on the in-memory fake inside workerd; no durability or D1 claim)",
+    "nodeSqliteDurability": "passed (durable-proof.mjs: shared runner including conditional-commit-version-guard, process crash/reopen and races, missing-head and row-count guard on SQLite files)",
+    "localWorkerD1Binding": "passed (d1-proof.mjs: shared runner 16 scenarios with workerd restarts, 16 in-Worker, D1-specific initialize-and-save, conditional-refusals, missing-head-and-row-count-guard, sql-failure-after-head, lost-acknowledgement, uncertain-timeout, limit-refusal, runtime-stop-during-batch, runtime-restart; initialization empty, populated-reopen-and-restart, older-marker-only, older-marker-with-data, unrelated-user-tables, malformed-marker, current-marker-incompatible-constraints, current-structure-without-head, host-table-required, host-table-preserved, concurrent-first-start; article-cms/worker-host-proof.mjs)",
+    "localRuntime": {
+      "miniflare": "5.20261006.1-alpha",
+      "workerd": "1.20261006.1",
+      "compatibilityDate": "2026-10-01"
+    },
+    "browserHttpJourneys": "passed (article-cms/journey-proof.mjs: the same Article scenario on Node/SQLite and Worker/local D1; fake provider, not model evidence)",
+    "remoteProductionVerification": "NOT performed: no Cloudflare account, remote binding, production D1 or deployment was used"
+  }
+}
