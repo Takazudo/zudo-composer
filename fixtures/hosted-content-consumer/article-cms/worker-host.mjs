@@ -86,8 +86,16 @@ export async function startWorkerArticleCms({ directory, port = 0, ai = "fake", 
     ARTICLE_HOST: { type: "json", value: config },
     ARTICLE_PROOF_FAULTS: { type: "json", value: { stopAfterVerified: Boolean(faults.stopAfterVerified) } },
   } });
-  // Explicit initialization: creates the schema and seeds only an absent database; a restart never resets it.
-  const initialized = await initializeArticleD1(await runtime.database(), createArticleSeed());
+  // Explicit initialization: classifies the database read-only first, creates and seeds only an empty one, reopens a
+  // current store unchanged and refuses anything else unchanged; a restart never resets it.
+  let initialized;
+  try { initialized = await initializeArticleD1(await runtime.database(), createArticleSeed()); }
+  catch (error) {
+    halted = true;
+    await new Promise(ready => { server.close(() => ready()); server.closeAllConnections?.(); });
+    const stopping = runtime; runtime = null; await stopping.dispose();
+    throw error;
+  }
   const url = `http://127.0.0.1:${actual}`;
   const status = async () => { const answer = await fetch(`${url}/api/publication-status`); return answer.json(); };
   // Any request resumes a persisted, unfinished publication; this first read does so after a restart.

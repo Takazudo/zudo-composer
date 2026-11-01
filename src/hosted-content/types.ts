@@ -99,8 +99,10 @@ export interface HostedStorage {
   /** One Entry's revisions, newest first, below `beforeSequence` when given; never more than `limit`. */
   listRevisions(entry: ContentEntryRef, page: { beforeSequence?: number; limit: number }): Promise<HostedRevision[]>;
   /**
-   * Write everything or nothing. Resolve false, writing nothing, when the stored head version differs from
-   * `expectedVersion` or the receipt (actorId, operationKey), snapshot id, revision id or revision (entry, sequence) already exists. Throw only when the
+   * Write everything or nothing. Resolve false, writing nothing, when the stored head is missing or its version differs from
+   * `expectedVersion`, when `head.version` equals `expectedVersion`, or when the receipt (actorId, operationKey), snapshot id,
+   * revision id or revision (entry, sequence) already exists. The version check must be decided inside the same atomic write;
+   * a stored version that merely equals `head.version` afterwards is not proof the write applied. Throw only when the
    * outcome is unknown or storage failed; a throw after a durable write is recovered through the receipt.
    */
   commit(change: HostedCommit): Promise<boolean>;

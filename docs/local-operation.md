@@ -230,8 +230,11 @@ node article-cms/worker-host.mjs --data .zudo-local/article-cms-d1 --ai off
   the consumer's pinned workerd through Miniflare, and keeps the D1 state in
   `<data>/d1-state`. It needs no Cloudflare login, refuses remote bindings
   (`remote: true`) and remote flags, and is not in any deploy target registry.
-- **One store per database.** The first start initializes the schema and seeds
-  an absent database; later starts reopen it and never reset or reseed it. Each
+- **One store per database.** The first start creates and seeds an empty
+  database in one batch; later starts reopen it without writing and never reset
+  or reseed it. A database that is neither empty nor a current Article store
+  (unknown tables, an older or malformed marker, altered tables, a missing head)
+  is refused at startup and left unchanged; there is no migration. Each
   backend keeps its own directory. Nothing is copied, merged or synchronized
   between SQLite and D1, and an editing session uses one backend.
 - **AI.** `fake` (deterministic test provider, never model evidence) or `off`.

@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startD1Runtime } from "../d1-runtime.mjs";
+import { snapshotD1Database } from "../d1-storage.mjs";
 import { articleRef } from "./article-data.mjs";
 import { buildArticleWorker, startWorkerArticleCms } from "./worker-host.mjs";
 
@@ -51,6 +52,22 @@ export async function runWorkerHostProof({ directory } = {}) {
   let remoteOutput = ""; remoteFlag.stderr.on("data", chunk => { remoteOutput += chunk; });
   const [remoteCode] = await once(remoteFlag, "exit");
   check("a remote execution flag is refused by the launcher", remoteCode !== 0 && /Remote execution flag --remote is refused/.test(remoteOutput));
+
+  // A data directory whose local D1 holds an unrelated database: the host refuses to start and changes nothing.
+  const foreign = join(root, "foreign-data");
+  const prepareForeign = await startD1Runtime({ persist: join(foreign, "d1-state"), name: "article-cms-local" });
+  let foreignBefore;
+  try {
+    const db = await prepareForeign.database();
+    await db.batch([db.prepare("CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL)"), db.prepare("INSERT INTO notes (body) VALUES ('not an Article store')")]);
+    foreignBefore = await snapshotD1Database(db);
+  } finally { await prepareForeign.dispose(); }
+  const foreignStart = await startWorkerArticleCms({ directory: foreign }).then(started => started.close().then(() => "started"), error => error);
+  const inspectForeign = await startD1Runtime({ persist: join(foreign, "d1-state"), name: "article-cms-local" });
+  try {
+    check("a data directory holding an unrelated D1 database is refused at startup and left exactly as it was",
+      foreignStart?.code === "storage-incompatible" && JSON.stringify(await snapshotD1Database(await inspectForeign.database())) === JSON.stringify(foreignBefore));
+  } finally { await inspectForeign.dispose(); }
 
   // Launcher restarts on one directory: the first start seeds, later starts reopen; Host and Origin are checked.
   const data = join(root, "worker-data");

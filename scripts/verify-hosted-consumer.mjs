@@ -121,8 +121,8 @@ await writeFile(join(consumer, "verification.json"), JSON.stringify({ installedT
   articleContentAiLauncher: noBrowser ? "not run (--no-browser)" : "passed (server.mjs subprocesses: --ai fake, off, fake on one data directory; not model evidence)",
   evidenceLanes: {
     memoryServiceConformance: "passed (worker-proof.mjs: shared runner on the in-memory fake inside workerd; no durability or D1 claim)",
-    nodeSqliteDurability: "passed (durable-proof.mjs: shared runner, process crash/reopen and races on SQLite files)",
-    localWorkerD1Binding: `passed (d1-proof.mjs: shared runner ${d1Report.sharedConformance.scenarios.length} scenarios with workerd restarts, ${d1Report.inWorkerConformance.scenarios.length} in-Worker, D1-specific ${d1Report.d1Specific.results.map((/** @type {{case: string}} */ item) => item.case).join(", ")}; article-cms/worker-host-proof.mjs)`,
+    nodeSqliteDurability: "passed (durable-proof.mjs: shared runner including conditional-commit-version-guard, process crash/reopen and races, missing-head and row-count guard on SQLite files)",
+    localWorkerD1Binding: `passed (d1-proof.mjs: shared runner ${d1Report.sharedConformance.scenarios.length} scenarios with workerd restarts, ${d1Report.inWorkerConformance.scenarios.length} in-Worker, D1-specific ${d1Report.d1Specific.results.map((/** @type {{case: string}} */ item) => item.case).join(", ")}; initialization ${d1Report.initialization.cases.map((/** @type {{case: string}} */ item) => item.case).join(", ")}; article-cms/worker-host-proof.mjs)`,
     localRuntime: d1Report.runtime,
     browserHttpJourneys: noBrowser ? "not run (--no-browser)" : "passed (article-cms/journey-proof.mjs: the same Article scenario on Node/SQLite and Worker/local D1; fake provider, not model evidence)",
     remoteProductionVerification: "NOT performed: no Cloudflare account, remote binding, production D1 or deployment was used",

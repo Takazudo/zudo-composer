@@ -615,6 +615,121 @@ async function runHostedContentConformance(factory) {
 		equal((await b.storage.readHead()).version, "atomic-next", "a successful commit stores the new version");
 		equal((await b.storage.readHead()).state, changed.state, "the complete head is replaced atomically");
 	});
+	await scenario("conditional-commit-version-guard", async (_backend, a, b, one, two) => {
+		const saveRequest = edit(await one.readState(actor), "guard-save", "saved");
+		const saved = await one.execute(actor, saveRequest);
+		const captured = await one.execute(actor, {
+			kind: "capture-snapshot",
+			operationKey: "guard-capture",
+			expected: identities(saved.state)
+		});
+		const publication = (await one.execute(actor, {
+			kind: "begin-publication",
+			operationKey: "guard-publication",
+			expected: identities(captured.state),
+			snapshotId: captured.snapshot.id
+		})).publication;
+		const head = await a.storage.readHead();
+		const [latest] = await a.storage.listRevisions(lesson, { limit: 1 });
+		const receipt = await a.storage.readReceipt(actor.id, "guard-save");
+		assert(publication && latest && receipt && head.activePublicationId === publication.id, "guard fixture has an active publication, a receipt and a revision");
+		const observe = async () => ({
+			head: await b.storage.readHead(),
+			database: await b.dump(),
+			publication: await b.storage.readPublication(publication.id)
+		});
+		const before = await observe();
+		const proposed = (version) => {
+			const next = clone(head);
+			next.version = version;
+			next.state.draftRevision = `guard-${version}`;
+			next.activePublicationId = null;
+			next.state.providers[0].entries[0].values.title = "must-not-persist";
+			return next;
+		};
+		const fresh = {
+			receipt: {
+				...clone(receipt),
+				operationKey: "guard-fresh-receipt",
+				fingerprint: "guard"
+			},
+			revisions: [{
+				...clone(latest),
+				id: "guard-fresh-revision",
+				parentId: latest.id,
+				sequence: latest.sequence + 1
+			}],
+			snapshot: {
+				...clone(captured.snapshot),
+				id: "guard-fresh-snapshot"
+			},
+			publication: {
+				...clone(publication),
+				status: "conflict",
+				statusVersion: publication.statusVersion + 100,
+				message: "must-not-persist"
+			}
+		};
+		const writes = {
+			"head only": {},
+			"receipt and revision": {
+				receipt: fresh.receipt,
+				revisions: fresh.revisions
+			},
+			"snapshot and publication upsert": {
+				snapshot: fresh.snapshot,
+				publication: fresh.publication
+			},
+			"receipt-free publication change": { publication: fresh.publication },
+			"every record": fresh
+		};
+		const versions = {
+			"stale expected version, distinct proposed version": {
+				expectedVersion: `${head.version}-stale`,
+				version: "guard-distinct"
+			},
+			"stale expected version, proposed version equals the stored version": {
+				expectedVersion: `${head.version}-stale`,
+				version: head.version
+			},
+			"proposed version equals the expected version": {
+				expectedVersion: head.version,
+				version: head.version
+			}
+		};
+		const outcome = (work) => work.then((result) => result, (error) => `threw ${error instanceof Error ? error.message : String(error)}`);
+		for (const [versionCase, { expectedVersion, version }] of Object.entries(versions)) for (const [writeCase, write] of Object.entries(writes)) {
+			equal(await outcome(a.storage.commit({
+				...clone(write),
+				expectedVersion,
+				head: proposed(version)
+			})), false, `${versionCase} with ${writeCase} is refused`);
+			equal(await observe(), before, `${versionCase} with ${writeCase} writes nothing: head, receipts, snapshots, revisions and the publication row are unchanged`);
+		}
+		const gate = a.holdNextCommit();
+		const held = outcome(a.storage.commit({
+			...clone(fresh),
+			expectedVersion: head.version,
+			head: proposed("guard-race")
+		}));
+		await gate.entered;
+		const winner = proposed("guard-race");
+		winner.state.providers[0].entries[0].values.title = "guard-winner";
+		assert(await b.storage.commit({
+			expectedVersion: head.version,
+			head: winner
+		}), "the competing handle commits first");
+		const afterWinner = await observe();
+		gate.release();
+		equal(await held, false, "the delayed original carrying the version the winner stored is refused");
+		equal(await observe(), afterWinner, "the delayed original writes none of its receipt, snapshot, revision or publication");
+		equal(await two.execute(actor, clone(saveRequest)), saved, "an exact retry of a committed command returns its original receipt");
+		equal(await observe(), afterWinner, "the exact retry writes nothing");
+		assert(await a.storage.commit({
+			expectedVersion: "guard-race",
+			head: proposed("guard-final")
+		}), "the current expected version still commits");
+	});
 	await scenario("commit-retry-after-bookkeeping", async (_backend, a, _b, one, two) => {
 		const initial = await one.readState(actor);
 		const gate = a.holdNextCommit();

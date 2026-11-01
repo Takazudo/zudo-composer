@@ -5,15 +5,13 @@ import { D1_LIMITS, HostedD1Error, initializeD1Database } from "../d1-storage.mj
 import { articleActor } from "./article-core.mjs";
 import { renderArticlesHtml } from "./render.mjs";
 
-const ARTIFACT_TABLE = `CREATE TABLE IF NOT EXISTS article_artifact (
-  publication_id TEXT PRIMARY KEY, snapshot_id TEXT NOT NULL, snapshot_digest TEXT NOT NULL, html_digest TEXT NOT NULL, html TEXT NOT NULL)`;
+// Host-owned table declared to initialization: created in the same batch as the store and required, with exactly this
+// definition, when an existing store is reopened.
+export const ARTICLE_HOST_TABLES = Object.freeze([["article_artifact", `CREATE TABLE article_artifact (
+  publication_id TEXT PRIMARY KEY, snapshot_id TEXT NOT NULL, snapshot_digest TEXT NOT NULL, html_digest TEXT NOT NULL, html TEXT NOT NULL)`]]);
 
-/** Explicit local initialization of one site database: current schema, seed only when absent, host artifact table. */
-export async function initializeArticleD1(db, seed) {
-  const result = await initializeD1Database(db, seed);
-  await db.prepare(ARTIFACT_TABLE).run();
-  return result;
-}
+/** Explicit local initialization of one site database: refuses a foreign database unchanged, reopens a current one, creates an empty one. */
+export const initializeArticleD1 = (db, seed) => initializeD1Database(db, seed, { hostTables: ARTICLE_HOST_TABLES });
 
 const hex = async (algorithm, text) => Array.from(new Uint8Array(await globalThis.crypto.subtle.digest(algorithm, new TextEncoder().encode(text))), byte => byte.toString(16).padStart(2, "0")).join("");
 export const sha256Hex = text => hex("SHA-256", text);

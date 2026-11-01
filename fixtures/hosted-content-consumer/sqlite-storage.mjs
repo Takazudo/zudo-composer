@@ -43,10 +43,11 @@ const SCHEMA = `
     sequence INTEGER NOT NULL CHECK (sequence > 0), body TEXT NOT NULL CHECK (json_valid(body)),
     UNIQUE (provider_id, model_id, record_id, sequence)
   );
-  -- Never holds a row: inserting NULL aborts the whole commit when the head CAS did not apply.
+  -- Never holds a row: inserting NULL aborts the whole commit when the version precondition or the head UPDATE fails.
   CREATE TABLE IF NOT EXISTS hosted_commit_guard (ok INTEGER NOT NULL);
 `;
 
+const HEAD_UPDATE = 1;
 const revisionInsert = revision => ["INSERT INTO hosted_revision (id, provider_id, model_id, record_id, sequence, body) VALUES (?, ?, ?, ?, ?, ?)",
   revision.id, revision.entry.providerId, revision.entry.modelId, revision.entry.recordId, revision.sequence, JSON.stringify(revision)];
 
@@ -56,10 +57,14 @@ const revisionInsert = revision => ["INSERT INTO hosted_revision (id, provider_i
  */
 function commitStatements(change) {
   const statements = [
+    // Decisive precondition before any write: the head exists at `expectedVersion` and the proposed version differs.
+    ["INSERT INTO hosted_commit_guard (ok) SELECT NULL WHERE ? IS ? OR NOT EXISTS (SELECT 1 FROM hosted_head WHERE id = 1 AND version = ?)",
+      change.head.version, change.expectedVersion, change.expectedVersion],
     ["UPDATE hosted_head SET version = ?, state = ?, baseline_providers = ?, active_publication_id = ? WHERE id = 1 AND version = ?",
       change.head.version, JSON.stringify(change.head.state), JSON.stringify(change.head.baselineProviders),
       change.head.activePublicationId, change.expectedVersion],
-    ["INSERT INTO hosted_commit_guard (ok) SELECT NULL WHERE (SELECT version FROM hosted_head WHERE id = 1) IS NOT ?", change.head.version],
+    // Postcondition: the UPDATE itself changed exactly one row.
+    ["INSERT INTO hosted_commit_guard (ok) SELECT NULL WHERE changes() <> 1"],
   ];
   if (change.receipt) statements.push(["INSERT INTO hosted_receipt (actor_id, operation_key, fingerprint, result) VALUES (?, ?, ?, ?)",
     change.receipt.actorId, change.receipt.operationKey, change.receipt.fingerprint, JSON.stringify(change.receipt.result)]);
@@ -153,7 +158,7 @@ export function openSqliteHandle(filename, { busyDeadlineMilliseconds = 8_000 } 
       for (const [index, [sql, ...values]] of statements.entries()) {
         try { connection.prepare(sql).run(...values); }
         catch (error) { if (constraint(error)) { connection.exec("ROLLBACK"); started = false; return false; } throw error; }
-        if (index === 0 && selectedFault === "receipt-persistence") {
+        if (index === HEAD_UPDATE && selectedFault === "receipt-persistence") {
           // An actual SQLite CHECK failure after the head UPDATE proves rollback covers both.
           try { connection.prepare("INSERT INTO hosted_receipt (actor_id, operation_key, fingerprint, result) VALUES ('fault', 'fault', 'fault', 'invalid-json')").run(); }
           catch (error) { throw new Error(`Injected receipt persistence failure: ${error.message}`, { cause: error }); }
