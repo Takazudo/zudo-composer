@@ -44,7 +44,7 @@ try {
     root,
     logLevel: "error",
     build: {
-      target: "node22.13",
+      target: "node24",
       ssr: true,
       minify: false,
       outDir: generated,

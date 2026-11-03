@@ -19,5 +19,8 @@
     "preact-render-to-string": "^6.6.6",
     "vitest": "^4.1.11",
     "zudo-composer": "workspace:*"
+  },
+  "engines": {
+    "node": ">=24 <25"
   }
 }

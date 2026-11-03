@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "bac350afa149a206f7077af9bda357988161c5ca",
-  "payloadSha256": "94045b276a5576cfad62d1d409a7521b89a33573f87ee40537c3c1356884f378",
-  "rawPackageJsonSha256": "bedc05aaf44d88f1197b0b3dca7ebb2dc573151891a29a23b5ee900c5bbe1c3a",
+  "packageOutputSha": "a66424d2edcfc2cc146b8240091e9040dc105338",
+  "payloadSha256": "5b1ace6635d6a5abc88aa1d0f62991ea477540a116589b06aaf0e05cd0d5be31",
+  "rawPackageJsonSha256": "e94e87a525bd10bd476c77ba4e80593f354bbe5307760be12c9843125f558ebc",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -12,9 +12,9 @@
     },
     {
       "path": "README.md",
-      "bytes": 41385,
+      "bytes": 41370,
       "mode": 420,
-      "sha256": "4f0495a3d54fb0cdcfc393c2afa85a268378805ed14652906f408c2f3a0fdb26"
+      "sha256": "6125bbddebab87030df1e62a00fee15e00e50973adc92ce305d9407ac152c119"
     },
     {
       "path": "bin/zudo-composer.mjs",
@@ -54,9 +54,9 @@
     },
     {
       "path": "package.json",
-      "bytes": 9795,
+      "bytes": 9783,
       "mode": 420,
-      "sha256": "1500e21483694d68730130611c6c02068c599a9c012a5c13b112cc3084d2d67f"
+      "sha256": "1c007b554a1c913adc1f1e38b5ca12805e25cbeac380f8aa304c58d1de7b834f"
     },
     {
       "path": "packages/image-editor/src/core/encode.ts",

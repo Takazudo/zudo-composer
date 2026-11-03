@@ -14,7 +14,7 @@ from that project root.
 
 | Requirement | Supported value | Why it matters |
 | --- | --- | --- |
-| Node.js | `^22.13.0` or `>=24.0.0` | These are the versions declared by the tool's `engines.node`; Node 23 is outside that range. |
+| Node.js | `>=24 <25` | These are the versions declared by the tool's `engines.node`; other Node major versions are outside that range. |
 | pnpm | `11.5.2` | The tool and generated hosts pin this exact version. |
 | Corepack | Enabled or otherwise available | The documented install and creator commands invoke pnpm through `corepack`. |
 

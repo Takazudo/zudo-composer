@@ -105,7 +105,7 @@
     "docs/assistant.md"
   ],
   "engines": {
-    "node": "^22.13.0 || >=24.0.0",
+    "node": ">=24 <25",
     "pnpm": "11.5.2"
   },
   "scripts": {
