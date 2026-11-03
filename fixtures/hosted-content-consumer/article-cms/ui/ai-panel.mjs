@@ -16,7 +16,10 @@ const display = value => value === undefined ? "—" : typeof value === "string"
 const pointerKey = entry => `article-cms:content-ai:${entry.providerId}/${entry.modelId}/${entry.recordId}`;
 const readPointer = entry => { try { return JSON.parse(localStorage.getItem(pointerKey(entry)) ?? "null"); } catch { return null; } };
 const writePointer = (entry, value) => { try { if (value) localStorage.setItem(pointerKey(entry), JSON.stringify(value)); else localStorage.removeItem(pointerKey(entry)); } catch { /* the page still works without it */ } };
-const lostConnection = error => error instanceof TypeError;
+// Only an authoritative refusal proves a mutation did not commit. Invalid JSON,
+// malformed envelopes and unavailable storage responses must recover by receipt.
+const definiteRefusals = new Set(["invalid-request", "not-found", "forbidden", "invalid-value", "revision-conflict", "operation-key-reuse", "restore-incompatible", "configuration-required"]);
+const lostConnection = error => !definiteRefusals.has(error?.code);
 
 /**
  * @param {HTMLElement} container
@@ -130,15 +133,16 @@ export function mountArticleAiPanel(container, { h, entry, handle, frame, fieldL
     const proposal = ui.proposal;
     ui.busy = kind === "apply" ? "applying" : "undoing"; ui.error = ""; ui.recovered = null; ui.uncertain = null; draw();
     writePointer(entry, { proposalId: proposal.id, pending: kind });
-    let unreachable = false;
+    let unreachable = false, acknowledged = false;
     try {
       const outcome = kind === "apply" ? await remote.apply({ proposalId: proposal.id, renderedCandidate: ui.render.identity }) : await remote.undo({ proposalId: proposal.id });
+      acknowledged = true;
       ui.recovered = outcome.recovered ? kind : null;
       await readBack();
       writePointer(entry, { proposalId: proposal.id, pending: null });
       await onCommitted();
     } catch (error) {
-      if (lostConnection(error)) {
+      if (acknowledged || lostConnection(error)) {
         // The request may have committed. Keep the pointer and read the result back instead of resending blindly.
         ui.busy = "recovering"; draw();
         try { await reconcile(proposal.id, kind); }
