@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "a66424d2edcfc2cc146b8240091e9040dc105338",
-  "payloadSha256": "5b1ace6635d6a5abc88aa1d0f62991ea477540a116589b06aaf0e05cd0d5be31",
-  "rawPackageJsonSha256": "e94e87a525bd10bd476c77ba4e80593f354bbe5307760be12c9843125f558ebc",
+  "packageOutputSha": "fba434aaa96af8b4dbc2a086638180f71a2da741",
+  "payloadSha256": "9d16cf54ad12dd2b6ddb8849531c62fba0302f5bbe028570c26c7d0e26149916",
+  "rawPackageJsonSha256": "68ee9986d5a26761639616733ad0d70c375dea1abc0d7818f7d69091f6b7e463",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -30,15 +30,15 @@
     },
     {
       "path": "docs/assistant.md",
-      "bytes": 17859,
+      "bytes": 18557,
       "mode": 420,
-      "sha256": "5f6580a49fcc5ed8bae13a345fb0ee263f58d1ebbdfdef7f2ed2ed0fe1b9fef5"
+      "sha256": "c8b65097c442ab2112dd170ed45f4553e854d30dd9c3b45edf0bf99ce499fe67"
     },
     {
       "path": "docs/hosted-content.md",
-      "bytes": 47813,
+      "bytes": 49303,
       "mode": 420,
-      "sha256": "6fbf9dfd69bd4048c8bf7f98537a19d1be0938c5b8d075901efcf119d90c13af"
+      "sha256": "181acfba22e39733a528b9bfb597c2f6bebbe3ed00d3d60c37f0065ad94d4590"
     },
     {
       "path": "docs/native-editing.md",
@@ -468,9 +468,9 @@
     },
     {
       "path": "server/assistant/codex-cli-provider.ts",
-      "bytes": 12335,
+      "bytes": 12448,
       "mode": 420,
-      "sha256": "c602a22f7f8f2c14c6814f57f695787a9e006f941758c7abea62f522d22e196a"
+      "sha256": "334a7a0f18ec2a4603a14be0af10e2b35636f2b82916e7792757d2aa18412a9b"
     },
     {
       "path": "server/assistant/context.ts",
@@ -522,9 +522,9 @@
     },
     {
       "path": "server/authoring.d.mts",
-      "bytes": 42816,
+      "bytes": 42986,
       "mode": 420,
-      "sha256": "02c904b964d806d35496348a6e5740274275d5208150fac5daa9ae65d997bb09"
+      "sha256": "397501287c83482eb7731fd0e83d1a6b7c61a8e61d489bbc06694d62dc200195"
     },
     {
       "path": "server/authoring.mjs",
@@ -648,15 +648,15 @@
     },
     {
       "path": "server/config-public.d.mts",
-      "bytes": 7185,
+      "bytes": 7355,
       "mode": 420,
-      "sha256": "692b1aab45d5eed6b3bd7856541a04b56de7191021857b84a99fd7b53b301fb2"
+      "sha256": "197263213cd287e9a7cb6bb1d8a3eac466addb6bd958243cc24d574795c50610"
     },
     {
       "path": "server/config/assistant.ts",
-      "bytes": 6821,
+      "bytes": 7330,
       "mode": 420,
-      "sha256": "37549d009250aad076dd12c6d0f58a13f3c19f10bf7886aa8b6dec16acc86408"
+      "sha256": "f6053cb78393f369db6fc12fef82574f6621026b83253a70436b5a3337487694"
     },
     {
       "path": "server/config/config.ts",
@@ -702,9 +702,9 @@
     },
     {
       "path": "server/content-ai/hosted-node.ts",
-      "bytes": 2792,
+      "bytes": 3059,
       "mode": 420,
-      "sha256": "dabba99b54802311d8ec481ea0d9426aa43b3f0b538cde8c5728d2fa36d45ab0"
+      "sha256": "963aabddcbdc5448a00f00d170f0f654cc22f4b2629ae747dc456dc5d4c853f2"
     },
     {
       "path": "server/content-ai/model-proposer.ts",
@@ -810,9 +810,9 @@
     },
     {
       "path": "server/editing.d.mts",
-      "bytes": 109245,
+      "bytes": 109415,
       "mode": 420,
-      "sha256": "e3b59c154db8257a4020b43a834c1be97b57e96ac023875ac663b0d23708caaf"
+      "sha256": "4d13fd78810e784ba856d90da12e40371cc14695d9332390c9477bda3b031556"
     },
     {
       "path": "server/editing.mjs",
@@ -894,15 +894,15 @@
     },
     {
       "path": "server/hosted-content/node.d.mts",
-      "bytes": 3002,
+      "bytes": 3272,
       "mode": 420,
-      "sha256": "2d59cefa8f56076ae2db1fe1a305c70097dfd65de92b4ec2412876bfa367cf07"
+      "sha256": "15c937e9cca7286092039c89ba6a15dfd5f8b0cf13134e92480768dfd05b7627"
     },
     {
       "path": "server/hosted-content/node.mjs",
-      "bytes": 50946,
+      "bytes": 51375,
       "mode": 420,
-      "sha256": "48a695de3ee6f3082d421712ffa90ebe6af95e4cfc76d27064ce46ae5f2c399f"
+      "sha256": "68e0fbc7ba824ac5edcec13d07246c50eede75ccdc5923f2ce390ded20eaca5b"
     },
     {
       "path": "server/hosted-content/preview.d.mts",
@@ -1134,9 +1134,9 @@
     },
     {
       "path": "server/vite.d.mts",
-      "bytes": 27438,
+      "bytes": 27608,
       "mode": 420,
-      "sha256": "626fc1b498eb89262a0d381d9a5a93b4be6e65cb20c228e24737b0c8fec261a1"
+      "sha256": "d6d4b9e0b5464f868670ec4cf332086bd0c41fd9e67b6f8a51cefa8b93435991"
     },
     {
       "path": "src/App.tsx",
