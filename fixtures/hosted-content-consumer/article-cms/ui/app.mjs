@@ -5,6 +5,7 @@ import { HostedContentError } from "zudo-composer/hosted-content";
 import { mountHostedContentEditor } from "zudo-composer/hosted-content/editor";
 import "zudo-composer/hosted-content/editor.css";
 import { renderArticlesHtml } from "../render.mjs";
+import { mountArticleAiPanel } from "./ai-panel.mjs";
 import "./app.css";
 
 const provider = "articles", modelId = "article";
@@ -114,7 +115,7 @@ async function main() {
   const fieldLabel = id => article.document.fields.find(field => field.id === id)?.label ?? id;
   const pageSize = Math.min(100, Math.max(1, Number(new URLSearchParams(window.location.search).get("pageSize")) || 20));
   const app = document.getElementById("app");
-  const ui = { perspective: "working", mode: "custom", selected: null, handle: null, preview: null, compare: null, notice: "", entries: [], entriesCursor: null, revisions: [], revisionsCursor: null };
+  const ui = { perspective: "working", mode: "custom", selected: null, handle: null, ai: null, preview: null, compare: null, notice: "", entries: [], entriesCursor: null, revisions: [], revisionsCursor: null };
   const sameEntry = (left, right) => !!left && !!right && left.providerId === right.providerId && left.modelId === right.modelId && left.recordId === right.recordId;
 
   const list = h("ul", { class: "article-list", "aria-label": "Articles" });
@@ -126,11 +127,18 @@ async function main() {
   const previewStatus = h("p", { role: "status", class: "article-preview-status", "aria-label": "Preview status" });
   const frame = createPreviewFrame(preview, previewStatus);
   frame.clear(null, "Not previewed.");
+  // The AI candidate gets its own frame, so reviewing it never replaces the saved-content preview.
+  const candidatePreview = h("iframe", { title: "AI candidate preview", sandbox: "allow-same-origin", class: "article-candidate-preview" });
+  const candidateStatus = h("p", { role: "status", class: "article-preview-status", "aria-label": "Candidate preview status" });
+  const candidateFrame = createPreviewFrame(candidatePreview, candidateStatus);
+  candidateFrame.clear(null, "No candidate.");
+  const aiContainer = h("div", { class: "article-ai-container" });
   const perspectiveButton = perspective => h("button", { type: "button", "aria-pressed": String(ui.perspective === perspective), onclick: () => { ui.perspective = perspective; void render(); } },
     perspective === "working" ? "Working" : "Published");
   const nav = h("nav", { class: "article-nav", "aria-label": "Article CMS" });
   app.replaceChildren(h("header", { class: "article-header" }, h("strong", {}, "Article CMS"), h("span", { class: "article-local" }, "Local only — nothing here is deployed."), nav),
-    h("div", { class: "article-layout" }, h("aside", {}, h("h2", {}, "Articles"), list, moreEntries), main, h("aside", {}, history, publication, h("h2", {}, "Preview"), previewStatus, preview)));
+    h("div", { class: "article-layout" }, h("aside", {}, h("h2", {}, "Articles"), list, moreEntries), main, h("aside", {}, history, publication, h("h2", {}, "Preview"), previewStatus, preview,
+      h("h2", {}, "AI candidate"), candidateStatus, candidatePreview)));
 
   /** The one place the selected Article changes: list clicks and the editor's own navigation both land here. */
   async function adoptSelection(entry) {
@@ -139,9 +147,9 @@ async function main() {
     ui.preview?.invalidate();
   }
   function mountEditor(entry) {
-    ui.handle?.dispose();
+    ui.handle?.dispose(); ui.ai?.dispose(); ui.ai = null;
     const container = h("div");
-    main.replaceChildren(h("h2", {}, ui.mode === "custom" ? "Edit article" : "Edit article (standard form)"), container);
+    main.replaceChildren(h("h2", {}, ui.mode === "custom" ? "Edit article" : "Edit article (standard form)"), container, aiContainer);
     let key = 0;
     ui.preview = workingPreview(frame);
     // Whatever the frame showed belongs to another view; the working draft is not previewed until asked.
@@ -152,12 +160,17 @@ async function main() {
     let last = "";
     ui.handle.subscribe(state => {
       const marker = `${state.phase}:${state.content?.draftRevision}`;
-      if (marker !== last && ["saved", "clean"].includes(state.phase)) { last = marker; void refreshSide(); }
+      if (marker !== last && ["saved", "clean"].includes(state.phase)) { last = marker; void refreshSide(); ui.ai?.contentChanged(); }
+      else ui.ai?.editorChanged();
     });
-    return ui.handle.ready;
+    // Content-AI edits the same Entry through the same Content owner and history; the editor reloads after each commit.
+    const handle = ui.handle;
+    ui.ai = mountArticleAiPanel(aiContainer, { h, entry, handle: () => ui.handle, frame: candidateFrame, fieldLabel,
+      onCommitted: async () => { if (ui.handle === handle) await handle.refresh(); await refreshSide(); } });
+    return Promise.all([ui.handle.ready, ui.ai.ready]);
   }
   async function showPublished(entry) {
-    ui.handle?.dispose(); ui.handle = null; ui.preview = null;
+    ui.handle?.dispose(); ui.handle = null; ui.preview = null; ui.ai?.dispose(); ui.ai = null;
     const site = await request("/api/published-site");
     void frame.render(null, `published:${site.baseline.gitSha}:${site.baseline.contentDigest}:${site.integrationFence}`, renderArticlesHtml(site.renderData),
       `published content ${site.baseline.gitSha.slice(0, 8)}`).catch(() => undefined);
@@ -259,6 +272,6 @@ async function main() {
   }
   await render();
   setInterval(() => { void renderPublication().catch(() => undefined); }, 1000);
-  Object.assign(window, { articleCms: { get handle() { return ui.handle; }, get selected() { return ui.selected; }, frame, transport, select } });
+  Object.assign(window, { articleCms: { get handle() { return ui.handle; }, get selected() { return ui.selected; }, get ai() { return ui.ai; }, frame, candidateFrame, transport, select } });
 }
 void main().catch(error => { document.getElementById("app").textContent = error instanceof Error ? error.message : String(error); });

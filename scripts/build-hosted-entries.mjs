@@ -13,7 +13,9 @@ const check = process.argv.includes("--check");
 const temporary = await mkdtemp(join(tmpdir(), "composer-hosted-build-"));
 const output = join(temporary, "output");
 const declarations = join(temporary, "types");
-const entries = { index: "src/hosted-content/index.ts", editor: "src/hosted-content/browser.ts", preview: "src/hosted-content/preview-browser.ts", testing: "src/hosted-content/testing.ts" };
+const entries = { index: "src/hosted-content/index.ts", editor: "src/hosted-content/browser.ts", preview: "src/hosted-content/preview-browser.ts", testing: "src/hosted-content/testing.ts", node: "server/content-ai/hosted-node.ts" };
+// Only the Node entry may reach Node built-ins; check-hosted-boundary.mjs proves the other graphs never do.
+const nodeEntries = new Set(["node"]);
 const allowed = new Set(["zod", "@lezer/markdown", "preact", "preact/hooks", "preact/jsx-runtime", "@zudo-composer/component-contract"]);
 const packageData = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 for (const name of Object.keys(packageData.dependencies)) if (name.startsWith("@codemirror/") || name === "@lezer/highlight") allowed.add(name);
@@ -36,7 +38,7 @@ try {
       rolldownOptions: {
         external(id) {
           if (id.startsWith(".") || isAbsolute(id)) return false;
-          assert.ok(allowed.has(id), `Forbidden dependency in hosted graph: ${id}`);
+          assert.ok(allowed.has(id) || id.startsWith("node:"), `Forbidden dependency in hosted graph: ${id}`);
           return true;
         },
         output: { entryFileNames: "[name].mjs", chunkFileNames: "chunks/[name]-[hash].mjs" },
@@ -47,12 +49,16 @@ try {
     jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "preact", strict: true, skipLibCheck: true,
     declaration: true, emitDeclarationOnly: true, rootDir: root, outDir: declarations,
     lib: ["lib.es2023.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"], types: [], newLine: ts.NewLineKind.LineFeed };
-  const program = ts.createProgram(Object.values(entries).map((path) => join(root, path)), options);
-  const diagnostics = ts.getPreEmitDiagnostics(program);
-  assert.equal(diagnostics.length, 0, ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-    getCanonicalFileName: (path) => path, getCurrentDirectory: () => root, getNewLine: () => "\n",
-  }));
-  assert.ok(!program.emit().emitSkipped, "Hosted declaration emission failed");
+  // Portable and browser declarations compile without Node types; the Node entry alone gets them.
+  for (const node of [false, true]) {
+    const sources = Object.entries(entries).filter(([name]) => nodeEntries.has(name) === node).map(([, path]) => join(root, path));
+    const program = ts.createProgram(sources, { ...options, types: node ? ["node"] : [] });
+    const diagnostics = ts.getPreEmitDiagnostics(program);
+    assert.equal(diagnostics.length, 0, ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+      getCanonicalFileName: (path) => path, getCurrentDirectory: () => root, getNewLine: () => "\n",
+    }));
+    assert.ok(!program.emit().emitSkipped, "Hosted declaration emission failed");
+  }
   // TypeScript does not copy hand-written declarations of JavaScript modules; the bundler resolves them.
   for (const path of await files(join(root, "src"))) if (path.endsWith(".d.mts")) {
     const target = join(declarations, relative(root, path)); await mkdir(dirname(target), { recursive: true }); await writeFile(target, await readFile(path));

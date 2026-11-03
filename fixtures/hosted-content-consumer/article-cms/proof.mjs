@@ -11,7 +11,7 @@ import { buildArticleUi, startArticleCms } from "./server.mjs";
 
 const welcome = articleRef("welcome");
 const identities = state => ({ draftRevision: state.draftRevision, baseline: state.baseline, definition: state.definition });
-const publicImports = new Set(["zudo-composer/hosted-content", "zudo-composer/hosted-content/editor", "zudo-composer/hosted-content/editor.css", "../render.mjs", "./app.css"]);
+const publicImports = new Set(["zudo-composer/hosted-content", "zudo-composer/hosted-content/editor", "zudo-composer/hosted-content/editor.css", "../render.mjs", "./ai-panel.mjs", "./app.css"]);
 
 export async function runArticleCmsProof({ directory } = {}) {
   const root = directory ? resolve(directory) : await mkdtemp(join(tmpdir(), "article-cms-"));
@@ -27,7 +27,7 @@ export async function runArticleCmsProof({ directory } = {}) {
   const q = value => encodeURIComponent(JSON.stringify(value));
   try {
     // 11–12. The admin is built from supported exports only, and its browser bytes carry no Node or private code.
-    const source = await readFile(fileURLToPath(new URL("ui/app.mjs", import.meta.url)), "utf8");
+    const source = (await Promise.all(["ui/app.mjs", "ui/ai-panel.mjs"].map(file => readFile(fileURLToPath(new URL(file, import.meta.url)), "utf8")))).join("\n");
     const specifiers = [...source.matchAll(/^import\s+(?:[^"']+from\s+)?["']([^"']+)["']/gm)].map(match => match[1]);
     check("admin imports only public tool entries and host files", specifiers.length > 0 && specifiers.every(specifier => publicImports.has(specifier)));
     const { files, metafile } = await buildArticleUi();

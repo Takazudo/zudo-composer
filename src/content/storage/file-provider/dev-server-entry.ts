@@ -4,9 +4,9 @@
 // The plugin graph cannot use `instanceof`, so the domain-error predicate is
 // exported from here rather than reimplemented as a duck-type check.
 import { ContentPersistenceError } from "../../library";
-import { createContentAiService, createNativeContentEditorial, EditorialError, type ContentAiProposalStore, type ContentAiProposer } from "../../editorial";
+import { createContentAiService, createNativeContentEditorial, EditorialError, runContentAiOperation, type ContentAiInference, type ContentAiProposalStore, type ContentAiProposer, type ContentAiWireResult } from "../../editorial";
 import { openContentAiProposalStore } from "../filesystem/content-ai-proposals";
-import type { ContentEntryRecord, ContentEntryRef } from "../../model";
+import type { ContentEntryRecord } from "../../model";
 import { createFilesystemContentStore, type FilesystemContentStore } from "../filesystem";
 import { workspaceScopedRoot } from "../../../shared/workspace-scope";
 
@@ -78,48 +78,44 @@ export async function runContentEditorial(
 type ActivatedReader = Parameters<typeof runContentEditorial>[1];
 const proposalStores = new Map<string, Promise<ContentAiProposalStore>>();
 
+/** The host's configured Content-AI provider, as the plugin resolves it from the Assistant config. */
+export interface NativeContentAiHost {
+  provider: { label: string; proposer: ContentAiProposer; inference(): Promise<ContentAiInference> };
+  canApply: boolean;
+  proposalRoot: string;
+}
+
 /**
  * One Content-AI request from the Content editor. The proposer comes from the
  * host's configured Assistant provider; without one, Content-AI is unavailable.
  * Proposals are recorded under the host's private data directory, so Apply and
- * Undo stay recoverable across a restart.
+ * Undo stay recoverable across a restart, including while inference is down.
  */
 export async function runContentAi(
   store: FilesystemContentStore,
   readActivated: ActivatedReader,
-  host: () => Promise<{ proposer: ContentAiProposer; canApply: boolean; proposalRoot: string } | null>,
+  host: () => Promise<NativeContentAiHost | null>,
   operation: string,
   payload: unknown,
-): Promise<{ ok: true; value: unknown } | { ok: false; error: { code: string; message: string; diagnostics: unknown[] } }> {
-  try {
-    const configured = await host();
-    if (operation === "content-ai-status") return { ok: true, value: configured ? { available: true, provider: configured.proposer.label, canApply: configured.canApply } : { available: false } };
-    if (!configured) throw new EditorialError("configuration-required", "Content-AI needs an Assistant provider in zudo-composer.config.ts.");
-    let proposals = proposalStores.get(configured.proposalRoot);
-    if (!proposals) proposalStores.set(configured.proposalRoot, proposals = openContentAiProposalStore(configured.proposalRoot));
-    const service = createContentAiService({
-      boundary: (provenance) => createNativeContentEditorial({ store, provenance, readPublished: () => readPublishedFrom(store, readActivated) }),
-      actor: CONTENT_EDITOR_PROVENANCE.actor,
-      owner: `native:${store.root}`,
-      proposer: configured.proposer,
-      store: await proposals,
-      createId: () => globalThis.crypto.randomUUID(),
-      canApply: configured.canApply,
-    });
-    const input = (payload ?? {}) as never;
-    switch (operation) {
-      case "content-ai-scope": return { ok: true, value: await service.scope((input as { entry: ContentEntryRef }).entry) };
-      case "content-ai-prepare": return { ok: true, value: await service.prepare(input) };
-      case "content-ai-read": return { ok: true, value: await service.read(input) };
-      case "content-ai-apply": return { ok: true, value: await service.apply(input) };
-      case "content-ai-undo": return { ok: true, value: await service.undo(input) };
-      default: throw new EditorialError("invalid-request", "Unknown Content-AI operation.");
-    }
-  } catch (error) {
-    if (!(error instanceof EditorialError)) {
-      if (error instanceof Error && error.name === "ProviderError") return { ok: false, error: { code: "unavailable", message: error.message, diagnostics: [] } };
-      throw error;
-    }
-    return { ok: false, error: { code: error.code, message: error.message, diagnostics: error.diagnostics } };
-  }
+): Promise<ContentAiWireResult> {
+  const configured = await host();
+  return runContentAiOperation({
+    status: async () => configured
+      ? { configured: true, provider: configured.provider.label, canApply: configured.canApply, inference: await configured.provider.inference() }
+      : { configured: false },
+    async service() {
+      if (!configured) throw new EditorialError("configuration-required", "Content-AI needs an Assistant provider in zudo-composer.config.ts.");
+      let proposals = proposalStores.get(configured.proposalRoot);
+      if (!proposals) proposalStores.set(configured.proposalRoot, proposals = openContentAiProposalStore(configured.proposalRoot));
+      return createContentAiService({
+        boundary: (provenance) => createNativeContentEditorial({ store, provenance, readPublished: () => readPublishedFrom(store, readActivated) }),
+        actor: CONTENT_EDITOR_PROVENANCE.actor,
+        owner: `native:${store.root}`,
+        proposer: configured.provider.proposer,
+        store: await proposals,
+        createId: () => globalThis.crypto.randomUUID(),
+        canApply: configured.canApply,
+      });
+    },
+  }, operation, payload);
 }

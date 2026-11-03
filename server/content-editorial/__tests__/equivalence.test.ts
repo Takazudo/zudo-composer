@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CONTENT_PROVIDERS, type ContentModelRecord, type ContentEntryRecord } from "../../../src/content";
-import { createNativeContentEditorial } from "../../../src/content/editorial";
+import { createNativeContentEditorial, type ContentAiProposalStore } from "../../../src/content/editorial";
 import { runEditorialScenario, type EditorialScenarioHarness } from "../../../src/content/editorial/scenario";
 import { runContentAiScenario } from "../../../src/content/editorial/ai-scenario";
 import { createFilesystemContentStore, type FilesystemContentStore } from "../../../src/content/storage/filesystem";
@@ -145,11 +145,17 @@ describe("shared Content editorial boundary", () => {
 
   it("native project-file Content passes the Content-AI journey", async () => {
     const proposals = join(await scratch("native-proposals-"), "content-ai");
-    expect((await runContentAiScenario(await nativeHarness(), check, { openProposals: () => openContentAiProposalStore(proposals) })).map((step) => step.step)).toEqual(["prepare", "apply", "undo", "crash-window", "guards"]);
+    expect((await runContentAiScenario(await nativeHarness(), check, { openProposals: () => openContentAiProposalStore(proposals) })).map((step) => step.step)).toEqual(["prepare", "apply", "undo", "crash-window", "guards", "provider-unavailable"]);
+  });
+
+  it("local SQLite Hosted Content passes the Content-AI journey with the Article host's SQLite proposal store", async () => {
+    const { openArticleProposalStore } = await import(String("../../../fixtures/hosted-content-consumer/article-cms/content-ai.mjs")) as { openArticleProposalStore(filename: string): ContentAiProposalStore };
+    const filename = join(await scratch("hosted-sqlite-proposals-"), "proposals.sqlite");
+    expect((await runContentAiScenario(await hostedHarness(), check, { openProposals: async () => openArticleProposalStore(filename) })).map((step) => step.step)).toEqual(["prepare", "apply", "undo", "crash-window", "guards", "provider-unavailable"]);
   });
 
   it("local SQLite Hosted Content passes the same Content-AI journey", async () => {
     const proposals = join(await scratch("hosted-proposals-"), "content-ai");
-    expect((await runContentAiScenario(await hostedHarness(), check, { openProposals: () => openContentAiProposalStore(proposals) })).map((step) => step.step)).toEqual(["prepare", "apply", "undo", "crash-window", "guards"]);
+    expect((await runContentAiScenario(await hostedHarness(), check, { openProposals: () => openContentAiProposalStore(proposals) })).map((step) => step.step)).toEqual(["prepare", "apply", "undo", "crash-window", "guards", "provider-unavailable"]);
   });
 });

@@ -14,6 +14,9 @@
  *   wait                               keep replying until stopped
  *   try to apply                       request a tool that does not exist (must be refused)
  *   HTML/CSS/JSX, new component, template, file or shell requests are declined.
+ *
+ * A Content-AI request (its tools include propose_article_fields) gets a fixed
+ * title-only proposal: the current title with " (revised)" appended.
  */
 
 export const FAKE_POLICY_VERSION = "fake-policy/1";
@@ -33,6 +36,7 @@ const json = value => { try { return JSON.parse(String(value)); } catch { return
  * @returns {FakeReply}
  */
 export function fakeDecide(document) {
+  if (document.tools.some(tool => tool.name === "propose_article_fields")) return contentAiDecision(document);
   const messages = document.messages;
   let turnIndex = -1;
   messages.forEach((message, index) => { if (message.role === "user" && message.content.some(block => block.type === "text" && String(block.text).includes("<turn_context>"))) turnIndex = index; });
@@ -111,5 +115,17 @@ export function fakeDecide(document) {
   const decision = decide();
   // Ids are unique within this turn's transcript.
   decision.tool_calls = decision.tool_calls.map((call, index) => ({ id: `fake-${step}-${index}`, name: call.name, input_json: call.input_json }));
+  return decision;
+}
+
+/** @param {RequestDocument} document @returns {FakeReply} */
+function contentAiDecision(document) {
+  const text = document.messages[0]?.content.find(block => block.type === "text")?.text;
+  const request = json(text);
+  const title = Array.isArray(request?.fields) ? request.fields.find((/** @type {any} */ field) => field.key === "title") : null;
+  const decision = !title || typeof title.value !== "string"
+    ? reply("", [{ name: "decline", input: { reason: "No title field was provided." } }])
+    : reply("", [{ name: "propose_article_fields", input: { title: `${title.value} (revised)`, summary: "Fake CLI policy: appended (revised) to the title only." } }]);
+  decision.tool_calls = decision.tool_calls.map((call, index) => ({ id: `fake-content-ai-${index}`, name: call.name, input_json: call.input_json }));
   return decision;
 }

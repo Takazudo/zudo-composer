@@ -2,7 +2,7 @@ import type { JSX } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { Button, Field, Textarea } from "../../components/ui";
 import type { ContentEntryRecord, ContentFieldDefinition } from "../../content";
-import { EditorialError, type ContentAiProposal, type EditorialField } from "../../content/editorial";
+import { EditorialError, type ContentAiInference, type ContentAiProposal, type EditorialField } from "../../content/editorial";
 import { useWorkspace } from "../../app/workspace-context";
 import { ContentAiCandidateFrame } from "./ai-candidate-frame";
 import { aiProposalStale, type ContentAiSession, type ContentAuthoringController, type ContentAuthoringState } from "./controller";
@@ -58,7 +58,7 @@ export function ArticleAiPanel({ controller, state, entry, fields }: ArticleAiPa
   const contentAi = controller.contentAi;
   // The site project the candidate is rendered in; without it a fresh Apply stays blocked.
   const integration = useWorkspace()?.integration;
-  const [scope, setScope] = useState<{ fields: EditorialField[]; provider: string; canApply: boolean } | null>(null);
+  const [scope, setScope] = useState<{ fields: EditorialField[]; provider: string; canApply: boolean; inference: ContentAiInference } | null>(null);
   const [instruction, setInstruction] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"prepare" | "act" | null>(null);
@@ -69,10 +69,11 @@ export function ArticleAiPanel({ controller, state, entry, fields }: ArticleAiPa
     setScope(null);
     void (async () => {
       const status = await contentAi.status();
-      if (!status.available) return;
+      if (!status.configured) return;
       const scoped = await contentAi.scope(controller.entryRef(entry));
       if (!current) return;
-      setScope({ fields: scoped, provider: status.provider, canApply: status.canApply });
+      // A provider that cannot run now still leaves saved proposals and their committed results readable.
+      setScope({ fields: scoped, provider: status.provider, canApply: status.canApply, inference: status.inference });
       await controller.restoreAiProposal();
     })().catch(() => { /* No title/body in this model, or no provider: the panel stays hidden. */ });
     return () => { current = false; };
@@ -95,11 +96,12 @@ export function ArticleAiPanel({ controller, state, entry, fields }: ArticleAiPa
     <section class="sg-content-group sg-content-ai" aria-labelledby={`content-ai-${entry.id}`}>
       <h3 class="sg-content-group__title" id={`content-ai-${entry.id}`}>AI proposal</h3>
       <p class="sg-content-ai__note">Edits only {scope.fields.map((field) => field.label).join(" and ")}. Nothing is written until you apply it, and publishing stays separate. Provider: {scope.provider}.</p>
+      {scope.inference.state !== "ready" ? <p class="sg-content-history__refusal" role="status" data-ai-inference={scope.inference.state}>New proposals are unavailable: {scope.inference.message}</p> : null}
       <Field controlId={`content-ai-instruction-${entry.id}`} label="Instruction">
         <Textarea rows={2} value={instruction} onInput={(event) => setInstruction(event.currentTarget.value)} />
       </Field>
       <div class="sg-content-history__actions">
-        <Button variant="primary" size="sm" disabled={busy !== null || !instruction.trim()} onClick={prepare}>{phase === "stale" || phase === "expired" ? "Prepare again" : "Prepare proposal"}</Button>
+        <Button variant="primary" size="sm" disabled={busy !== null || !instruction.trim() || scope.inference.state === "unavailable"} onClick={prepare}>{phase === "stale" || phase === "expired" ? "Prepare again" : "Prepare proposal"}</Button>
         {session ? <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => controller.discardAiProposal()}>Discard</Button> : null}
       </div>
       {error ? <p class="sg-content-history__refusal" role="alert">{error}</p> : null}

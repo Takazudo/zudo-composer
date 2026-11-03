@@ -119,7 +119,7 @@ export default function contentDomainProvider(options = {}) {
         if (!config) return null;
         const factory = await server.ssrLoadModule(appModuleId("server/content-ai/proposer-factory.ts"));
         // Private to this host installation; never published or exported.
-        return { proposer: await factory.createContentAiProposer(config), canApply: config.permission === "apply", proposalRoot: join(hostConfig.paths.data, "content-ai") };
+        return { provider: await factory.createHostContentAiProvider(config), canApply: config.permission === "apply", proposalRoot: join(hostConfig.paths.data, "content-ai") };
       })();
       return {
         isDomainError: module.isContentPersistenceError,

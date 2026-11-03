@@ -2,9 +2,9 @@
 // (process-protocol evidence, never model inference).
 import { afterEach, describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import type { CliAssistantConfig } from "../../config/assistant";
 import { createCliProvider } from "../cli-provider";
 import { CODEX_CLI_PROFILE, CODEX_SCHEMA_FILE, codexCliProtocol, codexExecArgs, codexFailure, createCodexCliProtocol } from "../codex-cli-provider";
@@ -61,8 +61,9 @@ describe("Codex CLI provider (fake executable)", () => {
     expect(seen.argv.slice(0, CODEX_CLI_PROFILE.length)).toEqual([...CODEX_CLI_PROFILE]);
     expect(seen.argv).toEqual(expect.arrayContaining(["--sandbox", "read-only", "--ephemeral", "--ignore-user-config", "--strict-config", "-m", "gpt-5.5", 'model_reasoning_effort="high"']));
     expect(seen.argv.at(-1)).toBe("-");
-    expect(seen.cwd).toBe(seen.cd);
-    expect(seen.cwd.startsWith(join(tmpdir(), "zudo-assistant-cli-"))).toBe(true);
+    // process.cwd() reports the resolved path (macOS tmpdir is a /private/var symlink).
+    expect(seen.cwd).toBe(join(await realpath(tmpdir()), basename(seen.cd)));
+    expect(seen.cd.startsWith(join(tmpdir(), "zudo-assistant-cli-"))).toBe(true);
     expect(seen.schemaExists).toBe(true);
     expect(seen.stdinBytes).toBeGreaterThan(0);
     expect(existsSync(seen.cwd)).toBe(false);
