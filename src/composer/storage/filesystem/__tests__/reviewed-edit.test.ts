@@ -117,10 +117,11 @@ describe("reviewed Composition transactions", () => {
     await expect(store.snapshot()).rejects.toMatchObject({ code: "conflict" });
     armed = false;
     await unlink(join(root, ".mutation.lock"));
-    expect((await store.snapshot()).records).toEqual([nextA, nextB]);
+    const reopened = await createFilesystemCompositionStore({ compositionsRoot: root, provideJsx: () => "old JSX" });
+    expect((await reopened.snapshot()).records).toEqual([nextA, nextB]);
     expect(await readFile(join(root, "composition-b.tsx"), "utf8")).toBe("new B");
-    expect(await store.reviewedEditReceipt("draft-apply")).toEqual({ pages: ["a", "b"] });
-    expect(await store.commitReviewedEdit(input)).toEqual({ pages: ["a", "b"] });
+    expect(await reopened.reviewedEditReceipt("draft-apply")).toEqual({ pages: ["a", "b"] });
+    expect(await reopened.commitReviewedEdit(input)).toEqual({ pages: ["a", "b"] });
   });
   it("rejects duplicate or empty multi-page change sets before preparing intent", async () => {
     const { root, store, input } = await setup();
