@@ -9,5 +9,8 @@
   },
   "dependencies": {
     "preact": "^10.29.8"
+  },
+  "engines": {
+    "node": ">=24 <25"
   }
 }

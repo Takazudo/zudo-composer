@@ -518,7 +518,7 @@ table, things to try, providers and reset are in
 
 ## Development and validation
 
-Use Node.js 22.13.0+ or 24.0.0+ and pnpm 11.5.2 through Corepack:
+Use Node.js 24.x and pnpm 11.5.2 through Corepack:
 
 ```sh
 corepack pnpm install --frozen-lockfile

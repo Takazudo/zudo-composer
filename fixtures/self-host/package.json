@@ -10,5 +10,8 @@
   "devDependencies": {
     "@zudo-composer/component-contract": "^1.0.0",
     "preact": "^10.29.8"
+  },
+  "engines": {
+    "node": ">=24 <25"
   }
 }

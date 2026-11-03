@@ -12,5 +12,8 @@
     "@zudo-composer/ui": "workspace:*",
     "preact": "^10.29.8",
     "zudo-composer": "workspace:*"
+  },
+  "engines": {
+    "node": ">=24 <25"
   }
 }

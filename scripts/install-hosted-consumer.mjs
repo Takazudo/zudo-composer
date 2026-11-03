@@ -13,7 +13,7 @@ const destination = process.argv[3] ? resolve(process.argv[3]) : await mkdtemp(j
 await mkdir(destination, { recursive: true });
 await cp(join(root, "fixtures/hosted-content-consumer"), destination, { recursive: true, filter: path => !path.split(/[\\/]/).includes("node_modules") && !path.split(/[\\/]/).includes("dist") });
 const manifest = {
-  name: "composer-hosted-public-consumer", version: "0.0.0", private: true, type: "module", packageManager: "pnpm@11.5.2",
+  name: "composer-hosted-public-consumer", version: "0.0.0", private: true, type: "module", packageManager: "pnpm@11.5.2", engines: { node: ">=24 <25" },
   dependencies: {
     "zudo-composer": `git+https://github.com/Takazudo/zudo-composer.git#${sha}`,
     "@zudo-composer/component-contract": "git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
@@ -27,9 +27,7 @@ const manifest = {
 await writeFile(join(destination, "package.json"), JSON.stringify(manifest, null, 2) + "\n");
 // Exact release-age exclusions this install needs; prune each once it is older than pnpm's default minimum release age.
 /** @type {string[]} */
-const releaseAgeExclude = [
-  "@takazudo/zudo-sg@0.8.1", "@takazudo/zudo-doc@9.1.1",
-];
+const releaseAgeExclude = [];
 await writeFile(join(destination, "pnpm-workspace.yaml"), `packages: []\nautoInstallPeers: false\nstrictPeerDependencies: true\nallowBuilds:\n  '@zudo-composer/component-contract': true\n  esbuild: true\n  workerd: true\n${releaseAgeExclude.length ? `minimumReleaseAgeExclude:\n${releaseAgeExclude.map(item => `  - '${item}'\n`).join("")}` : ""}`);
 execFileSync("corepack", ["pnpm", "install"], { cwd: destination, stdio: "inherit" });
 await writeFile(join(destination, "renderer/package.json"), JSON.stringify({ ...manifest, name: "composer-hosted-renderer" }, null, 2) + "\n");
