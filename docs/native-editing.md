@@ -225,8 +225,19 @@ A long-lived editing process pins the host source epoch when loading its context
 The editing fingerprint follows and hashes imported dependency files, including
 bare-package metadata, rather than trusting package versions. After a source
 change, restart the process before planning again; creating another service in
-the same process cannot clear native ESM caches. Graphs that cannot be statically
-resolved are refused. Storage edits do not reset this source epoch.
+the same process cannot clear native ESM caches. Host-owned source that cannot be
+statically resolved is refused. An installed package whose own loads are computed
+(the `ProseMd` WASM loader, say) is attested as its whole package plus the
+transitive closure of the dependencies it declares, wherever they are installed
+(nested or hoisted); every module in that closure is followed, so a module
+reachable only by a computed load still has its own imports attested. A declared
+dependency that is not installed, or a reachable module that does not resolve,
+refuses the graph. A dependency declaration is not confinement, because a
+computed load can name any file, so the editing process also confines such a
+package at load time: a module hook refuses anything it loads outside the
+attested files (an undeclared nested or sibling package, a loose host file, a
+`data:` URL), and editing refuses to start without Node's `module.registerHooks`
+(Node 22.15 or newer). Storage edits do not reset this source epoch.
 
 A durable prepared journal is irrevocable commit intent. It contains the exact
 canonical JSON, JSX and receipt. Roll-forward accepts only recorded before or

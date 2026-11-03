@@ -16,7 +16,7 @@ export interface DomainProviderDescriptor {
   /** `false` for an endpoint no workspace scopes, such as the registry itself. */
   workspaceScoped?: boolean;
   resolveRoot(workspaceRoot: string): string;
-  bind(module: Record<string, unknown>, root: string): DomainProviderBinding;
+  bind(module: Record<string, unknown>, root: string, server?: unknown): DomainProviderBinding;
 }
 
 export default function domainFileProviderPlugin(options: {

@@ -246,6 +246,12 @@ type HostedCommand = HostedCommandBase & ({
 } | {
     kind: "begin-publication";
     snapshotId: string;
+}
+/** Writes the revision's values as a new working revision; lifecycle, baseline and history are kept. */
+ | {
+    kind: "restore-revision";
+    entry: ContentEntryRef;
+    revisionId: string;
 });
 interface HostedResult {
     state: HostedState;
@@ -260,13 +266,149 @@ interface HostedReceipt {
     fingerprint: string;
     result: HostedResult;
 }
+type HostedRevisionOperation = "initial" | "set-fields" | "create-entry" | "add-entry" | "reorder" | "restore-revision" | "adopt-canonical-baseline";
+/**
+ * One immutable working revision of one Entry. It is written in the same atomic commit as the Entry change and
+ * its receipt, and it is never updated or pruned: history is retained for the life of the storage.
+ */
+interface HostedRevision {
+    id: string;
+    entry: ContentEntryRef;
+    /** 1-based and contiguous per Entry; the newest revision has the highest sequence. */
+    sequence: number;
+    parentId: string | null;
+    values: Record<string, JsonValue>;
+    /** The hosted definition the values were written under. */
+    definition: string;
+    createdAt: string;
+    /** The authenticated actor, or null when the values came from canonical content rather than an edit here. */
+    actor: HostedActor | null;
+    /** Trusted host label for the entry point, from the service options; never a request value. */
+    source: string;
+    operation: {
+        kind: HostedRevisionOperation;
+        key: string | null;
+    };
+    restoredFrom?: string;
+}
+interface HostedActor {
+    id: string;
+}
+/** `working` is the retained draft; `published` is the active canonical baseline, never a lifecycle filter of the draft. */
+type HostedPerspective = "working" | "published";
+/** `new`: absent from the active baseline. `published`: working values equal it. `changed`: working values differ from it. */
+type HostedEditorialStatus = "new" | "published" | "changed";
+interface HostedModelSummary {
+    providerId: string;
+    model: ContentModelRecord;
+    workingEntries: number;
+    publishedEntries: number;
+}
+interface HostedEntryView {
+    entry: ContentEntryRef;
+    perspective: HostedPerspective;
+    status: HostedEditorialStatus;
+    lifecycle: ContentEntryRecord["lifecycle"];
+    generation: number;
+    updatedAt: string;
+    values: Record<string, JsonValue>;
+    /** Head of the Entry's working history, the same in both perspectives; null before history begins. Guards history and restore. */
+    workingRevisionId: string | null;
+    /** What identifies the shown values: a working revision, or the activated baseline for published values (never a revision id). */
+    valuesIdentity: HostedValuesIdentity;
+    /** The identities this read was taken at; a command prepared from it quotes them as `expected`. */
+    expected: HostedIdentities;
+}
+type HostedValuesIdentity = {
+    perspective: "working";
+    draftRevision: string;
+    revisionId: string | null;
+} | {
+    perspective: "published";
+    baseline: HostedState["baseline"];
+    integrationFence: number;
+};
+interface HostedPage {
+    cursor?: string;
+    limit?: number;
+}
+interface HostedEntryPage {
+    entries: HostedEntryView[];
+    nextCursor: string | null;
+}
+interface HostedRevisionPage {
+    revisions: HostedRevision[];
+    nextCursor: string | null;
+}
+type HostedRevisionTarget = {
+    revisionId: string;
+} | {
+    perspective: HostedPerspective;
+};
+interface HostedFieldDifference {
+    fieldId: string;
+    key: string;
+    label: string;
+    change: "added" | "removed" | "changed";
+    before?: JsonValue;
+    after?: JsonValue;
+    /** True when the current definition no longer has this field. */
+    removedFromDefinition: boolean;
+}
+interface HostedComparison {
+    entry: ContentEntryRef;
+    from: HostedRevisionTarget;
+    to: HostedRevisionTarget;
+    differences: HostedFieldDifference[];
+}
+/** Each stage is reported separately; none implies the next. */
+interface HostedPublicationOverview {
+    /** The active canonical baseline that `published` reads return. */
+    activated: {
+        baseline: HostedIdentities["baseline"];
+        definition: string;
+        integrationFence: number;
+    };
+    /** The newest accepted submission, if any. */
+    submission: {
+        publicationId: string;
+        snapshotId: string;
+        status: HostedPublicationStage;
+        statusVersion: number;
+        message?: string;
+    } | null;
+    /** Host-recorded `artifact` fact of that submission, e.g. a local artifact id; null until the host records one. */
+    artifact: string | null;
+    deployed: boolean;
+}
 /** `unavailable` means storage kept refusing a commit; nothing was written and the exact request may be retried. */
-type HostedErrorCode = "invalid-request" | "invalid-value" | "forbidden" | "not-found" | "revision-conflict" | "baseline-conflict" | "definition-conflict" | "operation-key-reuse" | "publication-busy" | "incomplete" | "configuration-required" | "unavailable";
+type HostedErrorCode = "invalid-request" | "invalid-value" | "forbidden" | "not-found" | "revision-conflict" | "baseline-conflict" | "definition-conflict" | "operation-key-reuse" | "publication-busy" | "incomplete" | "restore-incompatible" | "configuration-required" | "unavailable";
 interface HostedTransport {
     readState(): Promise<HostedState>;
     execute(request: HostedCommand): Promise<HostedResult>;
     readReceipt(operationKey: string): Promise<HostedReceipt | null>;
     getPublication(publicationId: string): Promise<HostedPublication>;
+    /** Editorial reads; a transport without them supports only the single-entry editor. */
+    listModels?(): Promise<HostedModelSummary[]>;
+    listEntries?(query: {
+        perspective: HostedPerspective;
+        providerId: string;
+        modelId: string;
+    } & HostedPage): Promise<HostedEntryPage>;
+    readEntry?(query: {
+        perspective: HostedPerspective;
+        entry: ContentEntryRef;
+    }): Promise<HostedEntryView>;
+    listRevisions?(query: {
+        entry: ContentEntryRef;
+    } & HostedPage): Promise<HostedRevisionPage>;
+    readRevision?(revisionId: string): Promise<HostedRevision>;
+    compareRevisions?(query: {
+        entry: ContentEntryRef;
+        from: HostedRevisionTarget;
+        to: HostedRevisionTarget;
+    }): Promise<HostedComparison>;
+    readPublicationStatus?(): Promise<HostedPublicationOverview>;
 }
 
 /** `blocked`: the host must reconcile its definition or configuration; local values are retained until then. */
@@ -389,6 +531,12 @@ declare class HostedContentSession {
     createEntry(collectionId: string, values: Record<string, JsonValue>, before?: ContentEntryRef | null): Promise<HostedResult>;
     addEntry(collectionId: string, entry: ContentEntryRef, before?: ContentEntryRef | null): Promise<HostedResult>;
     reorder(collectionId: string, entries: ContentEntryRef[]): Promise<HostedResult>;
+    /**
+     * Restore an exact revision as a new working revision through the guarded service command. Retained edits are
+     * saved first, so a restore never overwrites unsaved work; a definite refusal writes nothing and leaves no
+     * operation to review, because the request carried no local edits.
+     */
+    restoreRevision(entry: ContentEntryRef, revisionId: string): Promise<HostedResult>;
     /** A clean refresh may adopt a confirmed integration; dirty edits need explicit review. */
     refresh(): Promise<void>;
     refreshPublication(): Promise<HostedPublication>;
@@ -668,6 +816,28 @@ interface HostedEditorSelection {
     entry: ContentEntryRef;
     fieldId: string;
 }
+/** What a host field renderer receives. It never holds storage, transport or the session itself. */
+interface HostedFieldRenderContext {
+    readonly entry: ContentEntryRef;
+    readonly field: ContentFieldDefinition;
+    readonly permission: HostedFieldPermission;
+    readonly value: JsonValue | undefined;
+    readonly disabled: boolean;
+    readonly labels: HostedEditorLabels;
+    /** Stage a value through the same session edit as the built-in control; the service validates it on save. */
+    setValue(next: JsonValue | undefined): void;
+    /** Mount the built-in control for this field into a host element, e.g. beside a host-owned counter. */
+    renderDefault(element: HTMLElement): HostedFieldMount;
+}
+interface HostedFieldMount {
+    update(context: HostedFieldRenderContext): void;
+    destroy(): void;
+}
+/** Host-owned control for chosen fields. Fields it does not match keep the built-in control. */
+interface HostedFieldRenderer {
+    matches(field: ContentFieldDefinition, entry: ContentEntryRef): boolean;
+    mount(element: HTMLElement, context: HostedFieldRenderContext): HostedFieldMount;
+}
 interface HostedContentEditorOptions extends HostedSessionOptions {
     policy: HostedPolicy;
     selection: HostedEditorSelection;
@@ -680,6 +850,8 @@ interface HostedContentEditorOptions extends HostedSessionOptions {
     /** Map typed diagnostics and transport failures to host-facing messages. Overrides `errorMessages`. */
     formatError?(error: unknown): string;
     onNavigate?(selection: HostedEditorSelection): void | Promise<void>;
+    /** The first matching renderer replaces a record field's control; the label and clear action stay built in. */
+    fieldRenderers?: HostedFieldRenderer[];
 }
 interface HostedContentEditorHandle {
     readonly state: HostedEditorSessionState;
@@ -691,10 +863,126 @@ interface HostedContentEditorHandle {
     preview(): ReturnType<HostedContentSession["captureAndPreview"]>;
     submit(): ReturnType<HostedContentSession["submit"]>;
     refreshPublication(): ReturnType<HostedContentSession["refreshPublication"]>;
+    readonly selection: HostedEditorSelection;
+    /** Restore an exact revision of a permitted Entry as a new working revision; unsaved edits are saved first. */
+    restore(entry: ContentEntryRef, revisionId: string): Promise<HostedResult>;
     dispose(): void;
 }
 /** Mount only the policy projection. Location paths/queries never select local authoring tools. */
 declare function mountHostedContentEditor(container: HTMLElement, options: HostedContentEditorOptions): HostedContentEditorHandle;
 
-export { HostedContentSession, HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost, hostedEditorLabels, hostedEditorLabelsJa, hostedErrorMessages, hostedErrorMessagesJa, mountHostedContentEditor };
-export type { HostedContentEditorHandle, HostedContentEditorOptions, HostedControlLabels, HostedEditorLabels, HostedEditorSelection, HostedEditorSessionState, HostedPreviewAdapter, HostedPreviewController, HostedPreviewControllerOptions, HostedPreviewHostOptions, HostedPreviewLocation, HostedPreviewRenderContext, HostedPreviewState, HostedRecoveryCheckpoint, HostedSessionOptions };
+interface EditorialFieldDifference {
+    fieldId: string;
+    key: string;
+    label: string;
+    change: "added" | "removed" | "changed";
+    before?: JsonValue;
+    after?: JsonValue;
+    /** True when the current definition no longer has this field. */
+    removedFromDefinition: boolean;
+}
+interface EditorialReceipt {
+    operationKey: string;
+    entry: ContentEntryRef;
+    /** The revision the operation appended, or the unchanged head when nothing changed. */
+    revisionId: string | null;
+    /** The precondition after this operation, for a follow-up such as an undo. */
+    expected: string;
+}
+/** One field of the Entry's current definition. */
+interface EditorialField {
+    id: string;
+    key: string;
+    label: string;
+    kind: string;
+    required: boolean;
+}
+
+interface ContentAiProposal {
+    id: string;
+    entry: ContentEntryRef;
+    /** The precondition the proposal was validated against; Apply quotes it unchanged. */
+    expected: string;
+    summary: string;
+    /** Field id → proposed value, scoped fields only. */
+    values: Record<string, string>;
+    differences: EditorialFieldDifference[];
+    /** The exact working values Apply would write. */
+    candidate: Record<string, unknown>;
+    /** SHA-256 of the entry, precondition and candidate: what a rendered preview must acknowledge. */
+    candidateDigest: string;
+    operationKey: string;
+    provider: string;
+    createdAt: string;
+    /** After this a fresh Apply is refused; a committed Apply or Undo stays recoverable. */
+    expiresAt: string;
+}
+type ContentAiPrepareResult = {
+    status: "proposed";
+    proposal: ContentAiProposal;
+} | {
+    status: "refused";
+    message: string;
+};
+/** A proposal with what the backend has committed for it. */
+interface ContentAiOperation {
+    proposal: ContentAiProposal;
+    applied: EditorialReceipt | null;
+    undone: EditorialReceipt | null;
+}
+interface ContentAiOutcome {
+    receipt: EditorialReceipt;
+    recovered: boolean;
+}
+
+/**
+ * Whether inference can run now. `ready` means the provider's own local check
+ * passed, not that a model call has succeeded; `unknown` is never reported as
+ * signed in.
+ */
+type ContentAiInference = {
+    state: "ready";
+    detail: string;
+    version?: string | null;
+} | {
+    state: "unavailable";
+    code: string;
+    message: string;
+} | {
+    state: "unknown";
+    message: string;
+};
+/** `configured` says the host set up Content-AI; `inference` says whether a new proposal can be prepared now. */
+type ContentAiStatus = {
+    configured: false;
+} | {
+    configured: true;
+    provider: string;
+    canApply: boolean;
+    inference: ContentAiInference;
+};
+type ContentAiWireOperation = "content-ai-status" | "content-ai-scope" | "content-ai-prepare" | "content-ai-read" | "content-ai-apply" | "content-ai-undo";
+
+interface RemoteContentAi {
+    status(): Promise<ContentAiStatus>;
+    scope(entry: ContentEntryRef): Promise<EditorialField[]>;
+    prepare(request: {
+        entry: ContentEntryRef;
+        instruction: string;
+    }): Promise<ContentAiPrepareResult>;
+    read(request: {
+        proposalId: string;
+    }): Promise<ContentAiOperation>;
+    apply(request: {
+        proposalId: string;
+        renderedCandidate?: string;
+    }): Promise<ContentAiOutcome>;
+    undo(request: {
+        proposalId: string;
+    }): Promise<ContentAiOutcome>;
+}
+/** The browser half of Content-AI. Provenance and the proposer stay on the server. */
+declare function createRemoteContentAi(call: (operation: ContentAiWireOperation, payload: unknown) => Promise<unknown>): RemoteContentAi;
+
+export { HostedContentSession, HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost, createRemoteContentAi, hostedEditorLabels, hostedEditorLabelsJa, hostedErrorMessages, hostedErrorMessagesJa, mountHostedContentEditor };
+export type { HostedContentEditorHandle, HostedContentEditorOptions, HostedControlLabels, HostedEditorLabels, HostedEditorSelection, HostedEditorSessionState, HostedFieldMount, HostedFieldRenderContext, HostedFieldRenderer, HostedPreviewAdapter, HostedPreviewController, HostedPreviewControllerOptions, HostedPreviewHostOptions, HostedPreviewLocation, HostedPreviewRenderContext, HostedPreviewState, HostedRecoveryCheckpoint, HostedSessionOptions, RemoteContentAi };

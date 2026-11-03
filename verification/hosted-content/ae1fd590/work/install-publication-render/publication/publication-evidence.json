@@ -1,0 +1,49 @@
+{
+  "node": "v22.22.0",
+  "provider": "fixture:approved-course-content",
+  "system": "persisted local synthetic remote, no live Git/API",
+  "assertions": 67,
+  "scenarios": [
+    "two-publications-existing-entry",
+    "two-publications-new-entry",
+    "export-failure-retains-draft",
+    "unavailable-and-stale-status",
+    "disabled-provider-and-forbidden-destination",
+    "independent-external-baseline-conflict"
+  ],
+  "traces": [
+    {
+      "scenario": "existing-entry",
+      "snapshotA": "2fb7d0cd-7cff-4259-a04f-a1f0dc6039fa",
+      "digestA": "63151f54b004e20f3231bf7cec4f64b76ebfca8bf3a2ed4831d35d2063a62358",
+      "snapshotB": "423e8cc8-16fd-4ab1-a2a7-432609e29062",
+      "digestB": "f906a70281fe886100cfaab777be2e7e02e11b493e052d8f8d5010bd06a7b32b",
+      "baseline1": {
+        "gitSha": "78777b06aec85cd90428043137d19cf2787051e5",
+        "contentDigest": "63151f54b004e20f3231bf7cec4f64b76ebfca8bf3a2ed4831d35d2063a62358"
+      },
+      "baseline2": {
+        "gitSha": "7d4e6305a1c4f2e01982a1691c8d06bbe8692162",
+        "contentDigest": "f906a70281fe886100cfaab777be2e7e02e11b493e052d8f8d5010bd06a7b32b"
+      },
+      "databaseReopenedBeforeReconciliation": true
+    },
+    {
+      "scenario": "new-entry",
+      "snapshotA": "c2fa7d8a-47b1-4493-886c-ace48755b5f1",
+      "digestA": "37d43ec83667d92eec9a713d03ea57c43025279925bdf1399385f3b4c18f9ba8",
+      "snapshotB": "803357b5-265f-4a72-b870-d68adcbbc96d",
+      "digestB": "87dfdcc9ac49ae4bfd930935b47a642f8c2f46e010fadfd8370cef56f130101a",
+      "baseline1": {
+        "gitSha": "60ad2d1b14b91889368599f67a53379029b1f43a",
+        "contentDigest": "37d43ec83667d92eec9a713d03ea57c43025279925bdf1399385f3b4c18f9ba8"
+      },
+      "baseline2": {
+        "gitSha": "156aa12920beefcd22499a5ec131652ea605bf9c",
+        "contentDigest": "87dfdcc9ac49ae4bfd930935b47a642f8c2f46e010fadfd8370cef56f130101a"
+      },
+      "databaseReopenedBeforeReconciliation": true
+    }
+  ],
+  "downstreamD1": "not tested"
+}

@@ -12,7 +12,7 @@ import { createFilesystemAssetStore } from "../../../src/assets/storage/filesyst
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-async function fixture(prose = false, variant?: "bound" | "defaults" | "wrapper" | "metadata" | "external-metadata" | "no-optin" | "missing" | "source") {
+async function fixture(prose = false, variant?: "bound" | "defaults" | "wrapper" | "metadata" | "external-metadata" | "computed-dependency" | "no-optin" | "missing" | "source") {
   const root = await mkdtemp(join(tmpdir(), "native-service-")); roots.push(root);
   await cp(resolve("fixtures/edit-host"), root, { recursive: true });
   await writeFile(join(root, "package.json"), JSON.stringify({ name: "native-edit-host", version: "1.0.0", type: "module", exports: { "./components": "./components/pack.mjs", "./metadata": "./components/metadata.mjs" }, dependencies: { preact: "10.27.2", "@zudo-composer/component-contract": "workspace:*" } }));
@@ -28,15 +28,22 @@ async function fixture(prose = false, variant?: "bound" | "defaults" | "wrapper"
   if (variant) {
     const packPath = join(root, "components/pack.mjs");
     let source = await readFile(packPath, "utf8");
-    if (variant === "metadata" || variant === "external-metadata") {
+    if (variant === "metadata" || variant === "external-metadata" || variant === "computed-dependency") {
       await writeFile(join(root, "components/metadata.mjs"), 'export const paragraphDescription = "Initial native ESM metadata";\n');
       source = 'import { paragraphDescription } from "native-edit-host/metadata";\n' + source.replace('description: `${title} native editing proof`', 'description: id === "native.paragraph" ? paragraphDescription : `${title} native editing proof`');
     }
-    if (variant === "external-metadata") {
+    if (variant === "external-metadata" || variant === "computed-dependency") {
       const dependency = join(root, "node_modules/native-metadata");
       await mkdir(dependency);
-      await writeFile(join(dependency, "package.json"), JSON.stringify({ name: "native-metadata", version: "1.0.0", type: "module", exports: "./index.mjs" }));
-      await writeFile(join(dependency, "index.mjs"), 'export const paragraphDescription = "External metadata version one";\n');
+      await writeFile(join(dependency, "package.json"), JSON.stringify({ name: "native-metadata", version: "1.0.0", type: "module", exports: "./index.mjs", ...(variant === "computed-dependency" ? { dependencies: { "native-deep": "1.0.0" } } : {}) }));
+      await writeFile(join(dependency, "index.mjs"), 'export const paragraphDescription = "External metadata version one";\n' + (variant === "computed-dependency" ? 'export const loadDeep = (name = ["native", "deep"].join("-")) => import(name);\n' : ""));
+      if (variant === "computed-dependency") {
+        // Reachable only through the computed import above.
+        const deep = join(dependency, "node_modules/native-deep");
+        await mkdir(deep, { recursive: true });
+        await writeFile(join(deep, "package.json"), JSON.stringify({ name: "native-deep", version: "1.0.0", type: "module", exports: "./index.mjs" }));
+        await writeFile(join(deep, "index.mjs"), "export const deep = 1;\n");
+      }
       source = source.replace('"native-edit-host/metadata"', '"native-metadata"');
       const packagePath = join(root, "package.json"), pkg = JSON.parse(await readFile(packagePath, "utf8"));
       pkg.dependencies["native-metadata"] = "1.0.0";
@@ -178,11 +185,13 @@ const approval = (plan: { id: string; digest: string }) => ({ planId: plan.id, a
     expect((await captureHost(options)).tokens).toEqual(before);
   });
 
-  it.each(["metadata", "external-metadata"] as const)("refuses %s byte changes after context load but before the first service operation", async (variant) => {
+  it.each(["metadata", "external-metadata", "computed-dependency"] as const)("refuses %s byte changes after context load but before the first service operation", async (variant) => {
     const { service, root, options } = await fixture(false, variant);
     // fixture loaded host context, but has never inspected or planned through service.
     const before = (await captureHost(options)).tokens;
-    const file = variant === "metadata" ? join(root, "components/metadata.mjs") : join(root, "node_modules/native-metadata/index.mjs");
+    const file = variant === "metadata" ? join(root, "components/metadata.mjs")
+      : variant === "computed-dependency" ? join(root, "node_modules/native-metadata/node_modules/native-deep/index.mjs")
+        : join(root, "node_modules/native-metadata/index.mjs");
     await writeFile(file, 'export const paragraphDescription = "Same version, changed metadata bytes";\n');
     await expect(service.plan(request)).rejects.toMatchObject({ code: "stale-plan", message: expect.stringMatching(/restart|new process/i) });
     await expect(createEditingService(options).inspect({ workspaceId: "proof", page: "/" })).rejects.toMatchObject({ code: "stale-plan" });

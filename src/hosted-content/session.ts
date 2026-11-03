@@ -42,7 +42,7 @@ const identities = (state: HostedState): HostedIdentities => ({ draftRevision: s
 const conflicts = new Set(["revision-conflict", "baseline-conflict", "definition-conflict"]);
 const blocking = new Set(["configuration-required"]);
 const rejectedPhase = (code: string | undefined): HostedSavePhase => conflicts.has(code ?? "") ? "conflict" : blocking.has(code ?? "") ? "blocked" : "failed";
-const rejectionCodes = new Set<HostedErrorCode>(["invalid-request", "invalid-value", "forbidden", "not-found", "revision-conflict", "baseline-conflict", "definition-conflict", "operation-key-reuse", "publication-busy", "incomplete", "configuration-required"]);
+const rejectionCodes = new Set<HostedErrorCode>(["invalid-request", "invalid-value", "forbidden", "not-found", "revision-conflict", "baseline-conflict", "definition-conflict", "operation-key-reuse", "publication-busy", "incomplete", "restore-incompatible", "configuration-required"]);
 function rejectionCode(error: unknown): HostedErrorCode | null {
   const code = error && typeof error === "object" && "code" in error ? error.code : null;
   return typeof code === "string" && rejectionCodes.has(code as HostedErrorCode) ? code as HostedErrorCode : null;
@@ -252,6 +252,24 @@ export class HostedContentSession {
   }
   reorder(collectionId: string, entries: ContentEntryRef[]): Promise<HostedResult> {
     return this.collectionAction({ kind: "reorder", collectionId, entries });
+  }
+  /**
+   * Restore an exact revision as a new working revision through the guarded service command. Retained edits are
+   * saved first, so a restore never overwrites unsaved work; a definite refusal writes nothing and leaves no
+   * operation to review, because the request carried no local edits.
+   */
+  async restoreRevision(entry: ContentEntryRef, revisionId: string): Promise<HostedResult> {
+    await this.flush();
+    if (this.creationDraft || this.invalidInputs.size) throw new Error("Save or cancel the new item before restoring");
+    this.revision++; this.reviewed = null; this.options.preview?.invalidate?.();
+    try {
+      const result = await this.command({ kind: "restore-revision", entry, revisionId });
+      this.presentationRevision++; this.emit();
+      return result;
+    } catch (error) {
+      if (this.pending?.request.kind === "restore-revision" && this.pending.rejected) { this.pending = null; await this.persist(); this.emit(); }
+      throw error;
+    }
   }
   /** A clean refresh may adopt a confirmed integration; dirty edits need explicit review. */
   async refresh(): Promise<void> {

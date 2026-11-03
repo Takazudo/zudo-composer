@@ -13,20 +13,18 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
-import { basename, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdtemp, readFile, readdir, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join, relative } from "node:path";
 import { parseArgs } from "node:util";
 import { chromium, expect } from "@playwright/test";
 import { frame, lastReply, send } from "./browser-helpers.mjs";
 import { freePort, launchLocalHost } from "./launch-local-host.mjs";
+import { LOCAL_DEMOS } from "./local-demo-journeys.mjs";
+import { DRY_LABEL, REAL_LABEL, ciRefusal, createScrubber, repo, selectCliExecutable, writeNumberedResult, writesUnderVerification } from "./real-cli-shared.mjs";
 
-const repo = fileURLToPath(new URL("../..", import.meta.url));
-const FAKES = { "claude-cli": join(repo, "scripts/fixtures/assistant/fake-claude-cli.mjs"), "codex-cli": join(repo, "scripts/fixtures/assistant/fake-codex-cli.mjs") };
-const REAL_LABEL = "normal-login real CLI inference";
-const DRY_LABEL = "fake executable dry run — not real CLI evidence";
-const USAGE = `Usage: node scripts/assistant/verify-real-cli.mjs --provider claude-cli|codex-cli [--executable <name|/abs/path>] [--model <id>] [--keep] [--yes]
+const USAGE = `Usage: node scripts/assistant/verify-real-cli.mjs --provider claude-cli|codex-cli [--executable <name|/abs/path>] [--model <id>] [--demo sample|landing|blog|webshop] [--keep] [--yes]
+  --demo                   the real demo for the bounded smoke journey (default sample)
   --yes                    required to start (real CLI calls spend your normal CLI plan/quota)
   --keep                   keep the disposable host directory afterwards
   --out-dir <dir>          where the JSON result goes (default verification/assistant/real-cli)
@@ -37,7 +35,7 @@ const { values: options } = parseArgs({
   strict: true,
   options: {
     provider: { type: "string" }, executable: { type: "string" }, model: { type: "string" },
-    keep: { type: "boolean", default: false }, yes: { type: "boolean", default: false },
+    demo: { type: "string", default: "sample" }, keep: { type: "boolean", default: false }, yes: { type: "boolean", default: false },
     "out-dir": { type: "string" }, "allow-fake-executable": { type: "boolean", default: false }, help: { type: "boolean", default: false },
   },
 });
@@ -46,19 +44,17 @@ const refuse = message => { console.error(`${message}\n${USAGE}`); process.exit(
 if (options.help) { console.log(USAGE); process.exit(0); }
 const provider = /** @type {"claude-cli" | "codex-cli"} */ (options.provider);
 if (provider !== "claude-cli" && provider !== "codex-cli") refuse("--provider must be claude-cli or codex-cli.");
-if (process.env.CI && process.env.CI !== "false") refuse("Refusing to run with CI set: this check uses a person's normal CLI sign-in and is never a CI lane.");
-const requested = options.executable ?? (provider === "claude-cli" ? "claude" : "codex");
-// A path is made absolute (the server accepts only a bare command name or an absolute path).
-const executable = requested.includes("/") ? resolve(requested) : requested;
-const isFake = existsSync(executable) && Object.values(FAKES).includes(await realpath(executable));
-if (isFake && !options["allow-fake-executable"]) refuse("That executable is a test fake; pass --allow-fake-executable for a dry run.");
-if (options["allow-fake-executable"] && !isFake) refuse("--allow-fake-executable accepts only scripts/fixtures/assistant/fake-claude-cli.mjs or fake-codex-cli.mjs.");
-if (isFake && (await realpath(executable)) !== FAKES[provider]) refuse(`The fake executable does not match --provider ${provider}.`);
-const dryRun = isFake;
+const inCi = ciRefusal();
+if (inCi) refuse(inCi);
+const demo = LOCAL_DEMOS.find(candidate => candidate.host === options.demo);
+if (!demo) refuse(`--demo must be one of ${LOCAL_DEMOS.map(candidate => candidate.host).join(", ")}.`);
+const selected = await selectCliExecutable({ provider, requested: options.executable, allowFake: options["allow-fake-executable"] });
+if ("refusal" in selected) refuse(selected.refusal);
+const { executable, dryRun } = /** @type {{ executable: string, dryRun: boolean }} */ (selected);
 const label = dryRun ? DRY_LABEL : REAL_LABEL;
 const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
 const outDir = options["out-dir"] ? join(process.cwd(), options["out-dir"]) : dryRun ? join(repo, "test-results/assistant-real-cli-dry-run") : join(repo, "verification/assistant/real-cli");
-if (dryRun && relative(join(repo, "verification"), outDir).split(/[\\/]/)[0] !== "..") refuse("A dry run never writes under verification/.");
+if (dryRun && writesUnderVerification(outDir)) refuse("A dry run never writes under verification/.");
 
 // Natural phrasing for a real model; the fake policy only understands its own fixed forms.
 const TARGET = "Verified through the Assistant";
@@ -68,12 +64,14 @@ const PROMPTS = dryRun ? {
   recall: "Who is our audience?",
   slow: "wait",
   outOfScope: "Write custom CSS and HTML for a new component called RedBanner.",
+  demo: `replace "${demo.find}" with "${demo.replace}"`,
 } : {
   edit: `On this page, change the first paragraph so it reads "${TARGET}" instead of "Before replacement". Change nothing else.`,
   remember: "Please remember this for future conversations: our audience is first-time gardeners.",
   recall: "In one sentence, who is our audience?",
   slow: "Without proposing any page changes, write a very long, detailed essay (at least 3000 words) about the history of typography.",
   outOfScope: "Write custom CSS and HTML to add a brand-new RedBanner component with a red background to this page.",
+  demo: `On this page, change the text "${demo.find}" so it reads "${demo.replace}" instead. Change nothing else.`,
 };
 
 console.log([
@@ -81,8 +79,9 @@ console.log([
   `  Label:  ${label}`,
   "  Plan:   fresh disposable native-edit host in a temp dir, free loopback port, real dev server + Playwright UI.",
   "          Steps (each once): provider status → wording edit, Draft, Apply, reload, Undo → Memory Auto + recall in a",
-  "          new conversation → Stop a long reply → restart and check persistence → out-of-scope request.",
-  `  Cost:   about 8–12 ${dryRun ? "fake (free, offline)" : "real model replies on your normal CLI sign-in"}.`,
+  "          new conversation → Stop a long reply → restart and check persistence → out-of-scope request →",
+  `          real-demo smoke on ${demo.name} (its own disposable host): proposal, Draft preview, Apply, restart, Undo.`,
+  `  Cost:   about 9–13 ${dryRun ? "fake (free, offline)" : "real model replies on your normal CLI sign-in"}.`,
   `  Result: ${relative(repo, outDir) || "."}/${provider}-<cliVersion>-${sha.slice(0, 8)}.json`,
 ].join("\n"));
 if (!dryRun && !options.yes) { console.log("Nothing was run. Re-run with --yes to start."); process.exit(2); }
@@ -92,7 +91,7 @@ const dir = join(temporary, "host");
 const port = await freePort();
 const data = join(dir, "cms");
 const composition = join(data, "compositions/workspace-v1-native-proof/composition-home.composition.json");
-const scrub = (/** @type {string} */ text) => text.replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "gu"), "").split(temporary).join("<tmp>").split(repo.replace(/\/$/, "")).join("<repo>").split(homedir()).join("~");
+const scrub = createScrubber([temporary, repo]);
 const log = (/** @type {string} */ line) => console.log(`real-cli: ${line}`);
 
 /** @typedef {{ name: string, status: "pass" | "fail" | "blocked", durationMs: number, details: Record<string, unknown>, error?: string }} StepResult */
@@ -340,6 +339,63 @@ try {
       details.hostSourceUnchanged = JSON.stringify(await hostSource()) === JSON.stringify(source);
       if (!details.draftUnchanged || !details.pagesUnchanged || !details.hostSourceUnchanged) throw new Error("An out-of-scope request changed the draft, a page or host source.");
     });
+    // 7. Bounded real-demo smoke journey in its own disposable host: one proposal,
+    // Draft preview, Apply, restart, Undo. Judged by saved bytes, never wording.
+    await step(`demo-smoke-${demo.host}`, async details => {
+      await p.close();
+      await server?.stop();
+      server = undefined;
+      const demoDir = join(temporary, `demo-${demo.host}`);
+      const demoArgs = ["--host", demo.host, "--dir", demoDir, "--port", String(port), "--provider", provider, "--executable", executable, ...(options.model ? ["--model", options.model] : [])];
+      const workspace = join(demoDir, `cms/compositions/workspace-v1-${demo.host}-assistant`);
+      /** Saved Composition JSON and derived JSX, timestamps factored out. */
+      const saved = async () => Object.fromEntries(await Promise.all((await readdir(workspace)).filter(name => name.endsWith(".composition.json") || name.endsWith(".tsx")).sort().map(async name => [name, (await readFile(join(workspace, name), "utf8")).replace(/"updatedAt": "[^"]+"/g, "")])));
+      const owned = async () => JSON.stringify([await snapshot(join(demoDir, "cms/content")), await snapshot(join(demoDir, "cms/mappings"))]);
+      server = await launchLocalHost(demoArgs);
+      details.created = new RegExp(`"${demo.host}" created`).test(server.output());
+      p = await openPage();
+      await expect(frame(p, "Current").getByText(demo.find).first()).toBeVisible({ timeout: 120_000 });
+      const before = await saved();
+      const ownedBefore = await owned();
+      await send(p, PROMPTS.demo, replyTimeout);
+      const pending = p.locator(".cms-assistant-review .cms-assistant-count").first();
+      await expect(pending).toBeVisible({ timeout: 10_000 });
+      details.pendingChanges = Number(await pending.textContent());
+      details.proposalLeftSavedFilesUntouched = JSON.stringify(await saved()) === JSON.stringify(before);
+      await p.getByRole("button", { name: /^Draft/ }).click();
+      await expect(frame(p, "Draft").getByText(demo.replace).first()).toBeVisible({ timeout: 60_000 });
+      await expect(p.locator("#assistant-apply-state")).toContainText("rendered successfully", { timeout: 60_000 });
+      details.previewRendered = true;
+      await p.getByRole("button", { name: "Apply to Composer" }).click();
+      await expect(p.getByRole("heading", { name: "Applied to Composer" })).toBeVisible({ timeout: 60_000 });
+      const applied = await saved();
+      const changed = Object.keys(applied).filter(name => applied[name] !== before[name]);
+      details.appliedFiles = changed;
+      details.appliedCarriesTarget = changed.length > 0 && changed.every(name => applied[name]?.includes(demo.replace));
+      details.contentAndMappingUntouched = await owned() === ownedBefore;
+      if (!details.created || !details.proposalLeftSavedFilesUntouched || !details.appliedCarriesTarget || !details.contentAndMappingUntouched) throw new Error("The demo proposal/Apply did not write exactly the requested change to saved JSON/JSX.");
+      await p.close();
+      await server.stop();
+      server = await launchLocalHost(demoArgs);
+      details.restartReused = new RegExp(`"${demo.host}" reused`).test(server.output());
+      p = await openPage();
+      await expect(frame(p, "Current").getByText(demo.replace).first()).toBeVisible({ timeout: 120_000 });
+      details.restartKeptApplied = JSON.stringify(await saved()) === JSON.stringify(applied);
+      let attempts = 0;
+      for (;;) {
+        attempts++;
+        await p.getByRole("button", { name: "Undo apply" }).click();
+        const outcome = await Promise.race([
+          p.getByRole("heading", { name: "Undo committed" }).waitFor({ timeout: 60_000 }).then(() => "done"),
+          p.locator(".cms-assistant-review [role=alert]").filter({ hasText: "Finish saving in every authoring tab" }).waitFor({ timeout: 60_000 }).then(() => "refused"),
+        ]);
+        if (outcome === "done" || attempts >= 2) break;
+      }
+      details.undoAttempts = attempts;
+      await expect(p.getByRole("heading", { name: "Undo committed" })).toBeVisible();
+      details.undoRestored = JSON.stringify(await saved()) === JSON.stringify(before);
+      if (!details.restartReused || !details.restartKeptApplied || !details.undoRestored) throw new Error("The demo restart or Undo did not keep or restore the saved files.");
+    });
     exitCode = steps.every(entry => entry.status === "pass") ? 0 : 1;
   }
   const runs = (await records()).runs;
@@ -367,11 +423,7 @@ const result = {
   ranAt: new Date().toISOString(),
   steps,
 };
-await mkdir(outDir, { recursive: true });
-// Earlier results (failures included) are kept; a rerun at the same version and commit gets a numbered name.
-let file = join(outDir, `${provider}-${version}-${sha.slice(0, 8)}.json`);
-for (let index = 2; existsSync(file); index++) file = join(outDir, `${provider}-${version}-${sha.slice(0, 8)}-${index}.json`);
-await writeFile(file, `${JSON.stringify(result, null, 2)}\n`);
+const file = await writeNumberedResult(outDir, `${provider}-${version}-${sha.slice(0, 8)}`, result);
 if (options.keep) log(`kept disposable host at ${dir}`);
 else await rm(temporary, { recursive: true, force: true });
 log(`${result.outcome} (${label}); result: ${relative(repo, file)}`);

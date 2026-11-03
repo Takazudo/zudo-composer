@@ -1,0 +1,288 @@
+{
+  "installedToolSha": "79635a7c1d40c44f9f5213ee9ad549bfb4aaf0e1",
+  "node": "v22.22.0",
+  "packageManager": "pnpm@11.5.2",
+  "contractSha": "c0b452da075b66757c60bd0d721a47062d4354d0",
+  "contractProtocol": 2,
+  "peerPreact": "10.29.8",
+  "commands": [
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "/home/user/zudo-composer/scripts/install-hosted-consumer.mjs",
+        "79635a7c1d40c44f9f5213ee9ad549bfb4aaf0e1",
+        "/tmp/claude-0/sc/hc/c1"
+      ],
+      "cwd": "/home/user/zudo-composer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/tmp/claude-0/sc/hc/c1/work/install-browser-bundle"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/tmp/claude-0/sc/hc/c1/work/install-browser-transport.sqlite",
+        "/tmp/claude-0/sc/hc/c1/work/install-browser-transport"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/tmp/claude-0/sc/hc/c1/work/install-render.sqlite"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/tmp/claude-0/sc/hc/c1/work/install-publication-render"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1/renderer",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "zudo-composer",
+        "--help"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.worker.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.browser.json",
+        "--pretty",
+        "false"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "worker-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-bundle-proof.mjs",
+        "/tmp/claude-0/sc/hc/c1/work/frozen-browser-bundle"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "node-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "durable-proof.mjs"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-transport-proof.mjs",
+        "/tmp/claude-0/sc/hc/c1/work/frozen-browser-transport.sqlite",
+        "/tmp/claude-0/sc/hc/c1/work/frozen-browser-transport"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "render-proof.mjs",
+        "/tmp/claude-0/sc/hc/c1/work/frozen-render.sqlite"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "publication-render-proof.mjs",
+        "/tmp/claude-0/sc/hc/c1/work/frozen-publication-render"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "corepack",
+      "args": [
+        "pnpm",
+        "exec",
+        "playwright",
+        "install",
+        "--with-deps",
+        "chromium"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-proof.mjs",
+        "/tmp/claude-0/sc/hc/c1/work/browser.sqlite"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    },
+    {
+      "command": "/opt/node22/bin/node",
+      "args": [
+        "browser-broad-proof.mjs",
+        "/tmp/claude-0/sc/hc/c1/work/browser-broad.sqlite",
+        "/tmp/claude-0/sc/hc/c1/work/browser-broad"
+      ],
+      "cwd": "/tmp/claude-0/sc/hc/c1",
+      "outcome": "passed"
+    }
+  ],
+  "payloadSha256": "50d42154ae87b8093158feb8fe4a4e792cb8ceb8e3586c52bd27724c0c8d663b",
+  "lockDigests": {
+    "package.json": "454f60e62a330f702a11a253bc87e382569c56bba18c1dc05f1ff0e6b724d4af",
+    "pnpm-lock.yaml": "bdcc495407035e4ae91501ab53794fee53e562c1832c840804338036f7688ca8",
+    "renderer/package.json": "e4a3e9c18a03dca612dcbf09f3739056fe22c35cfbb1a758ba7aed6daa9d9a44",
+    "renderer/pnpm-lock.yaml": "1c6abdcc7bf0d7a4c0dbf3888bb888ad5b9a3dabdff68acccbd18addbabb8c5e"
+  },
+  "independentInstall": "passed",
+  "frozenReinstall": "passed",
+  "worker": "passed",
+  "browserBundle": "passed",
+  "nodeBoundary": "passed",
+  "sqlite": "passed",
+  "httpTransport": "passed",
+  "staticRenderer": "passed",
+  "browser": "passed"
+}

@@ -122,7 +122,7 @@ export default defineConfig({
       workspaceRoot: composerConfig.workspaceRoot,
       descriptors: [
         workspaceDomainProvider({ registryRoot: workspaceRegistryRoot, domainRoots }),
-        contentDomainProvider({ contentRoot: domainRoots.content }),
+        contentDomainProvider({ contentRoot: domainRoots.content, release: { workspaceRoot: composerConfig.workspaceRoot, packIdentity: componentPack.identity, stylesPath: composerConfig.paths.styles } }),
         mappingDomainProvider({ mappingsRoot: domainRoots.mappings }),
         sitemapperDomainProvider({ sitemapsRoot: domainRoots.sitemaps }),
       ],

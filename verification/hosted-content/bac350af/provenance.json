@@ -1,0 +1,7 @@
+{
+  "packageOutputSha": "bac350afa149a206f7077af9bda357988161c5ca",
+  "source": "Unmodified local run of node scripts/verify-hosted-consumer.mjs <C> <scratch> (the hosted:installed command) in the Claude Code cloud container (Node 24.22.1, pnpm 11.5.2) with PLAYWRIGHT_BROWSERS_PATH pointing at the preinstalled Chromium mapped to the consumer Playwright revision. C is the storage-correctness change: the in-batch conditional-commit version guard in the D1 and SQLite fixture adapters, the shared conditional-commit-version-guard conformance scenario, and read-only D1 initialization classification. packed-payload-inventory.json is a copy of verification/hosted-content/current-payload.json written with HEAD at C; this evidence-only commit leaves the packed payload byte-identical, as check-hosted-payload --check proves.",
+  "browser": "passed (preinstalled Chromium under the consumer's Playwright 1.62.1)",
+  "contentAi": "Article CMS Content-AI ran with the offline fake provider only. It is protocol and UI evidence, not model inference.",
+  "d1": "Local workerd 1.20261006.1 through miniflare 5.20261006.1-alpha only; no Cloudflare account, remote binding, production D1 or deployment."
+}

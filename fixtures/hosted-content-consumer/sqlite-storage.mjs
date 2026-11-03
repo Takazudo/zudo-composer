@@ -37,9 +37,19 @@ const SCHEMA = `
   );
   CREATE TABLE IF NOT EXISTS hosted_snapshot (id TEXT PRIMARY KEY, body TEXT NOT NULL CHECK (json_valid(body)));
   CREATE TABLE IF NOT EXISTS hosted_publication (id TEXT PRIMARY KEY, body TEXT NOT NULL CHECK (json_valid(body)));
-  -- Never holds a row: inserting NULL aborts the whole commit when the head CAS did not apply.
+  -- Insert-only Entry history; the unique sequence refuses a racing append even without the head guard.
+  CREATE TABLE IF NOT EXISTS hosted_revision (
+    id TEXT PRIMARY KEY, provider_id TEXT NOT NULL, model_id TEXT NOT NULL, record_id TEXT NOT NULL,
+    sequence INTEGER NOT NULL CHECK (sequence > 0), body TEXT NOT NULL CHECK (json_valid(body)),
+    UNIQUE (provider_id, model_id, record_id, sequence)
+  );
+  -- Never holds a row: inserting NULL aborts the whole commit when the version precondition or the head UPDATE fails.
   CREATE TABLE IF NOT EXISTS hosted_commit_guard (ok INTEGER NOT NULL);
 `;
+
+const HEAD_UPDATE = 1;
+const revisionInsert = revision => ["INSERT INTO hosted_revision (id, provider_id, model_id, record_id, sequence, body) VALUES (?, ?, ?, ?, ?, ?)",
+  revision.id, revision.entry.providerId, revision.entry.modelId, revision.entry.recordId, revision.sequence, JSON.stringify(revision)];
 
 /**
  * The exact statement list a host would send as one D1 batch(). Every statement is
@@ -47,16 +57,21 @@ const SCHEMA = `
  */
 function commitStatements(change) {
   const statements = [
+    // Decisive precondition before any write: the head exists at `expectedVersion` and the proposed version differs.
+    ["INSERT INTO hosted_commit_guard (ok) SELECT NULL WHERE ? IS ? OR NOT EXISTS (SELECT 1 FROM hosted_head WHERE id = 1 AND version = ?)",
+      change.head.version, change.expectedVersion, change.expectedVersion],
     ["UPDATE hosted_head SET version = ?, state = ?, baseline_providers = ?, active_publication_id = ? WHERE id = 1 AND version = ?",
       change.head.version, JSON.stringify(change.head.state), JSON.stringify(change.head.baselineProviders),
       change.head.activePublicationId, change.expectedVersion],
-    ["INSERT INTO hosted_commit_guard (ok) SELECT NULL WHERE (SELECT version FROM hosted_head WHERE id = 1) IS NOT ?", change.head.version],
+    // Postcondition: the UPDATE itself changed exactly one row.
+    ["INSERT INTO hosted_commit_guard (ok) SELECT NULL WHERE changes() <> 1"],
   ];
   if (change.receipt) statements.push(["INSERT INTO hosted_receipt (actor_id, operation_key, fingerprint, result) VALUES (?, ?, ?, ?)",
     change.receipt.actorId, change.receipt.operationKey, change.receipt.fingerprint, JSON.stringify(change.receipt.result)]);
   if (change.snapshot) statements.push(["INSERT INTO hosted_snapshot (id, body) VALUES (?, ?)", change.snapshot.id, JSON.stringify(change.snapshot)]);
   if (change.publication) statements.push(["INSERT INTO hosted_publication (id, body) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET body = excluded.body",
     change.publication.id, JSON.stringify(change.publication)]);
+  for (const revision of change.revisions ?? []) statements.push(revisionInsert(revision));
   return statements;
 }
 
@@ -79,6 +94,7 @@ function dumpDatabase(connection) {
       .map(receipt => ({ actorId: receipt.actor_id, operationKey: receipt.operation_key, fingerprint: receipt.fingerprint, result: JSON.parse(receipt.result) })),
     snapshots: connection.prepare("SELECT body FROM hosted_snapshot ORDER BY id").all().map(row => JSON.parse(row.body)),
     publications: connection.prepare("SELECT body FROM hosted_publication ORDER BY id").all().map(row => JSON.parse(row.body)),
+    revisions: connection.prepare("SELECT body FROM hosted_revision ORDER BY provider_id, model_id, record_id, sequence").all().map(row => JSON.parse(row.body)),
   };
 }
 
@@ -98,6 +114,7 @@ export async function initializeSqliteDatabase(filename, seed) {
           .run(receipt.actorId, receipt.operationKey, receipt.fingerprint, JSON.stringify(receipt.result));
         for (const snapshot of seed.snapshots) connection.prepare("INSERT INTO hosted_snapshot (id, body) VALUES (?, ?)").run(snapshot.id, JSON.stringify(snapshot));
         for (const publication of seed.publications) connection.prepare("INSERT INTO hosted_publication (id, body) VALUES (?, ?)").run(publication.id, JSON.stringify(publication));
+        for (const revision of seed.revisions ?? []) { const [sql, ...values] = revisionInsert(revision); connection.prepare(sql).run(...values); }
       }
       connection.exec("COMMIT");
     } catch (error) { connection.exec("ROLLBACK"); throw error; }
@@ -141,7 +158,7 @@ export function openSqliteHandle(filename, { busyDeadlineMilliseconds = 8_000 } 
       for (const [index, [sql, ...values]] of statements.entries()) {
         try { connection.prepare(sql).run(...values); }
         catch (error) { if (constraint(error)) { connection.exec("ROLLBACK"); started = false; return false; } throw error; }
-        if (index === 0 && selectedFault === "receipt-persistence") {
+        if (index === HEAD_UPDATE && selectedFault === "receipt-persistence") {
           // An actual SQLite CHECK failure after the head UPDATE proves rollback covers both.
           try { connection.prepare("INSERT INTO hosted_receipt (actor_id, operation_key, fingerprint, result) VALUES ('fault', 'fault', 'fault', 'invalid-json')").run(); }
           catch (error) { throw new Error(`Injected receipt persistence failure: ${error.message}`, { cause: error }); }
@@ -169,6 +186,11 @@ export function openSqliteHandle(filename, { busyDeadlineMilliseconds = 8_000 } 
       },
       async readSnapshot(snapshotId) { return read(() => readBody(connection, "hosted_snapshot", snapshotId)); },
       async readPublication(publicationId) { return read(() => readBody(connection, "hosted_publication", publicationId)); },
+      async readRevision(revisionId) { return read(() => readBody(connection, "hosted_revision", revisionId)); },
+      async listRevisions(entry, { beforeSequence, limit }) {
+        return read(() => connection.prepare("SELECT body FROM hosted_revision WHERE provider_id = ? AND model_id = ? AND record_id = ? AND sequence < ? ORDER BY sequence DESC LIMIT ?")
+          .all(entry.providerId, entry.modelId, entry.recordId, beforeSequence ?? Number.MAX_SAFE_INTEGER, limit).map(row => JSON.parse(row.body)));
+      },
       commit,
     },
     // A read transaction gives every table the same WAL snapshot.

@@ -29,7 +29,7 @@ export function createFixtureSeed() {
     policy: createFixturePolicy(), pack: hostPack, renderer: hostRenderer, contractVersion: CONTRACT_VERSION })).digest("hex");
   const contentDigest = createHash("sha256").update(canonicalSerialize(providers)).digest("hex");
   return { state: { draftRevision: "r0", baseline: { gitSha: "0".repeat(40), contentDigest }, definition, integrationFence: 0, providers },
-    baselineProviders: structuredClone(providers), receipts: [], snapshots: [], publications: [] };
+    baselineProviders: structuredClone(providers), receipts: [], snapshots: [], publications: [], revisions: [] };
 }
 export function createFixturePolicy() {
   return { models: [

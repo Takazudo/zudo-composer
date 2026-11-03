@@ -119,6 +119,36 @@ export async function runLocalHostProof({ directory } = {}) {
     check("restart keeps the publication and its artifact link", rowAfterRestart?.status === "integrated" && rowAfterRestart.artifact?.url === rowA.artifact.url);
     check("restart serves identical artifact bytes", (await readArtifact(url, rowA)).html === indexA.toString());
 
+    // 2b. Editorial API over the loopback boundary: perspectives, history, comparison, guarded restore, restart.
+    const q = value => encodeURIComponent(JSON.stringify(value));
+    const entryAt = perspective => api(url, `/api/entry?q=${q({ perspective, entry: fixtureEntry })}`);
+    await save(url, "編集中の講座B", "editorial-b");
+    const [workingB, publishedA] = [await entryAt("working"), await entryAt("published")];
+    check("working reads B while published reads the integrated A", workingB.values.title === "編集中の講座B" && publishedA.values.title === "ローカル講座A" && workingB.status === "changed");
+    const overview = await api(url, "/api/publication-status");
+    check("publication status separates submission, activation, artifact and deployment", overview.submission?.publicationId === A.publication.id
+      && overview.submission.status === "integrated" && overview.activated.baseline.contentDigest === A.snapshot.digest && overview.artifact === A.publication.id && overview.deployed === false);
+    const history = await api(url, `/api/revisions?q=${q({ entry: fixtureEntry })}`);
+    const revisionA = history.revisions.find(revision => revision.operation.key === "save-a");
+    check("history lists exact revisions newest first", history.revisions[0].operation.key === "editorial-b" && revisionA?.values.title === "ローカル講座A"
+      && history.revisions.every((revision, index, all) => index === 0 || all[index - 1].sequence === revision.sequence + 1));
+    check("keyed revision read is exact", JSON.stringify(await api(url, `/api/revision?id=${encodeURIComponent(revisionA.id)}`)) === JSON.stringify(revisionA));
+    const diff = await api(url, `/api/compare?q=${q({ entry: fixtureEntry, from: { revisionId: revisionA.id }, to: { perspective: "working" } })}`);
+    check("comparison names the changed field", diff.differences.length === 1 && diff.differences[0].fieldId === "title" && diff.differences[0].after === "編集中の講座B");
+    const current = await api(url, "/api/state");
+    const restore = { kind: "restore-revision", operationKey: "editorial-restore", expected: identities(current), entry: fixtureEntry, revisionId: revisionA.id };
+    const restored = await api(url, "/api/execute", restore);
+    check("restore creates a new working revision without moving the baseline", restored.state.providers[0].entries.find(entry => entry.id === "home").values.title === "ローカル講座A"
+      && JSON.stringify(restored.state.baseline) === JSON.stringify(current.baseline));
+    check("restore retry replays its receipt", JSON.stringify(await api(url, "/api/execute", restore)) === JSON.stringify(restored));
+    const stale = await api(url, "/api/execute", { ...restore, operationKey: "editorial-stale" }).then(() => null, error => error);
+    check("stale restore is refused over HTTP", stale?.status === 409 && stale.code === "revision-conflict");
+    const afterRestore = await api(url, `/api/revisions?q=${q({ entry: fixtureEntry })}`);
+    check("restore appended exactly one revision naming its source", afterRestore.revisions.length === history.revisions.length + 1 && afterRestore.revisions[0].restoredFrom === revisionA.id);
+    url = await restart();
+    check("restart keeps history and both perspectives", JSON.stringify(await api(url, `/api/revisions?q=${q({ entry: fixtureEntry })}`)) === JSON.stringify(afterRestore)
+      && (await entryAt("published")).values.title === "ローカル講座A");
+
     // 3. Saving C while B is publishing corrupts neither.
     url = await restart({ buildDelayMs: 2500 });
     await save(url, "講座B", "save-b");

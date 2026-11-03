@@ -1,0 +1,5 @@
+{
+  "packageOutputSha": "80e45d68e65d0eb14d29f639f1a6cd4a6a0fd3d7",
+  "source": "Unmodified local run of corepack pnpm hosted:installed <C> <scratch> in the Claude Code cloud container (Node 24.22.2, pnpm 11.5.2) with PLAYWRIGHT_BROWSERS_PATH pointing at the pinned Chromium 1234 install. packed-payload-inventory.json is a copy of the checked verification/hosted-content/current-payload.json written at C.",
+  "browser": "passed (pinned Chromium 1234)"
+}

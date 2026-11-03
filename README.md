@@ -178,6 +178,7 @@ persistence and production providers remain host-owned.
 | `zudo-composer/hosted-content/editor` and `/editor.css` | Browser editor (Preact peer), English and Japanese label sets |
 | `zudo-composer/hosted-content/preview` | Framework-free iframe controller and receiver |
 | `zudo-composer/hosted-content/testing` | Storage conformance runner for a host's adapter |
+| `zudo-composer/hosted-content/node` | Node-only Content-AI provider selection (`fake`, `claude-cli`, `codex-cli`) for a host's own server |
 
 The service exposes six finite commands, opaque draft revisions, keyed storage
 reads with one conditional commit (mappable to a D1 `batch()`), and
@@ -510,8 +511,10 @@ you choose **Apply to Composer** (not publish). The host selects one provider:
 your signed-in Claude Code or Codex CLI, an offline deterministic fake, or the
 Anthropic Messages API; there is no fallback between them. Site Memory, modes,
 provider configuration and data flow are described in
-[docs/assistant.md](docs/assistant.md); `corepack pnpm assistant:local` starts
-a persistent local AI editing host ([docs/local-operation.md](docs/local-operation.md)).
+[docs/assistant.md](docs/assistant.md). `corepack pnpm assistant:local -- --host <sample|landing|blog|webshop>`
+opens any of the four demos in a persistent local AI editing host; the demo
+table, things to try, providers and reset are in
+[docs/local-operation.md](docs/local-operation.md#ai-editing-host).
 
 ## Development and validation
 

@@ -1,6 +1,6 @@
-import { readFile, realpath } from "node:fs/promises";
+import { readFile, readdir, realpath } from "node:fs/promises";
 import { isBuiltin } from "node:module";
-import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { BuildEnvironment, createIdResolver, parseAst, resolveConfig, transformWithOxc } from "vite";
 import { resolveComposerModules } from "../../plugins/module-resolution.mjs";
 import { tailwindResolverAlias } from "../../plugins/tailwind-plugin.mjs";
@@ -17,6 +17,11 @@ export interface PackSourceGraph {
   readonly dependencies: readonly PackSourceDependency[];
   /** Editing-only full executed graph, including installed dependency bytes. */
   readonly attestedFiles?: readonly string[];
+  /**
+   * Editing-only real paths of installed packages with a load the walk cannot prove. Their attestation is
+   * complete only while `enforceComputedLoadBoundary` confines what those packages load to `attestedFiles`.
+   */
+  readonly confinedPackages?: readonly string[];
 }
 
 export interface CollectPackSourceGraphOptions {
@@ -85,6 +90,8 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
   const attestedFiles = new Set<string>();
   const dependencies = new Map<string, PackSourceDependency>();
   const followed = new Set<string>();
+  const widened = new Set<string>();
+  const confined = new Set<string>();
   const queue: string[] = [];
 
   async function admit(resolvedId: string, from: string, follow: boolean): Promise<void> {
@@ -161,11 +168,74 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
     await admitRoot(splitQuery(resolvedId)[0], `source.module "${specifier}"`);
   }
 
+  // An installed file whose loads cannot be proven statically (a computed
+  // `import()` in a WASM loader, say) could reach any file at all, so a
+  // declaration is no confinement. The editing attestation widens to its own
+  // package and the packages it declares: every byte is attested, every module
+  // in it is followed like a statically reached one, and an undeclared or
+  // missing dependency refuses the graph. The package is then recorded as
+  // confined, and `enforceComputedLoadBoundary` refuses at load time anything
+  // it resolves outside the attested files. Host-owned source still fails closed.
+  async function widenToPackage(file: string, reason: string): Promise<void> {
+    const segments = file.split(sep);
+    const modulesIndex = segments.lastIndexOf("node_modules");
+    const inHost = relative(hostRoot, file);
+    const hostOwned = !inHost.startsWith(`..${sep}`) && !isAbsolute(inHost) && !inHost.split(sep).includes("node_modules");
+    if (!options.attestExternalFiles || modulesIndex === -1 || hostOwned) fail(reason);
+    const scoped = segments[modulesIndex + 1]?.startsWith("@") ?? false;
+    const packageDir = segments.slice(0, modulesIndex + (scoped ? 3 : 2)).join(sep);
+    confined.add(await realpath(packageDir));
+    await widenPackageDir(packageDir, reason);
+  }
+
+  async function widenPackageDir(packageDir: string, reason: string): Promise<void> {
+    if (widened.has(packageDir)) return;
+    widened.add(packageDir);
+    const segments = packageDir.split(sep);
+    await admitDependency(segments, segments.lastIndexOf("node_modules"), reason);
+    const walk = async (directory: string): Promise<void> => {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        if (entry.name === "node_modules") continue;
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) await walk(path);
+        else if (entry.isFile()) {
+          const real = await realpath(path);
+          attestedFiles.add(real);
+          const extension = extname(real);
+          if ((SCRIPT_EXTENSIONS.has(extension) || extension === ".css") && !/\.d\.[cm]?ts$/.test(real) && !followed.has(real)) {
+            followed.add(real);
+            queue.push(real);
+          }
+        }
+        else fail(`${path} (in installed package ${packageDir}) is neither a regular file nor a directory; ${reason}`);
+      }
+    };
+    await walk(packageDir);
+    let manifest: { dependencies?: unknown; optionalDependencies?: unknown; peerDependencies?: unknown; peerDependenciesMeta?: unknown };
+    try {
+      manifest = JSON.parse(await readFile(join(packageDir, "package.json"), "utf8"));
+    } catch (error) {
+      fail(`${join(packageDir, "package.json")} cannot be read: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const names = (value: unknown) => value !== null && typeof value === "object" ? Object.keys(value) : [];
+    const optional = new Set([...names(manifest.optionalDependencies), ...names(manifest.peerDependencies)]);
+    for (const name of [...new Set([...names(manifest.dependencies), ...optional])].sort(byCodePoint)) {
+      const found = await findInstalledPackage(packageDir, name);
+      if (found === undefined) {
+        if (optional.has(name)) continue;
+        fail(`${packageDir} declares "${name}", which is not installed where it can be reached; ${reason}`);
+      }
+      await widenPackageDir(found, `${reason} (via ${packageDir})`);
+    }
+  }
+
   while (queue.length > 0) {
     const file = queue.shift()!;
     const extension = extname(file);
     if (SCRIPT_EXTENSIONS.has(extension)) {
-      for (const specifier of await scriptSpecifiers(file, hostRoot)) {
+      const { specifiers, unprovable } = await scriptSpecifiers(file, hostRoot);
+      if (unprovable !== undefined) await widenToPackage(file, unprovable);
+      for (const specifier of specifiers) {
         await admitSpecifier(specifier.value, file, specifier.relativeToFile ? relativeFileResolver(file) : resolveScript);
       }
     } else if (extension === ".css") {
@@ -182,9 +252,23 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
 
   return {
     files: [...files].sort(byCodePoint),
-    ...(options.attestExternalFiles ? { attestedFiles: [...attestedFiles].sort(byCodePoint) } : {}),
+    ...(options.attestExternalFiles ? { attestedFiles: [...attestedFiles].sort(byCodePoint), confinedPackages: [...confined].sort(byCodePoint) } : {}),
     dependencies: [...dependencies.values()].sort((a, b) => byCodePoint(a.name, b.name) || byCodePoint(a.version, b.version)),
   };
+}
+
+/** Node's lookup: `<ancestor>/node_modules/<name>` from the package directory upward. */
+async function findInstalledPackage(packageDir: string, name: string): Promise<string | undefined> {
+  for (let directory = packageDir; ; directory = dirname(directory)) {
+    if (basename(directory) !== "node_modules") {
+      const candidate = join(directory, "node_modules", ...name.split("/"));
+      try {
+        await readFile(join(candidate, "package.json"));
+        return candidate;
+      } catch { /* keep looking upward */ }
+    }
+    if (dirname(directory) === directory) return undefined;
+  }
 }
 
 function splitQuery(id: string): [string, string | undefined] {
@@ -197,7 +281,7 @@ function relativeFileResolver(importer: string): Resolver {
   return async (specifier) => resolve(dirname(importer), specifier);
 }
 
-async function scriptSpecifiers(file: string, hostRoot: string): Promise<{ value: string; relativeToFile: boolean }[]> {
+async function scriptSpecifiers(file: string, hostRoot: string): Promise<{ specifiers: { value: string; relativeToFile: boolean }[]; unprovable?: string }> {
   const source = await readFile(file, "utf8");
   const extension = extname(file);
   const where = relative(hostRoot, file).split(sep).join("/");
@@ -211,6 +295,9 @@ async function scriptSpecifiers(file: string, hostRoot: string): Promise<{ value
     fail(`${where} cannot be parsed: ${error instanceof Error ? error.message : String(error)}`);
   }
   const found: { value: string; relativeToFile: boolean }[] = [];
+  // The caller decides whether an unprovable load fails or widens the attestation.
+  let unprovable: string | undefined;
+  const refuse = (reason: string) => { unprovable ??= reason; };
   visit(program, (node) => {
     switch (node.type) {
       case "ImportDeclaration":
@@ -222,7 +309,7 @@ async function scriptSpecifiers(file: string, hostRoot: string): Promise<{ value
       }
       case "ImportExpression": {
         const value = literalString(node.source);
-        if (value === undefined) fail(`${where} has a dynamic import() whose specifier is not a string literal.`);
+        if (value === undefined) { refuse(`${where} has a dynamic import() whose specifier is not a string literal.`); break; }
         found.push({ value, relativeToFile: false });
         break;
       }
@@ -230,14 +317,14 @@ async function scriptSpecifiers(file: string, hostRoot: string): Promise<{ value
         const callee = node.callee as Node;
         if (callee.type === "Identifier" && callee.name === "require") {
           const value = literalString((node.arguments as Node[])[0]);
-          if (value === undefined) fail(`${where} has a require() whose specifier is not a string literal.`);
+          if (value === undefined) { refuse(`${where} has a require() whose specifier is not a string literal.`); break; }
           found.push({ value, relativeToFile: false });
         }
         break;
       }
       case "MemberExpression":
         if (isImportMeta(node.object) && propertyName(node) !== undefined && propertyName(node)!.startsWith("glob")) {
-          fail(`${where} uses import.meta.${propertyName(node)}, whose matches cannot be attested statically.`);
+          refuse(`${where} uses import.meta.${propertyName(node)}, whose matches cannot be attested statically.`);
         }
         break;
       case "NewExpression": {
@@ -245,14 +332,14 @@ async function scriptSpecifiers(file: string, hostRoot: string): Promise<{ value
         const args = node.arguments as Node[];
         if (callee.type === "Identifier" && callee.name === "URL" && args.length >= 2 && isImportMetaUrl(args[1])) {
           const value = literalString(args[0]);
-          if (value === undefined) fail(`${where} has new URL(…, import.meta.url) whose first argument is not a string literal.`);
+          if (value === undefined) { refuse(`${where} has new URL(…, import.meta.url) whose first argument is not a string literal.`); break; }
           found.push({ value, relativeToFile: true });
         }
         break;
       }
     }
   });
-  return found;
+  return { specifiers: found, unprovable };
 }
 
 function visit(node: unknown, onNode: (node: Node) => void): void {

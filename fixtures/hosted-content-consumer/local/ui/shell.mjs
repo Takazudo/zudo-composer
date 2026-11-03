@@ -21,7 +21,7 @@ async function request(path, payload) {
     : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
   const body = await response.json();
   if (!response.ok) {
-    if (body.code) throw new HostedContentError(body.code, body.message ?? "Local request failed", body.diagnostics);
+    if (body.code) throw new HostedContentError(body.code, body.message ?? "Local request failed", body.diagnostics, body.restoreDiagnostics);
     throw new Error(body.message ?? `HTTP ${response.status}`);
   }
   return body;
@@ -31,6 +31,13 @@ const transport = {
   execute: command => request("/api/execute", command),
   readReceipt: key => request(`/api/receipt?key=${encodeURIComponent(key)}`),
   getPublication: id => request(`/api/publication?id=${encodeURIComponent(id)}`),
+  listModels: () => request("/api/models"),
+  listEntries: q => request(`/api/entries?q=${encodeURIComponent(JSON.stringify(q))}`),
+  readEntry: q => request(`/api/entry?q=${encodeURIComponent(JSON.stringify(q))}`),
+  listRevisions: q => request(`/api/revisions?q=${encodeURIComponent(JSON.stringify(q))}`),
+  readRevision: id => request(`/api/revision?id=${encodeURIComponent(id)}`),
+  compareRevisions: q => request(`/api/compare?q=${encodeURIComponent(JSON.stringify(q))}`),
+  readPublicationStatus: () => request("/api/publication-status"),
 };
 
 function element(tag, attributes = {}, ...children) {

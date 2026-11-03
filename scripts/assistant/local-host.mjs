@@ -11,7 +11,7 @@ import { accessSync, constants, existsSync, statSync } from "node:fs";
 import { delimiter, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { DEMOS, prepareAssistantHost } from "./prepare-host.mjs";
 
 const repo = fileURLToPath(new URL("../..", import.meta.url));
@@ -26,7 +26,7 @@ const CONFIG = "zudo-composer.config.ts";
 const MANAGED = /\/\*<local-host>\*\/ .*? \/\*<\/local-host>\*\//u;
 const HOSTS = [...Object.keys(DEMOS), "edit-host"];
 const PROVIDERS = ["fake", "claude-cli", "codex-cli"];
-const USAGE = `Usage: node scripts/assistant/local-host.mjs [--provider fake|claude-cli|codex-cli] [--host landing|blog|webshop|edit-host] [--dir <path>] [--port <n>] [--reset]
+const USAGE = `Usage: node scripts/assistant/local-host.mjs [--provider fake|claude-cli|codex-cli] [--host sample|landing|blog|webshop|edit-host] [--dir <path>] [--port <n>] [--reset]
   CLI providers: [--executable <name|/abs/path>] [--model <id>] [--effort low|medium|high] [--timeout-ms <n>]
   Env defaults:  ZUDO_CLAUDE_CLI_EXECUTABLE, ZUDO_CLAUDE_CLI_MODEL, ZUDO_CODEX_CLI_EXECUTABLE, ZUDO_CODEX_CLI_MODEL
   --verbose forwards the dev server output; otherwise it goes to <dir>/${LOG}.`;
@@ -36,7 +36,8 @@ class UsageError extends Error {}
 /** @param {string[]} argv */
 function readOptions(argv) {
   const { values } = parseArgs({
-    args: argv,
+    // `pnpm assistant:local -- --host sample` forwards the separator itself.
+    args: argv[0] === "--" ? argv.slice(1) : argv,
     strict: true,
     options: {
       provider: { type: "string", default: "fake" },
@@ -125,15 +126,16 @@ function findExecutable(executable) {
   return null;
 }
 
-/** Checks the CLI without running inference: locate it and ask for `--version`. @param {string} executable */
+/**
+ * Locates the CLI without running it. Whether it starts, its version and its
+ * sign-in are checked by the authoring server itself, which shows them in the
+ * Assistant; this launcher never spawns the provider executable.
+ * @param {string} executable
+ */
 function cliStatus(executable) {
   const path = findExecutable(executable);
   if (!path) return isAbsolute(executable) ? `unavailable: ${executable} is not an executable file` : `unavailable: "${executable}" was not found on PATH`;
-  const run = spawnSync(path, ["--version"], { encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "pipe"], env: process.env });
-  if (run.error) return `unavailable: ${path} --version failed (${run.error.message})`;
-  if (run.status !== 0) return `unavailable: ${path} --version exited ${run.status}${run.stderr.trim() ? `: ${run.stderr.trim().split("\n")[0]}` : ""}`;
-  const version = (run.stdout.trim() || run.stderr.trim()).split("\n")[0] || "version unknown";
-  return `found ${version} (${path})`;
+  return `found ${path} (version and sign-in are shown in the Assistant)`;
 }
 
 /** @param {ReturnType<typeof readOptions>} options */
@@ -146,6 +148,12 @@ function assistantFor(options) {
   const assistant = { provider: options.provider, executable, ...(model ? { model } : {}), ...(options.effort ? { effort: options.effort } : {}), ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}) };
   return { assistant, status: `${options.provider} — ${cliStatus(executable)}${model ? `, model ${model}` : ""}` };
 }
+
+// Ambient setting overrides (every ZUDO_COMPOSER_* key) and absolute storage
+// roots would point the editable host at other data, such as the tracked demo
+// it was seeded from; the host's own config decides.
+const HOST_OVERRIDE = /^(?:ZUDO_COMPOSER_|ZUDO_(?:COMPOSITIONS_ROOT|ASSETS_STORE_ROOT|SITE_PROJECT_ROOT|DATA_ROOT)$)/u;
+const hostEnv = () => Object.fromEntries(Object.entries(process.env).filter(([key]) => !HOST_OVERRIDE.test(key)));
 
 /** @param {string} origin @param {Promise<unknown>} exited */
 async function waitForServer(origin, exited) {
@@ -188,7 +196,7 @@ async function main() {
   const logPath = join(dir, LOG);
   const log = options.verbose ? null : await open(logPath, "w");
   const child = spawn(process.execPath, [join(repo, "bin/zudo-composer.mjs"), "dev", "--host", "127.0.0.1", "--port", String(options.port), "--strict-port"], {
-    cwd: dir, env: process.env, detached: true, stdio: ["ignore", log ? log.fd : "inherit", log ? log.fd : "inherit"],
+    cwd: dir, env: hostEnv(), detached: true, stdio: ["ignore", log ? log.fd : "inherit", log ? log.fd : "inherit"],
   });
   const exited = new Promise(settle => child.once("close", settle));
   let stopping = false;

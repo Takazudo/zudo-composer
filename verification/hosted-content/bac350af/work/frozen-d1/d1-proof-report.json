@@ -1,0 +1,293 @@
+{
+  "label": "Local Worker/D1 binding behavior (not memory conformance, not Node/SQLite, not remote production)",
+  "runtime": {
+    "miniflare": "5.20261006.1-alpha",
+    "workerd": "1.20261006.1",
+    "compatibilityDate": "2026-10-01"
+  },
+  "sharedConformance": {
+    "runner": "runHostedContentConformance from zudo-composer/hosted-content/testing",
+    "driver": "Node process; every storage call through Miniflare's D1 binding proxy into workerd's local D1",
+    "scenarios": [
+      "independent-cas",
+      "duplicate-create-and-key-reuse",
+      "competing-reorder",
+      "rollback-before-commit",
+      "rollback-receipt-persistence",
+      "conditional-commit-atomicity",
+      "conditional-commit-version-guard",
+      "commit-retry-after-bookkeeping",
+      "lost-create-ack-restart",
+      "coherent-immutable-capture",
+      "two-integrations-existing-entry",
+      "two-integrations-new-entry",
+      "external-baseline-adoption",
+      "definition-change-adoption",
+      "external-integration-conflict",
+      "editorial-perspectives-and-history"
+    ],
+    "assertions": 198,
+    "runtimeRestarts": [
+      "lost-create-ack-restart: workerd stopped and restarted on /tmp/claude-0/verify-bac350a/work/frozen-d1/composer-d1-lost-create-ack-restart-A8vSCf",
+      "two-integrations-existing-entry: workerd stopped and restarted on /tmp/claude-0/verify-bac350a/work/frozen-d1/composer-d1-two-integrations-existing-entry-XAnvtT",
+      "two-integrations-new-entry: workerd stopped and restarted on /tmp/claude-0/verify-bac350a/work/frozen-d1/composer-d1-two-integrations-new-entry-YODvgH",
+      "editorial-perspectives-and-history: workerd stopped and restarted on /tmp/claude-0/verify-bac350a/work/frozen-d1/composer-d1-editorial-perspectives-and-history-p0X4ym"
+    ]
+  },
+  "inWorkerConformance": {
+    "driver": "runner and adapter bundled into one Worker, executing inside workerd against env.DB; restart reopens handles only",
+    "scenarios": [
+      "independent-cas",
+      "duplicate-create-and-key-reuse",
+      "competing-reorder",
+      "rollback-before-commit",
+      "rollback-receipt-persistence",
+      "conditional-commit-atomicity",
+      "conditional-commit-version-guard",
+      "commit-retry-after-bookkeeping",
+      "lost-create-ack-restart",
+      "coherent-immutable-capture",
+      "two-integrations-existing-entry",
+      "two-integrations-new-entry",
+      "external-baseline-adoption",
+      "definition-change-adoption",
+      "external-integration-conflict",
+      "editorial-perspectives-and-history"
+    ],
+    "assertions": 198
+  },
+  "d1Specific": {
+    "results": [
+      {
+        "case": "initialize-and-save",
+        "proves": "explicit schema initialization seeds only an absent site; a service write commits through one batch"
+      },
+      {
+        "case": "conditional-refusals",
+        "proves": "stale CAS, duplicate revision id and duplicate (entry, sequence) each refuse the whole batch with no writes"
+      },
+      {
+        "case": "missing-head-and-row-count-guard",
+        "proves": "with no head row every commit is refused and no record is orphaned; the changes() postcondition aborts a batch whose UPDATE matched zero rows"
+      },
+      {
+        "case": "sql-failure-after-head",
+        "proves": "a real CHECK failure placed right after the head UPDATE aborts the batch; reported as HostedD1Error(failed), never revision-conflict",
+        "diagnostic": "D1 rolled back the commit: D1_ERROR: CHECK constraint failed: json_valid(result): SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_CHECK)"
+      },
+      {
+        "case": "lost-acknowledgement",
+        "proves": "a response lost after the D1 batch completed recovers through its receipt exactly once; a different request under that key is refused"
+      },
+      {
+        "case": "uncertain-timeout",
+        "proves": "a D1 wait that times out reports an unknown outcome, the write still commits later and is recovered under the same key; a retry that wins first makes the late original refuse",
+        "diagnostic": "D1 did not answer within 150 ms. The write may still commit; read the operation's receipt before retrying."
+      },
+      {
+        "case": "limit-refusal",
+        "proves": "a row over D1's 2,000,000-byte limit is refused before submission; atomicity is not weakened by splitting"
+      },
+      {
+        "case": "runtime-stop-during-batch",
+        "proves": "stopping workerd with a batch in flight leaves head, receipt and revision all present or all absent after reopen",
+        "observed": {
+          "acknowledgement": "unacknowledged: D1 commit outcome is unknown: Cannot use disposed instance",
+          "committed": false
+        }
+      },
+      {
+        "case": "runtime-restart",
+        "proves": "a new workerd process on the same directory reads the site, receipts and proposals without seeding; re-initialization is a no-op",
+        "persist": "/tmp/claude-0/verify-bac350a/work/frozen-d1/composer-d1-specific-f5JFcB/state"
+      }
+    ],
+    "assertions": 33,
+    "persist": "/tmp/claude-0/verify-bac350a/work/frozen-d1/composer-d1-specific-f5JFcB/state"
+  },
+  "initialization": {
+    "driver": "one real local D1 database per case; refusals compare complete before/after snapshots of schema objects, definitions and table rows",
+    "cases": [
+      {
+        "case": "empty",
+        "proves": "a database with no application objects is created and seeded in one batch",
+        "passed": true
+      },
+      {
+        "case": "populated-reopen-and-restart",
+        "proves": "a valid populated store reopens without any write, before and after a workerd restart",
+        "passed": true,
+        "observed": {
+          "rows": {
+            "content_ai_proposal": 1,
+            "hosted_commit_guard": 0,
+            "hosted_head": 1,
+            "hosted_publication": 0,
+            "hosted_receipt": 1,
+            "hosted_revision": 2,
+            "hosted_schema": 1,
+            "hosted_snapshot": 0
+          }
+        }
+      },
+      {
+        "case": "older-marker-only",
+        "proves": "an older marker table with no other tables is refused; no table is created",
+        "passed": true,
+        "observed": {
+          "refusal": "This D1 database is not an empty database or a current hosted-d1-v1 store (missing table hosted_head; missing table hosted_receipt; missing table hosted_snapshot; missing table hosted_publication; missing table hosted_revision; missing table hosted_commit_guard; missing table content_ai_proposal); it was left unchanged.",
+          "objects": [
+            "table _cf_METADATA",
+            "table hosted_schema"
+          ]
+        }
+      },
+      {
+        "case": "older-marker-with-data",
+        "proves": "an older store with its own tables and records is refused; nothing is added or rewritten",
+        "passed": true,
+        "observed": {
+          "refusal": "This D1 database is not an empty database or a current hosted-d1-v1 store (table hosted_head has a different definition; table hosted_receipt has a different definition; missing table hosted_snapshot; missing table hosted_publication; missing table hosted_revision; missing table hosted_commit_guard; missing table content_ai_proposal); it was left unchanged.",
+          "objects": [
+            "table _cf_METADATA",
+            "table hosted_head",
+            "table hosted_receipt",
+            "table hosted_schema"
+          ]
+        }
+      },
+      {
+        "case": "unrelated-user-tables",
+        "proves": "unrelated tables, an index and records without any marker are refused; no marker is stamped",
+        "passed": true,
+        "observed": {
+          "refusal": "This D1 database is not an empty database or a current hosted-d1-v1 store (unexpected index notes_body; unknown table notes; missing table hosted_schema; missing table hosted_head; missing table hosted_receipt; missing table hosted_snapshot; missing table hosted_publication; missing table hosted_revision; missing table hosted_commit_guard; missing table content_ai_proposal); it was left unchanged.",
+          "objects": [
+            "index notes_body",
+            "table _cf_METADATA",
+            "table notes"
+          ]
+        }
+      },
+      {
+        "case": "malformed-marker",
+        "proves": "a marker table with the current version string but the wrong structure is refused",
+        "passed": true,
+        "observed": {
+          "refusal": "This D1 database is not an empty database or a current hosted-d1-v1 store (table hosted_schema has a different definition; missing table hosted_head; missing table hosted_receipt; missing table hosted_snapshot; missing table hosted_publication; missing table hosted_revision; missing table hosted_commit_guard; missing table content_ai_proposal); it was left unchanged.",
+          "objects": [
+            "table _cf_METADATA",
+            "table hosted_schema"
+          ]
+        }
+      },
+      {
+        "case": "current-marker-incompatible-constraints",
+        "proves": "every table and the current marker, but hosted_revision without its unique sequence constraint, is refused",
+        "passed": true,
+        "observed": {
+          "refusal": "This D1 database is not an empty database or a current hosted-d1-v1 store (table hosted_revision has a different definition); it was left unchanged.",
+          "objects": [
+            "index sqlite_autoindex_content_ai_proposal_1",
+            "index sqlite_autoindex_hosted_publication_1",
+            "index sqlite_autoindex_hosted_receipt_1",
+            "index sqlite_autoindex_hosted_revision_1",
+            "index sqlite_autoindex_hosted_snapshot_1",
+            "table _cf_METADATA",
+            "table content_ai_proposal",
+            "table hosted_commit_guard",
+            "table hosted_head",
+            "table hosted_publication",
+            "table hosted_receipt",
+            "table hosted_revision",
+            "table hosted_schema",
+            "table hosted_snapshot"
+          ]
+        }
+      },
+      {
+        "case": "current-structure-without-head",
+        "proves": "a complete current structure whose head row is missing (an incomplete store) is refused, never reset or completed",
+        "passed": true,
+        "observed": {
+          "refusal": "This D1 database is not an empty database or a current hosted-d1-v1 store (the head row is missing); it was left unchanged.",
+          "objects": [
+            "index sqlite_autoindex_content_ai_proposal_1",
+            "index sqlite_autoindex_hosted_publication_1",
+            "index sqlite_autoindex_hosted_receipt_1",
+            "index sqlite_autoindex_hosted_revision_1",
+            "index sqlite_autoindex_hosted_revision_2",
+            "index sqlite_autoindex_hosted_snapshot_1",
+            "table _cf_METADATA",
+            "table content_ai_proposal",
+            "table hosted_commit_guard",
+            "table hosted_head",
+            "table hosted_publication",
+            "table hosted_receipt",
+            "table hosted_revision",
+            "table hosted_schema",
+            "table hosted_snapshot"
+          ]
+        }
+      },
+      {
+        "case": "host-table-required",
+        "proves": "a core-only store is refused by a host that declares its own table; nothing is added",
+        "passed": true,
+        "observed": {
+          "refusal": "This D1 database is not an empty database or a current hosted-d1-v1 store (missing table article_artifact); it was left unchanged.",
+          "objects": [
+            "index sqlite_autoindex_content_ai_proposal_1",
+            "index sqlite_autoindex_hosted_publication_1",
+            "index sqlite_autoindex_hosted_receipt_1",
+            "index sqlite_autoindex_hosted_revision_1",
+            "index sqlite_autoindex_hosted_revision_2",
+            "index sqlite_autoindex_hosted_snapshot_1",
+            "table _cf_METADATA",
+            "table content_ai_proposal",
+            "table hosted_commit_guard",
+            "table hosted_head",
+            "table hosted_publication",
+            "table hosted_receipt",
+            "table hosted_revision",
+            "table hosted_schema",
+            "table hosted_snapshot"
+          ]
+        }
+      },
+      {
+        "case": "host-table-preserved",
+        "proves": "a current Article store with an artifact row reopens with the artifact preserved",
+        "passed": true
+      },
+      {
+        "case": "concurrent-first-start",
+        "proves": "two initializers racing on one empty database: one seeds, the other reopens; the store holds exactly one seed",
+        "passed": true,
+        "observed": {
+          "rounds": [
+            "left seeded",
+            "left seeded",
+            "left seeded",
+            "left seeded",
+            "left seeded"
+          ],
+          "heldInterleaving": "late initializer reopened the early one's store",
+          "intrusion": "This D1 database is not an empty database or a current hosted-d1-v1 store (unknown table intruder; missing table hosted_schema; missing table hosted_head; missing table hosted_receipt; missing table hosted_snapshot; missing table hosted_publication; missing table hosted_revision; missing table hosted_commit_guard; missing table content_ai_proposal); it was left unchanged."
+        }
+      }
+    ],
+    "assertions": 44,
+    "passed": true
+  },
+  "injectedFaults": {
+    "receipt-persistence": "a real D1 CHECK failure statement inserted directly after the head UPDATE in the same batch",
+    "before-commit": "the same failing statement appended as the last statement of the batch",
+    "lost-acknowledgement": "the batch completes durably, then the adapter discards the response and reports an unknown outcome",
+    "hold": "a commit is prepared and held before submission while another handle commits (interleaving)",
+    "uncertain-timeout": "the real batch is held in flight while the adapter's own timeout expires; it is then released and commits",
+    "runtime-stop": "workerd is disposed while a batch is in flight"
+  },
+  "notReproduced": "Production network partitions, D1 primary failover, replica lag and Cloudflare-side resets are not reproducible in local workerd.",
+  "remote": "not performed"
+}

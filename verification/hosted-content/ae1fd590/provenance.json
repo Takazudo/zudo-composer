@@ -1,0 +1,5 @@
+{
+  "packageOutputSha": "ae1fd59089ad184d7c23ce3d9c8127121fcf316e",
+  "source": "Unmodified local run of corepack pnpm hosted:installed <C> <scratch> in the Claude Code cloud container (Node 22.22.0). The container ships Chromium headless shell build 1243 instead of the pinned 1234, so PLAYWRIGHT_BROWSERS_PATH pointed at a directory mapping the pinned build name to the installed 1243 shell; real browser acceptance, including article-cms/proof.mjs, ran and passed on it. packed-payload-inventory.json is a copy of the checked verification/hosted-content/current-payload.json written at C. work/article-cms/article-cms-proof.txt is the Article CMS proof output from that run.",
+  "browser": "passed (Chromium headless shell 1243, not the pinned 1234)"
+}

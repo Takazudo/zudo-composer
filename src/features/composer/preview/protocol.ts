@@ -214,12 +214,18 @@ export const previewLinkedSourceContextSchema: z.ZodType<PreviewLinkedSourceCont
  * owner-qualified runtime keys. `linked` is present only after the
  * provider-owning app has resolved and validated a Global template.
  */
+const nativePageIdentitySchema = z.object({ workspaceId: z.string().min(1), sitemapId: z.string().min(1), pageId: z.string().min(1), providerId: z.literal("files"), recordId: z.string().min(1) }).strict();
+/** A Content-AI candidate rendered through the Mapping that binds its Entry; nothing it names is saved. */
+const contentCandidateIdentitySchema = z.object({
+  kind: z.literal("content-candidate"), providerId: z.string().min(1), modelId: z.string().min(1), recordId: z.string().min(1),
+  mapping: z.object({ providerId: z.string().min(1), recordId: z.string().min(1) }).strict(), pathname: z.string().startsWith("/"),
+}).strict();
 export const nativeReviewSchema = z.object({
   planId: z.string().min(1), digest: z.string().regex(/^[a-f0-9]{64}$/),
-  identity: z.object({ workspaceId: z.string().min(1), sitemapId: z.string().min(1), pageId: z.string().min(1), providerId: z.literal("files"), recordId: z.string().min(1) }).strict(),
+  identity: z.union([nativePageIdentitySchema, contentCandidateIdentitySchema]),
   dependencyDigest: z.string().regex(/^[a-f0-9]{64}$/), frameSession: z.uuid(),
 }).strict();
-export const nativePageSchema = z.object({ identity: nativeReviewSchema.shape.identity, draftRevision: z.string().regex(/^[a-f0-9]{64}$/), frameSession: z.uuid() }).strict();
+export const nativePageSchema = z.object({ identity: nativePageIdentitySchema, draftRevision: z.string().regex(/^[a-f0-9]{64}$/), frameSession: z.uuid() }).strict();
 export type NativePageIdentity = z.infer<typeof nativePageSchema>;
 /**
  * Editor-owned review decoration for one node of an Assistant candidate. Text
@@ -704,8 +710,11 @@ export function renderedMessage(pack: PreviewPackIdentity, revision: number, nat
 
 export function sameNativeReview(a: NativeReviewIdentity, b: NativeReviewIdentity): boolean {
   return a.planId === b.planId && a.digest === b.digest && a.dependencyDigest === b.dependencyDigest && a.frameSession === b.frameSession &&
-    a.identity.workspaceId === b.identity.workspaceId && a.identity.sitemapId === b.identity.sitemapId && a.identity.pageId === b.identity.pageId && a.identity.providerId === b.identity.providerId && a.identity.recordId === b.identity.recordId;
+    sortedJson(a.identity) === sortedJson(b.identity);
 }
+const sortedJson = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
+  ? Object.fromEntries(Object.entries(item).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)))
+  : item);
 
 export function nativeSelectMessage(pack: PreviewPackIdentity, revision: number, nodeId: string, nativePage: NativePageIdentity): NativeSelectMessage {
   return { ...envelopeValue(pack), type: "native-select", revision, nodeId, nativePage };

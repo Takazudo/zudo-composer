@@ -1,0 +1,5 @@
+{
+  "packageOutputSha": "79635a7c1d40c44f9f5213ee9ad549bfb4aaf0e1",
+  "source": "Unmodified local run of corepack pnpm hosted:installed <C> <scratch> in the Claude Code cloud container (Node 22.22.0, pnpm 11.5.2). The container ships Chromium headless shell build 1243 instead of the pinned 1234, so PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH pointed at the installed 1243 shell; real browser acceptance ran and passed on it. packed-payload-inventory.json is a copy of the checked verification/hosted-content/current-payload.json written at C.",
+  "browser": "passed (Chromium headless shell 1243, not the pinned 1234)"
+}

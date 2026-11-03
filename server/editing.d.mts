@@ -535,9 +535,9 @@ interface ContentEntrySnapshot {
     entries: readonly ContentEntryRecord[];
     diagnostics: readonly ContentCompletenessDiagnostic[];
 }
-declare const CONTENT_PERSISTENCE_OPERATIONS: readonly ["read-all", "transact", "reconcile-publication", "initialize", "list-models", "get-model", "put-model", "delete-model", "count-entries", "get-entry", "page-entries", "scan-entries", "put-entry", "delete-entry", "remove-field", "seed", "clear"];
+declare const CONTENT_PERSISTENCE_OPERATIONS: readonly ["read-all", "transact", "reconcile-publication", "initialize", "list-models", "get-model", "put-model", "delete-model", "count-entries", "get-entry", "page-entries", "scan-entries", "put-entry", "delete-entry", "remove-field", "seed", "clear", "edit-entry", "list-revisions", "read-revision"];
 type ContentPersistenceOperation = (typeof CONTENT_PERSISTENCE_OPERATIONS)[number];
-declare const CONTENT_PERSISTENCE_ERROR_CODES: readonly ["conflict", "reference-in-use", "dependency-in-use", "unsupported-transaction", "unavailable", "blocked", "versionchange", "unsupported-version", "validation", "not-found", "immutable-kind", "field-in-use", "field-removal-required", "single-cardinality", "read-failed", "write-failed", "transaction-failed", "invalid-cursor", "commit-uncertain", "unknown"];
+declare const CONTENT_PERSISTENCE_ERROR_CODES: readonly ["conflict", "reference-in-use", "dependency-in-use", "unsupported-transaction", "unavailable", "blocked", "versionchange", "unsupported-version", "validation", "not-found", "immutable-kind", "field-in-use", "field-removal-required", "single-cardinality", "read-failed", "write-failed", "transaction-failed", "invalid-cursor", "commit-uncertain", "unknown", "operation-key-reuse"];
 type ContentPersistenceErrorCode = (typeof CONTENT_PERSISTENCE_ERROR_CODES)[number];
 declare class ContentPersistenceError extends Error {
     readonly operation: ContentPersistenceOperation;
@@ -584,6 +584,65 @@ interface ContentStore {
     removeField(modelId: string, fieldId: string): Promise<void>;
     seed(seed: ContentSeed): Promise<void>;
     clear(): Promise<void>;
+}
+/** Who wrote a revision. Supplied by trusted server code, never by a request body. */
+interface ContentProvenance {
+    actor: {
+        id: string;
+    } | null;
+    source: string;
+}
+type ContentRevisionOperationKind = "initial" | "save" | "remove-field" | "set-fields" | "restore-revision";
+/**
+ * One immutable working revision of one Entry, committed with the Entry change
+ * that produced it. History is never pruned by an ordinary mutation.
+ */
+interface ContentRevisionRecord {
+    id: string;
+    entry: ContentEntryRef;
+    /** 1-based and contiguous per Entry; the newest revision has the highest sequence. */
+    sequence: number;
+    parentId: string | null;
+    values: Record<RecordId, JsonValue>;
+    createdAt: string;
+    actor: {
+        id: string;
+    } | null;
+    source: string;
+    operation: {
+        kind: ContentRevisionOperationKind;
+        key: string | null;
+    };
+    restoredFrom?: string;
+}
+/** The durable answer to one keyed edit; a retry with the same key and request returns it unchanged. */
+interface ContentEditReceipt {
+    actorId: string | null;
+    operationKey: string;
+    fingerprint: string;
+    entry: ContentEntryRef;
+    /** The revision the edit appended, or the unchanged head when the values already matched. */
+    revisionId: string | null;
+    mutationToken: number;
+}
+interface ContentEntryEdit {
+    entry: ContentEntryRef;
+    expectedMutationToken: number;
+    operation: {
+        kind: "set-fields" | "restore-revision";
+        key: string;
+    };
+    provenance: ContentProvenance;
+    /** Digest of the complete request, so a reused key with a different request is refused. */
+    fingerprint: string;
+    restoredFrom?: string;
+    /** Runs under the store lock against the current values; throwing refuses the edit without writing. */
+    values(current: ContentEntryRecord, model: ContentModelRecord): Record<RecordId, JsonValue>;
+}
+interface ContentEntryEditResult {
+    receipt: ContentEditReceipt;
+    replayed: boolean;
+    snapshot: ContentSnapshot;
 }
 interface ContentSnapshot extends ContentSeed {
     providerId: string;
@@ -1451,6 +1510,8 @@ interface FilesystemContentStoreOptions {
     newMutationToken?: RecordMutationTokenSource;
     /** Clock used when a provider-owned operation restamps `updatedAt`. */
     now?: () => string;
+    /** Trusted provenance recorded on revisions written by ordinary store mutations. */
+    revisionProvenance?: ContentProvenance;
 }
 
 /** Whole-record transaction capability, independent of a filesystem transport. */
@@ -1476,13 +1537,14 @@ interface ContentInitializationScan {
 declare class TransactionalContentStore implements ContentStore {
     private readonly records;
     private readonly now;
+    private readonly revisionProvenance;
     readonly provider: {
         readonly id: "content-filesystem";
         readonly label: "Project files";
     };
     readonly transactionScope: "provider";
-    protected constructor(records: RecordTransactionStorage, now: () => string);
-    static fromRecords(records: RecordTransactionStorage, now?: () => string): Promise<TransactionalContentStore>;
+    protected constructor(records: RecordTransactionStorage, now: () => string, revisionProvenance: ContentProvenance);
+    static fromRecords(records: RecordTransactionStorage, now?: () => string, revisionProvenance?: ContentProvenance): Promise<TransactionalContentStore>;
     get root(): string;
     /**
      * Stamp the layout marker on a brand-new store, and refuse an existing one
@@ -1515,6 +1577,13 @@ declare class TransactionalContentStore implements ContentStore {
      * the new mutation token as its generation.
      */
     private stampGenerations;
+    /**
+     * The revisions one commit appends: an `initial` revision of the prior values
+     * when a changed Entry has no history yet, then one revision per Entry whose
+     * values changed. Seeding and publication reconciliation never change values
+     * through an edit, so they append nothing.
+     */
+    private revisionsFor;
     readAll(): Promise<ContentSnapshot>;
     listModels(): Promise<readonly ContentModelSummary[]>;
     getModel(id: string): Promise<ContentLoadOutcome<ContentModelRecord>>;
@@ -1539,6 +1608,22 @@ declare class TransactionalContentStore implements ContentStore {
      * filesystem analogue of "rejects malformed operations before writes".
      */
     private assertMutationShape;
+    /** The activation fence last applied by publication reconciliation. */
+    activationFence(): Promise<number>;
+    /** One Entry's revisions, newest first, below `beforeSequence` when given. */
+    listRevisions(entryId: string, page: {
+        beforeSequence?: number;
+        limit: number;
+    }): Promise<ContentRevisionRecord[]>;
+    readRevision(revisionId: string): Promise<ContentRevisionRecord | null>;
+    readReceipt(actorId: string | null, operationKey: string): Promise<ContentEditReceipt | null>;
+    /**
+     * One keyed edit of one Entry's values: the Entry change, its revision and
+     * its receipt commit together or not at all. A repeated key with the same
+     * request returns the stored receipt before any precondition is checked, so a
+     * retry after a lost acknowledgement never appends a second revision.
+     */
+    editEntry(edit: ContentEntryEdit): Promise<ContentEntryEditResult>;
     /**
      * Apply an activation's publication decisions behind a monotonic fence.
      *

@@ -36,7 +36,7 @@ const RESOLVED_DOMAIN_PROVIDERS_MODULE_ID = `\0${DOMAIN_PROVIDERS_MODULE_ID}`;
  *   entryModule: string,
  *   workspaceScoped?: boolean,
  *   resolveRoot: (workspaceRoot: string) => string,
- *   bind: (module: any, root: string) => {
+ *   bind: (module: any, root: string, server?: any) => {
  *     isDomainError: (value: unknown) => boolean,
  *     createStore: (workspaceId: string | undefined) => Promise<any>,
  *     operations: Record<string, (store: any, payload: unknown) => unknown>,
@@ -94,7 +94,7 @@ export default function domainFileProviderPlugin(options) {
         const endpoint = domainFileProviderEndpoint(descriptor.domain);
         const root = descriptor.resolveRoot(workspaceRoot);
         const module = await server.ssrLoadModule(appModuleId(descriptor.entryModule));
-        const bound = descriptor.bind(module, root);
+        const bound = descriptor.bind(module, root, server);
         const handler = createDomainFileProviderMiddleware({
           domain: descriptor.domain,
           capability: activeCapability,

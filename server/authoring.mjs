@@ -1945,6 +1945,14 @@ var CONTENT_MODEL_RECORD_PREFIX = "model-";
 var CONTENT_ENTRY_RECORD_PREFIX = "entry-";
 var CONTENT_META_RECORD_ID = "meta";
 /**
+* Working history and edit receipts live beside the records they describe, so
+* every commit carries them forward and no generation swap can drop them. They
+* add record kinds without changing the layout marker: an existing workspace
+* opens as it is, and its history begins with its first edit.
+*/
+var CONTENT_REVISION_RECORD_PREFIX = "revision-";
+var CONTENT_RECEIPT_RECORD_PREFIX = "receipt-";
+/**
 * The provider's exact-physical-shape check.
 *
 * A directory of JSON documents cannot be interrogated for its keys and
@@ -1992,6 +2000,13 @@ var errorPolicy$2 = {
 		throw contentError(operation, code, message, cause);
 	}
 };
+/** A plan's own refusal, rethrown unchanged instead of becoming a transaction failure. */
+var PlanRefusal = class {
+	reason;
+	constructor(reason) {
+		this.reason = reason;
+	}
+};
 /**
 * Thrown by a plan that decided nothing should be written. Throwing is what
 * guarantees it: the record store writes nothing at all when a plan throws, so
@@ -2007,6 +2022,9 @@ var UnchangedContent = class {
 };
 function modelRecordId(id) {
 	return `${CONTENT_MODEL_RECORD_PREFIX}${id}`;
+}
+function revisionRecordId(id) {
+	return `${CONTENT_REVISION_RECORD_PREFIX}${id}`;
 }
 function entryRecordId(id) {
 	return `${CONTENT_ENTRY_RECORD_PREFIX}${id}`;
@@ -2032,14 +2050,19 @@ function assertStorableId$2(operation, kind, id) {
 var TransactionalContentStore = class {
 	records;
 	now;
+	revisionProvenance;
 	provider = CONTENT_PROVIDERS.filesystem;
 	transactionScope = "provider";
-	constructor(records, now) {
+	constructor(records, now, revisionProvenance) {
 		this.records = records;
 		this.now = now;
+		this.revisionProvenance = revisionProvenance;
 	}
-	static async fromRecords(records, now = () => (/* @__PURE__ */ new Date()).toISOString()) {
-		const store = new this(records, now);
+	static async fromRecords(records, now = () => (/* @__PURE__ */ new Date()).toISOString(), revisionProvenance = {
+		actor: null,
+		source: "content-store"
+	}) {
+		const store = new this(records, now, structuredClone(revisionProvenance));
 		await store.open();
 		return store;
 	}
@@ -2080,10 +2103,18 @@ var TransactionalContentStore = class {
 		if (!isPlainObject(meta) || Object.keys(meta).sort().join(",") !== META_KEYS.slice().sort().join(",") || !sameLayout$2(meta.layout) || !Number.isSafeInteger(meta.mutationToken) || meta.mutationToken < 0 || !Number.isSafeInteger(meta.activationGeneration) || meta.activationGeneration < 0) throw contentError(operation, "unsupported-version", "Content storage layout marker is missing or unsupported. Records are preserved; explicit recovery is required.");
 		const models = [];
 		const entries = [];
+		const revisions = [];
+		const receipts = /* @__PURE__ */ new Map();
 		for (const record of snapshot.records) {
 			if (record.id === "meta") continue;
 			const raw = this.parse(operation, record.id, record.json);
-			if (record.id.startsWith("model-")) {
+			if (record.id.startsWith("revision-")) {
+				if (!isRevision(raw) || revisionRecordId(raw.id) !== record.id) throw contentError(operation, "blocked", `Content history record "${record.id}" is malformed. It was preserved; explicit recovery is required.`);
+				revisions.push(raw);
+			} else if (record.id.startsWith("receipt-")) {
+				if (!isReceipt(raw)) throw contentError(operation, "blocked", `Content receipt "${record.id}" is malformed. It was preserved; explicit recovery is required.`);
+				receipts.set(record.id, raw);
+			} else if (record.id.startsWith("model-")) {
 				const id = record.id.slice(CONTENT_MODEL_RECORD_PREFIX.length);
 				models.push({
 					id,
@@ -2103,7 +2134,9 @@ var TransactionalContentStore = class {
 			mutationToken: meta.mutationToken,
 			activationGeneration: meta.activationGeneration,
 			models: models.sort(compareById$2),
-			entries: entries.sort(compareById$2)
+			entries: entries.sort(compareById$2),
+			revisions: revisions.sort((a, b) => a.sequence - b.sequence || compareById$2(a, b)),
+			receipts
 		};
 	}
 	parse(operation, id, json) {
@@ -2167,7 +2200,12 @@ var TransactionalContentStore = class {
 				const before = this.strict(decoded, operation);
 				if (options.validateBefore !== false) this.validateSnapshot(before, operation);
 				if (options.expectedMutationToken !== void 0 && options.expectedMutationToken !== before.mutationToken) throw contentError(operation, "conflict", "Content changed since the mutation was prepared.");
-				const planned = await plan(before, decoded);
+				let planned;
+				try {
+					planned = await plan(before, decoded);
+				} catch (refusal) {
+					throw refusal instanceof UnchangedContent || refusal instanceof ContentPersistenceError ? refusal : new PlanRefusal(refusal);
+				}
 				const token = before.mutationToken;
 				if (token >= Number.MAX_SAFE_INTEGER) throw contentError(operation, "write-failed", "Content mutation token is exhausted.");
 				const proposed = {
@@ -2183,6 +2221,20 @@ var TransactionalContentStore = class {
 					entries: this.stampGenerations(before, proposed.entries, token, operation)
 				};
 				const activationGeneration = planned.activationGeneration ?? decoded.activationGeneration;
+				const appended = planned.discardHistory ? [] : this.revisionsFor(decoded, before, next.entries, operation, planned.revision);
+				const revisions = planned.discardHistory ? [] : [...decoded.revisions, ...appended];
+				const receipts = new Map(planned.discardHistory ? [] : decoded.receipts);
+				let receipt;
+				if (planned.receipt) {
+					const edited = planned.receipt.value.entry.recordId;
+					const revisionId = appended.filter((revision) => revision.entry.recordId === edited).at(-1)?.id ?? latestRevision(revisions, edited)?.id ?? null;
+					receipt = {
+						...planned.receipt.value,
+						revisionId,
+						mutationToken: next.mutationToken
+					};
+					receipts.set(planned.receipt.recordId, receipt);
+				}
 				return {
 					records: [
 						envelope$2(CONTENT_META_RECORD_ID, {
@@ -2197,11 +2249,14 @@ var TransactionalContentStore = class {
 						...next.entries.map((entry) => {
 							assertStorableId$2(operation, "Entry", entry.id);
 							return envelope$2(entryRecordId(entry.id), entry);
-						})
+						}),
+						...revisions.map((revision) => envelope$2(revisionRecordId(revision.id), revision)),
+						...[...receipts].map(([id, receipt]) => envelope$2(id, receipt))
 					],
 					result: {
 						snapshot: next,
-						value: planned.value
+						value: planned.value,
+						...receipt ? { receipt } : {}
 					}
 				};
 			}, options.signal === void 0 ? {} : { signal: options.signal });
@@ -2211,6 +2266,7 @@ var TransactionalContentStore = class {
 				value: cause.value
 			};
 			if (cause instanceof ContentPersistenceError) throw cause;
+			if (cause instanceof PlanRefusal) throw cause.reason;
 			throw contentError(operation, "transaction-failed", `The Content ${operation} transaction did not complete.`, cause);
 		}
 	}
@@ -2243,6 +2299,68 @@ var TransactionalContentStore = class {
 				generation: token + 1
 			};
 		});
+	}
+	/**
+	* The revisions one commit appends: an `initial` revision of the prior values
+	* when a changed Entry has no history yet, then one revision per Entry whose
+	* values changed. Seeding and publication reconciliation never change values
+	* through an edit, so they append nothing.
+	*/
+	revisionsFor(decoded, before, entries, operation, revision) {
+		if (operation === "seed" || operation === "reconcile-publication" || operation === "clear") return [];
+		const previous = new Map(before.entries.map((entry) => [entry.id, entry]));
+		const appended = [];
+		const ids = new Set(decoded.revisions.map((item) => item.id));
+		const nextId = () => {
+			let id = globalThis.crypto.randomUUID();
+			while (ids.has(id)) id = globalThis.crypto.randomUUID();
+			ids.add(id);
+			return id;
+		};
+		const createdAt = this.clock(operation);
+		for (const entry of entries) {
+			const old = previous.get(entry.id);
+			if (old && sameJson(old.values, entry.values)) continue;
+			const ref = {
+				providerId: this.provider.id,
+				modelId: entry.modelId,
+				recordId: entry.id
+			};
+			let parent = latestRevision(decoded.revisions, entry.id) ?? null;
+			if (!parent && old) {
+				parent = {
+					id: nextId(),
+					entry: ref,
+					sequence: 1,
+					parentId: null,
+					values: structuredClone(old.values),
+					createdAt: old.updatedAt,
+					actor: null,
+					source: "existing-content",
+					operation: {
+						kind: "initial",
+						key: null
+					}
+				};
+				appended.push(parent);
+			}
+			appended.push({
+				id: nextId(),
+				entry: ref,
+				sequence: (parent?.sequence ?? 0) + 1,
+				parentId: parent?.id ?? null,
+				values: structuredClone(entry.values),
+				createdAt,
+				actor: structuredClone((revision?.provenance ?? this.revisionProvenance).actor),
+				source: (revision?.provenance ?? this.revisionProvenance).source,
+				operation: revision?.operation ?? {
+					kind: operation === "remove-field" ? "remove-field" : "save",
+					key: null
+				},
+				...revision?.restoredFrom ? { restoredFrom: revision.restoredFrom } : {}
+			});
+		}
+		return appended;
 	}
 	async readAll() {
 		return (await this.read("read-all")).snapshot;
@@ -2522,11 +2640,12 @@ var TransactionalContentStore = class {
 	}
 	/** Discards records the scan refused to read, so it never validates them. */
 	async forceClear() {
-		await this.mutate("clear", (before) => {
-			if (!before.models.length && !before.entries.length) throw new UnchangedContent(before, void 0);
+		await this.mutate("clear", (before, decoded) => {
+			if (!before.models.length && !before.entries.length && !decoded.revisions.length && !decoded.receipts.size) throw new UnchangedContent(before, void 0);
 			return {
 				models: [],
 				entries: [],
+				discardHistory: true,
 				value: void 0
 			};
 		}, { validateBefore: false });
@@ -2633,6 +2752,98 @@ var TransactionalContentStore = class {
 			this.assertLocalSchema(operation.record, "transact");
 		}
 	}
+	/** The activation fence last applied by publication reconciliation. */
+	async activationFence() {
+		return (await this.read("read-all")).decoded.activationGeneration;
+	}
+	/** One Entry's revisions, newest first, below `beforeSequence` when given. */
+	async listRevisions(entryId, page) {
+		const { decoded } = await this.read("list-revisions");
+		return decoded.revisions.filter((revision) => revision.entry.recordId === entryId && (page.beforeSequence === void 0 || revision.sequence < page.beforeSequence)).reverse().slice(0, page.limit).map((revision) => structuredClone(revision));
+	}
+	async readRevision(revisionId) {
+		const { decoded } = await this.read("read-revision");
+		const revision = decoded.revisions.find((candidate) => candidate.id === revisionId);
+		return revision ? structuredClone(revision) : null;
+	}
+	async readReceipt(actorId, operationKey) {
+		const { decoded } = await this.read("edit-entry");
+		const receipt = decoded.receipts.get(await receiptRecordId(actorId, operationKey));
+		return receipt ? structuredClone(receipt) : null;
+	}
+	/**
+	* One keyed edit of one Entry's values: the Entry change, its revision and
+	* its receipt commit together or not at all. A repeated key with the same
+	* request returns the stored receipt before any precondition is checked, so a
+	* retry after a lost acknowledgement never appends a second revision.
+	*/
+	async editEntry(edit) {
+		if (!edit.operation || typeof edit.operation.key !== "string" || !edit.operation.key.trim() || edit.operation.key.length > 200) throw contentError("edit-entry", "validation", "An edit requires an operation key of at most 200 characters.");
+		if (!Number.isSafeInteger(edit.expectedMutationToken) || edit.expectedMutationToken < 0 || typeof edit.fingerprint !== "string" || !edit.fingerprint) throw contentError("edit-entry", "validation", "An edit requires an expected token and a request fingerprint.");
+		if (edit.entry.providerId !== this.provider.id) throw contentError("edit-entry", "unsupported-transaction", "Cannot edit another provider.");
+		const actorId = edit.provenance.actor?.id ?? null;
+		const receiptId = await receiptRecordId(actorId, edit.operation.key);
+		const { snapshot, value, receipt: written } = await this.mutate("edit-entry", (before, decoded) => {
+			const stored = decoded.receipts.get(receiptId);
+			if (stored) {
+				if (stored.fingerprint !== edit.fingerprint) throw contentError("edit-entry", "operation-key-reuse", "This operation key was already used for a different request.");
+				throw new UnchangedContent(before, {
+					receipt: stored,
+					replayed: true
+				});
+			}
+			if (before.mutationToken !== edit.expectedMutationToken) throw contentError("edit-entry", "conflict", "Content changed since the edit was prepared.");
+			const current = before.entries.find((entry) => entry.id === edit.entry.recordId && entry.modelId === edit.entry.modelId);
+			if (!current) throw contentError("edit-entry", "not-found", "Content Entry was not found.");
+			const model = this.model(before, current.modelId, "edit-entry");
+			const values = edit.values(structuredClone(current), structuredClone(model));
+			const receipt = {
+				actorId,
+				operationKey: edit.operation.key,
+				fingerprint: edit.fingerprint,
+				entry: structuredClone(edit.entry)
+			};
+			if (sameJson(values, current.values)) throw new UnchangedContent(before, {
+				receipt: {
+					...receipt,
+					revisionId: latestRevision(decoded.revisions, current.id)?.id ?? null,
+					mutationToken: before.mutationToken
+				},
+				replayed: false
+			});
+			const now = this.clock("edit-entry");
+			const next = {
+				...current,
+				values,
+				updatedAt: now < current.updatedAt ? current.updatedAt : now
+			};
+			assertContentEntryMatchesModel(next, model, "edit-entry");
+			return {
+				models: before.models,
+				entries: [...before.entries.filter((entry) => entry.id !== current.id), next],
+				revision: {
+					provenance: edit.provenance,
+					operation: edit.operation,
+					...edit.restoredFrom ? { restoredFrom: edit.restoredFrom } : {}
+				},
+				receipt: {
+					recordId: receiptId,
+					value: receipt
+				},
+				value: {
+					receipt: null,
+					replayed: false
+				}
+			};
+		});
+		const receipt = value.receipt ?? written;
+		if (!receipt) throw contentError("edit-entry", "transaction-failed", "The edit produced no receipt.");
+		return {
+			receipt: structuredClone(receipt),
+			replayed: value.replayed,
+			snapshot
+		};
+	}
 	/**
 	* Apply an activation's publication decisions behind a monotonic fence.
 	*
@@ -2712,6 +2923,32 @@ var TransactionalContentStore = class {
 		return now;
 	}
 };
+function sameJson(left, right) {
+	return canonicalJson(left) === canonicalJson(right);
+}
+function canonicalJson(value) {
+	if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+	if (value !== null && typeof value === "object") return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+	return JSON.stringify(value);
+}
+function latestRevision(revisions, entryId) {
+	let latest;
+	for (const revision of revisions) if (revision.entry.recordId === entryId && (!latest || revision.sequence > latest.sequence)) latest = revision;
+	return latest;
+}
+async function receiptRecordId(actorId, operationKey) {
+	const bytes = new TextEncoder().encode(JSON.stringify([actorId, operationKey]));
+	return `${CONTENT_RECEIPT_RECORD_PREFIX}${[...new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes))].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+function isRef(value) {
+	return isPlainObject(value) && typeof value.providerId === "string" && isSafeRecordId(value.modelId) && isSafeRecordId(value.recordId);
+}
+function isRevision(value) {
+	return isPlainObject(value) && typeof value.id === "string" && isSafeRecordId(value.id) && isRef(value.entry) && Number.isSafeInteger(value.sequence) && value.sequence >= 1 && (value.parentId === null || typeof value.parentId === "string") && isPlainObject(value.values) && typeof value.createdAt === "string" && typeof value.source === "string" && (value.actor === null || isPlainObject(value.actor) && typeof value.actor.id === "string") && isPlainObject(value.operation) && typeof value.operation.kind === "string";
+}
+function isReceipt(value) {
+	return isPlainObject(value) && typeof value.operationKey === "string" && typeof value.fingerprint === "string" && (value.actorId === null || typeof value.actorId === "string") && isRef(value.entry) && (value.revisionId === null || typeof value.revisionId === "string") && Number.isSafeInteger(value.mutationToken);
+}
 function withoutField(values, fieldId) {
 	const next = { ...values };
 	delete next[fieldId];
@@ -2747,7 +2984,7 @@ var FilesystemContentStore = class extends TransactionalContentStore {
 			...options.randomToken === void 0 ? {} : { randomToken: options.randomToken },
 			...options.newMutationToken === void 0 ? {} : { newMutationToken: options.newMutationToken }
 		});
-		return this.fromRecords(records, options.now);
+		return this.fromRecords(records, options.now, options.revisionProvenance);
 	}
 };
 function createFilesystemContentStore(options) {

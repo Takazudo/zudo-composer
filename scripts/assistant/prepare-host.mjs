@@ -1,7 +1,7 @@
 // @ts-check
 // Seeds an explicitly new, disposable, ordinary writable authoring host from one
-// of the repository's real demo definitions (Orrery, Margin Notes, Nightjar
-// Supply) or from the installed native-edit fixture, for Assistant acceptance.
+// of the repository's real demo definitions (Sample Studio, Orrery, Margin
+// Notes, Nightjar Supply) or from the installed native-edit fixture.
 // The tracked demo packages, their site-project.ts and generated CMS are never
 // written; assets enter the new host only through the owning Assets store.
 import { cp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
@@ -12,7 +12,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const repo = fileURLToPath(new URL("../..", import.meta.url));
-export const DEMOS = /** @type {const} */ ({ landing: "demo-landing", blog: "demo-blog", webshop: "demo-webshop" });
+export const DEMOS = /** @type {const} */ ({ sample: "demo-sample", landing: "demo-landing", blog: "demo-blog", webshop: "demo-webshop" });
 
 /**
  * @param {{ kind: keyof typeof DEMOS | "edit-host", dir: string, baseUrl?: string, apiKeyEnv?: string, workspaceId?: string, name?: string }} options
@@ -40,12 +40,16 @@ export async function prepareAssistantHost({ kind, dir, baseUrl, apiKeyEnv = "ZU
   const skip = new Set(["cms", "node_modules", "__tests__", "site-project.ts", "site-project.json", "dist-site", "dist-editor", "images-src"]);
   for (const entry of await readdir(source)) if (!skip.has(entry)) await cp(join(source, entry), join(target, entry), { recursive: true });
   await symlink(join(source, "node_modules"), join(target, "node_modules"), "dir");
-  const pkg = JSON.parse(await readFile(join(source, "package.json"), "utf8"));
-  await writeFile(join(target, "zudo-composer.config.ts"), `// Disposable Assistant acceptance host seeded from packages/${DEMOS[kind]}.\nimport { defineComposerConfig } from "zudo-composer/config";\n\nexport default defineComposerConfig({\n  pack: "${pkg.name}/components",\n  nativeEditing: { source: "workspace" },\n  assistant: ${JSON.stringify(assistant)},\n});\n`);
   const require = createRequire(join(target, "package.json"));
   const authoring = await import(pathToFileURL(require.resolve("zudo-composer/authoring")).href);
   const vite = await import(pathToFileURL(require.resolve("zudo-composer/vite")).href);
-  const { composerConfig, pack } = await vite.loadHostContext({ workspaceRoot: target });
+  // The source host's own resolved settings, read without evaluating its pack
+  // and without ambient ZUDO_COMPOSER_* overrides: a host-local self-reference
+  // pack and an installed themeset are both carried over exactly as named.
+  const { loadHostConfig } = await import(pathToFileURL(join(repo, "server/host-context.mjs")).href);
+  const sourceConfig = await loadHostConfig(source, {});
+  await writeFile(join(target, "zudo-composer.config.ts"), `// Editable Assistant host seeded from packages/${DEMOS[kind]}.\nimport { defineComposerConfig } from "zudo-composer/config";\n\nexport default defineComposerConfig({\n${Object.entries(sourceConfig.settings).map(([key, value]) => `  ${key}: ${JSON.stringify(value)},\n`).join("")}  nativeEditing: { source: "workspace" },\n  assistant: ${JSON.stringify(assistant)},\n});\n`);
+  const { composerConfig, pack } = await vite.loadHostContext({ workspaceRoot: target, env: {} });
   // Exact repository definition; the committed SiteProject JSON is its generated form.
   const project = JSON.parse(await readFile(join(source, "site-project.json"), "utf8"));
   const assets = await authoring.createFilesystemAssetStore({ assetsStoreRoot: composerConfig.paths.assets });
@@ -67,7 +71,7 @@ export async function prepareAssistantHost({ kind, dir, baseUrl, apiKeyEnv = "ZU
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [kind, dir, ...rest] = process.argv.slice(2);
-  if (!kind || !dir || !(kind in DEMOS || kind === "edit-host")) { console.error("Usage: node scripts/assistant/prepare-host.mjs <landing|blog|webshop|edit-host> <new-empty-dir> [--base-url URL] [--name NAME]"); process.exit(2); }
+  if (!kind || !dir || !(kind in DEMOS || kind === "edit-host")) { console.error("Usage: node scripts/assistant/prepare-host.mjs <sample|landing|blog|webshop|edit-host> <new-empty-dir> [--base-url URL] [--name NAME]"); process.exit(2); }
   const flag = (/** @type {string} */ key) => { const index = rest.indexOf(key); return index >= 0 ? rest[index + 1] : undefined; };
   if (rest.includes("--fresh")) await rm(dir, { recursive: true, force: true });
   const result = await prepareAssistantHost({ kind: /** @type {any} */ (kind), dir, baseUrl: flag("--base-url"), name: flag("--name") });

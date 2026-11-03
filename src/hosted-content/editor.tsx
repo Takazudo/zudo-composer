@@ -1,12 +1,13 @@
 import { render } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import type { VNode } from "preact";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { Select } from "../components/ui/form-controls";
 import { HostedContentSession } from "./session";
 import { HostedFieldControl, fieldEditable, fieldClearable, entryLabel } from "./field-control";
 import { hostedEditorLabels } from "./labels";
 import type { HostedEditorLabels } from "./labels";
 import type { HostedEditorSessionState, HostedSessionOptions } from "./session";
-import type { ContentEntryRef, HostedErrorCode, HostedFieldPermission, HostedPolicy, HostedState, JsonValue } from "./types";
+import type { ContentEntryRef, ContentFieldDefinition, HostedErrorCode, HostedFieldPermission, HostedPolicy, HostedResult, HostedState, JsonValue } from "./types";
 
 export * from "./preview-browser";
 export type { HostedEditorSessionState, HostedRecoveryCheckpoint, HostedPreviewAdapter, HostedSessionOptions } from "./session";
@@ -14,6 +15,21 @@ export type { HostedControlLabels } from "./field-control";
 export { hostedEditorLabels, hostedEditorLabelsJa, hostedErrorMessages, hostedErrorMessagesJa } from "./labels";
 export type { HostedEditorLabels } from "./labels";
 export interface HostedEditorSelection { entry: ContentEntryRef; fieldId: string }
+/** What a host field renderer receives. It never holds storage, transport or the session itself. */
+export interface HostedFieldRenderContext {
+  readonly entry: ContentEntryRef; readonly field: ContentFieldDefinition; readonly permission: HostedFieldPermission;
+  readonly value: JsonValue | undefined; readonly disabled: boolean; readonly labels: HostedEditorLabels;
+  /** Stage a value through the same session edit as the built-in control; the service validates it on save. */
+  setValue(next: JsonValue | undefined): void;
+  /** Mount the built-in control for this field into a host element, e.g. beside a host-owned counter. */
+  renderDefault(element: HTMLElement): HostedFieldMount;
+}
+export interface HostedFieldMount { update(context: HostedFieldRenderContext): void; destroy(): void }
+/** Host-owned control for chosen fields. Fields it does not match keep the built-in control. */
+export interface HostedFieldRenderer {
+  matches(field: ContentFieldDefinition, entry: ContentEntryRef): boolean;
+  mount(element: HTMLElement, context: HostedFieldRenderContext): HostedFieldMount;
+}
 export interface HostedContentEditorOptions extends HostedSessionOptions {
   policy: HostedPolicy;
   selection: HostedEditorSelection;
@@ -26,6 +42,8 @@ export interface HostedContentEditorOptions extends HostedSessionOptions {
   /** Map typed diagnostics and transport failures to host-facing messages. Overrides `errorMessages`. */
   formatError?(error: unknown): string;
   onNavigate?(selection: HostedEditorSelection): void | Promise<void>;
+  /** The first matching renderer replaces a record field's control; the label and clear action stay built in. */
+  fieldRenderers?: HostedFieldRenderer[];
 }
 export interface HostedContentEditorHandle {
   readonly state: HostedEditorSessionState;
@@ -37,7 +55,26 @@ export interface HostedContentEditorHandle {
   preview(): ReturnType<HostedContentSession["captureAndPreview"]>;
   submit(): ReturnType<HostedContentSession["submit"]>;
   refreshPublication(): ReturnType<HostedContentSession["refreshPublication"]>;
+  readonly selection: HostedEditorSelection;
+  /** Restore an exact revision of a permitted Entry as a new working revision; unsaved edits are saved first. */
+  restore(entry: ContentEntryRef, revisionId: string): Promise<HostedResult>;
   dispose(): void;
+}
+const defaultViews = new WeakMap<HostedFieldRenderContext, () => VNode>();
+function renderDefaultInto(context: HostedFieldRenderContext, element: HTMLElement): HostedFieldMount {
+  const draw = (next: HostedFieldRenderContext) => render(defaultViews.get(next)!(), element);
+  draw(context);
+  return { update: draw, destroy: () => render(null, element) };
+}
+function CustomField({ renderer, context }: { renderer: HostedFieldRenderer; context: HostedFieldRenderContext }) {
+  const host = useRef<HTMLDivElement>(null), mounted = useRef<HostedFieldMount | null>(null), latest = useRef(context);
+  latest.current = context;
+  useEffect(() => {
+    mounted.current = renderer.mount(host.current!, latest.current);
+    return () => { mounted.current?.destroy(); mounted.current = null; };
+  }, [renderer]);
+  useEffect(() => { mounted.current?.update(context); });
+  return <div ref={host} class="hosted-content-editor__custom" />;
 }
 const sameRef = (a: ContentEntryRef, b: ContentEntryRef) => a.providerId === b.providerId && a.modelId === b.modelId && a.recordId === b.recordId;
 const refKey = (ref: ContentEntryRef) => JSON.stringify([ref.providerId, ref.modelId, ref.recordId]);
@@ -116,7 +153,17 @@ export function mountHostedContentEditor(container: HTMLElement, options: Hosted
       {records.length > 1 && options.presentation !== "field" ? <div class="hosted-content-editor__field"><span>{labels.content}</span><Select aria-label={labels.content} value={refKey(selection.entry)} onChange={(event) => { const next = records.find((record) => refKey(record.selection.entry) === event.currentTarget.value); if (next) run(() => navigate(next.selection)); }}>{records.map((record) => <option key={refKey(record.selection.entry)} value={refKey(record.selection.entry)}>{record.label}</option>)}</Select></div> : null}
       <div class="hosted-content-editor__fields">{fields.map((field) => {
         const allowed = modelPermission.fields.find((permission) => permission.fieldId === field.id)!;
-        return <div class="hosted-content-editor__field" key={`${refKey(selection.entry)}/${field.id}/${state.presentationRevision}`} data-hosted-field={field.id}><span>{field.label}</span><HostedFieldControl schema={field} field={field} value={item.entry.values[field.id]} permission={allowed} identity={`${refKey(selection.entry)}/${field.id}`} hasIncompleteInput={(prefix) => state.invalidInputs.some((controlId) => controlId === prefix || controlId.startsWith(`${prefix}/`))} onIncompleteNumber={(controlId, raw) => { session.setIncompleteInput(controlId, raw !== null); setActionError(raw === null ? null : new Error(labels.cannotClear)); }} label={field.label} content={content} policy={options.policy} labels={labels} onChange={(next) => { if (next === undefined && !allowed.clear) { setActionError(new Error(labels.cannotClear)); return; } setActionError(null); session.edit(selection.entry, field.id, next); }} />{fieldClearable(field, allowed) ? <button type="button" class="hosted-content-editor__clear" aria-label={`${labels.clear}: ${field.label}`} onClick={() => { for (const controlId of state.invalidInputs) if (controlId.startsWith(`${refKey(selection.entry)}/${field.id}`)) session.setIncompleteInput(controlId, false); session.edit(selection.entry, field.id, undefined); }}>{labels.clear}</button> : null}</div>;
+        const change = (next: JsonValue | undefined) => { if (next === undefined && !allowed.clear) { setActionError(new Error(labels.cannotClear)); return; } setActionError(null); session.edit(selection.entry, field.id, next); };
+        const control = () => <HostedFieldControl schema={field} field={field} value={item.entry.values[field.id]} permission={allowed} identity={`${refKey(selection.entry)}/${field.id}`} hasIncompleteInput={(prefix) => state.invalidInputs.some((controlId) => controlId === prefix || controlId.startsWith(`${prefix}/`))} onIncompleteNumber={(controlId, raw) => { session.setIncompleteInput(controlId, raw !== null); setActionError(raw === null ? null : new Error(labels.cannotClear)); }} label={field.label} content={content} policy={options.policy} labels={labels} onChange={change} />;
+        const renderer = options.fieldRenderers?.find((candidate) => candidate.matches(field, selection.entry));
+        let custom: VNode | null = null;
+        if (renderer) {
+          const context: HostedFieldRenderContext = { entry: selection.entry, field, permission: allowed, value: item.entry.values[field.id], disabled: busy, labels, setValue: change,
+            renderDefault: (element) => renderDefaultInto(context, element) };
+          defaultViews.set(context, control);
+          custom = <CustomField renderer={renderer} context={context} />;
+        }
+        return <div class="hosted-content-editor__field" key={`${refKey(selection.entry)}/${field.id}/${state.presentationRevision}`} data-hosted-field={field.id}><span>{field.label}</span>{custom ?? control()}{fieldClearable(field, allowed) ? <button type="button" class="hosted-content-editor__clear" aria-label={`${labels.clear}: ${field.label}`} onClick={() => { for (const controlId of state.invalidInputs) if (controlId.startsWith(`${refKey(selection.entry)}/${field.id}`)) session.setIncompleteInput(controlId, false); session.edit(selection.entry, field.id, undefined); }}>{labels.clear}</button> : null}</div>;
       })}</div>
       {options.presentation !== "field" ? collections.map((collection) => {
         const members = memberRefs(content, collection.owner, collection.fieldId);
@@ -165,6 +212,12 @@ export function mountHostedContentEditor(container: HTMLElement, options: Hosted
     flush: () => session.flush(), navigate,
     refresh: () => session.refresh(), preview,
     submit: () => session.submit(), refreshPublication: () => session.refreshPublication(),
+    get selection() { return selection; },
+    restore(entry, revisionId) {
+      if (disposed) return Promise.reject(new Error("Editor presentation is disposed"));
+      if (!permittedRef(options, entry, session.state.content)) return Promise.reject(new Error("Entry is not permitted"));
+      return session.restoreRevision(entry, revisionId);
+    },
     dispose() { if (disposed) return; disposed = true; unsubscribeSession(); render(null, container); session.dispose(); },
   };
 }
