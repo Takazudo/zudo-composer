@@ -27,8 +27,9 @@ The report identifies three different proofs:
   before commit; replace a process after a lost creation acknowledgement;
   and complete two integrations while preserving newer created-entry edits.
 
-These are SQLite and fake results. Pinsel must run the same public runner
-against its actual D1 adapter; this fixture makes no D1 verification claim.
+These are SQLite and fake results. The separate local D1 proofs are described
+in [D1.md](./D1.md); a downstream host such as Pinsel must still run the same
+public runner against its own D1 adapter.
 
 ## SQLite transaction boundary
 
@@ -40,9 +41,16 @@ test transport opens a separate connection for every request.
 The service never holds a transaction across host code. It reads the head
 row and keyed receipt/snapshot/publication rows, prepares the change, then calls
 `commit`. Each commit is one short `BEGIN IMMEDIATE` transaction that runs the
-same static statement list a host would send as one D1 `batch()`: a head
-`UPDATE … WHERE version = ?`, a guard insert that aborts when that update did
-not apply, insert-only receipt and snapshot rows, and a publication upsert.
+same static statement list a host would send as one D1 `batch()`: a
+precondition guard insert that aborts unless the head exists at
+`expectedVersion` and the proposed version differs from it, the head `UPDATE …
+WHERE version = ?`, a postcondition guard that aborts unless `changes()` is 1,
+insert-only receipt, snapshot and revision rows, and a publication upsert. The
+earlier guard only checked that the stored version equalled the proposed one
+after the `UPDATE`, so a reused version let a zero-row `UPDATE` commit the
+receipt and other rows. That shared adapter defect is fixed here and in the D1
+adapter (see [D1.md](./D1.md)); the shared `conditional-commit-version-guard`
+scenario and `runSqliteGuardProof` (missing head, `changes()` guard) cover it.
 A constraint failure rolls everything back and resolves `false`; the service
 then retries from fresh reads, where it finds the newer revision or the
 committed receipt. Other failures roll back and reach the caller. Commits use

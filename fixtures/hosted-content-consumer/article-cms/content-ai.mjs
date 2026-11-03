@@ -3,13 +3,11 @@
 // host decisions, and nothing here takes them from a request or a model reply.
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { EditorialError, contentAiCandidateDigest, createContentAiService, createHostedContentEditorial } from "zudo-composer/hosted-content";
-import { articleSiteId, createArticleService } from "./article-data.mjs";
-import { projectArticles } from "./render.mjs";
+import { EditorialError } from "zudo-composer/hosted-content";
+import { articleCandidateRenderWith, candidateRenderIdentityInput, createArticleContentAiWith } from "./article-core.mjs";
+import { createArticleService } from "./article-data.mjs";
 
-export const articleRoute = "journal";
-export const articleRenderer = "article-site-v1";
-export const articleProposalOwner = siteId => `article-cms:site:${siteId}`;
+export { articleProposalOwner, articleRenderer, articleRoute } from "./article-core.mjs";
 
 const SCHEMA = `CREATE TABLE IF NOT EXISTS article_content_ai_proposal (
   id TEXT PRIMARY KEY, owner TEXT NOT NULL, actor_id TEXT, created_at TEXT NOT NULL, body TEXT NOT NULL CHECK (json_valid(body))
@@ -53,20 +51,12 @@ export function openArticleProposalStore(filename) {
 
 /** One request's Content-AI service, bound to the session the host resolved. */
 export function createArticleContentAi({ storage, session, provider, store }) {
-  return createContentAiService({
-    boundary: provenance => createHostedContentEditorial({ service: source => createArticleService(storage, { source, role: session.role }), provenance }),
-    actor: { id: session.actorId },
-    owner: articleProposalOwner(articleSiteId),
-    proposer: provider?.proposer ?? null,
-    store,
-    createId: () => globalThis.crypto.randomUUID(),
-    canApply: session.role === "write",
-  });
+  return createArticleContentAiWith({ session, provider, store, serviceFor: source => createArticleService(storage, { source, role: session.role }) });
 }
 
 /** What a rendered candidate acknowledges: the proposal, its exact candidate, the route, the renderer and the definition. */
 export function candidateRenderIdentity({ proposal, definition }) {
-  return createHash("sha256").update(JSON.stringify({ proposalId: proposal.id, candidateDigest: proposal.candidateDigest, route: articleRoute, renderer: articleRenderer, definition })).digest("hex");
+  return createHash("sha256").update(candidateRenderIdentityInput({ proposal, definition })).digest("hex");
 }
 
 /**
@@ -74,14 +64,5 @@ export function candidateRenderIdentity({ proposal, definition }) {
  * memory. Nothing is saved. `stale` reports a precondition that no longer matches the working Content.
  */
 export async function articleCandidateRender({ storage, proposal, current }) {
-  const digest = await contentAiCandidateDigest({ entry: proposal.entry, expected: proposal.expected, candidate: proposal.candidate });
-  if (digest !== proposal.candidateDigest) throw new EditorialError("invalid-request", "The candidate does not match the proposal it came from.");
-  const head = await storage.readHead();
-  const providers = structuredClone(head.state.providers);
-  const entry = providers.find(item => item.providerId === proposal.entry.providerId)?.entries.find(item => item.modelId === proposal.entry.modelId && item.id === proposal.entry.recordId);
-  if (!entry) throw new EditorialError("not-found", "The Entry of this proposal is not part of the site.");
-  entry.values = structuredClone(proposal.candidate);
-  const definition = head.state.definition;
-  return { proposalId: proposal.id, candidateDigest: proposal.candidateDigest, route: articleRoute, renderer: articleRenderer, definition,
-    identity: candidateRenderIdentity({ proposal, definition }), stale: current.expected !== proposal.expected, renderData: projectArticles(providers) };
+  return articleCandidateRenderWith({ storage, proposal, current, identityOf: async input => candidateRenderIdentity(input) });
 }

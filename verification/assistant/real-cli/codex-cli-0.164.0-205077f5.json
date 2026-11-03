@@ -1,0 +1,119 @@
+{
+  "label": "normal-login real CLI inference",
+  "evidence": "real CLI inference through the person's normal sign-in",
+  "outcome": "pass",
+  "provider": {
+    "kind": "codex-cli",
+    "executable": "codex",
+    "identity": {
+      "provider": "codex-cli",
+      "label": "Codex CLI (local login)",
+      "model": null,
+      "version": "0.164.0"
+    }
+  },
+  "composer": {
+    "sha": "205077f5468635978a1d66af75be7f39a2e448df"
+  },
+  "ranAt": "2026-11-01T16:49:00.131Z",
+  "steps": [
+    {
+      "name": "provider-status",
+      "status": "pass",
+      "durationMs": 1744,
+      "details": {
+        "label": "Codex CLI (local login)",
+        "version": "0.164.0",
+        "model": null
+      }
+    },
+    {
+      "name": "edit-apply-undo",
+      "status": "pass",
+      "durationMs": 20953,
+      "details": {
+        "pendingChanges": 1,
+        "appliedTarget": true,
+        "otherRangesUnchanged": true,
+        "reloadShowsSaved": true,
+        "undoAttempts": 1,
+        "undoRestored": true
+      }
+    },
+    {
+      "name": "memory-auto-recall",
+      "status": "pass",
+      "durationMs": 12979,
+      "details": {
+        "mode": "auto",
+        "revisionBefore": 0,
+        "revisionAfter": 1,
+        "savedFact": true,
+        "recallRunMemory": {
+          "status": "used",
+          "revision": 1,
+          "mode": "auto",
+          "characters": 37
+        }
+      }
+    },
+    {
+      "name": "stop",
+      "status": "pass",
+      "durationMs": 1235,
+      "details": {
+        "cliProcessObservedDuringRun": true,
+        "runStatus": "stopped",
+        "leftoverCliProcesses": 0,
+        "draftUnchanged": true,
+        "pagesUnchanged": true
+      }
+    },
+    {
+      "name": "restart-persistence",
+      "status": "pass",
+      "durationMs": 6298,
+      "details": {
+        "launcherReused": true,
+        "conversations": 2,
+        "conversationsKept": true,
+        "memoryKept": true,
+        "pagesKept": true,
+        "stoppedRunKept": true
+      }
+    },
+    {
+      "name": "out-of-scope",
+      "status": "pass",
+      "durationMs": 15495,
+      "details": {
+        "runStatus": "completed",
+        "proposalEvents": 0,
+        "draftUnchanged": true,
+        "pagesUnchanged": true,
+        "hostSourceUnchanged": true
+      }
+    },
+    {
+      "name": "demo-smoke-blog",
+      "status": "pass",
+      "durationMs": 35767,
+      "details": {
+        "created": true,
+        "pendingChanges": 1,
+        "proposalLeftSavedFilesUntouched": true,
+        "previewRendered": true,
+        "appliedFiles": [
+          "composition-home.composition.json",
+          "composition-home.tsx"
+        ],
+        "appliedCarriesTarget": true,
+        "contentAndMappingUntouched": true,
+        "restartReused": true,
+        "restartKeptApplied": true,
+        "undoAttempts": 1,
+        "undoRestored": true
+      }
+    }
+  ]
+}

@@ -9,7 +9,8 @@ import {
   createHostedContentConformanceSeed, createMemoryHostedConformanceFactory,
   runHostedContentConformance,
 } from "zudo-composer/hosted-content/testing";
-import { createSqliteConformanceFactory, initializeSqliteDatabase } from "./sqlite-storage.mjs";
+import { DatabaseSync } from "node:sqlite";
+import { createSqliteConformanceFactory, initializeSqliteDatabase, openSqliteHandle } from "./sqlite-storage.mjs";
 
 const lesson = { providerId: "content", modelId: "lesson", recordId: "lesson-entry" };
 const faq = { providerId: "content", modelId: "faq", recordId: "faq-initial" };
@@ -198,11 +199,59 @@ export async function runSqliteProcessProof() {
   }
 }
 
+/** Every schema object and every table's rows, for exact before/after comparison. */
+function snapshotSqlite(filename) {
+  const connection = new DatabaseSync(filename);
+  try {
+    const schema = connection.prepare("SELECT type, name, tbl_name, sql FROM sqlite_schema ORDER BY type, name").all();
+    const tables = Object.fromEntries(schema.filter(object => object.type === "table").map(object =>
+      [object.name, connection.prepare(`SELECT * FROM "${object.name}" ORDER BY rowid`).all()]));
+    return JSON.parse(JSON.stringify({ schema, tables }));
+  } finally { connection.close(); }
+}
+
+/** SQLite-specific conditional-commit cases outside the shared runner: a missing head and the row-count postcondition. */
+export async function runSqliteGuardProof() {
+  const directory = await mkdtemp(join(tmpdir(), "composer-hosted-guard-"));
+  const filename = join(directory, "guard.sqlite");
+  let assertions = 0;
+  const check = (actual, expected, message) => { assertions++; assert.deepEqual(actual, expected, message); };
+  try {
+    await initializeSqliteDatabase(filename, createHostedContentConformanceSeed());
+    const seed = createHostedContentConformanceSeed();
+    const writer = new DatabaseSync(filename); writer.exec("DELETE FROM hosted_head"); writer.close();
+    const before = snapshotSqlite(filename);
+    const handle = openSqliteHandle(filename);
+    const revision = { id: "orphan-revision", entry: lesson, sequence: 1, parentId: null };
+    for (const expectedVersion of ["seed", "anything"]) {
+      check(await handle.storage.commit({ expectedVersion, head: { version: "orphan-next", state: seed.state, baselineProviders: [], activePublicationId: null },
+        receipt: { actorId: actor, operationKey: "orphan", fingerprint: "f", result: {} }, snapshot: { id: "orphan-snapshot" },
+        publication: { id: "orphan-publication", snapshotId: "orphan-snapshot", status: "submitted", statusVersion: 1 }, revisions: [revision] }), false,
+      `a commit against a missing head (expected ${expectedVersion}) is refused`);
+      check(snapshotSqlite(filename), before, `the refused commit (expected ${expectedVersion}) leaves every table unchanged; no record is orphaned`);
+    }
+    handle.close();
+    // The postcondition guard: after a zero-row UPDATE, changes() is 0 and the guard aborts the transaction.
+    const connection = new DatabaseSync(filename);
+    connection.exec("INSERT INTO hosted_head (id, version, state, baseline_providers) VALUES (1, 'seed', '{}', '[]')");
+    const restored = snapshotSqlite(filename);
+    connection.exec("BEGIN IMMEDIATE");
+    connection.prepare("UPDATE hosted_head SET version = 'never' WHERE id = 1 AND version = 'no-such-version'").run();
+    let refused = "";
+    try { connection.prepare("INSERT INTO hosted_commit_guard (ok) SELECT NULL WHERE changes() <> 1").run(); } catch (error) { refused = error.message; }
+    connection.exec("ROLLBACK"); connection.close();
+    check(/NOT NULL constraint failed: hosted_commit_guard\.ok/.test(refused), true, `changes() after a zero-row UPDATE aborts the commit (${refused})`);
+    check(snapshotSqlite(filename), restored, "nothing after the zero-row UPDATE committed");
+    return { assertions, scenarios: ["missing-head-no-orphans", "row-count-postcondition"] };
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}
+
 export async function runDurableProof() {
   const fake = await runHostedContentConformance(createMemoryHostedConformanceFactory());
   const sqlite = await runHostedContentConformance(createSqliteConformanceFactory());
   const processes = await runSqliteProcessProof();
-  return { node: process.version, backend: "Node node:sqlite, file-backed SQLite WAL, FULL synchronous", fake, sqlite, processes,
+  const guard = await runSqliteGuardProof();
+  return { node: process.version, backend: "Node node:sqlite, file-backed SQLite WAL, FULL synchronous", fake, sqlite, processes, guard,
     downstreamD1: "not tested" };
 }
 

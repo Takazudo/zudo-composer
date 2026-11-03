@@ -266,11 +266,16 @@ active_publication_id)`; `hosted_receipt` keyed by `(actor_id, operation_key)`;
 `hosted_snapshot` and `hosted_publication` keyed by `id`, bodies as JSON text;
 `hosted_revision(id, provider_id, model_id, record_id, sequence, body)` with
 `UNIQUE (provider_id, model_id, record_id, sequence)`.
-Send one `batch()` per commit: an `UPDATE hosted_head … WHERE id = 1 AND version =
-?expected`; a guard `INSERT` into an always-empty table that aborts the batch when
-that update did not apply (D1 cannot branch in JavaScript between statements);
-`INSERT` for the receipt, snapshot and each revision; and an upsert for the publication. A
-constraint failure rolls the batch back and the adapter resolves `false`.
+Send one `batch()` per commit (D1 cannot branch in JavaScript between statements).
+First, a precondition guard `INSERT` into an always-empty `NOT NULL` table that
+inserts `NULL`, aborting the batch, unless the head row exists with `version =
+?expected` and the proposed version differs from `?expected`. Then `UPDATE
+hosted_head … WHERE id = 1 AND version = ?expected`, followed by a postcondition
+guard that aborts when `changes()` is not 1. Then `INSERT` for the receipt, snapshot
+and each revision, and an upsert for the publication. Do not guard by checking that
+the stored version equals the proposed one after the update: a reused or repeated
+version would pass that check although the update matched no row. A constraint
+failure rolls the batch back and the adapter resolves `false`.
 `fixtures/hosted-content-consumer/sqlite-storage.mjs` shows the exact static
 statement list. A receipt stores a copy of the scoped result state, so plan row
 size and retention; keys are never pruned or recycled in this version.
@@ -740,11 +745,12 @@ re-run the host's Worker SSR byte-equality check against it.
 ### D1 adapter obligations
 
 1. Store the head, receipts, snapshots and publications as described above; the
-   head `UPDATE … WHERE version = ?` plus an abort-on-miss guard statement must
-   be in the same `batch()` as the inserts.
-2. `commit` resolves `false`, writing nothing, on a stale head version, or a
-   duplicate receipt key, snapshot ID, revision ID or revision `(entry,
-   sequence)`; it throws only for unknown outcomes.
+   version precondition guard, the head `UPDATE … WHERE version = ?` and its
+   row-count guard must be in the same `batch()` as the inserts.
+2. `commit` resolves `false`, writing nothing, on a stale or missing head, a
+   proposed version equal to the expected one, or a duplicate receipt key,
+   snapshot ID, revision ID or revision `(entry, sequence)`; it throws only for
+   storage failures and unknown outcomes.
 3. All reads return detached data; retain receipts, snapshots and revisions and
    do not recycle operation keys; budget row size for the result copy in each
    receipt and for one values copy per revision.

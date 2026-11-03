@@ -1,0 +1,95 @@
+{
+  "label": "normal-login real CLI inference",
+  "evidence": "real CLI inference through the person's normal sign-in, via the independently installed Article CMS",
+  "outcome": "pass",
+  "provider": {
+    "kind": "claude-cli",
+    "executable": "claude",
+    "model": null,
+    "version": "2.1.316"
+  },
+  "composer": {
+    "sha": "205077f5468635978a1d66af75be7f39a2e448df",
+    "installedHostedContentMatchesCheckout": true
+  },
+  "modelCalls": 1,
+  "deadline": {
+    "maxMinutes": 10,
+    "expired": false,
+    "timedOutPhase": null,
+    "cleanup": "clean",
+    "graceMs": 15000,
+    "ownedProcessesStopped": true,
+    "straysKilled": 0
+  },
+  "ranAt": "2026-11-01T16:44:40.927Z",
+  "steps": [
+    {
+      "name": "provider-status",
+      "status": "pass",
+      "durationMs": 0,
+      "details": {
+        "detail": "Claude Code CLI (local login) 2.1.316: the local check passed. No model call has been made yet.",
+        "version": "2.1.316"
+      }
+    },
+    {
+      "name": "publish-a-save-b",
+      "status": "pass",
+      "durationMs": 83,
+      "details": {
+        "published": "Article A",
+        "working": "Article B"
+      }
+    },
+    {
+      "name": "prepare-title-only",
+      "status": "pass",
+      "durationMs": 5194,
+      "details": {
+        "modelCalls": 1,
+        "changedFields": [
+          "title"
+        ],
+        "titleLength": 10,
+        "bodyUnchanged": true,
+        "otherFieldsUnchanged": true,
+        "nothingWritten": true
+      }
+    },
+    {
+      "name": "render-and-apply",
+      "status": "pass",
+      "durationMs": 162,
+      "details": {
+        "renderedTitle": true,
+        "oneRevision": true,
+        "aiProvenance": true,
+        "savedExactly": true,
+        "publishedUnchanged": true
+      }
+    },
+    {
+      "name": "restart-recover-apply",
+      "status": "pass",
+      "durationMs": 313,
+      "details": {
+        "recovered": true,
+        "noDuplicate": true,
+        "modelCalls": 1
+      }
+    },
+    {
+      "name": "undo-and-recover",
+      "status": "pass",
+      "durationMs": 361,
+      "details": {
+        "recovered": true,
+        "restoredB": true,
+        "twoRevisions": true,
+        "publishedUnchanged": true,
+        "modelCalls": 1
+      }
+    }
+  ]
+}

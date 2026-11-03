@@ -1,6 +1,7 @@
 body { margin: 0; font-family: system-ui, sans-serif; color: #1c2730; background: #f6f7f8; }
 .article-header { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; align-items: center; padding: 0.75rem 1rem; background: #fff; border-bottom: 1px solid #d5dbe0; }
 .article-local { color: #7a5b00; }
+.article-backend { color: #44515c; font-size: 0.875rem; }
 .article-nav { display: flex; gap: 0.5rem; align-items: center; margin-inline-start: auto; }
 .article-nav [aria-pressed="true"] { font-weight: 700; }
 .article-layout { display: grid; gap: 1rem; padding: 1rem; grid-template-columns: minmax(0, 1fr); }
