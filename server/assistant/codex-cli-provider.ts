@@ -100,12 +100,13 @@ export function createCodexCliProtocol(options: { platform?: NodeJS.Platform } =
 export const codexCliProtocol: CliProtocol = createCodexCliProtocol();
 
 /** Complete argv after the executable: trusted config and Composer-owned paths only; the prompt goes to stdin. */
-export function codexExecArgs(config: Pick<CliAssistantConfig, "model" | "effort">, scratch: string, schemaPath: string): string[] {
+export function codexExecArgs(config: Pick<CliAssistantConfig, "model" | "effort" | "serviceTier">, scratch: string, schemaPath: string): string[] {
   return [
     ...CODEX_CLI_PROFILE,
     "-C", scratch, "--output-schema", schemaPath,
     ...(config.model ? ["-m", config.model] : []),
     ...(config.effort ? ["-c", `model_reasoning_effort="${config.effort}"`] : []),
+    ...(config.serviceTier ? ["-c", `service_tier=${JSON.stringify(config.serviceTier)}`] : []),
     "-",
   ];
 }

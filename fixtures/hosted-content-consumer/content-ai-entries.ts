@@ -16,8 +16,11 @@ export async function host(provider: ContentAiProvider | null, service: ContentA
   return runContentAiOperation({ status, service }, operation, {});
 }
 export const remote: RemoteContentAi = createRemoteContentAi(async (name, payload) => ({ ok: true, value: { name, payload } }));
-const config: ContentAiProviderConfig = { provider: "codex-cli", executable: "codex", timeoutMs: 60_000 };
+const config: ContentAiProviderConfig = { provider: "codex-cli", executable: "codex", model: "gpt-6-astra", effort: "medium", serviceTier: "default", timeoutMs: 60_000 };
 export const provider: Promise<ContentAiProvider> = createContentAiProvider(config);
 // @ts-expect-error The browser client is exported from /editor only; /browser is not a package entry.
 import type { createRemoteContentAi as NotExported } from "zudo-composer/hosted-content/browser";
 export type Unused = typeof NotExported;
+
+// @ts-expect-error Service-tier overrides belong only to Codex, not Claude.
+export const invalidTier: ContentAiProviderConfig = { provider: "claude-cli", serviceTier: "default" };

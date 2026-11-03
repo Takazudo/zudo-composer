@@ -14,12 +14,16 @@ export type { ContentAiInference } from "../../src/content/editorial/ai-operatio
 
 export type ContentAiProviderConfig =
   | { provider: "fake" }
-  | {
-    provider: "claude-cli" | "codex-cli";
+  | ({ provider: "claude-cli" } | {
+    provider: "codex-cli";
+    /** Explicit service_tier from trusted host configuration; never inferred from user settings. */
+    serviceTier?: string | null;
+  }) & {
     /** Executable name looked up on PATH, or an absolute path. Never a command line. */
     executable?: string;
-    /** `null` or omitted uses the CLI's own default model. */
+    /** Explicit model. Null/omitted leaves the isolated CLI default, not personal settings. */
     model?: string | null;
+    /** Explicit effort; null/omitted does not import personal settings. */
     effort?: "low" | "medium" | "high" | null;
     /** Upper bound for one model reply, 5000–900000 ms. */
     timeoutMs?: number;

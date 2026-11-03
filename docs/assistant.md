@@ -27,7 +27,7 @@ export default defineComposerConfig({
 | --- | --- | --- |
 | `"fake"` | Deterministic offline policy; no model, no network | `name`, `permission` |
 | `"claude-cli"` | Your installed, signed-in Claude Code CLI | `executable` (default `claude`), `model`, `effort`, `timeoutMs` |
-| `"codex-cli"` | Your installed, signed-in Codex CLI | `executable` (default `codex`), `model`, `effort`, `timeoutMs` |
+| `"codex-cli"` | Your installed, signed-in Codex CLI | `executable` (default `codex`), `model`, `effort`, `serviceTier`, `timeoutMs` |
 | `"anthropic"` (default) | Anthropic Messages API via the pinned SDK | `model`, `apiKeyEnv`, `effort`, `baseUrl` |
 
 `name` is the default display name (renamable per site); `permission` is
@@ -40,6 +40,15 @@ never holds a secret.
 unsupported, the Assistant shows that state and sends nothing; it never
 switches to another provider. Composer, review, Memory and saved
 conversations keep working.
+
+CLI `model` and `effort` should be explicit when preserving the owner's current
+selection: the restricted profile does not load personal/project settings.
+Omitted/null values leave the isolated CLI defaults, which may still be affected
+by managed settings/environment. Codex additionally accepts `serviceTier`, a
+bounded lowercase token passed as `-c service_tier="..."`; omitted/null emits
+no override. Composer never selects a faster tier or retries without a rejected
+tier. Resolve these values in trusted host startup configuration, never a prompt
+or browser request. See [the Content-AI configuration contract](hosted-content.md#preserve-the-owners-cli-selections-explicitly).
 
 ### CLI providers
 

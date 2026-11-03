@@ -42,10 +42,12 @@ export interface CliAssistantConfig extends AssistantCommonConfig {
   provider: "claude-cli" | "codex-cli";
   /** Executable name (looked up on PATH) or absolute path. Never a shell command line. */
   executable: string;
-  /** Model passed to the CLI; `null` uses the CLI's own default. */
+  /** Explicit model; null leaves the isolated CLI default, not the user settings file. */
   model: string | null;
-  /** Reasoning effort passed to the CLI when it supports one; `null` uses the CLI default. */
+  /** Explicit reasoning effort; null does not import personal CLI settings. */
   effort: AssistantEffort | null;
+  /** Codex only: explicit service_tier token from trusted host configuration. Omitted/null leaves the isolated CLI default. */
+  serviceTier?: string | null;
   /** Upper bound for one CLI invocation (one model reply). */
   timeoutMs: number;
 }
@@ -60,7 +62,7 @@ const keysByProvider: Record<AssistantProviderKind, string[]> = {
   anthropic: ["provider", "model", "apiKeyEnv", "effort", "name", "permission", "baseUrl"],
   fake: ["provider", "name", "permission"],
   "claude-cli": ["provider", "executable", "model", "effort", "timeoutMs", "name", "permission"],
-  "codex-cli": ["provider", "executable", "model", "effort", "timeoutMs", "name", "permission"],
+  "codex-cli": ["provider", "executable", "model", "effort", "serviceTier", "timeoutMs", "name", "permission"],
 };
 
 export function parseAssistant(value: unknown): AssistantConfig | undefined {
@@ -98,6 +100,8 @@ export function parseAssistant(value: unknown): AssistantConfig | undefined {
       ...common,
     };
   }
+  const serviceTier = input.serviceTier;
+  if (serviceTier !== undefined && serviceTier !== null && (typeof serviceTier !== "string" || !/^[a-z][a-z0-9_-]{0,63}$/.test(serviceTier))) throw new Error("assistant.serviceTier must be a bounded service-tier token.");
   const timeoutMs = input.timeoutMs ?? DEFAULT_CLI_TIMEOUT_MS;
   if (typeof timeoutMs !== "number" || !Number.isInteger(timeoutMs) || timeoutMs < 5_000 || timeoutMs > 900_000) throw new Error("assistant.timeoutMs must be an integer between 5000 and 900000.");
   const model = input.model ?? null;
@@ -107,6 +111,7 @@ export function parseAssistant(value: unknown): AssistantConfig | undefined {
     executable: parseExecutable(input.executable ?? DEFAULT_EXECUTABLES[kind]),
     model,
     effort: effortOf(null),
+    ...(typeof serviceTier === "string" ? { serviceTier } : {}),
     timeoutMs,
     ...common,
   };
