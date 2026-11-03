@@ -41,6 +41,7 @@ var keysByProvider = {
 		"executable",
 		"model",
 		"effort",
+		"serviceTier",
 		"timeoutMs",
 		"name",
 		"permission"
@@ -87,6 +88,8 @@ function parseAssistant(value) {
 		baseUrl: parseBaseUrl(input.baseUrl),
 		...common
 	};
+	const serviceTier = input.serviceTier;
+	if (serviceTier !== void 0 && serviceTier !== null && (typeof serviceTier !== "string" || !/^[a-z][a-z0-9_-]{0,63}$/.test(serviceTier))) throw new Error("assistant.serviceTier must be a bounded service-tier token.");
 	const timeoutMs = input.timeoutMs ?? 18e4;
 	if (typeof timeoutMs !== "number" || !Number.isInteger(timeoutMs) || timeoutMs < 5e3 || timeoutMs > 9e5) throw new Error("assistant.timeoutMs must be an integer between 5000 and 900000.");
 	const model = input.model ?? null;
@@ -96,6 +99,7 @@ function parseAssistant(value) {
 		executable: parseExecutable(input.executable ?? DEFAULT_EXECUTABLES[kind]),
 		model,
 		effort: effortOf(null),
+		...typeof serviceTier === "string" ? { serviceTier } : {},
 		timeoutMs,
 		...common
 	};
@@ -1102,6 +1106,7 @@ function codexExecArgs(config, scratch, schemaPath) {
 		schemaPath,
 		...config.model ? ["-m", config.model] : [],
 		...config.effort ? ["-c", `model_reasoning_effort="${config.effort}"`] : [],
+		...config.serviceTier ? ["-c", `service_tier=${JSON.stringify(config.serviceTier)}`] : [],
 		"-"
 	];
 }

@@ -8,6 +8,10 @@ for (const name of ["createHostedContentEditorial", "createContentAiService", "c
   assert.equal(typeof portable[name], "function", `zudo-composer/hosted-content exports ${name}`);
 assert.deepEqual([...portable.CONTENT_AI_FIELD_KEYS], ["title", "body"]);
 assert.equal(typeof node.createContentAiProvider, "function", "zudo-composer/hosted-content/node exports createContentAiProvider");
+// Configuration validation is local only: this does not probe a CLI or make a model request.
+const configured = await node.createContentAiProvider({ provider: "codex-cli", executable: "/nonexistent/never-run-in-entry-smoke", model: "gpt-6-astra", effort: "medium", serviceTier: "default" });
+assert.equal(configured.kind, "codex-cli");
+await assert.rejects(node.createContentAiProvider({ provider: "claude-cli", serviceTier: "default" }), /serviceTier is not supported/);
 const fake = await node.createContentAiProvider({ provider: "fake" });
 assert.equal((await fake.inference()).state, "ready");
 for (const entry of ["zudo-composer/hosted-content/editor", "zudo-composer/hosted-content/editor.css", "zudo-composer/hosted-content/preview", "zudo-composer/hosted-content/testing"])

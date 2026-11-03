@@ -529,6 +529,30 @@ sends `{ operation, payload }` to that endpoint and turns refusals back into
 `EditorialError`s. The CLI runs only in the host's Node process, never in a
 browser or a Worker.
 
+### Preserve the owner's CLI selections explicitly
+
+The restricted launchers intentionally do not load personal/project CLI settings:
+Claude uses `--setting-sources ""`; Codex uses `--ignore-user-config`. Omitted
+or null `model`/`effort` therefore means the **isolated CLI default**, not the
+owner's saved preference. Managed settings or inherited environment may still
+influence the CLI. To preserve an existing selection, the host must resolve it
+from its trusted startup configuration and pass it explicitly:
+
+```ts
+await createContentAiProvider({ provider: "claude-cli", model: selectedClaudeModel, effort: selectedClaudeEffort });
+await createContentAiProvider({ provider: "codex-cli", model: selectedCodexModel, effort: selectedCodexEffort, serviceTier: selectedCodexTier });
+```
+
+`serviceTier` is Codex-only and becomes one `-c service_tier="..."` override.
+For example, a host whose verified existing selection is `default` passes
+`serviceTier: "default"`; Composer never chooses a faster tier for it. The value
+must be a 1–64 character lowercase token (`a-z`, digits, `_`, `-`, starting with
+a letter). The selected CLI/model must support the value. Omitted/null emits no
+tier override; a CLI rejection is reported without retrying with another tier,
+model or provider. These settings are never accepted from browser requests or
+model replies. Composer does not read/write the owner's settings or credentials,
+and keeps all existing tool, MCP, hook and filesystem restrictions.
+
 ### Proposal store contract
 
 `ContentAiProposalStore` has two methods. `create(record)` is create-only: an

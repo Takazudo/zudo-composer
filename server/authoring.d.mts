@@ -1247,10 +1247,12 @@ interface CliAssistantConfig extends AssistantCommonConfig {
     provider: "claude-cli" | "codex-cli";
     /** Executable name (looked up on PATH) or absolute path. Never a shell command line. */
     executable: string;
-    /** Model passed to the CLI; `null` uses the CLI's own default. */
+    /** Explicit model; null leaves the isolated CLI default, not the user settings file. */
     model: string | null;
-    /** Reasoning effort passed to the CLI when it supports one; `null` uses the CLI default. */
+    /** Explicit reasoning effort; null does not import personal CLI settings. */
     effort: AssistantEffort | null;
+    /** Codex only: explicit service_tier token from trusted host configuration. Omitted/null leaves the isolated CLI default. */
+    serviceTier?: string | null;
     /** Upper bound for one CLI invocation (one model reply). */
     timeoutMs: number;
 }

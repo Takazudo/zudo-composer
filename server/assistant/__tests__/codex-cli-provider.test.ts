@@ -69,6 +69,13 @@ describe("Codex CLI provider (fake executable)", () => {
     expect(existsSync(seen.cwd)).toBe(false);
   });
 
+  it("only emits the service tier when explicitly configured", () => {
+    for (const serviceTier of [undefined, null]) {
+      expect(codexExecArgs({ model: null, effort: null, serviceTier }, "/tmp/s", "/tmp/s/schema.json").join(" ")).not.toContain("service_tier");
+    }
+    expect(codexExecArgs({ model: null, effort: null, serviceTier: "default" }, "/tmp/s", "/tmp/s/schema.json")).toContain('service_tier="default"');
+  });
+
   it("omits -m and the effort override when the CLI defaults are used", () => {
     const args = codexExecArgs({ model: null, effort: null }, "/tmp/s", "/tmp/s/schema.json");
     expect(args).not.toContain("-m");
