@@ -68,16 +68,22 @@ describe("restricted Assistant runner", () => {
     const a = await runner.start("proof", { conversationId: first.id, clientTurnId: turn(), text: "Who is the audience?", context });
     expect((await complete(runner, a.runId)).memory).toMatchObject({ status: "used", revision: 1 });
     expect(fake.requests[0]!.system).toContain("Audience: experts.");
-    // Human correction is injected into the very next call, in another conversation.
+    // The next call in the same conversation and a new conversation both use the correction.
     await store.saveMemory(scope, { body: "Audience: beginners.", expectedRevision: 1 });
-    const second = await store.createConversation(scope);
-    const b = await runner.start("proof", { conversationId: second.id, clientTurnId: turn(), text: "Write for our audience.", context });
-    await complete(runner, b.runId);
+    const corrected = await runner.start("proof", { conversationId: first.id, clientTurnId: turn(), text: "And now?", context });
+    expect((await complete(runner, corrected.runId)).memory).toMatchObject({ status: "used", revision: 2 });
     expect(fake.requests[1]!.system).toContain("Audience: beginners.");
     expect(fake.requests[1]!.system).not.toContain("experts");
-    expect(fake.requests[1]!.system).toContain("Nightjar Bot");
+    const second = await store.createConversation(scope);
+    const b = await runner.start("proof", { conversationId: second.id, clientTurnId: turn(), text: "Write for our audience.", context });
+    expect((await complete(runner, b.runId)).memory).toMatchObject({ status: "used", revision: 2 });
+    expect(fake.requests[2]!.system).toContain("Nightjar Bot");
+    expect(fake.requests[2]!.system).toContain("Audience: beginners.");
+    expect(fake.requests[2]!.system).not.toContain("experts");
+    expect((await store.conversation(scope, second.id)).messages.at(-1)?.memory).toMatchObject({ revision: 2 });
     const messages = (await store.conversation(scope, first.id)).messages;
-    expect(messages.at(-1)).toMatchObject({ role: "assistant", text: "Noted.", memory: { revision: 1 }, outcome: "completed" });
+    expect(messages.filter(message => message.role === "assistant").map(message => message.memory?.revision)).toEqual([1, 2]);
+    expect(messages.at(-1)).toMatchObject({ role: "assistant", text: "Noted.", memory: { revision: 2 }, outcome: "completed" });
   });
 
   it("inspects then proposes a validated Unstaged Change; never exposes Apply; canonical bytes stay unchanged", async () => {

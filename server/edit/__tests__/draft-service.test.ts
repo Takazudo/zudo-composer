@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { loadHostContext } from "../../host-context.mjs";
@@ -170,18 +170,53 @@ describe("shared Assistant drafts", () => {
   });
 
   it("reconciles a draft from its durable receipt when the process died before the draft status write", async () => {
-    const { drafts, root, bytes } = await fixture();
-    const view = await drafts.propose({ workspaceId: "proof", expected: { generation: 0, draftId: null }, provenance: assistant, operations: [{ kind: "updateField", page: home, nodeId: "paragraph", prop: "text", value: "Committed" }] });
+    const { drafts, root, bytes, options } = await fixture();
+    const view = await drafts.propose({ workspaceId: "proof", expected: { generation: 0, draftId: null }, provenance: assistant, operations: [{ kind: "updateField", page: home, nodeId: "paragraph", prop: "text", value: "Committed" }, { kind: "updateField", page: other, nodeId: "note", prop: "text", value: "Also committed" }] });
     const approve = view.draft!.candidateDigest!;
     const draftFile = join(root, "cms/edit-drafts", `${view.draft!.id}.draft.json`);
     const pending = await readFile(draftFile, "utf8");
+    const stateFile = join(root, "cms/edit-drafts", (await readdir(join(root, "cms/edit-drafts"))).find(name => name.endsWith(".state.json"))!);
+    const pendingState = await readFile(stateFile, "utf8");
     const receipt = await drafts.apply({ workspaceId: "proof", draftId: view.draft!.id, revision: view.draft!.revision, approve });
     const committed = await bytes();
     // Simulate the crash window: canonical files and receipt are durable, the draft record still says "open".
     await writeFile(draftFile, pending);
-    expect((await drafts.draft({ workspaceId: "proof" })).draft).toMatchObject({ status: "applied", applied: { operationId: receipt.operationId } });
-    expect(await drafts.apply({ workspaceId: "proof", draftId: view.draft!.id, revision: view.draft!.revision, approve })).toEqual(receipt);
+    await writeFile(stateFile, pendingState);
+    const reopened = createEditingService(options).drafts;
+    expect(await reopened.draft({ workspaceId: "proof" })).toMatchObject({ generation: 1, draft: { status: "applied", applied: { operationId: receipt.operationId } } });
+    const token = (await captureHost(options)).tokens.compositions;
+    expect(await reopened.apply({ workspaceId: "proof", draftId: view.draft!.id, revision: view.draft!.revision, approve })).toEqual(receipt);
     expect(await bytes()).toEqual(committed);
+    expect((await captureHost(options)).tokens.compositions).toBe(token);
+    const appliedMetadata = await readFile(draftFile, "utf8");
+    const undo = await reopened.undo({ workspaceId: "proof", draftId: view.draft!.id, approve });
+    const restored = await bytes();
+    const undoToken = (await captureHost(options)).tokens.compositions;
+    // Undo's receipt is durable but its status write/acknowledgment was lost.
+    await writeFile(draftFile, appliedMetadata);
+    const restarted = createEditingService(options).drafts;
+    expect(await restarted.receipt({ workspaceId: "proof", draftId: view.draft!.id })).toEqual({ status: "undone", applied: receipt, undone: undo });
+    expect(await restarted.undo({ workspaceId: "proof", draftId: view.draft!.id, approve })).toEqual(undo);
+    expect(await bytes()).toEqual(restored);
+    expect((await captureHost(options)).tokens.compositions).toBe(undoToken);
+  });
+
+  it("refuses the entire multi-page Undo after a manual edit on the second page, including after reopen", async () => {
+    const { drafts, options, bytes } = await fixture();
+    const view = await drafts.propose({ workspaceId: "proof", expected: { generation: 0, draftId: null }, provenance: assistant, operations: [
+      { kind: "updateField", page: home, nodeId: "paragraph", prop: "text", value: "First candidate" },
+      { kind: "updateField", page: other, nodeId: "note", prop: "text", value: "Second candidate" },
+    ] });
+    const draft = view.draft!;
+    const applied = await drafts.apply({ workspaceId: "proof", draftId: draft.id, revision: draft.revision, approve: draft.candidateDigest! });
+    const state = await captureHost(options);
+    const record = state.records.compositions.find(candidate => candidate.id === "other")!;
+    await state.stores.compositions.put({ ...record, document: { ...record.document, root: record.document.root.map(item => item.id === "note" ? { ...item, props: { text: "Later manual edit" } } : item) } }, "later manual JSX");
+    const beforeUndo = await bytes();
+    const reopened = createEditingService(options).drafts;
+    await expect(reopened.undo({ workspaceId: "proof", draftId: draft.id, approve: draft.candidateDigest! })).rejects.toMatchObject({ code: "undo-conflict" });
+    expect(await bytes()).toEqual(beforeUndo);
+    expect(await reopened.receipt({ workspaceId: "proof", draftId: draft.id })).toEqual({ status: "applied", applied, undone: null });
   });
 
   it("a stopped run's proposal is refused at the write, and revalidate drops operations whose image changed", async () => {

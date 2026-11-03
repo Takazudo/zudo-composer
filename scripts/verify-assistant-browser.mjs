@@ -96,6 +96,19 @@ async function landingJourneys() {
   await expect(page.locator('.cms-assistant-message[data-role="assistant"]').filter({ hasText: "Your site writes for experts" }).getByText("Used Memory r2")).toBeVisible();
   log("journey 5: corrected Memory r3 used on the next call; old answer keeps r2");
 
+  await stop();
+  await start(host.dir);
+  await page.reload();
+  await expect(page.locator('.cms-assistant-message[data-role="assistant"]').filter({ hasText: "Your site writes for experts" }).getByText("Used Memory r2")).toBeVisible();
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await expect(page.locator(".cms-assistant-message")).toHaveCount(0);
+  api.script([{ text: "The corrected audience is beginners." }]);
+  await send(page, "Who is the audience after restart?");
+  await expect(lastReply(page).getByText("Used Memory r3")).toBeVisible();
+  assert.match(lastRequest()?.system ?? "", /beginners planning/);
+  assert.doesNotMatch(lastRequest()?.system ?? "", /experts/);
+  log("corrected Memory r3 survives host restart and is used in a new conversation");
+
   // Journey 3/4 on a real theme: exact field update + registered component insertion, then review.
   api.script([
     { tools: [{ name: "inspect_page", input: {} }] },
@@ -267,6 +280,8 @@ async function exactInsertionJourneys() {
   assert.ok(applied[1]?.includes("正確な日本語の追記。"), "home JSX carries the exact Japanese text");
   assert.ok(JSON.parse(applied[0] ?? "{}").document.root.some(node => node.componentId === "native.table"), "home JSON");
   assert.match(applied[2] ?? "", /now clearer/);
+  await stop();
+  await start(host.dir);
   await page.reload();
   await expect(page.getByRole("heading", { name: "Applied to Composer" })).toBeVisible({ timeout: 60_000 });
   await shot(page, "native-applied-receipt");
