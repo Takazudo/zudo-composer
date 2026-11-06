@@ -130,8 +130,8 @@ importers:
         specifier: 5.2.2
         version: 5.2.2(@takazudo/zfb@5.2.2)
       '@takazudo/zudo-doc':
-        specifier: ^9.1.3
-        version: 9.1.3(@takazudo/zfb-md-wasm@5.2.2)(@takazudo/zfb-runtime@5.2.2(@takazudo/zfb@5.2.2))(@takazudo/zfb@5.2.2)(@takazudo/zudo-doc-history-server@9.1.4)(@types/node@22.20.2)(diff@8.0.4)(zod@4.4.3)
+        specifier: ^9.1.4
+        version: 9.1.4(@takazudo/zfb-md-wasm@5.2.2)(@takazudo/zfb-runtime@5.2.2(@takazudo/zfb@5.2.2))(@takazudo/zfb@5.2.2)(@takazudo/zudo-doc-history-server@9.1.4)(@types/node@22.20.2)(diff@8.0.4)(zod@4.4.3)
       '@takazudo/zudo-doc-history-server':
         specifier: ^9.1.4
         version: 9.1.4
@@ -1837,8 +1837,8 @@ packages:
     resolution: {integrity: sha512-4bKqzyxSO/zSF8R0aKDNeUYRSr/mjWDsH8Xgf3BkPfN2Pq/AUGdoVqpqRnLUryKbkPdz9psLdJSAnSB5R3jjzQ==}
     hasBin: true
 
-  '@takazudo/zudo-doc@9.1.3':
-    resolution: {integrity: sha512-mBWdL+WWFOgGPjQ14x10rbhscKq4Eqb1LREAKI+UrQZyzO5vbKcwbn/e5VABqzSLVo67l6MQkIOgs/EYt2r36w==}
+  '@takazudo/zudo-doc@9.1.4':
+    resolution: {integrity: sha512-L6UAC3ZOi+YjYVBUGqr1t9tmxbSQr5UYJGYKFbxo5SpGiG5yHUojTJchHatTTgtufemNFAmnhY4ec1ojy+UR3w==}
     engines: {node: '>=24'}
     hasBin: true
     peerDependencies:
@@ -4782,7 +4782,7 @@ snapshots:
 
   '@takazudo/zudo-doc-history-server@9.1.4': {}
 
-  '@takazudo/zudo-doc@9.1.3(@takazudo/zfb-md-wasm@5.2.2)(@takazudo/zfb-runtime@5.2.2(@takazudo/zfb@5.2.2))(@takazudo/zfb@5.2.2)(@takazudo/zudo-doc-history-server@9.1.4)(@types/node@22.20.2)(diff@8.0.4)(zod@4.4.3)':
+  '@takazudo/zudo-doc@9.1.4(@takazudo/zfb-md-wasm@5.2.2)(@takazudo/zfb-runtime@5.2.2(@takazudo/zfb@5.2.2))(@takazudo/zfb@5.2.2)(@takazudo/zudo-doc-history-server@9.1.4)(@types/node@22.20.2)(diff@8.0.4)(zod@4.4.3)':
     dependencies:
       '@inquirer/prompts': 8.7.5(@types/node@22.20.2)
       '@takazudo/zfb': 5.2.2

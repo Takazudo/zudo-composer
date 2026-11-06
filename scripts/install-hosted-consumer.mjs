@@ -19,7 +19,7 @@ const manifest = {
     "@zudo-composer/component-contract": "git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
     // zudo-sg 0.8.2 peers on ZFB ^5.2.2, Doc ^9.1.3 and zdtp ^0.9.0 (strict peers below).
     preact: "10.29.8", "@takazudo/zfb": "5.2.2", "@takazudo/zfb-runtime": "5.2.2",
-    "@takazudo/zudo-sg": "0.8.2", "@takazudo/zdtp": "0.9.0", "@takazudo/zudo-doc": "9.1.3",
+    "@takazudo/zudo-sg": "0.8.2", "@takazudo/zdtp": "0.9.0", "@takazudo/zudo-doc": "9.1.4",
     marked: "16.3.0", // host-only Markdown renderer; never a tool runtime dependency
   },
   devDependencies: { esbuild: "0.28.2", "@playwright/test": "1.62.1", "@cloudflare/workers-types": "5.20261012.1", tsx: "4.23.12", typescript: "6.0.3", miniflare: "5.20261006.1-alpha" },
@@ -28,7 +28,7 @@ await writeFile(join(destination, "package.json"), JSON.stringify(manifest, null
 // Exact release-age exclusions this install needs; prune each once it is older than pnpm's default minimum release age.
 /** @type {string[]} */
 const releaseAgeExclude = [
-  "@takazudo/zudo-doc@9.1.3",
+  "@takazudo/zudo-doc@9.1.4",
   "@takazudo/zudo-sg@0.8.2",
   ...["zfb", "zfb-darwin-arm64", "zfb-darwin-x64", "zfb-linux-arm64-gnu", "zfb-linux-x64-gnu", "zfb-md-wasm", "zfb-runtime", "zfb-slugify", "zfb-win32-x64-msvc"].map(name => `@takazudo/${name}@5.2.2`),
 ];
