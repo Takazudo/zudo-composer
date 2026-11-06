@@ -2,7 +2,7 @@
 
 The `doc/` directory is the English developer documentation site for
 `zudo-composer`, built with [zudo-doc](https://github.com/zudolab/zudo-doc)
-9.1.0 on the aligned zfb 5.1.5 family, using zudo-react and Wind. The Drift theme, layout, chrome, routes, and interactive islands
+9.1.3 on the aligned zfb 5.2.2 family, using zudo-react and Wind. The Drift theme, layout, chrome, routes, and interactive islands
 come from the package; this workspace owns the config and MDX content.
 zudo-doc 9 requires Node 24 or later, so `doc/package.json` declares
 `engines.node: ">=24"`; CI builds the site on Node 24.
@@ -134,6 +134,12 @@ corepack pnpm exec wrangler rollback <version-id> --name zc-demo-blog-editor --c
 For a manual `workflow_dispatch`, provide the successful main CI `run_id`, the
 full `sha`, and one registry `target` key when a targeted rollout is needed;
 the guard still verifies the same-repository run and current `main` head.
+
+## Documentation structure
+
+Before adding a page, changing what a page is for, or changing a category, read `doc/AUTHORING.md` — this site's single editorial policy. Check for an existing page with the same role, the right category for the content, and whether the change alters what a category means. `doc/AUTHORING.md` holds the category boundaries and the minimal procedure; do not copy its category rules into this file.
+
+Typo, wording, and formatting fixes skip this structure check.
 
 ## Content conventions
 
