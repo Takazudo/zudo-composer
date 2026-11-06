@@ -51,7 +51,11 @@ try {
     // Public plugin/server type identity is compared with the host's Vite import.
     devDependencies: { typescript: toolPackage.devDependencies.typescript, "@types/node": toolPackage.devDependencies["@types/node"], vite: toolPackage.dependencies.vite },
   }, null, 2));
-  await writeFile(join(host, "pnpm-workspace.yaml"), `packages: []\nstrictPeerDependencies: true\noverrides:\n  zudo-composer: '${tarballs["zudo-composer"]}'\n  '@zudo-composer/component-contract': '${tarballs["@zudo-composer/component-contract"]}'\n`);
+  // The release proof below compares the pack's source graph, dependency
+  // versions included, across checkout and packed runtimes; hold Tailwind (reached
+  // through the host stylesheet) at the checkout's installed version.
+  const { version: tailwindVersion } = JSON.parse(await readFile(join(root, "node_modules/tailwindcss/package.json"), "utf8"));
+  await writeFile(join(host, "pnpm-workspace.yaml"), `packages: []\nstrictPeerDependencies: true\noverrides:\n  zudo-composer: '${tarballs["zudo-composer"]}'\n  '@zudo-composer/component-contract': '${tarballs["@zudo-composer/component-contract"]}'\n  tailwindcss: '${tailwindVersion}'\n`);
   await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "public-entry-host/components" });\n');
   await writeFile(join(host, "components/pack.mjs"), `import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
 export function Banner() { return null; }
