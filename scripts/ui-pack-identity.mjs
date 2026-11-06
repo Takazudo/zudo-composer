@@ -11,7 +11,7 @@
 
 // The package-only handoff commit on `package/ui-v1`. `ui-handoff.json` records
 // the same value for external hosts; `handoff:boundary` asserts they agree.
-const packageCommit = "7d1f71cef0173cf3bd7a2fae4ab751e4e4830ba5";
+const packageCommit = "21e5c4355628986904861d7d66e79b2a7e467054";
 // The zudo-sg package commit the twelve components were ported from.
 const provenanceCommit = "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf";
 const appProvenanceCommit = "f1206f3b82bdbfff791dcaf5d9918c2afdda0ae2";

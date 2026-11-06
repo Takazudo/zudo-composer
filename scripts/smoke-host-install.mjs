@@ -183,6 +183,13 @@ async function proveSynthesizedHost(workspace, tarballs, toolPackage) {
       },
     }, null, 2)}\n`);
     await configurePackedHost(hostRoot, tarballs, toolPackage.packageManager);
+    // The release proof compares the self pack's source graph, dependency
+    // versions included, across checkout and packed runtimes. Hold the one
+    // third-party package that graph reaches through the tool (Tailwind, via the
+    // host stylesheet) at the checkout's installed version, so a newer registry
+    // release cannot make the two runtimes disagree.
+    const { version: tailwindVersion } = JSON.parse(await readFile(join(root, "node_modules/tailwindcss/package.json"), "utf8"));
+    await writeFile(join(hostRoot, "pnpm-workspace.yaml"), `${await readFile(join(hostRoot, "pnpm-workspace.yaml"), "utf8")}  "tailwindcss": ${JSON.stringify(tailwindVersion)}\n`);
 
     step("installing");
     await run(pnpm, ["install", "--no-frozen-lockfile"], hostRoot);
