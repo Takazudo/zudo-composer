@@ -51,7 +51,7 @@ import { tags } from "@lezer/highlight";
 * | BoldIcon, ItalicIcon, InlineCodeIcon         | Markdown toolbar formatting                           |
 * | HeadingIcon, LinkIcon, QuoteIcon, ListIcon   | Markdown toolbar formatting                           |
 * | PreviewIcon, ExpandIcon, PlayIcon            | Evaluated preview and enlargement                      |
-* | BellIcon, MailIcon                           | Notification panel and planned email row              |
+* | BellIcon                                     | Notification panel                                     |
 * | CheckIcon, CheckCircleIcon                   | Saved/ready/success status                             |
 * | WarningIcon, ErrorIcon, InfoIcon, LoadingIcon | Diagnostics and transient status                     |
 * | LibraryIcon, FolderIcon, FileIcon            | Library and nested model navigation                   |
@@ -512,13 +512,6 @@ lineIcon(() => [h("path", { d: "M1.75 8s2.25-4 6.25-4 6.25 4 6.25 4-2.25 4-6.25 
 })]);
 filledPathIcon("M5 3.25v9.5L12.75 8 5 3.25Z");
 lineIcon(() => [h("path", { d: "M3.25 11.75h9.5l-1.25-1.5V7a3.5 3.5 0 0 0-7 0v3.25l-1.25 1.5Z" }), h("path", { d: "M6.5 13.25a1.65 1.65 0 0 0 3 0" })]);
-lineIcon(() => [h("rect", {
-	x: 1.75,
-	y: 3.25,
-	width: 12.5,
-	height: 9.5,
-	rx: 1.25
-}), h("path", { d: "m2.5 4.25 5.5 4.5 5.5-4.5" })]);
 filledPathIcon("M6.55 12.9 2.4 8.75l1.1-1.1 3.05 3.05 5.95-5.95 1.1 1.1-7.05 7.05Z");
 lineIcon(() => [h("circle", {
 	cx: 8,
