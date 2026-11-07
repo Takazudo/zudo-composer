@@ -98,11 +98,14 @@ hardware.
 | Select block by touch; no link navigates | Tapping a link inside a block while selecting selects that block. The preview and editor URLs stay unchanged. |
 | Draft highlights stay aligned (scroll, zoom, rotate, fold) | Each outline sits 4px outside its block and each label sits on the outline's outer edge, within ±2px. Every yellow word lies inside an outlined block, and labels never intercept pointer hits. This is checked on desktop, after keyboard navigation, after scroll and resize, at both Fold sizes and through 390×844 → 844×390 → 390×844 rotation. |
 | Apply and Undo with one tap and a receipt | One tap each at both Fold sizes. The Page view and its receipt return after the editor reloads under the new write epoch. Undo restores the saved JSON/JSX. |
+| Short narrow layouts keep the Bot heading, Rename and the preview usable | With a virtual keyboard at both Fold sizes and at 844×390, the Bot `h1` stays in the accessibility tree and Rename is on screen and opens its form. At 844×390, the message box and Send are on screen. In every narrow Page view, the preview is at least half the viewport tall and at least half visible below the sticky tabs, and the review list never covers it. |
+| A stored view value is trusted only when valid | Junk stored tab values (`"junk"`, an object, a number) open the Conversation view alone, with the Page pane hidden. |
 | Keyboard focus | Tab and Enter alone reach Draft, a change in the review list, Apply and Undo. Each target matches `:focus-visible` with a visible outline of at least 2px. |
 | Annotations never leave the editor | After Apply, saved JSON/JSX and the visitor `/website-preview` document contain no annotation markup or highlights. |
 
 The lane saves `device-draft-desktop.png`, `device-draft-fold-folded.png`,
-`device-draft-fold-unfolded.png` and `device-draft-landscape.png` to
+`device-draft-fold-unfolded.png`, `device-draft-landscape.png` and
+`device-conversation-landscape.png` to
 `test-results/assistant-browser/` for visual review.
 
 ### Optional hands-on checks

@@ -1,5 +1,5 @@
 // @ts-check
-/* global CSS, document, window, location, innerWidth, innerHeight, getComputedStyle, HTMLElement, MutationObserver */
+/* global CSS, document, window, location, innerWidth, innerHeight, getComputedStyle, HTMLElement, MutationObserver, sessionStorage, requestAnimationFrame */
 // Real-browser AI Assistant proof. Owns browser port 4177 and a loopback
 // scripted Messages API; run serially with the other browser lanes.
 // Evidence class: real dev server, real pack renderers, real Assistant adapter
@@ -270,6 +270,39 @@ async function tabTo(page, target, name) {
   }
   throw new Error(`Tab never reached ${name}`);
 }
+/**
+ * In a narrow Page view the preview must keep a usable height: at least half
+ * the viewport tall, and at least half the viewport visible below the sticky
+ * tabs once scrolled to.
+ * @param {import('@playwright/test').Page} page @param {string} where
+ */
+async function expectPreviewRoom(page, where) {
+  const room = await page.evaluate(() => {
+    const iframe = /** @type {HTMLElement} */ (document.querySelector('iframe[title$="page preview"]'));
+    const tabs = /** @type {HTMLElement} */ (document.querySelector(".cms-assistant-tabs"));
+    iframe.scrollIntoView({ block: "end" });
+    const rect = iframe.getBoundingClientRect();
+    const review = /** @type {HTMLElement} */ (document.querySelector(".cms-assistant-review")).getBoundingClientRect();
+    return { height: rect.height, visible: Math.min(rect.bottom, innerHeight) - Math.max(rect.top, tabs.getBoundingClientRect().bottom), viewport: innerHeight, overlap: Math.max(0, Math.min(rect.bottom, review.bottom) - Math.max(rect.top, review.top)) };
+  });
+  assert.ok(room.height >= room.viewport / 2 && room.visible >= room.viewport / 2, `the preview keeps at least half the viewport ${where} (${JSON.stringify(room)})`);
+  assert.ok(room.overlap <= 1, `the review list never covers the preview ${where} (${JSON.stringify(room)})`);
+}
+/**
+ * The Bot heading stays in the accessibility tree and Rename stays on screen
+ * and usable, even when a short viewport folds the title row away.
+ * @param {import('@playwright/test').Page} page @param {string} where
+ */
+async function expectRenameReachable(page, where) {
+  await expect(page.getByRole("heading", { level: 1, name: /Orrery Bot/ }), `Bot heading ${where}`).toHaveCount(1);
+  const rename = page.getByRole("button", { name: "Rename Orrery Bot" });
+  await expect(rename).toBeVisible();
+  assert.ok(await inViewport(page, rename), `Rename is on screen ${where}`);
+  await rename.tap();
+  await expect(page.getByRole("textbox", { name: "Assistant name" })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).tap();
+  await expect(rename).toBeVisible();
+}
 /** True when the whole element lies inside the current viewport. @param {import('@playwright/test').Page} page @param {import('@playwright/test').Locator} target */
 async function inViewport(page, target) {
   const box = await target.boundingBox(), size = page.viewportSize();
@@ -338,7 +371,9 @@ async function deviceJourneys() {
     assert.deepEqual(await recorded(), [{ key: "Enter", isComposing: true, keyCode: 13 }], "the confirming Enter reached the page as a composition key event");
     await composeWebKit("です", "です");
     assert.deepEqual(await recorded(), [{ key: "Enter", isComposing: false, keyCode: 229 }], "the post-commit Enter reached the page with keyCode 229");
-    await page.waitForTimeout(500);
+    // A send starts from the key handler; two frames later none has started. The exact
+    // counts after the real send below also catch any late send from these Enters.
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)))));
     await expect(userMessages).toHaveCount(sent);
     await expect(input).toHaveValue("日本語です");
     assert.equal(api.requests().length, requests, "a conversion Enter must not reach the model");
@@ -445,6 +480,21 @@ async function deviceJourneys() {
     await page.goto(url);
     const conversationTab = page.getByRole("tab", { name: "Conversation" }), pageTab = page.getByRole("tab", { name: /^Page/ });
     await expect(conversationTab).toHaveAttribute("aria-selected", "true", { timeout: 90_000 });
+    if (fold.name === "folded") {
+      // A junk stored tab value falls back to Conversation, never to two overlapping panes.
+      await expect.poll(() => page.evaluate(() => Object.keys(sessionStorage).some(key => /^zudo-assistant:.+:conversation$/.test(key)))).toBe(true);
+      for (const junk of ["junk", { tab: "page" }, 1]) {
+        await page.evaluate(value => {
+          const key = /** @type {string} */ (Object.keys(sessionStorage).find(entry => /^zudo-assistant:.+:conversation$/.test(entry)));
+          sessionStorage.setItem(key.replace(/:conversation$/, ":tab"), JSON.stringify(value));
+        }, junk);
+        await page.reload();
+        await expect(conversationTab).toHaveAttribute("aria-selected", "true", { timeout: 90_000 });
+        await expect(page.locator(".cms-assistant-left")).toBeVisible();
+        await expect(page.locator(".cms-assistant-right")).toBeHidden();
+      }
+      log("junk stored tab values fall back to the Conversation view alone");
+    }
     await pageTab.tap();
     await expect(pageTab).toHaveAttribute("aria-selected", "true");
     await expect(page.locator(".cms-assistant-left")).toBeHidden();
@@ -456,15 +506,20 @@ async function deviceJourneys() {
     const link = current.locator('[data-zc-owner="local"][data-zc-node-id] a[href]').first();
     await expect(link).toBeVisible();
     const frameUrl = await current.locator("body").evaluate(() => location.href);
+    const navigations = /** @type {string[]} */ ([]);
+    const onNavigation = (/** @type {import('@playwright/test').Frame} */ navigated) => { navigations.push(navigated.url()); };
+    page.on("framenavigated", onNavigation);
     await link.scrollIntoViewIfNeeded();
     await link.tap();
-    await page.waitForTimeout(500);
-    assert.equal(await current.locator("body").evaluate(() => location.href), frameUrl, "tapping a link while selecting must not navigate the preview");
-    assert.equal(page.url(), url, "tapping a link while selecting must not navigate the editor");
+    // The selection chip proves the tap was handled; only then judge navigation.
     await conversationTab.tap();
     await expect(conversationTab).toHaveAttribute("aria-selected", "true");
     await expect(page.locator(".cms-assistant-right")).toBeHidden();
     await expect(page.locator(".cms-assistant-context").getByText(/^Selected: /)).toBeVisible();
+    page.off("framenavigated", onNavigation);
+    assert.deepEqual(navigations, [], "tapping a link while selecting must not navigate any frame");
+    assert.equal(await current.locator("body").evaluate(() => location.href), frameUrl, "tapping a link while selecting must not navigate the preview");
+    assert.equal(page.url(), url, "tapping a link while selecting must not navigate the editor");
     await page.getByRole("button", { name: "Clear selection" }).tap();
 
     // The authoring document asks Chromium to shrink the layout viewport for a virtual keyboard;
@@ -484,6 +539,7 @@ async function deviceJourneys() {
     await page.getByRole("button", { name: "Stop" }).tap();
     await idle(page);
     await expect(lastReply(page).getByText("Stopped")).toBeVisible();
+    await expectRenameReachable(page, `with a virtual keyboard at Fold ${fold.name}`);
     await page.setViewportSize({ width: fold.width, height: fold.height });
 
     // Review by touch: Draft annotations, one-tap Apply and Undo with their receipts.
@@ -497,6 +553,8 @@ async function deviceJourneys() {
     await expect.poll(() => highlighted(draft)).toEqual(expect.arrayContaining(["Shared agendas", "calendar in one click"]));
     await expect(page.locator("#assistant-apply-state")).toContainText("rendered successfully", { timeout: 30_000 });
     await expectAligned(draft, `at Fold ${fold.name} ${fold.width}x${fold.height}`);
+    await expectPreviewRoom(page, `at Fold ${fold.name}`);
+    await expectAligned(draft, `after scrolling the Page view at Fold ${fold.name}`);
     await scrollPreview(draft);
     await expectAligned(draft, `after scrolling at Fold ${fold.name}`);
     await shot(page, `device-draft-fold-${fold.name}`);
@@ -506,7 +564,17 @@ async function deviceJourneys() {
         await expectAligned(draft, `at ${width}x${height}`);
         await scrollPreview(draft);
         await expectAligned(draft, `after scrolling at ${width}x${height}`);
-        if (width > height) await shot(page, "device-draft-landscape");
+        await expectPreviewRoom(page, `at ${width}x${height}`);
+        await expectAligned(draft, `after scrolling the Page view at ${width}x${height}`);
+        if (width > height) {
+          await shot(page, "device-draft-landscape");
+          await conversationTab.tap();
+          await expectRenameReachable(page, `at ${width}x${height}`);
+          for (const [name, target] of /** @type {const} */ ([["message box", page.locator("#assistant-input")], ["Send", page.getByRole("button", { name: "Send" })]])) assert.ok(await inViewport(page, target), `${name} is on screen at ${width}x${height}`);
+          await shot(page, "device-conversation-landscape");
+          await pageTab.tap();
+          await expectAligned(draft, `back on Page at ${width}x${height}`);
+        }
       }
       await page.setViewportSize({ width: fold.width, height: fold.height });
       await expectAligned(draft, `back at Fold ${fold.name}`);

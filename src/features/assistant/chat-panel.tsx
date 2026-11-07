@@ -66,7 +66,7 @@ export function ChatPanel(props: ChatPanelProps) {
   return <section class="cms-assistant-chat" aria-label={`${botName} conversation`}>
     <header class="cms-assistant-chat__header">
       {renaming === null
-        ? <h1 class="cms-assistant-chat__title">{botName} <button type="button" class="cms-assistant-link" aria-label={`Rename ${botName}`} onClick={() => setRenaming(botName)}>Rename</button></h1>
+        ? <h1 class="cms-assistant-chat__title"><span class="cms-assistant-chat__name">{botName}</span> <button type="button" class="cms-assistant-link" aria-label={`Rename ${botName}`} onClick={() => setRenaming(botName)}>Rename</button></h1>
         : <form class="cms-assistant-row" onSubmit={event => { event.preventDefault(); props.onRename(renaming.trim() ? renaming.trim() : null); setRenaming(null); }}>
           <label>Assistant name <input value={renaming} maxLength={40} onInput={event => setRenaming(event.currentTarget.value)} /></label>
           <button type="submit" class="cms-btn cms-btn--sm">Save</button><button type="button" class="cms-btn cms-btn--ghost cms-btn--sm" onClick={() => setRenaming(null)}>Cancel</button>
