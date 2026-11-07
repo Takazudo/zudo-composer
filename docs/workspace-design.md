@@ -379,4 +379,5 @@ tool draws only a preview strip in a Shadow DOM (source label, route picker) —
 the site's own global-template chrome, rendered with the host's own tokens, is
 what the visitor sees. The strip labels the current visitor route as live
 draft input and does not claim approval or activated immutable delivery.
-Notifications continue to disclose disabled, unconnected delivery capabilities.
+The Notifications panel states that Composer never sends email or other
+notifications; the host project owns delivery.
