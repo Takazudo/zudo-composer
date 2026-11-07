@@ -37,10 +37,19 @@ Create a populated standalone host with `zudo-composer init <new-directory>`.
 The [creator guide](./docs/creator.md) covers the installed command, the
 unpublished-package preview, and which generated files to commit.
 
-## Deployed sites
+## Hosted sites
 
-Thirteen hosted targets are deployed from `main` (each is its own Worker; see
-`scripts/hosted-demo/targets.mjs`):
+The hosted-demo registry in `scripts/hosted-demo/targets.mjs` defines thirteen
+targets, each its own Worker and custom domain. **Production delivery is
+currently stopped:** `scripts/hosted-demo/delivery-state.mjs` is `"stopped"`,
+the deploy workflow has only a `workflow_dispatch` trigger, the trusted-main
+guard and the `deploy.mjs` entry refuse every event, and
+`pnpm no-deploy:check` asserts all of it. CI still builds and verifies every
+artifact, but nothing from `main` is deployed. This repository does not record
+what each domain currently serves; any content there would come from an
+earlier deployment, not from current `main`. Re-enabling delivery is a
+separate owner-approved change; see the operator runbook,
+[`docs/hosted-demo.md`](./docs/hosted-demo.md).
 
 | Site | URL | Worker config |
 | --- | --- | --- |
@@ -614,8 +623,8 @@ corepack pnpm smoke:host-install
 `pnpm no-deploy:check` audits validation workflows, package aliases and local
 command wrappers before the aggregate or packed lane runs. Only explicit
 Wrangler `deploy --dry-run` may reach Cloudflare tooling; production deployment
-entry points and equivalent mutations fail the check. The independent trusted
-production workflow remains unchanged.
+entry points and equivalent mutations fail the check. The same check asserts
+that the separate production workflow stays stopped and dispatch-only.
 
 Both `test:browser:host` and `test:browser:dev` route specs to a viewport by
 filename: `*.coarse.pw.ts` runs only on a 390x844 touch project, and
@@ -717,10 +726,11 @@ described in [`docs/hosted-demo.md`](./docs/hosted-demo.md).
 The `doc` target runs `pnpm doc:build-site`, verifies `doc/dist` with
 `doc-site-manifest.json`, and serves extensionless documentation routes with
 the default `auto-trailing-slash` handling and explicit `404-page` behavior.
-Production consumes only successful `main` CI artifacts named for the exact
-40-character commit SHA, verifies each target again, captures the current
-single-version deployment, runs a Wrangler dry run, and activates only the
-version ID returned by the upload. The workflow is serialized per target and
+Production delivery is currently stopped (see [Hosted sites](#hosted-sites)).
+Once re-enabled, production consumes only successful `main` CI artifacts named
+for the exact 40-character commit SHA, verifies each target again, captures the
+current single-version deployment, runs a Wrangler dry run, and activates only
+the version ID returned by the upload. The workflow is serialized per target and
 fails closed on stale `main`, partial credentials, a missing rollback target,
 split traffic or an artifact/source mismatch.
 
