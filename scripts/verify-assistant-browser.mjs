@@ -300,6 +300,10 @@ async function expectRenameReachable(page, where) {
   assert.ok(await inViewport(page, rename), `Rename is on screen ${where}`);
   await rename.tap();
   await expect(page.getByRole("textbox", { name: "Assistant name" })).toBeVisible();
+  // The open Rename form must not starve the Conversation controls of width on a narrow viewport.
+  const conversation = page.getByRole("combobox", { name: "Conversation" });
+  const box = await conversation.boundingBox(), width = page.viewportSize()?.width ?? 0;
+  assert.ok(!!box && box.width > 0 && box.x >= 0 && box.x + box.width <= width, `the Conversation select keeps its width on screen while Rename is open ${where} (${JSON.stringify(box)}, viewport width ${width})`);
   await page.getByRole("button", { name: "Cancel", exact: true }).tap();
   await expect(rename).toBeVisible();
 }
@@ -540,6 +544,10 @@ async function deviceJourneys() {
     await idle(page);
     await expect(lastReply(page).getByText("Stopped")).toBeVisible();
     await expectRenameReachable(page, `with a virtual keyboard at Fold ${fold.name}`);
+    if (fold.rotate) {
+      await page.setViewportSize({ width: 390, height: 464 });
+      await expectRenameReachable(page, "with a virtual keyboard at 390x464");
+    }
     await page.setViewportSize({ width: fold.width, height: fold.height });
 
     // Review by touch: Draft annotations, one-tap Apply and Undo with their receipts.
