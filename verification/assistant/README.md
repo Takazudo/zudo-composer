@@ -1,15 +1,14 @@
 # AI Assistant verification
 
-Evidence for the AI Assistant comes in four separate classes. A result from one
+Evidence for the AI Assistant comes in separate classes. A result from one
 class never stands in for another.
 
 | Class | Command | What it proves | What it does not prove |
 | --- | --- | --- | --- |
 | Deterministic / fake provider | `pnpm vitest run server/assistant server/edit src/features/assistant` | Runner, store, draft service, adapter contract (scripted SSE) | Real model behavior |
-| Fake browser | `pnpm test:browser:assistant` (port 4177, CI) | Real dev server, renderers, adapter and SDK with scripted replies | Real model behavior |
-| Live inference | `pnpm test:browser:assistant:live` (port 4177, opt-in) | Real `claude-opus-5-5` replies through the product adapter on the real UI | Physical devices, installed package |
-| Installed package | `pnpm edit:installed`, `pnpm hosted:installed <C>` | The packed tool in a consumer host | Live model, physical devices |
-| Physical device | Checklist below | Real IME, touch and virtual keyboards | Anything automated |
+| Fake browser | `pnpm test:browser:assistant` (port 4177, CI) | Real dev server, renderers, adapter and SDK with scripted replies, plus the [device checks](#device-checks) | Real model behavior, OS input methods and hardware |
+| Live inference | `pnpm test:browser:assistant:live` (port 4177, opt-in) | Real `claude-opus-5-5` replies through the product adapter on the real UI | Device behavior, installed package |
+| Installed package | `pnpm edit:installed`, `pnpm hosted:installed <C>` | The packed tool in a consumer host | Live model, device behavior |
 
 ## Live lane
 
@@ -83,22 +82,34 @@ No live run has been recorded yet: no credential provisioned for this purpose
 was available in the verification environments. When a run is recorded, its
 `result.json` goes in `verification/assistant/live-<sha8>/`.
 
-## Physical device checklist
+## Device checks
 
-Do this checklist by hand on a Mac (Japanese IME) and on a foldable Android phone
-(touch, virtual keyboard, folded and unfolded). Use a disposable host from
-`node scripts/assistant/prepare-host.mjs landing <new-dir>`, plus either the
-live key or a local fake API. Record the device, OS, browser, input method,
-commit, and pass or fail with a photo or screen recording for each item.
+The former hand-run device checklist is now part of the fake browser lane
+(`deviceJourneys` in `scripts/verify-assistant-browser.mjs`), run on a
+disposable Orrery host in headless Chromium. They are browser-level emulation:
+Chromium's own composition and touch input, not an OS input method or real
+hardware.
 
-1. Type Japanese in the message box with the IME. Pressing Enter to confirm a
-   conversion must not send; a second Enter sends the confirmed text.
-2. On the narrow layout, switch between Conversation and Page with touch. The
-   virtual keyboard must not cover the message box or the Send/Stop buttons.
-3. In Page, tap **Select block** and then a block. The selection chip appears
-   and no link navigates.
-4. In Draft, the yellow words, the outlined block and its label stay aligned
-   while you scroll, pinch-zoom, rotate and fold or unfold the device.
-5. Open Memory, edit it with the IME, Save, then Close. Unsaved text asks before
-   it is discarded.
-6. Apply and Undo with touch. Each takes one tap and shows the receipt heading.
+| Former check | Automated check |
+| --- | --- |
+| Japanese IME: a converting Enter does not send; the next Enter sends | CDP `Input.imeSetComposition` + `Input.insertText` in the message box. Enter during an active composition (Chromium order, `isComposing`) and Enter with keyCode 229 after the commit (WebKit order) each reach the page and send nothing, and no model request is made. The next Enter sends exactly the confirmed text `日本語です`. |
+| Memory with the IME; unsaved text asks first | The same composition in the Memory editor commits exactly. Close on unsaved text asks before discarding, and the saved text reaches the next model call. |
+| Narrow Conversation/Page by touch; virtual keyboard leaves message box and Send/Stop visible | `hasTouch` + `isMobile` contexts at Galaxy Fold sizes 344×882 (folded) and 673×841 (unfolded). Tabs switch by tap. The authoring document declares `interactive-widget=resizes-content`. At 55% height, the message box, Send and the running Stop stay inside the viewport. |
+| Select block by touch; no link navigates | Tapping a link inside a block while selecting selects that block. The preview and editor URLs stay unchanged. |
+| Draft highlights stay aligned (scroll, zoom, rotate, fold) | Each outline sits 4px outside its block and each label sits on the outline's outer edge, within ±2px. Every yellow word lies inside an outlined block, and labels never intercept pointer hits. This is checked on desktop, after keyboard navigation, after scroll and resize, at both Fold sizes and through 390×844 → 844×390 → 390×844 rotation. |
+| Apply and Undo with one tap and a receipt | One tap each at both Fold sizes. The Page view and its receipt return after the editor reloads under the new write epoch. Undo restores the saved JSON/JSX. |
+| Keyboard focus | Tab and Enter alone reach Draft, a change in the review list, Apply and Undo. Each target matches `:focus-visible` with a visible outline of at least 2px. |
+| Annotations never leave the editor | After Apply, saved JSON/JSX and the visitor `/website-preview` document contain no annotation markup or highlights. |
+
+The lane saves `device-draft-desktop.png`, `device-draft-fold-folded.png`,
+`device-draft-fold-unfolded.png` and `device-draft-landscape.png` to
+`test-results/assistant-browser/` for visual review.
+
+### Optional hands-on checks
+
+These cannot be automated in a headless browser. None of them gates a change:
+
+- An OS input method's own candidate window: macOS Japanese IME, Android Gboard.
+- How a real on-screen keyboard overlays or resizes the page in a given browser, including iOS Safari, which ignores `interactive-widget`.
+- Pinch-zoom of the visual viewport and the physical fold or unfold hinge transition.
+- Engines other than Chromium.

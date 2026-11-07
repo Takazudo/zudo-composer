@@ -297,15 +297,15 @@ describe("Shell theme control", () => {
 });
 
 describe("Shell notifications", () => {
-  it("keeps the truthful planned-email disclosure and its focus contract", () => {
+  it("states that the host owns delivery, offers no email controls, and keeps its focus contract", () => {
     render(<ShellHarness />);
     const trigger = screen.getByRole("button", { name: "Notifications" });
     fireEvent.click(trigger);
 
-    expect(screen.getByRole("dialog", { name: "Notifications" })).toBeInTheDocument();
-    expect(screen.getByText("Planned")).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Send email alerts" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Configure email delivery" })).toBeDisabled();
+    const panel = screen.getByRole("dialog", { name: "Notifications" });
+    expect(panel).toHaveTextContent("Composer never sends email or other notifications; the host project owns delivery.");
+    expect(panel).not.toHaveTextContent(/planned/i);
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: "Escape" });

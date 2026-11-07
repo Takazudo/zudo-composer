@@ -6,7 +6,6 @@ import {
   ChevronRightIcon,
   DarkThemeIcon,
   LightThemeIcon,
-  MailIcon,
   SystemThemeIcon,
   XMarkIcon,
   type IconComponent,
@@ -161,20 +160,7 @@ function NotificationDisclosure(): JSX.Element {
               <XMarkIcon size="sm" />
             </button>
           </header>
-          <p class="app-notification-panel__intro">This standalone workspace runs in your browser. Delivery services are not connected.</p>
-          <div class="app-notification-channel" data-notification-state="planned">
-            <div class="app-notification-channel__heading">
-              <MailIcon size="sm" />
-              <strong>Email</strong>
-              <span class="app-status-label">Planned</span>
-            </div>
-            <p id="app-email-planned-copy">Email delivery is planned. This local browser app cannot send email yet, so no address is collected.</p>
-            <label class="app-disabled-control">
-              <input type="checkbox" disabled aria-describedby="app-email-planned-copy" />
-              <span>Send email alerts</span>
-            </label>
-            <button type="button" class="app-disabled-control app-notification-configure" disabled>Configure email delivery</button>
-          </div>
+          <p class="app-notification-panel__intro">This standalone workspace runs in your browser. Composer never sends email or other notifications; the host project owns delivery.</p>
         </section>
       )}
     </div>

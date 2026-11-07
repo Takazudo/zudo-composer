@@ -53,7 +53,9 @@ export function AssistantRoute() {
   const [dependents, setDependents] = useState<{ change: DraftChange; items: { id: string; kind: string; reason: string | null }[] } | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [images, setImages] = useState<{ id: string; name: string }[]>([]);
-  const [tab, setTab] = useState<"conversation" | "page">("conversation");
+  // Apply and Undo reload every authoring tab under a new write epoch; the narrow view must come back where it was.
+  const [tab, setTabState] = useState<"conversation" | "page">(() => read(`${prefix}:tab`, "conversation"));
+  const setTab = (value: "conversation" | "page") => { setTabState(value); write(`${prefix}:tab`, value); };
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
   const siteName = status?.siteName ?? "this site";

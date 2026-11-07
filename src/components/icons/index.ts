@@ -39,7 +39,7 @@
  * | BoldIcon, ItalicIcon, InlineCodeIcon         | Markdown toolbar formatting                           |
  * | HeadingIcon, LinkIcon, QuoteIcon, ListIcon   | Markdown toolbar formatting                           |
  * | PreviewIcon, ExpandIcon, PlayIcon            | Evaluated preview and enlargement                      |
- * | BellIcon, MailIcon                           | Notification panel and planned email row              |
+ * | BellIcon                                     | Notification panel                                     |
  * | CheckIcon, CheckCircleIcon                   | Saved/ready/success status                             |
  * | WarningIcon, ErrorIcon, InfoIcon, LoadingIcon | Diagnostics and transient status                     |
  * | LibraryIcon, FolderIcon, FileIcon            | Library and nested model navigation                   |
@@ -544,12 +544,6 @@ export const PlayIcon: IconComponent = filledPathIcon("M5 3.25v9.5L12.75 8 5 3.2
 export const BellIcon: IconComponent = lineIcon(() => [
   h("path", { d: "M3.25 11.75h9.5l-1.25-1.5V7a3.5 3.5 0 0 0-7 0v3.25l-1.25 1.5Z" }),
   h("path", { d: "M6.5 13.25a1.65 1.65 0 0 0 3 0" }),
-]);
-
-/** Email/mail notification channel. */
-export const MailIcon: IconComponent = lineIcon(() => [
-  h("rect", { x: 1.75, y: 3.25, width: 12.5, height: 9.5, rx: 1.25 }),
-  h("path", { d: "m2.5 4.25 5.5 4.5 5.5-4.5" }),
 ]);
 
 /** Successful/valid state. */

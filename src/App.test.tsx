@@ -286,18 +286,16 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Theme: Dark' })).toHaveFocus();
   });
 
-  it('discloses truthful planned email notifications without collecting data or simulating delivery', async () => {
+  it('leaves notification delivery to the host without collecting data or offering email', async () => {
     await renderApp();
     await screen.findByRole('heading', { name: GREETING });
 
     const trigger = screen.getByRole('button', { name: 'Notifications' });
     fireEvent.click(trigger);
-    expect(screen.getByRole('dialog', { name: 'Notifications' })).toBeInTheDocument();
-    expect(screen.getByText('Planned')).toBeInTheDocument();
-    expect(screen.getByText(/local browser app cannot send email/i)).toBeInTheDocument();
-    expect(screen.getByText(/no address is collected/i)).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Send email alerts' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Configure email delivery' })).toBeDisabled();
+    const panel = screen.getByRole('dialog', { name: 'Notifications' });
+    expect(panel).toHaveTextContent(/never sends email or other notifications; the host project owns delivery/i);
+    expect(panel).not.toHaveTextContent(/planned/i);
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: 'Escape' });

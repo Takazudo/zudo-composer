@@ -1,5 +1,5 @@
 // @ts-check
-/* global CSS */
+/* global CSS, document, window, location, innerWidth, innerHeight, getComputedStyle, HTMLElement, MutationObserver */
 // Real-browser AI Assistant proof. Owns browser port 4177 and a loopback
 // scripted Messages API; run serially with the other browser lanes.
 // Evidence class: real dev server, real pack renderers, real Assistant adapter
@@ -205,6 +205,334 @@ async function landingJourneys() {
   await stop();
 }
 
+/**
+ * Editor-owned review chrome must sit on its target block: the outline 4px
+ * outside the block, the label on the outline's outer edge, every yellow word
+ * inside an outlined block, and none of it intercepting pointer hits.
+ * Returns the mismatches (empty when aligned, within ±2px).
+ * @param {import('@playwright/test').FrameLocator} preview
+ */
+const reviewGeometry = preview => preview.locator("body").evaluate(() => {
+  const problems = /** @type {string[]} */ ([]);
+  const near = (/** @type {number} */ a, /** @type {number} */ b) => Math.abs(a - b) <= 2;
+  const json = (/** @type {DOMRect} */ rect) => `${Math.round(rect.left)},${Math.round(rect.top)} ${Math.round(rect.width)}x${Math.round(rect.height)}`;
+  const boxes = [...document.querySelectorAll(".zc-review-box[data-annotation]")].map(element => /** @type {HTMLElement} */ (element));
+  if (!boxes.length) problems.push("no review outlines");
+  const targets = [...document.querySelectorAll('[data-zc-owner="local"][data-zc-node-id]')].map(element => /** @type {HTMLElement} */ (element));
+  const owners = /** @type {HTMLElement[]} */ ([]);
+  for (const box of boxes) {
+    const id = box.dataset.annotation ?? "";
+    const target = targets.find(element => id.endsWith(`:${element.dataset.zcNodeId}`));
+    if (!target) { problems.push(`${id}: target block not found`); continue; }
+    owners.push(target);
+    const t = target.getBoundingClientRect(), b = box.getBoundingClientRect();
+    if (!(near(b.left, t.left - 4) && near(b.top, t.top - 4) && near(b.width, Math.max(t.width, 24) + 8) && near(b.height, Math.max(t.height, 16) + 8))) problems.push(`${id}: outline ${json(b)} vs block ${json(t)}`);
+    const badge = /** @type {HTMLElement | null} */ (box.querySelector(".zc-review-badge"));
+    if (!badge?.textContent?.match(/^(Changed|Added|Will change|Removed) \d+\/\d+$/)) { problems.push(`${id}: missing label`); continue; }
+    const l = badge.getBoundingClientRect();
+    if (!near(l.left, b.left) || !(badge.dataset.placement === "below" ? near(l.top, b.bottom) : near(l.bottom, b.top))) problems.push(`${id}: label ${json(l)} vs outline ${json(b)}`);
+    const x = l.left + l.width / 2, y = l.top + l.height / 2;
+    if (x >= 0 && y >= 0 && x < innerWidth && y < innerHeight && document.elementFromPoint(x, y)?.closest("[data-zc-review-layer]")) problems.push(`${id}: label intercepts pointer hits`);
+  }
+  const ranges = /** @type {Range[]} */ ([.../** @type {any} */ (CSS).highlights?.get("zc-review-insert") ?? []]);
+  if (!ranges.length) problems.push("no yellow words");
+  for (const range of ranges) {
+    const owner = owners.find(element => element.contains(range.commonAncestorContainer));
+    if (!owner) { problems.push(`"${range}" is outside every outlined block`); continue; }
+    const o = owner.getBoundingClientRect();
+    for (const rect of range.getClientRects()) if (rect.width && (rect.left < o.left - 2 || rect.right > o.right + 2 || rect.top < o.top - 2 || rect.bottom > o.bottom + 2)) problems.push(`"${range}" ${json(rect)} leaves its block ${json(o)}`);
+  }
+  return problems;
+});
+/** @param {import('@playwright/test').FrameLocator} preview @param {string} when */
+async function expectAligned(preview, when) {
+  await expect.poll(() => reviewGeometry(preview), { message: `review annotations aligned ${when}`, timeout: 10_000 }).toEqual([]);
+}
+/** Scrolls the preview so the first outline is mid-view, then a bit further. @param {import('@playwright/test').FrameLocator} preview */
+async function scrollPreview(preview) {
+  await preview.locator("body").evaluate(() => {
+    const box = document.querySelector(".zc-review-box");
+    if (box) window.scrollTo(0, Math.max(0, box.getBoundingClientRect().top + window.scrollY - 120));
+    window.scrollBy(0, 90);
+  });
+}
+/**
+ * Presses Tab until the locator has focus, then requires a visible focus ring.
+ * @param {import('@playwright/test').Page} page @param {import('@playwright/test').Locator} target @param {string} name
+ */
+async function tabTo(page, target, name) {
+  for (let presses = 1; presses <= 400; presses++) {
+    await page.keyboard.press("Tab");
+    if (!await target.evaluate(element => element === document.activeElement).catch(() => false)) continue;
+    const ring = await target.evaluate(element => { const style = getComputedStyle(element); return { focusVisible: element.matches(":focus-visible"), style: style.outlineStyle, width: parseFloat(style.outlineWidth), color: style.outlineColor }; });
+    assert.ok(ring.focusVisible && ring.style !== "none" && ring.width >= 2 && !/rgba\(\d+, \d+, \d+, 0\)|transparent/.test(ring.color), `${name} needs a visible focus ring (${JSON.stringify(ring)})`);
+    return presses;
+  }
+  throw new Error(`Tab never reached ${name}`);
+}
+/** True when the whole element lies inside the current viewport. @param {import('@playwright/test').Page} page @param {import('@playwright/test').Locator} target */
+async function inViewport(page, target) {
+  const box = await target.boundingBox(), size = page.viewportSize();
+  return !!box && !!size && box.y >= 0 && box.x >= 0 && box.y + box.height <= size.height && box.x + box.width <= size.width;
+}
+
+/**
+ * Browser-level device checks that replace the former hand-run checklist:
+ * Chromium IME composition through CDP, touch at Galaxy Fold sizes with a
+ * virtual-keyboard height, highlight geometry through scroll/resize/rotation,
+ * and a keyboard-only review → Apply → Undo path.
+ */
+async function deviceJourneys() {
+  const host = await prepareAssistantHost({ kind: "landing", dir: join(temporary, "devices"), baseUrl: api.url, name: "Orrery Bot" });
+  const homeRef = { sitemapId: "demo-landing-sitemap", pageId: "home-node" };
+  const json = join(host.dir, "cms/compositions/workspace-v1-landing-assistant/composition-home.composition.json");
+  const tsx = json.replace(".composition.json", ".tsx");
+  const canonical = async () => [await readFile(json, "utf8"), await readFile(tsx, "utf8")].map(text => text.replace(/"updatedAt": "[^"]+"/g, ""));
+  const url = `${origin}/composer?assistant=1&sitemap=${homeRef.sitemapId}&page=${homeRef.pageId}`;
+  const propose = () => api.script([
+    { tools: [{ name: "inspect_page", input: {} }] },
+    { tools: [{ name: "propose_changes", input: { operations: [
+      { kind: "updateField", page: homeRef, nodeId: "home-land-step-11", prop: "title", value: "Connect your calendar in one click", reason: "simpler first step" },
+      { kind: "insertComponent", page: homeRef, componentId: "land.feature-item", at: { after: "home-land-feature-item-7" }, props: { title: "Shared agendas", body: "Every meeting gets a short agenda everyone can edit.", icon: "people" }, reason: "add a fourth feature" },
+    ] } }] },
+    { text: "Two changes are ready for your review." },
+  ]);
+  await start(host.dir);
+  const before = await canonical();
+
+  // ── Desktop, keyboard and Chromium IME ──
+  {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    const page = await context.newPage();
+    const errors = /** @type {string[]} */ ([]);
+    page.on("pageerror", error => errors.push(error.message));
+    await page.goto(url);
+    await expect(frame(page, "Current").getByText("Every moving part of your week")).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole("button", { name: "New", exact: true })).toBeEnabled();
+    const cdp = await context.newCDPSession(page);
+    await page.evaluate(() => { /** @type {any} */ (window).__zcKeys = []; document.addEventListener("keydown", event => /** @type {any} */ (window).__zcKeys.push({ key: event.key, isComposing: event.isComposing, keyCode: event.keyCode }), true); });
+    const recorded = () => page.evaluate(() => /** @type {any} */ (window).__zcKeys.splice(0));
+    const enter = (/** @type {number} */ keyCode) => cdp.send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode });
+    const enterUp = () => cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+    /** Chromium (Blink) order: the confirming Enter arrives while the composition is still active. */
+    const composeChromium = async (/** @type {string} */ reading, /** @type {string} */ confirmed) => {
+      await cdp.send("Input.imeSetComposition", { text: reading, selectionStart: reading.length, selectionEnd: reading.length });
+      await enter(13);
+      await cdp.send("Input.insertText", { text: confirmed });
+      await enterUp();
+    };
+    /** WebKit order: the composition commits first, then Enter arrives with keyCode 229. */
+    const composeWebKit = async (/** @type {string} */ reading, /** @type {string} */ confirmed) => {
+      await cdp.send("Input.imeSetComposition", { text: reading, selectionStart: reading.length, selectionEnd: reading.length });
+      await cdp.send("Input.insertText", { text: confirmed });
+      await enter(229);
+      await enterUp();
+    };
+
+    const input = page.locator("#assistant-input");
+    const userMessages = page.locator('.cms-assistant-message[data-role="user"]');
+    const sent = await userMessages.count();
+    const requests = api.requests().length;
+    await input.focus();
+    await composeChromium("にほんご", "日本語");
+    assert.deepEqual(await recorded(), [{ key: "Enter", isComposing: true, keyCode: 13 }], "the confirming Enter reached the page as a composition key event");
+    await composeWebKit("です", "です");
+    assert.deepEqual(await recorded(), [{ key: "Enter", isComposing: false, keyCode: 229 }], "the post-commit Enter reached the page with keyCode 229");
+    await page.waitForTimeout(500);
+    await expect(userMessages).toHaveCount(sent);
+    await expect(input).toHaveValue("日本語です");
+    assert.equal(api.requests().length, requests, "a conversion Enter must not reach the model");
+    api.script([{ text: "受け取りました。" }]);
+    await page.keyboard.press("Enter");
+    await expect(userMessages).toHaveCount(sent + 1);
+    await expect(userMessages.last().locator(".cms-assistant-message__text")).toHaveText("日本語です");
+    await idle(page);
+    assert.equal(api.requests().length, requests + 1);
+    assert.match(JSON.stringify(lastRequest()?.messages.at(-1)), /日本語です/);
+    assert.doesNotMatch(JSON.stringify(lastRequest()?.messages.at(-1)), /にほんご/);
+    log("Chromium IME (CDP composition): confirming Enter in either order did not send; the next Enter sent exactly the confirmed text");
+
+    // Memory editor: composition text is committed exactly; unsaved text asks before it is discarded.
+    await page.getByRole("button", { name: /^Memory/ }).click();
+    const memory = page.getByRole("dialog", { name: /Site Memory/ });
+    const box = memory.getByRole("textbox");
+    await expect(box).toBeEnabled();
+    await box.focus();
+    await box.press("End");
+    await recorded();
+    await composeChromium("かいぎはげつようび", "会議は月曜日");
+    assert.deepEqual(await recorded(), [{ key: "Enter", isComposing: true, keyCode: 13 }]);
+    await expect(memory).toBeVisible();
+    await expect(box).toHaveValue(/会議は月曜日$/);
+    await expect(memory.getByText("unsaved changes")).toBeVisible();
+    const dialogs = /** @type {string[]} */ ([]);
+    page.once("dialog", dialog => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+    await memory.getByRole("button", { name: "Close" }).click();
+    await expect(memory).toBeVisible();
+    assert.deepEqual(dialogs, ["Discard unsaved Memory changes?"]);
+    await memory.getByRole("button", { name: "Save Memory" }).click();
+    await expect(memory.getByText("Memory saved.")).toBeVisible();
+    await memory.getByRole("button", { name: "Close" }).click();
+    await expect(memory).toBeHidden();
+    api.script([{ text: "Noted." }]);
+    await send(page, "What day are meetings?");
+    assert.match(lastRequest()?.system ?? "", /会議は月曜日/);
+    log("Memory editor: IME text committed exactly, unsaved Close asked first, saved Memory reached the next call");
+
+    // Keyboard only from here: review, Draft, change navigation, Apply, Undo.
+    propose();
+    await input.focus();
+    await page.keyboard.type("Simplify the first step and add a shared agendas feature.");
+    await page.keyboard.press("Enter");
+    await expect(count(page)).toHaveText("2", { timeout: 60_000 });
+    await idle(page);
+    await page.evaluate(() => /** @type {HTMLElement | null} */ (document.activeElement)?.blur());
+    await tabTo(page, page.getByRole("button", { name: /^Draft/ }), "Draft");
+    await page.keyboard.press("Enter");
+    const draft = frame(page, "Draft");
+    await expect(draft.getByText("Shared agendas")).toBeVisible();
+    await expect(page.locator("#assistant-apply-state")).toContainText("rendered successfully", { timeout: 30_000 });
+    await expectAligned(draft, "on desktop");
+    await tabTo(page, page.locator(".cms-assistant-change").first().locator(".cms-assistant-change__head button"), "first change in review");
+    // The focus pulse is transient, so record it as it happens.
+    await draft.locator("body").evaluate(() => {
+      const seen = /** @type {any} */ (window).__zcFocused = /** @type {string[]} */ ([]);
+      new MutationObserver(records => { for (const record of records) if (record.target instanceof HTMLElement && record.target.hasAttribute("data-focus")) seen.push(record.target.dataset.annotation ?? ""); })
+        .observe(document.body, { subtree: true, attributes: true, attributeFilter: ["data-focus"] });
+    });
+    await page.keyboard.press("Enter");
+    await expect.poll(() => draft.locator("body").evaluate(() => /** @type {any} */ (window).__zcFocused.length)).toBeGreaterThan(0);
+    const focused = await draft.locator("body").evaluate(() => /** @type {any} */ (window).__zcFocused[0]);
+    await expect.poll(() => draft.locator(`.zc-review-box[data-annotation="${focused}"]`).evaluate(box => { const rect = box.getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= innerHeight; })).toBe(true);
+    await expectAligned(draft, "after keyboard navigation scrolled the change into view");
+    await scrollPreview(draft);
+    await expectAligned(draft, "after scrolling on desktop");
+    await page.setViewportSize({ width: 1180, height: 820 });
+    await expectAligned(draft, "after a desktop resize");
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await expectAligned(draft, "after restoring the desktop size");
+    await shot(page, "device-draft-desktop");
+    await tabTo(page, page.getByRole("button", { name: "Apply to Composer" }), "Apply to Composer");
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("heading", { name: "Applied to Composer" })).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator(".cms-assistant-review").getByRole("status")).toContainText("Receipt ");
+    const applied = await canonical();
+    assert.ok(applied[0]?.includes("Connect your calendar in one click") && applied[1]?.includes("Shared agendas"), "Apply wrote JSON and JSX");
+    for (const text of applied) assert.doesNotMatch(text, /zc-review|data-zc-review|Changed \d+\/\d+|Added \d+\/\d+/u, "saved JSON/JSX carry no review annotations");
+    const visitor = await context.newPage();
+    await visitor.goto(`${origin}/website-preview`);
+    await expect(visitor.getByText("Connect your calendar in one click")).toBeVisible({ timeout: 90_000 });
+    await expect(visitor.locator(".zc-review-box, .zc-review-badge, [data-zc-review-layer]")).toHaveCount(0);
+    assert.equal(await visitor.evaluate(() => /** @type {any} */ (CSS).highlights?.size ?? 0), 0, "visitor output registers no review highlights");
+    assert.doesNotMatch(await visitor.content(), /zc-review/u);
+    await visitor.close();
+    log("visitor /website-preview carries the applied text and no annotation markup or highlights");
+    await tabTo(page, page.getByRole("button", { name: "Undo apply" }), "Undo apply");
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("heading", { name: "Undo committed" })).toBeVisible({ timeout: 60_000 });
+    assert.deepEqual(await canonical(), before, "Undo restored the saved page");
+    log("keyboard only: Tab/Enter reached Draft, a review change, Apply and Undo with visible focus rings; outlines and labels aligned through scroll and resize");
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+
+  // ── Touch at Galaxy Fold sizes ──
+  for (const fold of /** @type {const} */ ([{ name: "folded", width: 344, height: 882, rotate: true }, { name: "unfolded", width: 673, height: 841, rotate: false }])) {
+    const context = await browser.newContext({ viewport: { width: fold.width, height: fold.height }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+    const page = await context.newPage();
+    const errors = /** @type {string[]} */ ([]);
+    page.on("pageerror", error => errors.push(error.message));
+    await page.goto(url);
+    const conversationTab = page.getByRole("tab", { name: "Conversation" }), pageTab = page.getByRole("tab", { name: /^Page/ });
+    await expect(conversationTab).toHaveAttribute("aria-selected", "true", { timeout: 90_000 });
+    await pageTab.tap();
+    await expect(pageTab).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".cms-assistant-left")).toBeHidden();
+    const current = frame(page, "Current");
+    await expect(current.getByText("Every moving part of your week")).toBeVisible({ timeout: 90_000 });
+
+    // Selecting a block that contains a link selects it and never navigates.
+    await expect(page.getByRole("button", { name: "Select block" })).toHaveAttribute("aria-pressed", "true");
+    const link = current.locator('[data-zc-owner="local"][data-zc-node-id] a[href]').first();
+    await expect(link).toBeVisible();
+    const frameUrl = await current.locator("body").evaluate(() => location.href);
+    await link.scrollIntoViewIfNeeded();
+    await link.tap();
+    await page.waitForTimeout(500);
+    assert.equal(await current.locator("body").evaluate(() => location.href), frameUrl, "tapping a link while selecting must not navigate the preview");
+    assert.equal(page.url(), url, "tapping a link while selecting must not navigate the editor");
+    await conversationTab.tap();
+    await expect(conversationTab).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".cms-assistant-right")).toBeHidden();
+    await expect(page.locator(".cms-assistant-context").getByText(/^Selected: /)).toBeVisible();
+    await page.getByRole("button", { name: "Clear selection" }).tap();
+
+    // The authoring document asks Chromium to shrink the layout viewport for a virtual keyboard;
+    // at that shorter height the message box and Send/Stop stay visible.
+    assert.match(await page.locator('meta[name="viewport"]').getAttribute("content") ?? "", /interactive-widget=resizes-content/);
+    const input = page.locator("#assistant-input");
+    await input.tap();
+    await page.setViewportSize({ width: fold.width, height: Math.round(fold.height * 0.55) });
+    await input.fill("Write a long essay.");
+    await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+    assert.ok(await inViewport(page, page.getByRole("button", { name: "Send" })), `Send stays visible above a virtual keyboard (${fold.name})`);
+    assert.ok(await inViewport(page, input), `the message box stays visible above a virtual keyboard (${fold.name})`);
+    api.script([{ holdUntilAbort: true }]);
+    await page.getByRole("button", { name: "Send" }).tap();
+    await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+    assert.ok(await inViewport(page, page.getByRole("button", { name: "Stop" })), `Stop stays visible above a virtual keyboard (${fold.name})`);
+    await page.getByRole("button", { name: "Stop" }).tap();
+    await idle(page);
+    await expect(lastReply(page).getByText("Stopped")).toBeVisible();
+    await page.setViewportSize({ width: fold.width, height: fold.height });
+
+    // Review by touch: Draft annotations, one-tap Apply and Undo with their receipts.
+    propose();
+    await send(page, "Simplify the first step and add a shared agendas feature.");
+    await expect(count(page)).toHaveText("2");
+    await pageTab.tap();
+    await page.getByRole("button", { name: /^Draft/ }).tap();
+    const draft = frame(page, "Draft");
+    await expect(draft.getByText("Shared agendas")).toBeVisible();
+    await expect.poll(() => highlighted(draft)).toEqual(expect.arrayContaining(["Shared agendas", "calendar in one click"]));
+    await expect(page.locator("#assistant-apply-state")).toContainText("rendered successfully", { timeout: 30_000 });
+    await expectAligned(draft, `at Fold ${fold.name} ${fold.width}x${fold.height}`);
+    await scrollPreview(draft);
+    await expectAligned(draft, `after scrolling at Fold ${fold.name}`);
+    await shot(page, `device-draft-fold-${fold.name}`);
+    if (fold.rotate) {
+      for (const [width, height] of [[390, 844], [844, 390], [390, 844]]) {
+        await page.setViewportSize({ width, height });
+        await expectAligned(draft, `at ${width}x${height}`);
+        await scrollPreview(draft);
+        await expectAligned(draft, `after scrolling at ${width}x${height}`);
+        if (width > height) await shot(page, "device-draft-landscape");
+      }
+      await page.setViewportSize({ width: fold.width, height: fold.height });
+      await expectAligned(draft, `back at Fold ${fold.name}`);
+    }
+    const apply = page.getByRole("button", { name: "Apply to Composer" });
+    await apply.scrollIntoViewIfNeeded();
+    // Apply reloads the editor under a new write epoch; the Page view and its receipt must come back.
+    await apply.tap();
+    await expect(page.getByRole("heading", { name: "Applied to Composer" })).toBeVisible({ timeout: 60_000 });
+    await expect(pageTab).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".cms-assistant-review").getByRole("status")).toContainText("Receipt ");
+    await expect(page.locator("iframe[title$='page preview']").contentFrame().locator(".zc-review-box")).toHaveCount(0);
+    const undo = page.getByRole("button", { name: "Undo apply" });
+    await undo.scrollIntoViewIfNeeded();
+    await undo.tap();
+    await expect(page.getByRole("heading", { name: "Undo committed" })).toBeVisible({ timeout: 60_000 });
+    await expect(pageTab).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".cms-assistant-review").getByRole("status")).toContainText("Receipt ");
+    assert.deepEqual(await canonical(), before, "Undo restored the saved page");
+    log(`touch at Fold ${fold.name} ${fold.width}x${fold.height}: tab switch, link-safe selection, Send/Stop above a virtual keyboard, aligned annotations${fold.rotate ? " through 390x844/844x390 rotation" : ""}, one-tap Apply and Undo with receipts`);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  await stop();
+}
+
 async function exactInsertionJourneys() {
   const host = await prepareAssistantHost({ kind: "edit-host", dir: join(temporary, "native"), baseUrl: api.url, name: "Proof Bot" });
   const ref = (pageId) => ({ sitemapId: "main", pageId });
@@ -323,6 +651,7 @@ try {
   await mkdir(evidence, { recursive: true });
   browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}) });
   await landingJourneys();
+  await deviceJourneys();
   await exactInsertionJourneys();
   await otherThemes();
   log(`passed; screenshots in ${evidence}`);

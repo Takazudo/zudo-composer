@@ -138,4 +138,10 @@
   .cms-assistant-left, .cms-assistant-right { grid-area: main; border: 0; }
   .cms-assistant[data-mobile-tab="conversation"] .cms-assistant-right { display: none; }
   .cms-assistant[data-mobile-tab="page"] .cms-assistant-left { display: none; }
+  /* Page controls act on the hidden Page view; dropping them keeps the message box and Send/Stop above a virtual keyboard. */
+  .cms-assistant[data-mobile-tab="conversation"] .cms-assistant-top > :not(.cms-assistant-back) { display: none; }
+}
+/* A short narrow viewport (virtual keyboard open, or landscape phone) gives the title row's height to the messages and composer; the Bot name stays in the message box and replies. */
+@media (max-width: 56rem) and (max-height: 36rem) {
+  .cms-assistant-chat__title { display: none; }
 }
