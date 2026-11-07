@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "9ad39937870624ac788e0c91a1c2e72fad5757fe",
-  "payloadSha256": "1c9fa9d4a173c45da1a70867acec9b9e5daa55f09caf8818e330217bed815847",
-  "rawPackageJsonSha256": "4ec1ff4a453c3e95c7c8f751925853e91af7876a557cc1fb3631ebcdf729ffe4",
+  "packageOutputSha": "0bca0d5789832b443ab61f1032a69356c0112cc3",
+  "payloadSha256": "9965fdcfce63d8650e19ed2af1292abbcaf5b4cfb40fe05b495a68be8d8cda10",
+  "rawPackageJsonSha256": "94eeee724b24dd40553a7eaeea11400aa37a13d8388809f836cfd9ea0fccfcd9",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -30,9 +30,9 @@
     },
     {
       "path": "docs/assistant.md",
-      "bytes": 18839,
+      "bytes": 19272,
       "mode": 420,
-      "sha256": "72b08550be72b547f3a1874528cd1dc2a2f5241165634884bdeb55f8732c1af8"
+      "sha256": "e7db7cbdfcc59167488e3c7f67531ec42eb81622a5c2de121db1dc2a8ca2a8f0"
     },
     {
       "path": "docs/hosted-content.md",
@@ -2394,21 +2394,21 @@
     },
     {
       "path": "src/features/assistant/assistant-route.tsx",
-      "bytes": 31016,
+      "bytes": 31052,
       "mode": 420,
-      "sha256": "37f3ea1d3b0a8a74d6328df9e0613388a9a7082ee43e0ba3312b953489e28d35"
+      "sha256": "0f8189caea90181bee66f919e9afe35088faa309736d423f4de5f8b9e74b04b5"
     },
     {
       "path": "src/features/assistant/assistant.css",
-      "bytes": 10426,
+      "bytes": 11612,
       "mode": 420,
-      "sha256": "704a57c4f6d9d4ed07013dc3393cbaaf02fdb2cff775cb24ca8bff3c68b05597"
+      "sha256": "d2a709266aa44a507d6302134a5d6b182e350e912b5c94edbba4784e8b9f5a3a"
     },
     {
       "path": "src/features/assistant/chat-panel.tsx",
-      "bytes": 15471,
+      "bytes": 15517,
       "mode": 420,
-      "sha256": "a1b28299fe1843a0b6d89aad0de94f60f30ce72985c5947b07f371e5277d82ed"
+      "sha256": "5243eb541f60dba5bc4c37e39d25ea6b77d0addbafc02b5adc7d6550470457c8"
     },
     {
       "path": "src/features/assistant/memory-dialog.tsx",
