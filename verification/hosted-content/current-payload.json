@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "394158be69b90950a71c115ae145169b95191aa4",
-  "payloadSha256": "c4f7b04f4cf6a7df6756b997ee1a724e234d7b074749ef6393bb74c0004e667e",
-  "rawPackageJsonSha256": "473fb0bada3a555fca4a1aefcffde4ca9a2fced9a2dd2230fe4bbf89d102c7c9",
+  "packageOutputSha": "9ad39937870624ac788e0c91a1c2e72fad5757fe",
+  "payloadSha256": "1c9fa9d4a173c45da1a70867acec9b9e5daa55f09caf8818e330217bed815847",
+  "rawPackageJsonSha256": "4ec1ff4a453c3e95c7c8f751925853e91af7876a557cc1fb3631ebcdf729ffe4",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -30,9 +30,9 @@
     },
     {
       "path": "docs/assistant.md",
-      "bytes": 18557,
+      "bytes": 18839,
       "mode": 420,
-      "sha256": "c8b65097c442ab2112dd170ed45f4553e854d30dd9c3b45edf0bf99ce499fe67"
+      "sha256": "72b08550be72b547f3a1874528cd1dc2a2f5241165634884bdeb55f8732c1af8"
     },
     {
       "path": "docs/hosted-content.md",
@@ -48,9 +48,9 @@
     },
     {
       "path": "index.html",
-      "bytes": 632,
+      "bytes": 668,
       "mode": 420,
-      "sha256": "989ceb02b172a3bdb24d6594660f442ebb2df5ee05c84bee95bb6466d5fa2847"
+      "sha256": "6d4cb2da4b36bb280eb829e18485986df89b171d5c41d61756f9c6a5bd875ece"
     },
     {
       "path": "package.json",
@@ -876,9 +876,9 @@
     },
     {
       "path": "server/hosted-content/editor.mjs",
-      "bytes": 96616,
+      "bytes": 96478,
       "mode": 420,
-      "sha256": "1ae1b9322291149321ed15ef23000d9aea0861beeaece5b9ebe395c516154da1"
+      "sha256": "40ff7527b296183fd51604bece699dbeade43e0cdb4dcc4785433348d8efccdc"
     },
     {
       "path": "server/hosted-content/index.d.mts",
@@ -1236,9 +1236,9 @@
     },
     {
       "path": "src/app/shell.css",
-      "bytes": 15239,
+      "bytes": 14089,
       "mode": 420,
-      "sha256": "adfb372ec2eed597c569ac86fb31b1422268421b0c33c69ff5f6db6483f18648"
+      "sha256": "8489d10bd596f7a78b6d2230145458d32a43163efde6b85399af704a449e5941"
     },
     {
       "path": "src/app/shell.tsx",
@@ -1254,9 +1254,9 @@
     },
     {
       "path": "src/app/topbar.tsx",
-      "bytes": 8222,
+      "bytes": 7456,
       "mode": 420,
-      "sha256": "c086e30a911c503447885235e4ecbee74f96ec25c3397a4ddce683530ff6728d"
+      "sha256": "e2571b06307b6843ffa45a349f02311dfc8a197612fc6ece116df60e4198e373"
     },
     {
       "path": "src/app/workspace-context.tsx",
@@ -1566,9 +1566,9 @@
     },
     {
       "path": "src/components/icons/index.ts",
-      "bytes": 32121,
+      "bytes": 31901,
       "mode": 420,
-      "sha256": "0d3d5758c5999d18a5f931f5d73c7e57582b8c967ca5ff68f7639d90fdf0792b"
+      "sha256": "be654bdbd501f266dab70972d7fb34c0c873af415776de9f1ff56ac4b0036146"
     },
     {
       "path": "src/components/library-page/bulk-bar.tsx",
@@ -2394,15 +2394,15 @@
     },
     {
       "path": "src/features/assistant/assistant-route.tsx",
-      "bytes": 30756,
+      "bytes": 31016,
       "mode": 420,
-      "sha256": "cd97d71a2d6222d782ce25a7ab4d489207f3d18b0ead23a4c2e8ca5ead805d5a"
+      "sha256": "37f3ea1d3b0a8a74d6328df9e0613388a9a7082ee43e0ba3312b953489e28d35"
     },
     {
       "path": "src/features/assistant/assistant.css",
-      "bytes": 9898,
+      "bytes": 10426,
       "mode": 420,
-      "sha256": "6adbc0337d005ed6c704227cc3725347d2c2f061b1f140a572daacb87e4a7d57"
+      "sha256": "704a57c4f6d9d4ed07013dc3393cbaaf02fdb2cff775cb24ca8bff3c68b05597"
     },
     {
       "path": "src/features/assistant/chat-panel.tsx",
