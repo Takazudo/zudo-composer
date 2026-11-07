@@ -151,6 +151,8 @@
    and compacts the composer: Rename stays visible and the Bot name stays in the heading for assistive technology. */
 @media (max-width: 56rem) and (max-height: 36rem) {
   .cms-assistant-chat__header { grid-template-columns: auto minmax(0, 1fr); align-items: center; padding-block: var(--sp-2); }
+  /* An open Rename form is wider than a phone; giving it and the Conversation row whole rows keeps the controls usable. */
+  .cms-assistant-chat__header > form, .cms-assistant-chat__header > form ~ * { grid-column: 1 / -1; }
   .cms-assistant-chat__title { font-size: 0.85rem; }
   .cms-assistant-compose { gap: var(--sp-1); padding-block: var(--sp-2); }
   .cms-assistant-compose textarea { block-size: 3.25em; }
