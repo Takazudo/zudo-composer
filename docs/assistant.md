@@ -291,3 +291,11 @@ Evidence classes are kept separate; none stands in for another.
 Fake success is never reported as real CLI use, and harness success is never
 reported as model inference. Browser-emulated IME, touch and device sizes are
 not OS input-method or hardware evidence.
+
+The authoring document's viewport meta declares
+`interactive-widget=resizes-content` so that the Assistant's message box and
+Send/Stop stay above an on-screen keyboard. The setting applies to the whole
+document, not only the Assistant: on every authoring route, Chromium-based
+browsers shrink the layout viewport while an on-screen keyboard is open.
+Browsers that ignore it, such as iOS Safari, keep their default overlay
+behavior.

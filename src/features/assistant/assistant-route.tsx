@@ -54,7 +54,7 @@ export function AssistantRoute() {
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [images, setImages] = useState<{ id: string; name: string }[]>([]);
   // Apply and Undo reload every authoring tab under a new write epoch; the narrow view must come back where it was.
-  const [tab, setTabState] = useState<"conversation" | "page">(() => read(`${prefix}:tab`, "conversation"));
+  const [tab, setTabState] = useState<"conversation" | "page">(() => read<unknown>(`${prefix}:tab`, null) === "page" ? "page" : "conversation");
   const setTab = (value: "conversation" | "page") => { setTabState(value); write(`${prefix}:tab`, value); };
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
