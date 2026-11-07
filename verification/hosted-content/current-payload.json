@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "0bca0d5789832b443ab61f1032a69356c0112cc3",
-  "payloadSha256": "9965fdcfce63d8650e19ed2af1292abbcaf5b4cfb40fe05b495a68be8d8cda10",
-  "rawPackageJsonSha256": "94eeee724b24dd40553a7eaeea11400aa37a13d8388809f836cfd9ea0fccfcd9",
+  "packageOutputSha": "9b8219fb9ce18512cd67a4c990bc8b73c17017a2",
+  "payloadSha256": "3430ec719ee292f002e0c868267d588512cc5c95fecb3a2cff8e5c60628193d3",
+  "rawPackageJsonSha256": "e465bca71688bf12455263da59cb8e15ea1b25ef876cfa257ad57881eb087e3c",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -2400,9 +2400,9 @@
     },
     {
       "path": "src/features/assistant/assistant.css",
-      "bytes": 11612,
+      "bytes": 11838,
       "mode": 420,
-      "sha256": "d2a709266aa44a507d6302134a5d6b182e350e912b5c94edbba4784e8b9f5a3a"
+      "sha256": "3cfe641dfa5b3584728ef7e1cbf0d0729aa6be0f17ed8a3bc2b48ecc2074576f"
     },
     {
       "path": "src/features/assistant/chat-panel.tsx",
