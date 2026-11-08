@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "957d7daa5977680562885b79bce650e3324ab8d2",
-  "payloadSha256": "aa50c246718a325581a79a7e8a3415025834a52ef5924ba7511766bc779f454a",
-  "rawPackageJsonSha256": "7af50a97590c08e5f6ac85dc13dbf3cb93826e50736669888a631ea868ea2116",
+  "packageOutputSha": "13ed855a3268d91c114c3f5ee167d9ace9078d57",
+  "payloadSha256": "8c64fc6f2cd1d972b07fcea3490a4a019c493e42f4dc041758c481852f6806a2",
+  "rawPackageJsonSha256": "cc9204064503318e4fc0bc84a55dc870a587d1022a157a3fd743ea8f1f098e9e",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -882,9 +882,9 @@
     },
     {
       "path": "server/hosted-content/editor.mjs",
-      "bytes": 107121,
+      "bytes": 107038,
       "mode": 420,
-      "sha256": "7bc8f3ced701051f5da7481b0a6b8230c90ac72be7bcef5e4b30ca4bf8338898"
+      "sha256": "23a1d4b83d94fd7bc5ee5bf869a56bccdd1045417d7a71205c21946be8a042c5"
     },
     {
       "path": "server/hosted-content/index.d.mts",
@@ -3576,9 +3576,9 @@
     },
     {
       "path": "src/hosted-content/editor.tsx",
-      "bytes": 30272,
+      "bytes": 30297,
       "mode": 420,
-      "sha256": "9ca936be6d722321b17e8c9b751389df54a4cf1cbabb708960ad8f39b0a5358a"
+      "sha256": "3f0b2d7d0ca75a7a11d7ed45b48b432f32c978509a915919ba80b02491b0c003"
     },
     {
       "path": "src/hosted-content/editorial.ts",
@@ -3630,9 +3630,9 @@
     },
     {
       "path": "src/hosted-content/session.ts",
-      "bytes": 26314,
+      "bytes": 26357,
       "mode": 420,
-      "sha256": "8fd739ac3422ba50bbd42840b7ca94fb69b88e546b83b53a62ce48cb9a9cf18d"
+      "sha256": "efc4a10488960ad93f77ec8264ec2f083fa79d639ad012a36fe9c31765cad550"
     },
     {
       "path": "src/hosted-content/testing.ts",
