@@ -693,9 +693,10 @@ or used in place of, the immutable external UI-pack Git spec.
 ## Scoped hosted demo exception
 
 The installed tool and ordinary local workflow remain local-first. The scoped
-exception publishes four static demo sites, four disposable per-host editors,
-the developer documentation site, and four standalone styleguides; none
-adds hosted persistence, an API,
+exception covers four static demo sites, four disposable per-host editors,
+the developer documentation site, and four standalone styleguides. Their
+production delivery is currently stopped (see [Hosted sites](#hosted-sites));
+none adds hosted persistence, an API,
 authentication, arbitrary host-project access or a deployment target for
 installed applications. The registry and Wrangler contracts are:
 
@@ -741,7 +742,7 @@ targeted `workflow_dispatch` runs, token scopes and captured-version rollback:
 [`docs/hosted-demo.md`](./docs/hosted-demo.md).
 
 The `sample-sg` target runs `pnpm sg:build-site`; the other styleguide targets
-run `pnpm sg:build-styleguide <sample-sg|shop-sg|landing-sg|blog-sg>`. Each
+run `pnpm sg:build-styleguide <shop-sg|landing-sg|blog-sg>`. Each
 verifies its own `styleguide/<host>/dist` with the `doc-site-manifest.json`
 contract and takes the missing-Worker path on its first rollout. Run
 `pnpm sg:build-styleguides` to build all four catalogs serially.
