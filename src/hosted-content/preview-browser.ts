@@ -22,8 +22,9 @@ export type HostedPreviewState =
   | { status: "pending"; snapshotId: string; routeId: string }
   | { status: "rendered"; result: HostedDocumentRendered }
   | { status: "error"; error: HostedPreviewError };
+export type HostedPreviewErrorCode = HostedDocumentError["code"] | "timeout" | "superseded" | "disposed" | "identity-mismatch" | "transport-error";
 export class HostedPreviewError extends Error {
-  constructor(readonly code: HostedDocumentError["code"] | "timeout" | "superseded" | "disposed" | "identity-mismatch" | "transport-error", message: string) {
+  constructor(readonly code: HostedPreviewErrorCode, message: string) {
     super(message); this.name = "HostedPreviewError";
   }
 }

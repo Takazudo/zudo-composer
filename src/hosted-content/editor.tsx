@@ -2,23 +2,28 @@ import { render } from "preact";
 import type { VNode } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { Select } from "../components/ui/form-controls";
+import { diagnoseContentEntryCompleteness } from "../content/library/helpers";
+import type { ContentCompletenessDiagnostic, ContentValueSchema } from "../content/model/types";
+import { canonicalSerialize } from "./canonical";
 import { HostedContentSession } from "./session";
 import { HostedFieldControl, fieldEditable, fieldClearable, entryLabel } from "./field-control";
 import { hostedEditorLabels } from "./labels";
-import type { HostedEditorLabels } from "./labels";
+import type { HostedEditorErrorCode, HostedEditorLabels } from "./labels";
 import type { HostedEditorSessionState, HostedSessionOptions } from "./session";
-import type { ContentEntryRef, ContentFieldDefinition, HostedErrorCode, HostedFieldPermission, HostedPolicy, HostedResult, HostedState, JsonValue } from "./types";
+import type { ContentEntryRef, ContentFieldDefinition, HostedFieldPermission, HostedPolicy, HostedResult, HostedState, JsonValue } from "./types";
 
 export * from "./preview-browser";
-export type { HostedEditorSessionState, HostedRecoveryCheckpoint, HostedPreviewAdapter, HostedSessionOptions } from "./session";
+export type { HostedEditorSessionState, HostedPreviewFailure, HostedRecoveryCheckpoint, HostedPreviewAdapter, HostedSessionOptions } from "./session";
 export type { HostedControlLabels } from "./field-control";
 export { hostedEditorLabels, hostedEditorLabelsJa, hostedErrorMessages, hostedErrorMessagesJa } from "./labels";
-export type { HostedEditorLabels } from "./labels";
+export type { HostedEditorErrorCode, HostedEditorLabels } from "./labels";
 export interface HostedEditorSelection { entry: ContentEntryRef; fieldId: string }
 /** What a host field renderer receives. It never holds storage, transport or the session itself. */
 export interface HostedFieldRenderContext {
   readonly entry: ContentEntryRef; readonly field: ContentFieldDefinition; readonly permission: HostedFieldPermission;
   readonly value: JsonValue | undefined; readonly disabled: boolean; readonly labels: HostedEditorLabels;
+  /** True while the field is incomplete; `describedBy` names the editor's visible explanation. */
+  readonly invalid: boolean; readonly describedBy?: string;
   /** Stage a value through the same session edit as the built-in control; the service validates it on save. */
   setValue(next: JsonValue | undefined): void;
   /** Mount the built-in control for this field into a host element, e.g. beside a host-owned counter. */
@@ -37,8 +42,10 @@ export interface HostedContentEditorOptions extends HostedSessionOptions {
   presentation?: "record" | "field";
   routeId?: string;
   labels?: Partial<HostedEditorLabels>;
-  /** Routine messages for typed errors, e.g. `hostedErrorMessagesJa`; other errors show their own message. */
-  errorMessages?: Partial<Record<HostedErrorCode, string>>;
+  /** Routine messages for typed service and preview errors, e.g. `hostedErrorMessagesJa`; other errors show their own message. */
+  errorMessages?: Partial<Record<HostedEditorErrorCode, string>>;
+  /** `false` when the host offers no submission: Submit and its preview-first prompt are not shown. Defaults to true. */
+  submission?: boolean;
   /** Map typed diagnostics and transport failures to host-facing messages. Overrides `errorMessages`. */
   formatError?(error: unknown): string;
   onNavigate?(selection: HostedEditorSelection): void | Promise<void>;
@@ -101,12 +108,42 @@ function selected(content: HostedState | null, selection: HostedEditorSelection)
   return entry && model ? { entry, model } : null;
 }
 const displayValue = (value: JsonValue | undefined, none: string): string => value === undefined ? none : typeof value === "string" ? value : JSON.stringify(value);
+const sameValue = (a: JsonValue | undefined, b: JsonValue | undefined) => a === undefined || b === undefined ? a === b : canonicalSerialize(a) === canonicalSerialize(b);
+const errorCode = (error: unknown): HostedEditorErrorCode | null => error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code as HostedEditorErrorCode : null;
+/** Labels along a diagnostic path below its top-level field; list indexes are skipped. */
+function diagnosticLabels(field: ContentFieldDefinition, path: readonly (string | number)[] | undefined): string[] {
+  const names: string[] = [];
+  let schema: ContentValueSchema = field;
+  for (const step of path?.slice(1) ?? []) {
+    if (schema.kind === "list") { schema = schema.item; continue; }
+    if (schema.kind !== "object") break;
+    const child = schema.fields.find((candidate) => candidate.id === step);
+    if (!child) break;
+    names.push(child.label); schema = child;
+  }
+  return names;
+}
+let editorMounts = 0;
 
 /** Mount only the policy projection. Location paths/queries never select local authoring tools. */
 export function mountHostedContentEditor(container: HTMLElement, options: HostedContentEditorOptions): HostedContentEditorHandle {
   if (!permitted(options, options.selection)) throw new Error("Selection is not permitted");
   const session = new HostedContentSession(options);
   const labels = { ...hostedEditorLabels, ...options.labels };
+  const submission = options.submission !== false;
+  const domPrefix = `hosted-content-editor-${++editorMounts}`;
+  const messageFor = (error: unknown): string => {
+    const code = errorCode(error);
+    return options.formatError?.(error) ?? (code && options.errorMessages?.[code]) ?? (error instanceof Error ? error.message : String(error));
+  };
+  function diagnosticText(content: HostedState, current: ContentEntryRef, diagnostic: ContentCompletenessDiagnostic): string {
+    const provider = content.providers.find((candidate) => candidate.models.some((model) => model.id === diagnostic.modelId) && candidate.entries.some((entry) => entry.id === diagnostic.entryId && entry.modelId === diagnostic.modelId));
+    const top = provider?.models.find((model) => model.id === diagnostic.modelId)?.document.fields.find((field) => field.id === diagnostic.path?.[0] || field.id === diagnostic.fieldId);
+    if (!provider || !top) return diagnostic.message;
+    const ref = { providerId: provider.providerId, modelId: diagnostic.modelId, recordId: diagnostic.entryId };
+    const name = [...(sameRef(ref, current) ? [] : [entryLabel(content, ref)]), top.label, ...diagnosticLabels(top, diagnostic.path)].join(": ");
+    return (diagnostic.code === "required-value-missing" ? labels.diagnosticRequired : labels.diagnosticAccessibleText).replace("{field}", name);
+  }
   let selection = options.selection;
   let disposed = false;
   const draw = (state = session.state) => { if (!disposed) render(<Editor state={state} />, container); };
@@ -123,6 +160,29 @@ export function mountHostedContentEditor(container: HTMLElement, options: Hosted
     selection = next; draw();
   }
   const preview = () => options.routeId ? session.captureAndPreview(options.routeId) : Promise.reject(new Error("A host-owned route is required"));
+  function ConflictReview({ review, fields, local }: { review: HostedState; fields: ContentFieldDefinition[]; local: Record<string, JsonValue> }) {
+    const current = selected(review, selection)?.entry.values ?? {};
+    const differing = fields.filter((field) => !sameValue(local[field.id], current[field.id]));
+    const unchanged = fields.filter((field) => !differing.includes(field));
+    const headingId = `${domPrefix}-differing`;
+    return <div class="hosted-content-editor__review">
+      <div role="group" aria-labelledby={headingId}><p id={headingId} class="hosted-content-editor__review-heading">{labels.differingFields} ({differing.length})</p>
+      {differing.length ? <dl>{differing.map((field) => <div key={field.id} data-hosted-difference={field.id}><dt>{field.label}</dt><dd>{labels.localValue}: {displayValue(local[field.id], labels.none)}</dd><dd>{labels.serverValue}: {displayValue(current[field.id], labels.none)}</dd></div>)}</dl> : <p>{labels.noDifferingFields}</p>}</div>
+      {unchanged.length ? <details class="hosted-content-editor__unchanged"><summary>{labels.unchangedFields} ({unchanged.length})</summary><ul>{unchanged.map((field) => <li key={field.id}>{field.label}</li>)}</ul></details> : null}
+    </div>;
+  }
+  function PreviewFailure({ error, diagnostics, content }: { error: unknown; diagnostics: readonly ContentCompletenessDiagnostic[]; content: HostedState }) {
+    const reason = messageFor(error);
+    const code = errorCode(error);
+    const technical = error instanceof Error ? error.message : String(error);
+    const detail = [code, technical].filter(Boolean).join(": ");
+    return <div role="alert" class="hosted-content-editor__preview-failure">
+      <p class="hosted-content-editor__review-heading">{labels.previewFailed}</p>
+      <p>{reason}</p>
+      {diagnostics.length ? <><p>{labels.submissionIncomplete}</p><ul>{diagnostics.map((diagnostic, index) => <li key={index}>{diagnosticText(content, selection.entry, diagnostic)}</li>)}</ul></> : null}
+      {detail && detail !== reason ? <p class="hosted-content-editor__detail">{labels.errorDetail}: <code>{detail}</code></p> : null}
+    </div>;
+  }
   function Editor({ state }: { state: HostedEditorSessionState }) {
     const [actionError, setActionError] = useState<unknown>(null);
     const [review, setReview] = useState<HostedState | null>(null);
@@ -147,23 +207,27 @@ export function mountHostedContentEditor(container: HTMLElement, options: Hosted
     const rejected = !!state.pending?.rejected;
     const collections = options.policy.collections.filter((collection) => sameRef(collection.owner, selection.entry));
     const error = actionError ?? state.error;
-    const code = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code as HostedErrorCode : null;
-    const message = error ? options.formatError?.(error) ?? (code && options.errorMessages?.[code]) ?? (error instanceof Error ? error.message : String(error)) : null;
+    const previewFailure = state.previewFailure;
+    // A preview failure is explained once, in its own alert below.
+    const message = error && error !== previewFailure?.error ? messageFor(error) : null;
+    const completeness = diagnoseContentEntryCompleteness(item.model, item.entry);
     return <section class="hosted-content-editor" aria-busy={busy}>
       {records.length > 1 && options.presentation !== "field" ? <div class="hosted-content-editor__field"><span>{labels.content}</span><Select aria-label={labels.content} value={refKey(selection.entry)} onChange={(event) => { const next = records.find((record) => refKey(record.selection.entry) === event.currentTarget.value); if (next) run(() => navigate(next.selection)); }}>{records.map((record) => <option key={refKey(record.selection.entry)} value={refKey(record.selection.entry)}>{record.label}</option>)}</Select></div> : null}
-      <div class="hosted-content-editor__fields">{fields.map((field) => {
+      <div class="hosted-content-editor__fields">{fields.map((field, fieldIndex) => {
         const allowed = modelPermission.fields.find((permission) => permission.fieldId === field.id)!;
         const change = (next: JsonValue | undefined) => { if (next === undefined && !allowed.clear) { setActionError(new Error(labels.cannotClear)); return; } setActionError(null); session.edit(selection.entry, field.id, next); };
-        const control = () => <HostedFieldControl schema={field} field={field} value={item.entry.values[field.id]} permission={allowed} identity={`${refKey(selection.entry)}/${field.id}`} hasIncompleteInput={(prefix) => state.invalidInputs.some((controlId) => controlId === prefix || controlId.startsWith(`${prefix}/`))} onIncompleteNumber={(controlId, raw) => { session.setIncompleteInput(controlId, raw !== null); setActionError(raw === null ? null : new Error(labels.cannotClear)); }} label={field.label} content={content} policy={options.policy} labels={labels} onChange={change} />;
+        const problems = completeness.filter((diagnostic) => (diagnostic.path?.[0] ?? diagnostic.fieldId) === field.id);
+        const problemId = problems.length ? `${domPrefix}-problem-${fieldIndex}` : undefined;
+        const control = () => <HostedFieldControl schema={field} field={field} invalid={!!problems.length} describedBy={problemId} value={item.entry.values[field.id]} permission={allowed} identity={`${refKey(selection.entry)}/${field.id}`} hasIncompleteInput={(prefix) => state.invalidInputs.some((controlId) => controlId === prefix || controlId.startsWith(`${prefix}/`))} onIncompleteNumber={(controlId, raw) => { session.setIncompleteInput(controlId, raw !== null); setActionError(raw === null ? null : new Error(labels.cannotClear)); }} label={field.label} content={content} policy={options.policy} labels={labels} onChange={change} />;
         const renderer = options.fieldRenderers?.find((candidate) => candidate.matches(field, selection.entry));
         let custom: VNode | null = null;
         if (renderer) {
-          const context: HostedFieldRenderContext = { entry: selection.entry, field, permission: allowed, value: item.entry.values[field.id], disabled: busy, labels, setValue: change,
+          const context: HostedFieldRenderContext = { entry: selection.entry, field, permission: allowed, value: item.entry.values[field.id], disabled: busy, labels, invalid: !!problems.length, ...(problemId ? { describedBy: problemId } : {}), setValue: change,
             renderDefault: (element) => renderDefaultInto(context, element) };
           defaultViews.set(context, control);
           custom = <CustomField renderer={renderer} context={context} />;
         }
-        return <div class="hosted-content-editor__field" key={`${refKey(selection.entry)}/${field.id}/${state.presentationRevision}`} data-hosted-field={field.id}><span>{field.label}</span>{custom ?? control()}{fieldClearable(field, allowed) ? <button type="button" class="hosted-content-editor__clear" aria-label={`${labels.clear}: ${field.label}`} onClick={() => { for (const controlId of state.invalidInputs) if (controlId.startsWith(`${refKey(selection.entry)}/${field.id}`)) session.setIncompleteInput(controlId, false); session.edit(selection.entry, field.id, undefined); }}>{labels.clear}</button> : null}</div>;
+        return <div class="hosted-content-editor__field" key={`${refKey(selection.entry)}/${field.id}/${state.presentationRevision}`} data-hosted-field={field.id} data-invalid={problems.length ? "true" : undefined}><span>{field.label}</span>{custom ?? control()}{problemId ? <p id={problemId} class="hosted-content-editor__problem">{problems.map((diagnostic) => [...diagnosticLabels(field, diagnostic.path), diagnostic.code === "required-value-missing" ? labels.requiredMissing : labels.accessibleTextMissing].join(": ")).join(" ")}</p> : null}{fieldClearable(field, allowed) ? <button type="button" class="hosted-content-editor__clear" aria-label={`${labels.clear}: ${field.label}`} onClick={() => { for (const controlId of state.invalidInputs) if (controlId.startsWith(`${refKey(selection.entry)}/${field.id}`)) session.setIncompleteInput(controlId, false); session.edit(selection.entry, field.id, undefined); }}>{labels.clear}</button> : null}</div>;
       })}</div>
       {options.presentation !== "field" ? collections.map((collection) => {
         const members = memberRefs(content, collection.owner, collection.fieldId);
@@ -188,15 +252,16 @@ export function mountHostedContentEditor(container: HTMLElement, options: Hosted
       }) : null}
       <div class="hosted-content-editor__actions">
         <button type="button" disabled={busy || rejected || !!state.invalidInputs.length} onClick={() => run(() => session.flush())}>{labels.save}</button>
-        {options.preview && options.routeId ? <button type="button" disabled={busy || rejected || !!state.invalidInputs.length} onClick={() => run(preview)}>{labels.preview}</button> : null}
-        {options.preview ? <button type="button" disabled={!state.reviewedSnapshot || state.dirty || !!state.pending || !!state.reviewedSnapshot.diagnostics.length} onClick={() => run(() => session.submit())}>{labels.submit}</button> : null}
+        {options.preview && options.routeId ? <button type="button" disabled={busy || rejected || !!state.invalidInputs.length} onClick={() => { setActionError(null); void preview().catch((error) => { if (session.state.previewFailure?.error !== error && session.state.error !== error) setActionError(error); }); }}>{labels.preview}</button> : null}
+        {options.preview && submission ? <button type="button" disabled={!state.reviewedSnapshot || state.dirty || !!state.pending || !!state.reviewedSnapshot.diagnostics.length} onClick={() => run(() => session.submit())}>{labels.submit}</button> : null}
         <button type="button" disabled={busy || state.dirty || !!state.pending} onClick={() => run(() => session.refresh())}>{labels.reload}</button>
       </div>
       <p role="status" aria-live="polite">{labels[state.phase]}</p>
-      {options.preview ? <p>{state.reviewedSnapshot ? labels.previewCurrent : labels.previewRequired}</p> : null}
-      {state.reviewedSnapshot?.diagnostics.length ? <div role="alert"><p>{labels.submissionIncomplete}</p><ul>{state.reviewedSnapshot.diagnostics.map((diagnostic, index) => <li key={index}>{diagnostic.message}</li>)}</ul></div> : null}
+      {options.preview && (state.reviewedSnapshot || submission) ? <p>{state.reviewedSnapshot ? labels.previewCurrent : labels.previewRequired}</p> : null}
+      {state.reviewedSnapshot?.diagnostics.length ? <div role="alert"><p>{labels.submissionIncomplete}</p><ul>{state.reviewedSnapshot.diagnostics.map((diagnostic, index) => <li key={index}>{diagnosticText(content, selection.entry, diagnostic)}</li>)}</ul></div> : null}
+      {previewFailure ? <PreviewFailure error={previewFailure.error} diagnostics={previewFailure.diagnostics} content={content} /> : null}
       {message ? <p role="alert">{message}</p> : null}
-      {rejected ? <div class="hosted-content-editor__recovery"><button type="button" onClick={() => run(async () => setReview(await session.reviewAuthoritative()))}>{labels.review}</button>{review ? <><dl>{fields.map((field) => { const current = selected(review, selection)?.entry.values[field.id]; return <div key={field.id}><dt>{field.label}</dt><dd>{labels.localValue}: {displayValue(item.entry.values[field.id], labels.none)}</dd><dd>{labels.serverValue}: {displayValue(current, labels.none)}</dd></div>; })}</dl><div class="hosted-content-editor__actions"><button type="button" onClick={() => run(async () => { await session.reapply(review); setReview(null); })}>{labels.reapply}</button><button type="button" onClick={() => run(async () => { await session.discard(review); setReview(null); })}>{labels.discard}</button></div></> : null}</div> : null}
+      {rejected ? <div class="hosted-content-editor__recovery"><button type="button" onClick={() => run(async () => setReview(await session.reviewAuthoritative()))}>{labels.review}</button>{review ? <><ConflictReview review={review} fields={fields} local={item.entry.values} /><div class="hosted-content-editor__actions"><button type="button" onClick={() => run(async () => { await session.reapply(review); setReview(null); })}>{labels.reapply}</button><button type="button" onClick={() => run(async () => { await session.discard(review); setReview(null); })}>{labels.discard}</button></div></> : null}</div> : null}
       {state.publication ? <div class="hosted-content-editor__publication"><p role="status">{state.publicationStale ? `${labels.lastKnownStatus}: ` : ""}{labels[state.publication.status]}</p>{state.publication.message ? <p>{state.publication.message}</p> : null}{state.publicationError ? <p role="alert">{labels.statusUnavailable}</p> : null}<button type="button" onClick={() => run(() => session.refreshPublication())}>{labels.refreshStatus}</button></div> : null}
     </section>;
   }
@@ -211,7 +276,7 @@ export function mountHostedContentEditor(container: HTMLElement, options: Hosted
     subscribe: (listener) => session.subscribe(listener),
     flush: () => session.flush(), navigate,
     refresh: () => session.refresh(), preview,
-    submit: () => session.submit(), refreshPublication: () => session.refreshPublication(),
+    submit: () => submission ? session.submit() : Promise.reject(new Error("Submission is not offered by this host")), refreshPublication: () => session.refreshPublication(),
     get selection() { return selection; },
     restore(entry, revisionId) {
       if (disposed) return Promise.reject(new Error("Editor presentation is disposed"));

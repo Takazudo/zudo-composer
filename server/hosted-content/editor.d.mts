@@ -440,6 +440,11 @@ interface HostedRecoveryCheckpoint {
     publication?: HostedPublication | null;
     creationDraft?: HostedCreationDraft | null;
 }
+/** The latest preview attempt of the current saved draft failed; cleared by any later edit or preview. */
+interface HostedPreviewFailure {
+    error: unknown;
+    diagnostics: readonly ContentCompletenessDiagnostic[];
+}
 interface HostedEditorSessionState {
     phase: HostedSavePhase;
     invalidInputs: readonly string[];
@@ -455,6 +460,7 @@ interface HostedEditorSessionState {
     publicationStale: boolean;
     creationDraft: HostedCreationDraft | null;
     lastCreatedEntry: ContentEntryRef | null;
+    previewFailure: HostedPreviewFailure | null;
 }
 interface HostedPreviewAdapter {
     render(snapshot: HostedSnapshot, routeId: string): Promise<unknown>;
@@ -504,11 +510,13 @@ declare class HostedContentSession {
     private creationDraft;
     private lastCreatedEntry;
     private previewGeneration;
+    private failedPreview;
     private flight;
     private listeners;
     private checkpointWrites;
     constructor(options: HostedSessionOptions);
     get state(): HostedEditorSessionState;
+    private currentPreviewFailure;
     private projectContent;
     private hasCurrentPreview;
     /** Error objects are kept separately from JSON checkpoint data. */
@@ -576,50 +584,6 @@ interface HostedControlLabels {
     showSize: string;
     showType: string;
 }
-
-interface HostedEditorLabels extends HostedControlLabels {
-    save: string;
-    preview: string;
-    submit: string;
-    loading: string;
-    clean: string;
-    dirty: string;
-    saving: string;
-    saved: string;
-    recovering: string;
-    conflict: string;
-    blocked: string;
-    failed: string;
-    content: string;
-    edit: string;
-    create: string;
-    addExisting: string;
-    cancel: string;
-    review: string;
-    reapply: string;
-    discard: string;
-    localValue: string;
-    serverValue: string;
-    reload: string;
-    refreshStatus: string;
-    statusUnavailable: string;
-    cannotClear: string;
-    lastKnownStatus: string;
-    previewCurrent: string;
-    previewRequired: string;
-    submissionIncomplete: string;
-    submitted: string;
-    building: string;
-    verified: string;
-    integrated: string;
-    deployed: string;
-    unavailable: string;
-}
-declare const hostedEditorLabels: HostedEditorLabels;
-declare const hostedEditorLabelsJa: HostedEditorLabels;
-/** Routine messages by error code; the error object keeps its technical message and diagnostics for host support. */
-declare const hostedErrorMessages: Record<HostedErrorCode, string>;
-declare const hostedErrorMessagesJa: Record<HostedErrorCode, string>;
 
 interface PreviewPackIdentity {
     readonly packId: string;
@@ -745,9 +709,10 @@ type HostedPreviewState = {
     status: "error";
     error: HostedPreviewError;
 };
+type HostedPreviewErrorCode = HostedDocumentError["code"] | "timeout" | "superseded" | "disposed" | "identity-mismatch" | "transport-error";
 declare class HostedPreviewError extends Error {
-    readonly code: HostedDocumentError["code"] | "timeout" | "superseded" | "disposed" | "identity-mismatch" | "transport-error";
-    constructor(code: HostedDocumentError["code"] | "timeout" | "superseded" | "disposed" | "identity-mismatch" | "transport-error", message: string);
+    readonly code: HostedPreviewErrorCode;
+    constructor(code: HostedPreviewErrorCode, message: string);
 }
 interface HostedPreviewControllerOptions {
     frame: {
@@ -812,6 +777,62 @@ declare function createHostedPreviewFullscreen(options: {
     dispose(): void;
 };
 
+/** Service rejections and preview failures share one message table. */
+type HostedEditorErrorCode = HostedErrorCode | HostedPreviewErrorCode;
+interface HostedEditorLabels extends HostedControlLabels {
+    save: string;
+    preview: string;
+    submit: string;
+    loading: string;
+    clean: string;
+    dirty: string;
+    saving: string;
+    saved: string;
+    recovering: string;
+    conflict: string;
+    blocked: string;
+    failed: string;
+    content: string;
+    edit: string;
+    create: string;
+    addExisting: string;
+    cancel: string;
+    review: string;
+    reapply: string;
+    discard: string;
+    localValue: string;
+    serverValue: string;
+    reload: string;
+    refreshStatus: string;
+    statusUnavailable: string;
+    cannotClear: string;
+    lastKnownStatus: string;
+    previewCurrent: string;
+    previewRequired: string;
+    submissionIncomplete: string;
+    submitted: string;
+    building: string;
+    verified: string;
+    integrated: string;
+    deployed: string;
+    unavailable: string;
+    differingFields: string;
+    noDifferingFields: string;
+    unchangedFields: string;
+    requiredMissing: string;
+    accessibleTextMissing: string;
+    /** `{field}` is replaced with the field label, prefixed by its item when another item is affected. */
+    diagnosticRequired: string;
+    diagnosticAccessibleText: string;
+    previewFailed: string;
+    errorDetail: string;
+}
+declare const hostedEditorLabels: HostedEditorLabels;
+declare const hostedEditorLabelsJa: HostedEditorLabels;
+/** Routine messages by error code; the error object keeps its technical message and diagnostics for host support. */
+declare const hostedErrorMessages: Record<HostedEditorErrorCode, string>;
+declare const hostedErrorMessagesJa: Record<HostedEditorErrorCode, string>;
+
 interface HostedEditorSelection {
     entry: ContentEntryRef;
     fieldId: string;
@@ -824,6 +845,9 @@ interface HostedFieldRenderContext {
     readonly value: JsonValue | undefined;
     readonly disabled: boolean;
     readonly labels: HostedEditorLabels;
+    /** True while the field is incomplete; `describedBy` names the editor's visible explanation. */
+    readonly invalid: boolean;
+    readonly describedBy?: string;
     /** Stage a value through the same session edit as the built-in control; the service validates it on save. */
     setValue(next: JsonValue | undefined): void;
     /** Mount the built-in control for this field into a host element, e.g. beside a host-owned counter. */
@@ -845,8 +869,10 @@ interface HostedContentEditorOptions extends HostedSessionOptions {
     presentation?: "record" | "field";
     routeId?: string;
     labels?: Partial<HostedEditorLabels>;
-    /** Routine messages for typed errors, e.g. `hostedErrorMessagesJa`; other errors show their own message. */
-    errorMessages?: Partial<Record<HostedErrorCode, string>>;
+    /** Routine messages for typed service and preview errors, e.g. `hostedErrorMessagesJa`; other errors show their own message. */
+    errorMessages?: Partial<Record<HostedEditorErrorCode, string>>;
+    /** `false` when the host offers no submission: Submit and its preview-first prompt are not shown. Defaults to true. */
+    submission?: boolean;
     /** Map typed diagnostics and transport failures to host-facing messages. Overrides `errorMessages`. */
     formatError?(error: unknown): string;
     onNavigate?(selection: HostedEditorSelection): void | Promise<void>;
@@ -985,4 +1011,4 @@ interface RemoteContentAi {
 declare function createRemoteContentAi(call: (operation: ContentAiWireOperation, payload: unknown) => Promise<unknown>): RemoteContentAi;
 
 export { HostedContentSession, HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost, createRemoteContentAi, hostedEditorLabels, hostedEditorLabelsJa, hostedErrorMessages, hostedErrorMessagesJa, mountHostedContentEditor };
-export type { HostedContentEditorHandle, HostedContentEditorOptions, HostedControlLabels, HostedEditorLabels, HostedEditorSelection, HostedEditorSessionState, HostedFieldMount, HostedFieldRenderContext, HostedFieldRenderer, HostedPreviewAdapter, HostedPreviewController, HostedPreviewControllerOptions, HostedPreviewHostOptions, HostedPreviewLocation, HostedPreviewRenderContext, HostedPreviewState, HostedRecoveryCheckpoint, HostedSessionOptions, RemoteContentAi };
+export type { HostedContentEditorHandle, HostedContentEditorOptions, HostedControlLabels, HostedEditorErrorCode, HostedEditorLabels, HostedEditorSelection, HostedEditorSessionState, HostedFieldMount, HostedFieldRenderContext, HostedFieldRenderer, HostedPreviewAdapter, HostedPreviewController, HostedPreviewControllerOptions, HostedPreviewErrorCode, HostedPreviewFailure, HostedPreviewHostOptions, HostedPreviewLocation, HostedPreviewRenderContext, HostedPreviewState, HostedRecoveryCheckpoint, HostedSessionOptions, RemoteContentAi };

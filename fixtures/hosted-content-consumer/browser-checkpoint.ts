@@ -1,7 +1,7 @@
 /** Independent host fixture: all Composer imports use public package entries. */
 import { HostedContentError } from "zudo-composer/hosted-content";
 import type { HostedPolicy, HostedTransport } from "zudo-composer/hosted-content";
-import { mountHostedContentEditor, createHostedPreviewController, buildHostedPreviewLocation } from "zudo-composer/hosted-content/editor";
+import { mountHostedContentEditor, createHostedPreviewController, buildHostedPreviewLocation, hostedErrorMessages } from "zudo-composer/hosted-content/editor";
 import type { HostedEditorSelection, HostedRecoveryCheckpoint } from "zudo-composer/hosted-content/editor";
 import "zudo-composer/hosted-content/editor.css";
 interface Presentation {
@@ -37,6 +37,8 @@ async function main() {
     recovery: saved ? JSON.parse(saved) as HostedRecoveryCheckpoint : undefined,
     createOperationKey: () => crypto.randomUUID(),
     persistRecovery(checkpoint) { localStorage.setItem(checkpointKey, JSON.stringify(checkpoint)); },
+    // `?submission=off` is the host without a submission path.
+    submission: new URLSearchParams(location.search).get("submission") !== "off", errorMessages: hostedErrorMessages,
     labels: { save: "保存", preview: "プレビュー", submit: "提出", dirty: "未保存の変更があります", saving: "保存中…", saved: "保存しました", clean: "保存済み", recovering: "保存結果を確認中…" },
   });
   handle.subscribe((state) => { status.textContent = `${state.phase}: ${state.content?.draftRevision ?? "loading"}`; status.dataset.phase = state.phase; status.dataset.draftRevision = state.content?.draftRevision ?? ""; });
