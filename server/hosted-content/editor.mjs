@@ -1,3 +1,4 @@
+import { r as diagnoseContentEntryCompleteness, t as canonicalSerialize } from "./chunks/canonical-CF-xy2oG.mjs";
 import { t as EditorialError } from "./chunks/types-nfgY3xip.mjs";
 import { HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost } from "./preview.mjs";
 import { createContext, h, render } from "preact";
@@ -877,6 +878,10 @@ var rejectionCodes = /* @__PURE__ */ new Set([
 	"restore-incompatible",
 	"configuration-required"
 ]);
+function errorDiagnostics(error) {
+	const diagnostics = error && typeof error === "object" && "diagnostics" in error ? error.diagnostics : null;
+	return Array.isArray(diagnostics) ? diagnostics : [];
+}
 function rejectionCode(error) {
 	const code = error && typeof error === "object" && "code" in error ? error.code : null;
 	return typeof code === "string" && rejectionCodes.has(code) ? code : null;
@@ -902,6 +907,7 @@ var HostedContentSession = class {
 	creationDraft = null;
 	lastCreatedEntry = null;
 	previewGeneration = 0;
+	failedPreview = null;
 	flight = null;
 	listeners = /* @__PURE__ */ new Set();
 	checkpointWrites = Promise.resolve();
@@ -922,6 +928,8 @@ var HostedContentSession = class {
 	}
 	get state() {
 		const content = this.projectContent();
+		const previewFailure = this.currentPreviewFailure();
+		const error = !previewFailure && this.failedPreview?.rendered && this.error === this.failedPreview.error ? null : this.error;
 		return {
 			phase: this.phase,
 			invalidInputs: Object.freeze([...this.invalidInputs]),
@@ -936,7 +944,16 @@ var HostedContentSession = class {
 			creationDraft: this.creationDraft ? immutable(this.creationDraft) : null,
 			lastCreatedEntry: this.lastCreatedEntry ? immutable(this.lastCreatedEntry) : null,
 			publicationError: this.publicationError,
-			error: this.error
+			previewFailure,
+			error
+		};
+	}
+	currentPreviewFailure() {
+		const failed = this.failedPreview;
+		if (!failed || failed.generation !== this.previewGeneration || failed.revision !== this.revision || this.edits.length || this.creationDraft || this.acknowledged?.draftRevision !== failed.draftRevision) return null;
+		return {
+			error: failed.error,
+			diagnostics: failed.diagnostics
 		};
 	}
 	projectContent() {
@@ -973,10 +990,7 @@ var HostedContentSession = class {
 	}
 	emit() {
 		const state = this.state;
-		for (const listener of this.listeners) listener({
-			...state,
-			error: this.error
-		});
+		for (const listener of this.listeners) listener({ ...state });
 	}
 	checkpoint() {
 		return copy({
@@ -1293,27 +1307,44 @@ var HostedContentSession = class {
 		if (!this.options.preview) throw new Error("Preview adapter is required");
 		const generation = ++this.previewGeneration;
 		this.reviewed = null;
+		this.failedPreview = null;
 		this.emit();
-		await this.flush();
-		if (this.creationDraft || this.invalidInputs.size) throw new Error("Save or cancel the new item before previewing");
-		const revision = this.revision;
-		const result = await this.command({ kind: "capture-snapshot" });
-		if (!result.snapshot) throw new Error("Snapshot result is missing");
-		const snapshot = immutable(result.snapshot);
-		const stale = () => generation !== this.previewGeneration || this.revision !== revision || this.edits.length > 0 || !!this.pending || this.acknowledged?.draftRevision !== snapshot.draftRevision;
-		if (stale()) throw new Error("Preview became stale after a local edit");
+		let snapshot = null, captured = this.revision, rendered = false;
 		try {
-			await this.options.preview.render(snapshot, routeId);
-		} catch (error) {
-			this.error = error;
+			await this.flush();
+			if (this.creationDraft || this.invalidInputs.size) throw new Error("Save or cancel the new item before previewing");
+			captured = this.revision;
+			const result = await this.command({ kind: "capture-snapshot" });
+			if (!result.snapshot) throw new Error("Snapshot result is missing");
+			const current = snapshot = immutable(result.snapshot);
+			const stale = () => generation !== this.previewGeneration || this.revision !== captured || this.edits.length > 0 || !!this.pending || this.acknowledged?.draftRevision !== current.draftRevision;
+			if (stale()) throw new Error("Preview became stale after a local edit");
+			try {
+				await this.options.preview.render(current, routeId);
+			} catch (error) {
+				if (generation === this.previewGeneration) this.error = error;
+				rendered = true;
+				throw error;
+			}
+			if (stale()) throw new Error("Preview became stale after a local edit");
+			this.reviewed = current;
+			this.reviewedRoute = routeId;
 			this.emit();
+			return current;
+		} catch (error) {
+			if (generation === this.previewGeneration) {
+				this.failedPreview = {
+					error,
+					diagnostics: immutable(snapshot?.diagnostics ?? errorDiagnostics(error)),
+					generation,
+					revision: captured,
+					rendered,
+					draftRevision: this.acknowledged?.draftRevision
+				};
+				this.emit();
+			}
 			throw error;
 		}
-		if (stale()) throw new Error("Preview became stale after a local edit");
-		this.reviewed = snapshot;
-		this.reviewedRoute = routeId;
-		this.emit();
-		return snapshot;
 	}
 	async submit() {
 		const snapshot = this.reviewed;
@@ -1378,11 +1409,13 @@ function useDomId() {
 //#region src/features/content/scalar-control.tsx
 var text = (value) => typeof value === "string" || typeof value === "number" ? String(value) : "";
 /** The same primitive value widgets serve local structured forms and hosted forms. */
-function ContentScalarControl({ schema, value, label, required, maxLength, disabled, emptyChoiceLabel = "Choose an option", emptyChoiceDisabled, retainIncompleteNumber, allowEmptyNumber = true, onIncompleteNumber, onChange }) {
+function ContentScalarControl({ schema, value, label, required, maxLength, disabled, emptyChoiceLabel = "Choose an option", emptyChoiceDisabled, retainIncompleteNumber, allowEmptyNumber = true, onIncompleteNumber, invalid, describedBy, onChange }) {
 	const common = {
 		"aria-label": label,
 		required,
-		disabled
+		disabled,
+		"aria-invalid": invalid ? "true" : void 0,
+		"aria-describedby": describedBy
 	};
 	if (schema.kind === "choice") return /* @__PURE__ */ jsxs(Select, {
 		...common,
@@ -1416,6 +1449,8 @@ function ContentScalarControl({ schema, value, label, required, maxLength, disab
 		label,
 		required,
 		disabled,
+		invalid,
+		describedBy,
 		allowEmpty: allowEmptyNumber,
 		onIncomplete: onIncompleteNumber,
 		onChange
@@ -1435,7 +1470,7 @@ function ContentScalarControl({ schema, value, label, required, maxLength, disab
 	});
 }
 /** Transient invalid browser text stays local; only complete finite numbers reach Content. */
-function RetainedNumberControl({ value, label, required, disabled, allowEmpty, onIncomplete, onChange }) {
+function RetainedNumberControl({ value, label, required, disabled, invalid, describedBy, allowEmpty, onIncomplete, onChange }) {
 	const [draft, setDraft] = useState(text(value));
 	const [incomplete, setIncomplete] = useState(false);
 	const external = useRef(value);
@@ -1450,7 +1485,8 @@ function RetainedNumberControl({ value, label, required, disabled, allowEmpty, o
 		"aria-label": label,
 		required,
 		disabled,
-		"aria-invalid": incomplete ? "true" : void 0,
+		"aria-invalid": incomplete || invalid ? "true" : void 0,
+		"aria-describedby": describedBy,
 		value: draft,
 		onInput: (event) => {
 			const control = event.currentTarget;
@@ -1531,6 +1567,11 @@ var editorTheme = EditorView.theme({
 /** Imperative lifecycle boundary used by the Preact wrapper and focused tests. */
 function createMarkdownEditor(options) {
 	const themeCompartment = new Compartment();
+	const validityCompartment = new Compartment();
+	const validity = (invalid, describedBy) => EditorView.contentAttributes.of({
+		...invalid ? { "aria-invalid": "true" } : {},
+		...describedBy ? { "aria-describedby": describedBy } : {}
+	});
 	const state = EditorState.create({
 		doc: options.value,
 		extensions: [
@@ -1550,6 +1591,7 @@ function createMarkdownEditor(options) {
 				spellcheck: "true",
 				writingsuggestions: "false"
 			}),
+			validityCompartment.of(validity(options.invalid, options.describedBy)),
 			keymap.of([
 				{
 					key: "Enter",
@@ -1587,6 +1629,9 @@ function createMarkdownEditor(options) {
 		},
 		setTheme(theme) {
 			view.dispatch({ effects: themeCompartment.reconfigure(EditorView.darkTheme.of(theme === "dark")) });
+		},
+		setInvalid(invalid, describedBy) {
+			view.dispatch({ effects: validityCompartment.reconfigure(validity(invalid, describedBy)) });
 		},
 		destroy: () => view.destroy()
 	};
@@ -1767,12 +1812,20 @@ function protectedShape(schema) {
 		"asset-use"
 	].includes(schema.kind) || schema.kind === "object" && schema.fields.some(protectedShape) || schema.kind === "list" && protectedShape(schema.item);
 }
-function MarkdownSourceControl({ identity, label, required, value, onChange, labels }) {
+function MarkdownSourceControl({ identity, label, required, invalid, describedBy, value, onChange, labels }) {
 	const labelId = `hosted-markdown-${useDomId()}`;
 	const mount = useRef(null);
 	const controller = useRef(null);
 	const callback = useRef(onChange);
 	callback.current = onChange;
+	const validity = useRef({
+		invalid,
+		describedBy
+	});
+	validity.current = {
+		invalid,
+		describedBy
+	};
 	useEffect(() => {
 		if (!mount.current) return;
 		const created = createMarkdownEditor({
@@ -1780,6 +1833,7 @@ function MarkdownSourceControl({ identity, label, required, value, onChange, lab
 			value,
 			labelledBy: labelId,
 			required,
+			...validity.current,
 			theme: "light",
 			onChange: (next) => callback.current(next)
 		});
@@ -1794,6 +1848,7 @@ function MarkdownSourceControl({ identity, label, required, value, onChange, lab
 		required
 	]);
 	useEffect(() => controller.current?.setValue(value), [identity, value]);
+	useEffect(() => controller.current?.setInvalid(!!invalid, describedBy), [invalid, describedBy]);
 	const actions = [
 		{
 			label: labels.bold,
@@ -1871,6 +1926,8 @@ function HostedFieldControl(props) {
 						/* @__PURE__ */ jsx("span", { children: child.label }),
 						/* @__PURE__ */ jsx(HostedFieldControl, {
 							...props,
+							invalid: void 0,
+							describedBy: void 0,
 							schema: child,
 							field: child,
 							label: `${label}: ${child.label}`,
@@ -1912,6 +1969,8 @@ function HostedFieldControl(props) {
 				class: "hosted-content-editor__list-item",
 				children: [/* @__PURE__ */ jsx(HostedFieldControl, {
 					...props,
+					invalid: void 0,
+					describedBy: void 0,
 					schema: schema.item,
 					listItem: true,
 					value: item,
@@ -2075,6 +2134,8 @@ function HostedFieldControl(props) {
 		identity,
 		label,
 		required: field.required,
+		invalid: props.invalid,
+		describedBy: props.describedBy,
 		value: typeof value === "string" ? value : "",
 		onChange,
 		labels
@@ -2088,6 +2149,8 @@ function HostedFieldControl(props) {
 		emptyChoiceLabel: labels.choose,
 		emptyChoiceDisabled: !permission.clear,
 		disabled: schema.kind === "number" ? props.disabledNumber : void 0,
+		invalid: props.invalid,
+		describedBy: props.describedBy,
 		retainIncompleteNumber: true,
 		allowEmptyNumber: !!permission.clear && !props.listItem,
 		onIncompleteNumber: (raw) => props.onIncompleteNumber?.(identity, raw),
@@ -2133,7 +2196,16 @@ var hostedEditorLabels = {
 	verified: "Verified",
 	integrated: "Integrated",
 	deployed: "Deployed",
-	unavailable: "Unavailable"
+	unavailable: "Unavailable",
+	differingFields: "Fields that differ from the current saved content",
+	noDifferingFields: "No shown field differs from the current saved content.",
+	unchangedFields: "Unchanged fields",
+	requiredMissing: "This field is required.",
+	accessibleTextMissing: "Add the accessible text this asset needs.",
+	diagnosticRequired: "{field} is required.",
+	diagnosticAccessibleText: "{field} needs its accessible text.",
+	previewFailed: "The preview could not be shown.",
+	errorDetail: "Details"
 };
 var hostedEditorLabelsJa = {
 	clear: "クリア",
@@ -2192,7 +2264,16 @@ var hostedEditorLabelsJa = {
 	building: "ビルド中",
 	verified: "検証済み",
 	integrated: "反映済み",
-	deployed: "公開済み"
+	deployed: "公開済み",
+	differingFields: "現在保存されている内容と異なる項目",
+	noDifferingFields: "表示中の項目に、現在保存されている内容との違いはありません。",
+	unchangedFields: "変更のない項目",
+	requiredMissing: "この項目は必須です。",
+	accessibleTextMissing: "この素材に必要な代替テキストなどを入力してください。",
+	diagnosticRequired: "「{field}」は必須です。",
+	diagnosticAccessibleText: "「{field}」に必要な代替テキストなどが入力されていません。",
+	previewFailed: "プレビューを表示できませんでした。",
+	errorDetail: "詳細"
 };
 /** Routine messages by error code; the error object keeps its technical message and diagnostics for host support. */
 var hostedErrorMessages = {
@@ -2208,7 +2289,16 @@ var hostedErrorMessages = {
 	incomplete: "Complete the required content before submitting.",
 	"restore-incompatible": "This version no longer fits the current fields. Nothing was changed.",
 	"configuration-required": "The site settings changed. Your changes are retained until the site is updated.",
-	unavailable: "The service is busy. Your changes are retained; try again."
+	unavailable: "The service is busy. Your changes are retained; try again.",
+	"render-failed": "The preview could not be rendered.",
+	"missing-dependency": "A file the preview needs could not be loaded.",
+	"unsupported-route": "This page cannot be previewed.",
+	"invalid-document": "The preview document is not valid.",
+	timeout: "The preview took too long. Try again.",
+	superseded: "A newer preview replaced this one.",
+	disposed: "The preview was closed.",
+	"identity-mismatch": "The preview does not match this site's components. Reload the page.",
+	"transport-error": "The preview could not be reached. Try again."
 };
 var hostedErrorMessagesJa = {
 	"invalid-request": "リクエストを処理できませんでした。再読み込みしてからもう一度お試しください。",
@@ -2223,7 +2313,16 @@ var hostedErrorMessagesJa = {
 	incomplete: "申請する前に必須の内容を入力してください。",
 	"restore-incompatible": "この版は現在の項目設定に合わないため復元できません。何も変更されていません。",
 	"configuration-required": "サイトの設定が更新されました。サイトの更新が終わるまで変更内容は保持されます。",
-	unavailable: "混み合っています。変更内容は保持されています。もう一度お試しください。"
+	unavailable: "混み合っています。変更内容は保持されています。もう一度お試しください。",
+	"render-failed": "プレビューを描画できませんでした。",
+	"missing-dependency": "プレビューに必要なファイルを読み込めませんでした。",
+	"unsupported-route": "このページはプレビューできません。",
+	"invalid-document": "プレビューの内容が正しくありません。",
+	timeout: "プレビューに時間がかかりすぎています。もう一度お試しください。",
+	superseded: "新しいプレビューに置き換えられました。",
+	disposed: "プレビューは閉じられました。",
+	"identity-mismatch": "プレビューがこのサイトの部品と一致しません。ページを再読み込みしてください。",
+	"transport-error": "プレビューに接続できませんでした。もう一度お試しください。"
 };
 //#endregion
 //#region src/hosted-content/editor.tsx
@@ -2286,6 +2385,26 @@ function selected(content, selection) {
 	} : null;
 }
 var displayValue = (value, none) => value === void 0 ? none : typeof value === "string" ? value : JSON.stringify(value);
+var sameValue = (a, b) => a === void 0 || b === void 0 ? a === b : canonicalSerialize(a) === canonicalSerialize(b);
+var errorCode = (error) => error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : null;
+/** Labels along a diagnostic path below its top-level field; list indexes are skipped. */
+function diagnosticLabels(field, path) {
+	const names = [];
+	let schema = field;
+	for (const step of path?.slice(1) ?? []) {
+		if (schema.kind === "list") {
+			schema = schema.item;
+			continue;
+		}
+		if (schema.kind !== "object") break;
+		const child = schema.fields.find((candidate) => candidate.id === step);
+		if (!child) break;
+		names.push(child.label);
+		schema = child;
+	}
+	return names;
+}
+var editorMounts = 0;
 /** Mount only the policy projection. Location paths/queries never select local authoring tools. */
 function mountHostedContentEditor(container, options) {
 	if (!permitted(options, options.selection)) throw new Error("Selection is not permitted");
@@ -2294,6 +2413,28 @@ function mountHostedContentEditor(container, options) {
 		...hostedEditorLabels,
 		...options.labels
 	};
+	const submission = options.submission !== false;
+	const domPrefix = `hosted-content-editor-${++editorMounts}`;
+	const messageFor = (error) => {
+		const code = errorCode(error);
+		return options.formatError?.(error) ?? (code && options.errorMessages?.[code]) ?? (error instanceof Error ? error.message : String(error));
+	};
+	function diagnosticText(content, current, diagnostic) {
+		const provider = content.providers.find((candidate) => candidate.models.some((model) => model.id === diagnostic.modelId) && candidate.entries.some((entry) => entry.id === diagnostic.entryId && entry.modelId === diagnostic.modelId));
+		const top = provider?.models.find((model) => model.id === diagnostic.modelId)?.document.fields.find((field) => field.id === diagnostic.path?.[0] || field.id === diagnostic.fieldId);
+		if (!provider || !top) return diagnostic.message;
+		const ref = {
+			providerId: provider.providerId,
+			modelId: diagnostic.modelId,
+			recordId: diagnostic.entryId
+		};
+		const name = [
+			...sameRef(ref, current) ? [] : [entryLabel(content, ref)],
+			top.label,
+			...diagnosticLabels(top, diagnostic.path)
+		].join(": ");
+		return (diagnostic.code === "required-value-missing" ? labels.diagnosticRequired : labels.diagnosticAccessibleText).replace("{field}", name);
+	}
 	let selection = options.selection;
 	let disposed = false;
 	const draw = (state = session.state) => {
@@ -2312,6 +2453,76 @@ function mountHostedContentEditor(container, options) {
 		draw();
 	}
 	const preview = () => options.routeId ? session.captureAndPreview(options.routeId) : Promise.reject(/* @__PURE__ */ new Error("A host-owned route is required"));
+	function ConflictReview({ review, fields, local }) {
+		const current = selected(review, selection)?.entry.values ?? {};
+		const differing = fields.filter((field) => !sameValue(local[field.id], current[field.id]));
+		const unchanged = fields.filter((field) => !differing.includes(field));
+		const headingId = `${domPrefix}-differing`;
+		return /* @__PURE__ */ jsxs("div", {
+			class: "hosted-content-editor__review",
+			children: [/* @__PURE__ */ jsxs("div", {
+				role: "group",
+				"aria-labelledby": headingId,
+				children: [/* @__PURE__ */ jsxs("p", {
+					id: headingId,
+					class: "hosted-content-editor__review-heading",
+					children: [
+						labels.differingFields,
+						" (",
+						differing.length,
+						")"
+					]
+				}), differing.length ? /* @__PURE__ */ jsx("dl", { children: differing.map((field) => /* @__PURE__ */ jsxs("div", {
+					"data-hosted-difference": field.id,
+					children: [
+						/* @__PURE__ */ jsx("dt", { children: field.label }),
+						/* @__PURE__ */ jsxs("dd", { children: [
+							labels.localValue,
+							": ",
+							displayValue(local[field.id], labels.none)
+						] }),
+						/* @__PURE__ */ jsxs("dd", { children: [
+							labels.serverValue,
+							": ",
+							displayValue(current[field.id], labels.none)
+						] })
+					]
+				}, field.id)) }) : /* @__PURE__ */ jsx("p", { children: labels.noDifferingFields })]
+			}), unchanged.length ? /* @__PURE__ */ jsxs("details", {
+				class: "hosted-content-editor__unchanged",
+				children: [/* @__PURE__ */ jsxs("summary", { children: [
+					labels.unchangedFields,
+					" (",
+					unchanged.length,
+					")"
+				] }), /* @__PURE__ */ jsx("ul", { children: unchanged.map((field) => /* @__PURE__ */ jsx("li", { children: field.label }, field.id)) })]
+			}) : null]
+		});
+	}
+	function PreviewFailure({ error, diagnostics, content }) {
+		const reason = messageFor(error);
+		const detail = [errorCode(error), error instanceof Error ? error.message : String(error)].filter(Boolean).join(": ");
+		return /* @__PURE__ */ jsxs("div", {
+			role: "alert",
+			class: "hosted-content-editor__preview-failure",
+			children: [
+				/* @__PURE__ */ jsx("p", {
+					class: "hosted-content-editor__review-heading",
+					children: labels.previewFailed
+				}),
+				/* @__PURE__ */ jsx("p", { children: reason }),
+				diagnostics.length ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("p", { children: labels.submissionIncomplete }), /* @__PURE__ */ jsx("ul", { children: diagnostics.map((diagnostic, index) => /* @__PURE__ */ jsx("li", { children: diagnosticText(content, selection.entry, diagnostic) }, index)) })] }) : null,
+				detail && detail !== reason ? /* @__PURE__ */ jsxs("p", {
+					class: "hosted-content-editor__detail",
+					children: [
+						labels.errorDetail,
+						": ",
+						/* @__PURE__ */ jsx("code", { children: detail })
+					]
+				}) : null
+			]
+		});
+	}
 	function Editor({ state }) {
 		const [actionError, setActionError] = useState(null);
 		const [review, setReview] = useState(null);
@@ -2369,8 +2580,9 @@ function mountHostedContentEditor(container, options) {
 		const rejected = !!state.pending?.rejected;
 		const collections = options.policy.collections.filter((collection) => sameRef(collection.owner, selection.entry));
 		const error = actionError ?? state.error;
-		const code = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : null;
-		const message = error ? options.formatError?.(error) ?? (code && options.errorMessages?.[code]) ?? (error instanceof Error ? error.message : String(error)) : null;
+		const previewFailure = state.previewFailure;
+		const message = error && error !== previewFailure?.error ? messageFor(error) : null;
+		const completeness = diagnoseContentEntryCompleteness(item.model, item.entry);
 		return /* @__PURE__ */ jsxs("section", {
 			class: "hosted-content-editor",
 			"aria-busy": busy,
@@ -2392,7 +2604,7 @@ function mountHostedContentEditor(container, options) {
 				}) : null,
 				/* @__PURE__ */ jsx("div", {
 					class: "hosted-content-editor__fields",
-					children: fields.map((field) => {
+					children: fields.map((field, fieldIndex) => {
 						const allowed = modelPermission.fields.find((permission) => permission.fieldId === field.id);
 						const change = (next) => {
 							if (next === void 0 && !allowed.clear) {
@@ -2402,9 +2614,13 @@ function mountHostedContentEditor(container, options) {
 							setActionError(null);
 							session.edit(selection.entry, field.id, next);
 						};
+						const problems = completeness.filter((diagnostic) => (diagnostic.path?.[0] ?? diagnostic.fieldId) === field.id);
+						const problemId = problems.length ? `${domPrefix}-problem-${fieldIndex}` : void 0;
 						const control = () => /* @__PURE__ */ jsx(HostedFieldControl, {
 							schema: field,
 							field,
+							invalid: !!problems.length,
+							describedBy: problemId,
 							value: item.entry.values[field.id],
 							permission: allowed,
 							identity: `${refKey(selection.entry)}/${field.id}`,
@@ -2429,6 +2645,8 @@ function mountHostedContentEditor(container, options) {
 								value: item.entry.values[field.id],
 								disabled: busy,
 								labels,
+								invalid: !!problems.length,
+								...problemId ? { describedBy: problemId } : {},
 								setValue: change,
 								renderDefault: (element) => renderDefaultInto(context, element)
 							};
@@ -2441,9 +2659,15 @@ function mountHostedContentEditor(container, options) {
 						return /* @__PURE__ */ jsxs("div", {
 							class: "hosted-content-editor__field",
 							"data-hosted-field": field.id,
+							"data-invalid": problems.length ? "true" : void 0,
 							children: [
 								/* @__PURE__ */ jsx("span", { children: field.label }),
 								custom ?? control(),
+								problemId ? /* @__PURE__ */ jsx("p", {
+									id: problemId,
+									class: "hosted-content-editor__problem",
+									children: problems.map((diagnostic) => [...diagnosticLabels(field, diagnostic.path), diagnostic.code === "required-value-missing" ? labels.requiredMissing : labels.accessibleTextMissing].join(": ")).join(" ")
+								}) : null,
 								fieldClearable(field, allowed) ? /* @__PURE__ */ jsx("button", {
 									type: "button",
 									class: "hosted-content-editor__clear",
@@ -2644,10 +2868,13 @@ function mountHostedContentEditor(container, options) {
 						options.preview && options.routeId ? /* @__PURE__ */ jsx("button", {
 							type: "button",
 							disabled: busy || rejected || !!state.invalidInputs.length,
-							onClick: () => run(preview),
+							onClick: () => {
+								setActionError(null);
+								preview().catch(() => void 0);
+							},
 							children: labels.preview
 						}) : null,
-						options.preview ? /* @__PURE__ */ jsx("button", {
+						options.preview && submission ? /* @__PURE__ */ jsx("button", {
 							type: "button",
 							disabled: !state.reviewedSnapshot || state.dirty || !!state.pending || !!state.reviewedSnapshot.diagnostics.length,
 							onClick: () => run(() => session.submit()),
@@ -2666,10 +2893,15 @@ function mountHostedContentEditor(container, options) {
 					"aria-live": "polite",
 					children: labels[state.phase]
 				}),
-				options.preview ? /* @__PURE__ */ jsx("p", { children: state.reviewedSnapshot ? labels.previewCurrent : labels.previewRequired }) : null,
+				options.preview && (state.reviewedSnapshot || submission) ? /* @__PURE__ */ jsx("p", { children: state.reviewedSnapshot ? labels.previewCurrent : labels.previewRequired }) : null,
 				state.reviewedSnapshot?.diagnostics.length ? /* @__PURE__ */ jsxs("div", {
 					role: "alert",
-					children: [/* @__PURE__ */ jsx("p", { children: labels.submissionIncomplete }), /* @__PURE__ */ jsx("ul", { children: state.reviewedSnapshot.diagnostics.map((diagnostic, index) => /* @__PURE__ */ jsx("li", { children: diagnostic.message }, index)) })]
+					children: [/* @__PURE__ */ jsx("p", { children: labels.submissionIncomplete }), /* @__PURE__ */ jsx("ul", { children: state.reviewedSnapshot.diagnostics.map((diagnostic, index) => /* @__PURE__ */ jsx("li", { children: diagnosticText(content, selection.entry, diagnostic) }, index)) })]
+				}) : null,
+				previewFailure ? /* @__PURE__ */ jsx(PreviewFailure, {
+					error: previewFailure.error,
+					diagnostics: previewFailure.diagnostics,
+					content
 				}) : null,
 				message ? /* @__PURE__ */ jsx("p", {
 					role: "alert",
@@ -2681,22 +2913,11 @@ function mountHostedContentEditor(container, options) {
 						type: "button",
 						onClick: () => run(async () => setReview(await session.reviewAuthoritative())),
 						children: labels.review
-					}), review ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("dl", { children: fields.map((field) => {
-						const current = selected(review, selection)?.entry.values[field.id];
-						return /* @__PURE__ */ jsxs("div", { children: [
-							/* @__PURE__ */ jsx("dt", { children: field.label }),
-							/* @__PURE__ */ jsxs("dd", { children: [
-								labels.localValue,
-								": ",
-								displayValue(item.entry.values[field.id], labels.none)
-							] }),
-							/* @__PURE__ */ jsxs("dd", { children: [
-								labels.serverValue,
-								": ",
-								displayValue(current, labels.none)
-							] })
-						] }, field.id);
-					}) }), /* @__PURE__ */ jsxs("div", {
+					}), review ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx(ConflictReview, {
+						review,
+						fields,
+						local: item.entry.values
+					}), /* @__PURE__ */ jsxs("div", {
 						class: "hosted-content-editor__actions",
 						children: [/* @__PURE__ */ jsx("button", {
 							type: "button",
@@ -2751,7 +2972,7 @@ function mountHostedContentEditor(container, options) {
 		navigate,
 		refresh: () => session.refresh(),
 		preview,
-		submit: () => session.submit(),
+		submit: () => submission ? session.submit() : Promise.reject(/* @__PURE__ */ new Error("Submission is not offered by this host")),
 		refreshPublication: () => session.refreshPublication(),
 		get selection() {
 			return selection;

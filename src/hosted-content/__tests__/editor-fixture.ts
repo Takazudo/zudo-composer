@@ -8,11 +8,11 @@ const stamp = "2026-01-01T00:00:00.000Z";
 export const page = { providerId: "content", modelId: "page", recordId: "home" };
 export const faq = { providerId: "content", modelId: "faq", recordId: "faq-a" };
 const field = (id: string, schema: ContentValueSchema, required = false): ContentFieldDefinition => ({ id, key: id, label: id === "title" ? "講座名" : id, required, ...schema });
-export function editorFixture(options: { numericResults?: boolean; nestedNumeric?: boolean } = {}) {
+export function editorFixture(options: { numericResults?: boolean; nestedNumeric?: boolean; requiredNotes?: boolean } = {}) {
   const pageModel = createContentModelRecord({ name: "Page", kind: "single", fields: [
     field("title", { kind: "text" }, true), field("price", { kind: "number" }), field("enabled", { kind: "boolean" }),
     field("summary", { kind: "long-text" }), field("date", { kind: "date" }), field("url", { kind: "url" }), field("color", { kind: "color" }), field("slug", { kind: "slug" }),
-    field("choice", { kind: "choice", options: [{ value: "basic", label: "基本" }, { value: "next", label: "次" }] }), field("notes", { kind: "markdown" }),
+    field("choice", { kind: "choice", options: [{ value: "basic", label: "基本" }, { value: "next", label: "次" }] }), field("notes", { kind: "markdown" }, !!options.requiredNotes),
     field("details", { kind: "object", fields: [field("label", { kind: "text" }), field("secret", { kind: "text" }), ...(options.nestedNumeric ? [field("nested", { kind: "object", fields: [field("number", { kind: "number" })] })] : [])] }),
     field("rows", { kind: "list", item: { kind: "object", fields: [field("label", { kind: "text" }), field("secret", { kind: "text" })] } }),
     field("results", { kind: "list", item: { kind: options.numericResults ? "number" : "text" } }), field("image", { kind: "asset-use", use: "image" }),

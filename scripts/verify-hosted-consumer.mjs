@@ -96,6 +96,7 @@ if (!noBrowser) {
   run("corepack", ["pnpm", "exec", "playwright", "install", "--with-deps", "chromium"]);
   run(process.execPath, ["browser-proof.mjs", join(consumer, "work/browser.sqlite")]);
   run(process.execPath, ["browser-broad-proof.mjs", join(consumer, "work/browser-broad.sqlite"), join(consumer, "work/browser-broad")]);
+  run(process.execPath, ["browser-feedback-proof.mjs", join(consumer, "work/browser-feedback.sqlite"), join(consumer, "work/browser-feedback")]);
   run(process.execPath, ["article-cms/proof.mjs", join(consumer, "work/article-cms")]);
   // Fake-provider Content-AI in the real browser; a failure leaves its trace, screenshot and host log here.
   run(process.execPath, ["article-cms/ai-proof.mjs", join(consumer, "work/article-cms-ai"), join(consumer, "work/article-cms-ai-artifacts")]);

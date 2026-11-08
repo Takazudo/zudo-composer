@@ -1,6 +1,10 @@
 import { hostedControlLabels } from "./field-control";
 import type { HostedControlLabels } from "./field-control";
+import type { HostedPreviewErrorCode } from "./preview-browser";
 import type { HostedErrorCode } from "./types";
+
+/** Service rejections and preview failures share one message table. */
+export type HostedEditorErrorCode = HostedErrorCode | HostedPreviewErrorCode;
 
 export interface HostedEditorLabels extends HostedControlLabels {
   save: string; preview: string; submit: string; loading: string;
@@ -10,6 +14,11 @@ export interface HostedEditorLabels extends HostedControlLabels {
   reload: string; refreshStatus: string; statusUnavailable: string; cannotClear: string;
   lastKnownStatus: string; previewCurrent: string; previewRequired: string; submissionIncomplete: string;
   submitted: string; building: string; verified: string; integrated: string; deployed: string; unavailable: string;
+  differingFields: string; noDifferingFields: string; unchangedFields: string;
+  requiredMissing: string; accessibleTextMissing: string;
+  /** `{field}` is replaced with the field label, prefixed by its item when another item is affected. */
+  diagnosticRequired: string; diagnosticAccessibleText: string;
+  previewFailed: string; errorDetail: string;
 }
 export const hostedEditorLabels: HostedEditorLabels = {
   ...hostedControlLabels,
@@ -21,6 +30,10 @@ export const hostedEditorLabels: HostedEditorLabels = {
   reload: "Reload saved content", refreshStatus: "Refresh submission status", statusUnavailable: "Submission status is unavailable. The saved draft is retained.", cannotClear: "This field cannot be cleared.",
   lastKnownStatus: "Last confirmed status", previewCurrent: "Current saved content previewed", previewRequired: "Preview the current saved content before submitting.", submissionIncomplete: "Required content is incomplete.",
   submitted: "Submitted", building: "Building", verified: "Verified", integrated: "Integrated", deployed: "Deployed", unavailable: "Unavailable",
+  differingFields: "Fields that differ from the current saved content", noDifferingFields: "No shown field differs from the current saved content.", unchangedFields: "Unchanged fields",
+  requiredMissing: "This field is required.", accessibleTextMissing: "Add the accessible text this asset needs.",
+  diagnosticRequired: "{field} is required.", diagnosticAccessibleText: "{field} needs its accessible text.",
+  previewFailed: "The preview could not be shown.", errorDetail: "Details",
 };
 export const hostedEditorLabelsJa: HostedEditorLabels = {
   clear: "クリア", addItem: "項目を追加", removeItem: "項目を削除", moveUp: "上へ移動", moveDown: "下へ移動", choose: "選択してください", none: "なし", unavailable: "利用できません", asset: "承認済みの素材", item: "項目",
@@ -33,9 +46,13 @@ export const hostedEditorLabelsJa: HostedEditorLabels = {
   reload: "保存済みの内容を再読み込み", refreshStatus: "申請状況を更新", statusUnavailable: "申請状況を取得できません。保存済みの下書きは保持されています。", cannotClear: "この項目は空にできません。",
   lastKnownStatus: "最後に確認できた状況", previewCurrent: "現在の保存内容をプレビュー済み", previewRequired: "申請する前に、現在の保存内容をプレビューしてください。", submissionIncomplete: "必須の内容が入力されていません。",
   submitted: "申請済み", building: "ビルド中", verified: "検証済み", integrated: "反映済み", deployed: "公開済み",
+  differingFields: "現在保存されている内容と異なる項目", noDifferingFields: "表示中の項目に、現在保存されている内容との違いはありません。", unchangedFields: "変更のない項目",
+  requiredMissing: "この項目は必須です。", accessibleTextMissing: "この素材に必要な代替テキストなどを入力してください。",
+  diagnosticRequired: "「{field}」は必須です。", diagnosticAccessibleText: "「{field}」に必要な代替テキストなどが入力されていません。",
+  previewFailed: "プレビューを表示できませんでした。", errorDetail: "詳細",
 };
 /** Routine messages by error code; the error object keeps its technical message and diagnostics for host support. */
-export const hostedErrorMessages: Record<HostedErrorCode, string> = {
+export const hostedErrorMessages: Record<HostedEditorErrorCode, string> = {
   "invalid-request": "The request could not be processed. Reload and try again.",
   "invalid-value": "A value is not valid for its field.",
   forbidden: "This change is not permitted.",
@@ -49,8 +66,17 @@ export const hostedErrorMessages: Record<HostedErrorCode, string> = {
   "restore-incompatible": "This version no longer fits the current fields. Nothing was changed.",
   "configuration-required": "The site settings changed. Your changes are retained until the site is updated.",
   unavailable: "The service is busy. Your changes are retained; try again.",
+  "render-failed": "The preview could not be rendered.",
+  "missing-dependency": "A file the preview needs could not be loaded.",
+  "unsupported-route": "This page cannot be previewed.",
+  "invalid-document": "The preview document is not valid.",
+  timeout: "The preview took too long. Try again.",
+  superseded: "A newer preview replaced this one.",
+  disposed: "The preview was closed.",
+  "identity-mismatch": "The preview does not match this site's components. Reload the page.",
+  "transport-error": "The preview could not be reached. Try again.",
 };
-export const hostedErrorMessagesJa: Record<HostedErrorCode, string> = {
+export const hostedErrorMessagesJa: Record<HostedEditorErrorCode, string> = {
   "invalid-request": "リクエストを処理できませんでした。再読み込みしてからもう一度お試しください。",
   "invalid-value": "入力できない値が含まれています。",
   forbidden: "この変更は許可されていません。",
@@ -64,4 +90,13 @@ export const hostedErrorMessagesJa: Record<HostedErrorCode, string> = {
   "restore-incompatible": "この版は現在の項目設定に合わないため復元できません。何も変更されていません。",
   "configuration-required": "サイトの設定が更新されました。サイトの更新が終わるまで変更内容は保持されます。",
   unavailable: "混み合っています。変更内容は保持されています。もう一度お試しください。",
+  "render-failed": "プレビューを描画できませんでした。",
+  "missing-dependency": "プレビューに必要なファイルを読み込めませんでした。",
+  "unsupported-route": "このページはプレビューできません。",
+  "invalid-document": "プレビューの内容が正しくありません。",
+  timeout: "プレビューに時間がかかりすぎています。もう一度お試しください。",
+  superseded: "新しいプレビューに置き換えられました。",
+  disposed: "プレビューは閉じられました。",
+  "identity-mismatch": "プレビューがこのサイトの部品と一致しません。ページを再読み込みしてください。",
+  "transport-error": "プレビューに接続できませんでした。もう一度お試しください。",
 };

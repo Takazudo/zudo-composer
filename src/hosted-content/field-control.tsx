@@ -50,15 +50,17 @@ function defaultValue(schema: ContentValueSchema): JsonValue {
 function protectedShape(schema: ContentValueSchema): boolean {
   return ["slug", "reference", "reference-list", "asset-use"].includes(schema.kind) || schema.kind === "object" && schema.fields.some(protectedShape) || schema.kind === "list" && protectedShape(schema.item);
 }
-function MarkdownSourceControl({ identity, label, required, value, onChange, labels }: { identity: string; label: string; required: boolean; value: string; onChange(value: string): void; labels: HostedControlLabels }) {
+function MarkdownSourceControl({ identity, label, required, invalid, describedBy, value, onChange, labels }: { identity: string; label: string; required: boolean; invalid?: boolean; describedBy?: string; value: string; onChange(value: string): void; labels: HostedControlLabels }) {
   const labelId = `hosted-markdown-${useDomId()}`;
   const mount = useRef<HTMLDivElement>(null); const controller = useRef<MarkdownEditorController | null>(null); const callback = useRef(onChange); callback.current = onChange;
+  const validity = useRef({ invalid, describedBy }); validity.current = { invalid, describedBy };
   useEffect(() => {
     if (!mount.current) return;
-    const created = createMarkdownEditor({ parent: mount.current, value, labelledBy: labelId, required, theme: "light", onChange: (next) => callback.current(next) }); controller.current = created;
+    const created = createMarkdownEditor({ parent: mount.current, value, labelledBy: labelId, required, ...validity.current, theme: "light", onChange: (next) => callback.current(next) }); controller.current = created;
     return () => { controller.current = null; created.destroy(); };
   }, [identity, labelId, required]);
   useEffect(() => controller.current?.setValue(value), [identity, value]);
+  useEffect(() => controller.current?.setInvalid(!!invalid, describedBy), [invalid, describedBy]);
   const actions: { label: string; format: MarkdownFormat }[] = [{ label: labels.bold, format: "bold" }, { label: labels.italic, format: "italic" }, { label: labels.link, format: "link" }, { label: labels.heading, format: "heading" }];
   return <div class="hosted-content-editor__markdown"><span id={labelId} class="hosted-content-editor__sr-only">{label}</span><div class="hosted-content-editor__actions" role="toolbar" aria-label={label}>{actions.map((action) => <button type="button" key={action.format} onPointerDown={(event) => event.preventDefault()} onClick={() => { if (controller.current) applyMarkdownFormat(controller.current.view, action.format); }}>{action.label}</button>)}</div><div ref={mount} /></div>;
 }
@@ -67,6 +69,9 @@ interface ControlProps {
   identity: string; label: string; content: HostedState; policy: HostedPolicy; labels: HostedControlLabels;
   disabledNumber?: boolean;
   listItem?: boolean;
+  /** Top-level text and Markdown controls only; nested controls never inherit it. */
+  invalid?: boolean;
+  describedBy?: string;
   hasIncompleteInput?(controlPrefix: string): boolean;
   onIncompleteNumber?(controlId: string, raw: string | null): void;
   onChange(value: JsonValue | undefined): void;
@@ -84,14 +89,14 @@ export function HostedFieldControl(props: ControlProps): JSX.Element {
     return <fieldset class="hosted-content-editor__structured"><legend>{label}</legend>{schema.fields.map((child) => {
       const allowed = permission.children?.find((p) => p.fieldId === child.id) ?? (permission.replace ? { fieldId: child.id, replace: true, clear: permission.clear } : undefined);
       if (!allowed || !fieldEditable(child, allowed)) return null;
-      return <div class="hosted-content-editor__field" key={child.id}><span>{child.label}</span><HostedFieldControl {...props} schema={child} field={child} label={`${label}: ${child.label}`} value={current[child.id]} permission={allowed} identity={`${identity}/${child.id}`} onChange={(next) => { const updated = { ...current }; if (next === undefined) delete updated[child.id]; else updated[child.id] = next; onChange(updated); }} />{fieldClearable(child, allowed) ? <button type="button" disabled={!!props.hasIncompleteInput?.(`${identity}/${child.id}`)} aria-label={`${labels.clear}: ${label}: ${child.label}`} onClick={() => { if (props.hasIncompleteInput?.(`${identity}/${child.id}`)) return; props.onIncompleteNumber?.(`${identity}/${child.id}`, null); const updated = { ...current }; delete updated[child.id]; onChange(updated); }}>{labels.clear}</button> : null}</div>;
+      return <div class="hosted-content-editor__field" key={child.id}><span>{child.label}</span><HostedFieldControl {...props} invalid={undefined} describedBy={undefined} schema={child} field={child} label={`${label}: ${child.label}`} value={current[child.id]} permission={allowed} identity={`${identity}/${child.id}`} onChange={(next) => { const updated = { ...current }; if (next === undefined) delete updated[child.id]; else updated[child.id] = next; onChange(updated); }} />{fieldClearable(child, allowed) ? <button type="button" disabled={!!props.hasIncompleteInput?.(`${identity}/${child.id}`)} aria-label={`${labels.clear}: ${label}: ${child.label}`} onClick={() => { if (props.hasIncompleteInput?.(`${identity}/${child.id}`)) return; props.onIncompleteNumber?.(`${identity}/${child.id}`, null); const updated = { ...current }; delete updated[child.id]; onChange(updated); }}>{labels.clear}</button> : null}</div>;
     })}</fieldset>;
   }
   if (schema.kind === "list") {
     const items = Array.isArray(value) ? value : [];
     const shapeAllowed = permission.replace && !protectedShape(schema.item);
     const incomplete = !!props.hasIncompleteInput?.(identity);
-    return <div class="hosted-content-editor__list">{items.map((item, index) => <div class="hosted-content-editor__list-item" key={index}><HostedFieldControl {...props} schema={schema.item} listItem value={item} label={`${label}: ${labels.item} ${index + 1}`} identity={`${identity}/${index}`} permission={{ ...permission, maxLength: undefined, clear: permission.listRemove }} onChange={(next) => { if (next === undefined) return; const updated = [...items]; updated[index] = next; onChange(updated); }} /><div class="hosted-content-editor__actions">
+    return <div class="hosted-content-editor__list">{items.map((item, index) => <div class="hosted-content-editor__list-item" key={index}><HostedFieldControl {...props} invalid={undefined} describedBy={undefined} schema={schema.item} listItem value={item} label={`${label}: ${labels.item} ${index + 1}`} identity={`${identity}/${index}`} permission={{ ...permission, maxLength: undefined, clear: permission.listRemove }} onChange={(next) => { if (next === undefined) return; const updated = [...items]; updated[index] = next; onChange(updated); }} /><div class="hosted-content-editor__actions">
       {shapeAllowed && permission.listRemove ? <button type="button" disabled={incomplete} aria-label={`${labels.removeItem}: ${label} ${index + 1}`} onClick={() => onChange(items.filter((_, i) => i !== index))}>{labels.removeItem}</button> : null}
       {permission.listReorder && permission.replace && !protectedShape(schema.item) ? <><button type="button" disabled={incomplete || index === 0} aria-label={`${labels.moveUp}: ${label} ${index + 1}`} onClick={() => { const updated = [...items]; [updated[index - 1], updated[index]] = [updated[index]!, updated[index - 1]!]; onChange(updated); }}>{labels.moveUp}</button><button type="button" disabled={incomplete || index === items.length - 1} aria-label={`${labels.moveDown}: ${label} ${index + 1}`} onClick={() => { const updated = [...items]; [updated[index], updated[index + 1]] = [updated[index + 1]!, updated[index]!]; onChange(updated); }}>{labels.moveDown}</button></> : null}
     </div></div>)}{shapeAllowed && permission.listAdd ? <button type="button" disabled={incomplete || permission.maxLength !== undefined && items.length >= permission.maxLength} onClick={() => onChange([...items, defaultValue(schema.item)])}>{labels.addItem}: {label}</button> : null}</div>;
@@ -119,6 +124,6 @@ export function HostedFieldControl(props: ControlProps): JSX.Element {
       {current.kind ? descriptive.filter((name) => permission.assetDescription?.includes(name)).map((name) => <div class="hosted-content-editor__field" key={name}><span>{labels[name as keyof HostedControlLabels]}</span>{["decorative", "showSize", "showType"].includes(name) ? <Switch aria-label={`${label}: ${labels[name as keyof HostedControlLabels]}`} checked={current[name] === true} onCheckedChange={(next) => patch(name, next)} /> : name === "description" ? <Textarea aria-label={`${label}: ${labels.description}`} value={typeof current[name] === "string" ? current[name] : ""} onInput={(event) => patch(name, event.currentTarget.value)} /> : <Input aria-label={`${label}: ${labels[name as keyof HostedControlLabels]}`} value={typeof current[name] === "string" ? current[name] : ""} onInput={(event) => patch(name, event.currentTarget.value)} />}</div>) : null}
     </div>;
   }
-  if (schema.kind === "markdown") return <MarkdownSourceControl identity={identity} label={label} required={field.required} value={typeof value === "string" ? value : ""} onChange={onChange} labels={labels} />;
-  return <ContentScalarControl schema={schema} label={label} required={field.required} maxLength={permission.maxLength} value={value} emptyChoiceLabel={labels.choose} emptyChoiceDisabled={!permission.clear} disabled={schema.kind === "number" ? props.disabledNumber : undefined} retainIncompleteNumber allowEmptyNumber={!!permission.clear && !props.listItem} onIncompleteNumber={(raw) => props.onIncompleteNumber?.(identity, raw)} onChange={onChange} />;
+  if (schema.kind === "markdown") return <MarkdownSourceControl identity={identity} label={label} required={field.required} invalid={props.invalid} describedBy={props.describedBy} value={typeof value === "string" ? value : ""} onChange={onChange} labels={labels} />;
+  return <ContentScalarControl schema={schema} label={label} required={field.required} maxLength={permission.maxLength} value={value} emptyChoiceLabel={labels.choose} emptyChoiceDisabled={!permission.clear} disabled={schema.kind === "number" ? props.disabledNumber : undefined} invalid={props.invalid} describedBy={props.describedBy} retainIncompleteNumber allowEmptyNumber={!!permission.clear && !props.listItem} onIncompleteNumber={(raw) => props.onIncompleteNumber?.(identity, raw)} onChange={onChange} />;
 }

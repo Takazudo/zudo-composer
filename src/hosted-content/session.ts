@@ -1,3 +1,4 @@
+import type { ContentCompletenessDiagnostic } from "../content/model/types";
 import type { ContentEntryRef, HostedCommand, HostedIdentities, HostedPublication, HostedResult, HostedSnapshot, HostedState, HostedTransport, HostedErrorCode, JsonValue } from "./types";
 
 /** `blocked`: the host must reconcile its definition or configuration; local values are retained until then. */
@@ -11,10 +12,13 @@ export interface HostedRecoveryCheckpoint {
   localRevision: number; pending: HostedPendingOperation | null;
   publication?: HostedPublication | null; creationDraft?: HostedCreationDraft | null;
 }
+/** The latest preview attempt of the current saved draft failed; cleared by any later edit or preview. */
+export interface HostedPreviewFailure { error: unknown; diagnostics: readonly ContentCompletenessDiagnostic[] }
 export interface HostedEditorSessionState {
   phase: HostedSavePhase; invalidInputs: readonly string[]; presentationRevision: number; content: HostedState | null; localRevision: number;
   dirty: boolean; pending: HostedPendingOperation | null; error: unknown;
   reviewedSnapshot: HostedSnapshot | null; publication: HostedPublication | null; publicationError: unknown; publicationStale: boolean; creationDraft: HostedCreationDraft | null; lastCreatedEntry: ContentEntryRef | null;
+  previewFailure: HostedPreviewFailure | null;
 }
 export interface HostedPreviewAdapter {
   render(snapshot: HostedSnapshot, routeId: string): Promise<unknown>;
@@ -43,6 +47,10 @@ const conflicts = new Set(["revision-conflict", "baseline-conflict", "definition
 const blocking = new Set(["configuration-required"]);
 const rejectedPhase = (code: string | undefined): HostedSavePhase => conflicts.has(code ?? "") ? "conflict" : blocking.has(code ?? "") ? "blocked" : "failed";
 const rejectionCodes = new Set<HostedErrorCode>(["invalid-request", "invalid-value", "forbidden", "not-found", "revision-conflict", "baseline-conflict", "definition-conflict", "operation-key-reuse", "publication-busy", "incomplete", "restore-incompatible", "configuration-required"]);
+function errorDiagnostics(error: unknown): ContentCompletenessDiagnostic[] {
+  const diagnostics = error && typeof error === "object" && "diagnostics" in error ? error.diagnostics : null;
+  return Array.isArray(diagnostics) ? diagnostics as ContentCompletenessDiagnostic[] : [];
+}
 function rejectionCode(error: unknown): HostedErrorCode | null {
   const code = error && typeof error === "object" && "code" in error ? error.code : null;
   return typeof code === "string" && rejectionCodes.has(code as HostedErrorCode) ? code as HostedErrorCode : null;
@@ -68,6 +76,7 @@ export class HostedContentSession {
   private creationDraft: HostedCreationDraft | null = null;
   private lastCreatedEntry: ContentEntryRef | null = null;
   private previewGeneration = 0;
+  private failedPreview: { error: unknown; diagnostics: readonly ContentCompletenessDiagnostic[]; generation: number; revision: number; rendered: boolean; draftRevision: string | undefined } | null = null;
   private flight: Promise<void> | null = null;
   private listeners = new Set<(state: HostedEditorSessionState) => void>();
   private checkpointWrites: Promise<void> = Promise.resolve();
@@ -86,7 +95,15 @@ export class HostedContentSession {
   }
   get state(): HostedEditorSessionState {
     const content = this.projectContent();
-    return { phase: this.phase, invalidInputs: Object.freeze([...this.invalidInputs]), presentationRevision: this.presentationRevision, content, localRevision: this.revision, dirty: this.edits.length > 0 || !!this.creationDraft || this.invalidInputs.size > 0, pending: this.pending, reviewedSnapshot: this.hasCurrentPreview() ? this.reviewed : null, publication: this.publication ? immutable(this.publication) : null, publicationStale: this.publicationStale, creationDraft: this.creationDraft ? immutable(this.creationDraft) : null, lastCreatedEntry: this.lastCreatedEntry ? immutable(this.lastCreatedEntry) : null, publicationError: this.publicationError, error: this.error };
+    const previewFailure = this.currentPreviewFailure();
+    // An obsolete preview failure no longer explains the current draft.
+    const error = !previewFailure && this.failedPreview?.rendered && this.error === this.failedPreview.error ? null : this.error;
+    return { phase: this.phase, invalidInputs: Object.freeze([...this.invalidInputs]), presentationRevision: this.presentationRevision, content, localRevision: this.revision, dirty: this.edits.length > 0 || !!this.creationDraft || this.invalidInputs.size > 0, pending: this.pending, reviewedSnapshot: this.hasCurrentPreview() ? this.reviewed : null, publication: this.publication ? immutable(this.publication) : null, publicationStale: this.publicationStale, creationDraft: this.creationDraft ? immutable(this.creationDraft) : null, lastCreatedEntry: this.lastCreatedEntry ? immutable(this.lastCreatedEntry) : null, publicationError: this.publicationError, previewFailure, error };
+  }
+  private currentPreviewFailure(): HostedPreviewFailure | null {
+    const failed = this.failedPreview;
+    if (!failed || failed.generation !== this.previewGeneration || failed.revision !== this.revision || this.edits.length || this.creationDraft || this.acknowledged?.draftRevision !== failed.draftRevision) return null;
+    return { error: failed.error, diagnostics: failed.diagnostics };
   }
   private projectContent(): HostedState | null {
     if (this.projection?.acknowledged === this.acknowledged && this.projection.edits === this.edits) return this.projection.content;
@@ -114,7 +131,7 @@ export class HostedContentSession {
   subscribe(listener: (state: HostedEditorSessionState) => void): () => void {
     this.listeners.add(listener); listener(this.state); return () => this.listeners.delete(listener);
   }
-  private emit() { const state = this.state; for (const listener of this.listeners) listener({ ...state, error: this.error }); }
+  private emit() { const state = this.state; for (const listener of this.listeners) listener({ ...state }); }
   checkpoint(): HostedRecoveryCheckpoint { return copy({ version: 1, acknowledged: this.acknowledged, edits: this.edits, localRevision: this.revision, pending: this.pending, publication: this.publication, creationDraft: this.creationDraft }); }
   private persist(): Promise<void> {
     const checkpoint = this.checkpoint();
@@ -295,19 +312,29 @@ export class HostedContentSession {
   }
   async captureAndPreview(routeId: string): Promise<HostedSnapshot> {
     if (!this.options.preview) throw new Error("Preview adapter is required");
-    const generation = ++this.previewGeneration; this.reviewed = null; this.emit();
-    await this.flush();
-    if (this.creationDraft || this.invalidInputs.size) throw new Error("Save or cancel the new item before previewing");
-    const revision = this.revision;
-    const result = await this.command({ kind: "capture-snapshot" });
-    if (!result.snapshot) throw new Error("Snapshot result is missing");
-    const snapshot = immutable(result.snapshot);
-    const stale = () => generation !== this.previewGeneration || this.revision !== revision || this.edits.length > 0 || !!this.pending || this.acknowledged?.draftRevision !== snapshot.draftRevision;
-    if (stale()) throw new Error("Preview became stale after a local edit");
-    try { await this.options.preview.render(snapshot, routeId); }
-    catch (error) { this.error = error; this.emit(); throw error; }
-    if (stale()) throw new Error("Preview became stale after a local edit");
-    this.reviewed = snapshot; this.reviewedRoute = routeId; this.emit(); return snapshot;
+    const generation = ++this.previewGeneration; this.reviewed = null; this.failedPreview = null; this.emit();
+    let snapshot: HostedSnapshot | null = null, captured = this.revision, rendered = false;
+    try {
+      await this.flush();
+      if (this.creationDraft || this.invalidInputs.size) throw new Error("Save or cancel the new item before previewing");
+      captured = this.revision;
+      const result = await this.command({ kind: "capture-snapshot" });
+      if (!result.snapshot) throw new Error("Snapshot result is missing");
+      const current = snapshot = immutable(result.snapshot);
+      const stale = () => generation !== this.previewGeneration || this.revision !== captured || this.edits.length > 0 || !!this.pending || this.acknowledged?.draftRevision !== current.draftRevision;
+      if (stale()) throw new Error("Preview became stale after a local edit");
+      try { await this.options.preview.render(current, routeId); }
+      catch (error) { if (generation === this.previewGeneration) this.error = error; rendered = true; throw error; }
+      if (stale()) throw new Error("Preview became stale after a local edit");
+      this.reviewed = current; this.reviewedRoute = routeId; this.emit(); return current;
+    } catch (error) {
+      // Kept only while it describes the current saved draft; see currentPreviewFailure.
+      if (generation === this.previewGeneration) {
+        this.failedPreview = { error, diagnostics: immutable(snapshot?.diagnostics ?? errorDiagnostics(error)), generation, revision: captured, rendered, draftRevision: this.acknowledged?.draftRevision };
+        this.emit();
+      }
+      throw error;
+    }
   }
   async submit(): Promise<HostedPublication> {
     const snapshot = this.reviewed;

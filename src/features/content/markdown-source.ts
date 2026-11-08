@@ -46,6 +46,8 @@ export interface MarkdownEditorController {
   readonly view: EditorView;
   setValue(value: string): void;
   setTheme(theme: ResolvedTheme): void;
+  /** Mark the source invalid and name the element that explains why. */
+  setInvalid(invalid: boolean, describedBy?: string): void;
   destroy(): void;
 }
 
@@ -55,6 +57,8 @@ export interface CreateMarkdownEditorOptions {
   /** Space-separated ids naming the editor — its label, and its kind hint. */
   labelledBy: string;
   required?: boolean;
+  invalid?: boolean;
+  describedBy?: string;
   theme: ResolvedTheme;
   onChange(value: string): void;
 }
@@ -62,6 +66,11 @@ export interface CreateMarkdownEditorOptions {
 /** Imperative lifecycle boundary used by the Preact wrapper and focused tests. */
 export function createMarkdownEditor(options: CreateMarkdownEditorOptions): MarkdownEditorController {
   const themeCompartment = new Compartment();
+  const validityCompartment = new Compartment();
+  const validity = (invalid: boolean | undefined, describedBy: string | undefined) => EditorView.contentAttributes.of({
+    ...(invalid ? { "aria-invalid": "true" } : {}),
+    ...(describedBy ? { "aria-describedby": describedBy } : {}),
+  });
   const state = EditorState.create({
     doc: options.value,
     extensions: [
@@ -81,6 +90,7 @@ export function createMarkdownEditor(options: CreateMarkdownEditorOptions): Mark
         spellcheck: "true",
         writingsuggestions: "false",
       }),
+      validityCompartment.of(validity(options.invalid, options.describedBy)),
       keymap.of([
         { key: "Enter", run: insertNewlineContinueMarkup },
         ...defaultKeymap,
@@ -109,6 +119,9 @@ export function createMarkdownEditor(options: CreateMarkdownEditorOptions): Mark
     },
     setTheme(theme) {
       view.dispatch({ effects: themeCompartment.reconfigure(EditorView.darkTheme.of(theme === "dark")) });
+    },
+    setInvalid(invalid, describedBy) {
+      view.dispatch({ effects: validityCompartment.reconfigure(validity(invalid, describedBy)) });
     },
     destroy: () => view.destroy(),
   };

@@ -39,7 +39,7 @@ describe("hosted editor extension points", () => {
     expect(fixture.requests.at(-1)).toMatchObject({ kind: "set-fields", entry: page, values: { title: "新しい講座名です" } });
     // Unmatched fields keep the built-in control.
     expect(screen.getByRole("spinbutton", { name: "price" })).toBeInTheDocument();
-    expect(Object.keys(seen[0]!).sort()).toEqual(["disabled", "entry", "field", "labels", "permission", "renderDefault", "setValue", "value"]);
+    expect(Object.keys(seen[0]!).sort()).toEqual(["disabled", "entry", "field", "invalid", "labels", "permission", "renderDefault", "setValue", "value"]);
   });
 
   it("validates a fully custom control's value on the server like any edit", async () => {

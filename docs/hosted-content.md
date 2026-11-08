@@ -182,9 +182,20 @@ record; `presentation: "field"` keeps the one-field checkpoint surface. Optional
 `labels` replace visible labels without changing schema or permissions.
 English is the default. `hostedEditorLabelsJa` is a complete Japanese label set
 (pass it as `labels`), and `hostedErrorMessages` / `hostedErrorMessagesJa` are
-routine messages per error code (pass either as `errorMessages`). `formatError`
-overrides both for host-specific mapping and receives typed diagnostics and
-transport failures.
+routine messages per service and preview error code (pass either as
+`errorMessages`). `formatError` overrides both for host-specific mapping and
+receives typed diagnostics and transport failures. Pass `submission: false` when
+the host offers no submission: Submit and the preview-before-submitting prompt
+are not shown, and `handle.submit()` rejects.
+
+An empty required field, or an asset use without its accessible text, may still
+be saved as a draft. The editor marks such a text or Markdown control with
+`aria-invalid` and a visible message named by `aria-describedby`; a host field
+renderer receives the same facts as `invalid` and `describedBy`. When a preview
+fails, `state.previewFailure` holds the error and the captured snapshot's
+completeness diagnostics until the next edit or preview; the editor shows the
+localized reason, the diagnostics by field label and the technical code and
+message as detail.
 
 The save state is one of `loading`, `clean`, `dirty`, `saving`, `saved`,
 `recovering`, `conflict`, `blocked` or `failed`. `conflict` means the draft,
@@ -221,7 +232,8 @@ its durable host checkpoint write before resolving. Restore that checkpoint thro
 submission's operation identity survives reopen so the host can refresh its status.
 Preview approval never survives reopen as an acknowledgement of a fresh iframe.
 Conflict UI compares retained and authoritative values before explicit reapply or
-discard; it cannot discard an unresolved operation that might still commit.
+discard, listing only the fields whose values differ and summarizing the
+unchanged ones by label; it cannot discard an unresolved operation that might still commit.
 Authentication recovery and provider errors retain the draft and its operation key.
 Incomplete numeric typing stays in the mounted control and blocks saving,
 preview and navigation until corrected. That transient invalid text is not a
@@ -746,7 +758,7 @@ gitSha, contentDigest })`; external Git drift uses `adoptCanonicalBaseline`.
 `mountHostedContentEditor(container, { transport, createOperationKey,
 persistRecovery, recovery, isAuthenticationExpired, onAuthenticationExpired,
 preview, policy, selection, presentation, routeId, labels, errorMessages,
-formatError, onNavigate })`. The handle gains `ready`, `navigate`, `refresh`,
+formatError, submission, onNavigate })`. The handle gains `ready`, `navigate`, `refresh`,
 `preview`, `submit` and `refreshPublication`. The `transport` implements
 `readState`, `execute`, `readReceipt` and `getPublication`; persist the recovery
 checkpoint durably before `persistRecovery` resolves. Save states are `loading`,

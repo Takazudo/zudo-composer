@@ -286,9 +286,10 @@ type HostedPreviewState = {
     status: "error";
     error: HostedPreviewError;
 };
+type HostedPreviewErrorCode = HostedDocumentError["code"] | "timeout" | "superseded" | "disposed" | "identity-mismatch" | "transport-error";
 declare class HostedPreviewError extends Error {
-    readonly code: HostedDocumentError["code"] | "timeout" | "superseded" | "disposed" | "identity-mismatch" | "transport-error";
-    constructor(code: HostedDocumentError["code"] | "timeout" | "superseded" | "disposed" | "identity-mismatch" | "transport-error", message: string);
+    readonly code: HostedPreviewErrorCode;
+    constructor(code: HostedPreviewErrorCode, message: string);
 }
 interface HostedPreviewControllerOptions {
     frame: {
@@ -354,4 +355,4 @@ declare function createHostedPreviewFullscreen(options: {
 };
 
 export { HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost };
-export type { HostedPreviewController, HostedPreviewControllerOptions, HostedPreviewHostOptions, HostedPreviewLocation, HostedPreviewRenderContext, HostedPreviewState };
+export type { HostedPreviewController, HostedPreviewControllerOptions, HostedPreviewErrorCode, HostedPreviewHostOptions, HostedPreviewLocation, HostedPreviewRenderContext, HostedPreviewState };
