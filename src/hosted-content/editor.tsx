@@ -252,7 +252,8 @@ export function mountHostedContentEditor(container: HTMLElement, options: Hosted
       }) : null}
       <div class="hosted-content-editor__actions">
         <button type="button" disabled={busy || rejected || !!state.invalidInputs.length} onClick={() => run(() => session.flush())}>{labels.save}</button>
-        {options.preview && options.routeId ? <button type="button" disabled={busy || rejected || !!state.invalidInputs.length} onClick={() => { setActionError(null); void preview().catch((error) => { if (session.state.previewFailure?.error !== error && session.state.error !== error) setActionError(error); }); }}>{labels.preview}</button> : null}
+        {options.preview && options.routeId ? <button type="button" disabled={busy || rejected || !!state.invalidInputs.length} onClick={() => { setActionError(null); // The session records every current preview failure in state.previewFailure; a superseded or outdated one stays hidden.
+          void preview().catch(() => undefined); }}>{labels.preview}</button> : null}
         {options.preview && submission ? <button type="button" disabled={!state.reviewedSnapshot || state.dirty || !!state.pending || !!state.reviewedSnapshot.diagnostics.length} onClick={() => run(() => session.submit())}>{labels.submit}</button> : null}
         <button type="button" disabled={busy || state.dirty || !!state.pending} onClick={() => run(() => session.refresh())}>{labels.reload}</button>
       </div>

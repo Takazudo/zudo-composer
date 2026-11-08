@@ -1322,7 +1322,7 @@ var HostedContentSession = class {
 			try {
 				await this.options.preview.render(current, routeId);
 			} catch (error) {
-				this.error = error;
+				if (generation === this.previewGeneration) this.error = error;
 				rendered = true;
 				throw error;
 			}
@@ -2870,9 +2870,7 @@ function mountHostedContentEditor(container, options) {
 							disabled: busy || rejected || !!state.invalidInputs.length,
 							onClick: () => {
 								setActionError(null);
-								preview().catch((error) => {
-									if (session.state.previewFailure?.error !== error && session.state.error !== error) setActionError(error);
-								});
+								preview().catch(() => void 0);
 							},
 							children: labels.preview
 						}) : null,

@@ -89,6 +89,37 @@ describe("empty required fields are marked while drafts stay saveable", () => {
   });
 });
 
+describe("superseded previews stay hidden", () => {
+  function deferredPreview() {
+    const calls: Array<{ resolve: () => void; reject: (error: unknown) => void }> = [];
+    return { calls, preview: { render: () => new Promise<void>((resolve, reject) => { calls.push({ resolve, reject }); }) } };
+  }
+  it("an older rejection does not show after a newer preview succeeds", async () => {
+    const fixture = editorFixture(), deferred = deferredPreview();
+    const { handle } = mount(fixture, { preview: deferred.preview, routeId: "home" });
+    await handle.ready; await screen.findByRole("textbox", { name: "講座名" });
+    const first = handle.preview(); await waitFor(() => expect(deferred.calls).toHaveLength(1));
+    const second = handle.preview(); await waitFor(() => expect(deferred.calls).toHaveLength(2));
+    deferred.calls[1]!.resolve(); await second;
+    deferred.calls[0]!.reject(new HostedPreviewError("superseded", "A newer preview request replaced this request"));
+    await expect(first).rejects.toMatchObject({ code: "superseded" });
+    expect(handle.state.error).toBeNull(); expect(handle.state.previewFailure).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+  it("a preview button rejection made outdated by an edit shows no alert", async () => {
+    const fixture = editorFixture(), deferred = deferredPreview();
+    const { handle } = mount(fixture, { preview: deferred.preview, routeId: "home" });
+    await handle.ready;
+    fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
+    await waitFor(() => expect(deferred.calls).toHaveLength(1));
+    fireEvent.input(screen.getByRole("textbox", { name: "講座名" }), { target: { value: "編集中" } });
+    deferred.calls[0]!.reject(new HostedPreviewError("superseded", "The draft changed after preview was requested"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(handle.state.previewFailure).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
 describe("a failed preview explains why", () => {
   const failing = (error: unknown) => ({ render: async () => { throw error; } });
   it.each([

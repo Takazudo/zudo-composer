@@ -324,7 +324,7 @@ export class HostedContentSession {
       const stale = () => generation !== this.previewGeneration || this.revision !== captured || this.edits.length > 0 || !!this.pending || this.acknowledged?.draftRevision !== current.draftRevision;
       if (stale()) throw new Error("Preview became stale after a local edit");
       try { await this.options.preview.render(current, routeId); }
-      catch (error) { this.error = error; rendered = true; throw error; }
+      catch (error) { if (generation === this.previewGeneration) this.error = error; rendered = true; throw error; }
       if (stale()) throw new Error("Preview became stale after a local edit");
       this.reviewed = current; this.reviewedRoute = routeId; this.emit(); return current;
     } catch (error) {
