@@ -35,7 +35,7 @@ handoff and does not install Sample's `@zudo-composer/ui` package.
 
 ## Published descriptor shell and isolated previews
 
-The catalog uses published zudo-sg 0.8 / zudo-doc 9.1 (Classic theme pack) on zfb 5.2.2, with
+The catalog uses published zudo-sg 0.9 / zudo-doc 10.0 (Classic theme pack) on zfb 6.0.1, with
 zudo-react and Wind for its shell. The actual product pack and story callbacks
 remain Preact. `src/config/preview.mjs` validates the retained same-origin
 `/components/preview` endpoint. The frame loads only its separately compiled
