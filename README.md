@@ -88,7 +88,7 @@ The host installs the UI pack and component contract by their exact root Git
 specs, so its dependencies show the pinned package commits recorded by the
 handoff files:
 
-- `@zudo-composer/ui`: `git+https://github.com/Takazudo/zudo-composer.git#21e5c4355628986904861d7d66e79b2a7e467054`
+- `@zudo-composer/ui`: `git+https://github.com/Takazudo/zudo-composer.git#893224c3d703fcba00ce08e41e5c184e8d8286b3`
 - `@zudo-composer/component-contract`: `git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0`
 
 This is the proven Git-spec state from the scaffold; it does not fall back to
@@ -256,7 +256,7 @@ contract, which the package declares as a **peer dependency** so the host's own
 pnpm add -D \
   "zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<commit>" \
   "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0" \
-  "@zudo-composer/ui@git+https://github.com/Takazudo/zudo-composer.git#21e5c4355628986904861d7d66e79b2a7e467054"
+  "@zudo-composer/ui@git+https://github.com/Takazudo/zudo-composer.git#893224c3d703fcba00ce08e41e5c184e8d8286b3"
 ```
 
 Replace `<commit>` with a full 40-character tool commit. This consumer install
@@ -642,8 +642,8 @@ it through a package-only commit recorded by [`ui-handoff.json`](./ui-handoff.js
 | Package | `@zudo-composer/ui` |
 | Source path | `packages/ui` |
 | Branch | `package/ui-v1` |
-| Package commit | `21e5c4355628986904861d7d66e79b2a7e467054` |
-| Exact external Git spec | `git+https://github.com/Takazudo/zudo-composer.git#21e5c4355628986904861d7d66e79b2a7e467054` |
+| Package commit | `893224c3d703fcba00ce08e41e5c184e8d8286b3` |
+| Exact external Git spec | `git+https://github.com/Takazudo/zudo-composer.git#893224c3d703fcba00ce08e41e5c184e8d8286b3` |
 | Package metadata | `@zudo-composer/ui@0.1.0` |
 | Component-pack protocol identity | `@zudo-composer/ui@1.0.0` |
 
