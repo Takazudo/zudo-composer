@@ -98,3 +98,27 @@ it("blocks refresh, selection, and workspace flush while a field draft is unsave
   expect(writes).toBe(2);
   fireEvent.click(view.getByRole("button", { name: "Discard local draft" }));
 });
+it("retains the exact qualified Remove request across response loss and reload", async () => {
+  const { fireEvent } = await import("@testing-library/preact");
+  Object.assign(mocks.integration, { sessions: createWorkspaceSaveRegistry(), subscribeChanges: () => () => {}, componentProvider: { manifest: { components: [] } } });
+  const identity = { workspaceId: "proof", pathname: "/", revision: "a".repeat(64), packId: "proof", packVersion: "1", rendererId: "proof", rendererVersion: "1", rendererDigest: "b".repeat(64) };
+  const target = { renderedNodeId: "rendered-child", parentRenderedNodeId: "parent", slotId: "items", providerId: "files", recordId: "page", nodeId: "child", componentId: "paragraph", props: {}, entries: [], capabilities: { fields: { allowed: true }, structure: { allowed: true }, placement: { allowed: false }, remove: { allowed: true }, uses: ["/"], insertSlots: [] } };
+  const preview = { identity, frameId: "frame", documentUrl: "about:blank", targets: [target], routes: [] };
+  const requests: unknown[] = [];
+  mocks.request.mockImplementation(async (operation, request) => {
+    if (operation === "document-edit") { requests.push(request); if (requests.length === 1) throw new Error("Lost Remove response"); return { committed: true }; }
+    return preview;
+  });
+  let view = render(<HostDocumentPage />);
+  await waitFor(() => expect(view.container.querySelector("iframe")).toBeTruthy());
+  const send = (data: object) => fireEvent(window, new MessageEvent("message", { source: view.container.querySelector("iframe")!.contentWindow, origin: window.location.origin, data: { protocol: "zudo-host-document-v1", identity, frameId: "frame", ...data } }));
+  await waitFor(() => { send({ type: "ready" }); expect(view.getByRole("status").textContent).toBe("Saved snapshot rendered"); });
+  send({ type: "select", target: { renderedNodeId: target.renderedNodeId, providerId: target.providerId, recordId: target.recordId, nodeId: target.nodeId } });
+  fireEvent.click(view.getByRole("button", { name: "Remove component" }));
+  await waitFor(() => expect(view.getByRole("alert").textContent).toContain("outcome remains uncertain"));
+  expect(requests[0]).toMatchObject({ revision: identity.revision, pathname: "/", target: { renderedNodeId: "rendered-child", providerId: "files", recordId: "page", nodeId: "child" }, change: { kind: "remove" } });
+  view.unmount(); sessionStorage.clear(); view = render(<HostDocumentPage />);
+  fireEvent.click(await view.findByRole("button", { name: /Recover pending save/ }));
+  await waitFor(() => expect(requests).toHaveLength(2));
+  expect(requests[1]).toEqual(requests[0]);
+});

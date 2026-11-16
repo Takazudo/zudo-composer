@@ -49,3 +49,23 @@ it("refuses stale/foreign selections, absent policy and entry metadata; local fi
   mapping.document.bindings = [{ id: "identity", source: { kind: "entry-id" }, target: { nodeId: "copy", prop: "text" }, transform: { kind: "identity" } }];
   expect(resolveHostOwnership({ ...input, selection: input.select("copy", "text") }).owner).toMatchObject({ domain: "unsupported", reason: expect.stringContaining("read-only metadata") });
 });
+it("qualifies removal from the canonical parent slot and refuses roots/shared or Mapping-owned structure", async () => {
+  const { removalReason, describeHostDocumentTargets } = await import("../capabilities");
+  const input = await fixture(), project = input.snapshot.project;
+  const targets = hostDocumentTargets(input.compiled.build.routes[0]!);
+  const local = targets.find(target => target.nodeId === "local")!, shared = targets.find(target => target.nodeId === "copy")!;
+  expect(removalReason(project, local, input.manifest)).toContain("Root");
+  expect(removalReason(project, shared, input.manifest)).toContain("shared Mapping");
+  const record = project.providers.compositions.find(provider => provider.id === "files")!.records.find(record => record.id === "home")!;
+  const child = record.document.root.pop()!;
+  record.document.root[0]!.slots.children = [child];
+  expect(removalReason(project, local, input.manifest)).toContain("parent slot");
+  const attachments = project.collectionAttachments;
+  project.collectionAttachments = [];
+  // Display hierarchy is irrelevant: this fixture still says parentRenderedNodeId=null.
+  expect(describeHostDocumentTargets([local], project, input.manifest)[0]!.capabilities?.remove).toEqual({ allowed: true });
+  project.collectionAttachments = attachments;
+  const original = record.document.root[0]!;
+  record.document.root = [{ ...original, id: "outer", slots: { children: [original] } }];
+  expect(removalReason(project, targets.find(target => target.nodeId === "root")!, input.manifest)).toContain("subtree owns a Mapping placement");
+});

@@ -105,3 +105,16 @@ it("accepts schema-valid decimals with no step and retains explicit step constra
   fireEvent.click(view.getByRole("button", { name: "Save field" }));
   expect(onSave).toHaveBeenLastCalledWith({ kind: "field", prop: "count", value: 1.5 });
 });
+it("removes only a server-qualified local child and keeps dirty drafts protected", () => {
+  const eligible = { ...target, capabilities: { ...target.capabilities!, remove: { allowed: true } } };
+  const onSave = vi.fn(async () => {}), view = render(<HostInspector target={eligible} component={component} disabled={false} onDirty={() => {}} onSave={onSave} />);
+  fireEvent.input(view.getByRole("textbox", { name: "Heading" }), { target: { value: "Unsaved" } });
+  expect((view.getByRole("button", { name: "Remove component" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(onSave).not.toHaveBeenCalled();
+  fireEvent.click(view.getByRole("button", { name: "Discard local draft" }));
+  fireEvent.click(view.getByRole("button", { name: "Remove component" }));
+  expect(onSave).toHaveBeenCalledExactlyOnceWith({ kind: "remove" });
+  view.rerender(<HostInspector target={{ ...eligible, capabilities: { ...eligible.capabilities, remove: { allowed: false, reason: "Root components cannot be removed here." } } }} component={component} disabled={false} onDirty={() => {}} onSave={onSave} />);
+  expect((view.getByRole("button", { name: "Remove component" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(view.getByText("Root components cannot be removed here.")).toBeTruthy();
+});

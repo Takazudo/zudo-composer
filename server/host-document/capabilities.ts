@@ -2,7 +2,7 @@ import type { ComponentPackManifest } from "@zudo-composer/component-contract";
 import type { SiteProject } from "../../src/site-project/model/types";
 import type { SitemapNode } from "../../src/sitemapper/model/types";
 import { createComponentCatalog, type CompositionNode } from "../../src/composer/model/types";
-import { addNode } from "../../src/composer/model/commands";
+import { addNode, removeNode } from "../../src/composer/model/commands";
 import { diagnoseDocument, describeSlotCompleteness } from "../../src/composer/model/validate";
 import type { HostDocumentTarget } from "./types";
 import { validateHostComponentPresentation, type HostComponentPresentation } from "../config/host-document";
@@ -18,6 +18,25 @@ export function localOwnerReason(project: SiteProject, owner: { providerId: stri
 }
 export function mappedSlot(project: SiteProject, owner: { providerId: string; recordId: string; nodeId: string }, slotId: string): boolean {
   return project.collectionAttachments.some(attachment => attachment.composition.providerId === owner.providerId && attachment.composition.recordId === owner.recordId && attachment.target.nodeId === owner.nodeId && attachment.target.slotId === slotId);
+}
+/** Canonical parent/slot ownership, independent of transparent display hierarchy. */
+export function removalReason(project: SiteProject, target: HostDocumentTarget, manifest: ComponentPackManifest): string | undefined {
+  const reason = localOwnerReason(project, target);
+  if (reason) return reason;
+  const record = project.providers.compositions.find(provider => provider.id === target.providerId)?.records.find(record => record.id === target.recordId);
+  if (!record) return "The owning Composition is unavailable.";
+  let parent: { node: CompositionNode; slotId: string } | undefined;
+  const visit = (nodes: readonly CompositionNode[]) => { for (const node of nodes) for (const [slotId, children] of Object.entries(node.slots)) { if (children.some(child => child.id === target.nodeId)) parent = { node, slotId }; visit(children); } };
+  visit(record.document.root);
+  if (!parent) return "Root components cannot be removed here.";
+  if (mappedSlot(project, { ...target, nodeId: parent.node.id }, parent.slotId)) return "The parent slot is populated by Mapping/Content.";
+  const catalog = createComponentCatalog(manifest), result = removeNode(record.document, catalog, target.nodeId);
+  if (!result.ok) return result.error;
+  const remaining = new Set<string>();
+  const collect = (nodes: readonly CompositionNode[]) => { for (const node of nodes) { remaining.add(node.id); Object.values(node.slots).forEach(collect); } };
+  collect(result.document.root);
+  if (project.collectionAttachments.some(attachment => attachment.composition.providerId === target.providerId && attachment.composition.recordId === target.recordId && !remaining.has(attachment.target.nodeId))) return "This subtree owns a Mapping placement. Remove it through its source workflow.";
+  if (!diagnoseDocument(result.document, catalog).canExport || describeSlotCompleteness(result.document, catalog).length) return "Removing this component would leave a required slot incomplete.";
 }
 export function describeHostDocumentTargets(targets: readonly HostDocumentTarget[], project: SiteProject, manifest: ComponentPackManifest, presentation?: HostComponentPresentation, uses: ReadonlyMap<string, readonly string[]> = new Map()): HostDocumentTarget[] {
   validateHostComponentPresentation(presentation, manifest);
@@ -43,6 +62,6 @@ export function describeHostDocumentTargets(targets: readonly HostDocumentTarget
       return { slotId: slot.id, label: slot.label ?? slot.id, components, ...(slotReason ? { reason: slotReason } : components.length ? {} : { reason: "No component with complete defaults fits this slot." }) };
     });
     const capability = (reason: string | undefined) => ({ allowed: !reason, ...(reason ? { reason } : {}) });
-    return { ...target, presentation: { label, kindTitle, transparent: display?.transparent === true }, capabilities: { fields: capability(reason), structure: capability(reason), placement: capability(placementReason), insertSlots, uses: uses.get(`${target.providerId}/${target.recordId}`) ?? [] } };
+    return { ...target, presentation: { label, kindTitle, transparent: display?.transparent === true }, capabilities: { remove: capability(removalReason(project, target, manifest)), fields: capability(reason), structure: capability(reason), placement: capability(placementReason), insertSlots, uses: uses.get(`${target.providerId}/${target.recordId}`) ?? [] } };
   });
 }

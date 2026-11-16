@@ -14,7 +14,7 @@ export interface HostDocumentIdentity {
 export interface HostDocumentTarget {
   presentation?: { label: string; kindTitle: string; transparent: boolean };
   capabilities?: {
-    fields: { allowed: boolean; reason?: string }; structure: { allowed: boolean; reason?: string }; placement: { allowed: boolean; reason?: string };
+    remove?: { allowed: boolean; reason?: string }; fields: { allowed: boolean; reason?: string }; structure: { allowed: boolean; reason?: string }; placement: { allowed: boolean; reason?: string };
     uses: readonly string[];
     insertSlots: readonly { slotId: string; label: string; reason?: string; components: readonly { id: string; title: string }[] }[];
   };
