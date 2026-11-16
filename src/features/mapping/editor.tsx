@@ -2,7 +2,7 @@
 /** @jsxImportSource preact */
 
 import type { JSX } from "preact";
-import { useMemo, useRef, useState } from "preact/hooks";
+import { useCallback, useMemo, useRef, useState } from "preact/hooks";
 import { useBreadcrumb, type EditorStatus } from "../../app/chrome-context";
 import { formatIntent } from "../../app/route-intents";
 import { EditorBody, EditorChrome, RecordTitle } from "../../components/editor-chrome";
@@ -120,6 +120,7 @@ export function MappingEditor({
     }),
   });
 
+  const referenceEntries = useCallback((target: { providerId: string; recordId: string }) => controller.referenceQueryEntries(target), [controller]);
   return (
     <EditorChrome
       editorKey="mapping"
@@ -209,6 +210,7 @@ export function MappingEditor({
             onSelectEntry={(entryId) => run(() => controller.selectEntry(entryId))}
             onModeChange={(kind) => run(() => controller.setMode(kind))}
             onQueryChange={(change: Partial<MappingCollectionQuery> | ((query: MappingCollectionQuery) => MappingCollectionQuery)) => run(() => controller.updateCollectionQuery(change))}
+            referenceEntries={referenceEntries}
             onOpenPins={() => setPinPickerOpen(true)}
           />
         }
