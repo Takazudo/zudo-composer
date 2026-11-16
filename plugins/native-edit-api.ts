@@ -15,6 +15,8 @@ import { resolveComponentPack } from "./component-pack.mjs";
 import { createHostDocumentCache } from "../server/host-document/document-cache";
 import { loadHostContext } from "../server/host-context.mjs";
 import { editDigest, createEditingService, type EditPlan, type EditReceipt } from "../server/edit/service";
+import type { createHostReviewService } from "../server/host-document/review-service";
+import type { HostReviewService } from "../src/features/assistant/host-review-types";
 
 const command = z.object({ operation: z.enum(["inspect", "resolve", "plan", "review", "apply", "receipt", "discard", "supersede", "undo", "document-preview", "document-edit"]), input: z.unknown(), expected: z.object({ revision: z.string().regex(/^[a-f0-9]{64}$/), identity: z.object({ workspaceId: z.string(), sitemapId: z.string(), pageId: z.string(), providerId: z.literal("files"), recordId: z.string() }).strict() }).strict().optional() }).strict();
 const bindSchema = z.object({ clientId: z.uuid(), capability: z.string(), epoch: z.number().int().nonnegative().nullable() }).strict();
@@ -50,11 +52,11 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
   const hostDocument = context.composerConfig.hostDocument;
   validateHostComponentPresentation(hostDocument?.componentPresentation, context.pack.manifest);
   const hostCapture = hostDocument ? await server.ssrLoadModule(appModuleId("server/authoring-workspace/capture.ts")) : null;
-  const hostRendererIdentity = hostCapture ? await hostCapture.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig }) : null;
+  const hostRendererIdentity = hostCapture ? await hostCapture!.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig }) : null;
   const hostRenderer = hostDocument ? await createModuleEvaluator(context.composerConfig.workspaceRoot, { jsxImportSource: hostDocument.jsxImportSource })(resolveComponentPack(context.composerConfig.workspaceRoot, hostDocument.module).entryPath) : null;
   const assertDocumentSourcesCurrent = async () => {
     await service.initializeSourceEpoch();
-    if (!hostCapture || !hostRendererIdentity || editDigest(await hostCapture.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig })) !== editDigest(hostRendererIdentity)) throw Object.assign(new Error("Host renderer source changed. Restart authoring before preview or save."), { code: "stale-plan" });
+    if (!hostCapture || !hostRendererIdentity || editDigest(await hostCapture!.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig })) !== editDigest(hostRendererIdentity)) throw Object.assign(new Error("Host renderer source changed. Restart authoring before preview or save."), { code: "stale-plan" });
   };
   if (hostDocument) await assertDocumentSourcesCurrent();
   const assistantConfig = context.composerConfig.assistant;
@@ -97,9 +99,35 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
     ]);
     const capture = () => inspectModule.captureHost({ config: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity });
     const store = await storeModule.openAssistantStore(context.composerConfig.paths.data);
-    const runner = runnerModule.createAssistantRunner({ store, service, provider: providerModule.createModelProvider(assistantConfig), config: assistantConfig, lease, capture, siteName: (state: { workspace: { metadata: { name: string } } }) => state.workspace.metadata.name });
+    let hostReview: HostReviewService | undefined;
+    if (hostDocument) {
+      const [reviewModule, ownershipModule, contentModule, contentFactory, contentStoreModule, releaseReader] = await Promise.all([
+        server.ssrLoadModule(appModuleId("server/host-document/review-service.ts")), server.ssrLoadModule(appModuleId("server/host-document/ownership.ts")),
+        server.ssrLoadModule(appModuleId("src/content/storage/file-provider/dev-server-entry.ts")), server.ssrLoadModule(appModuleId("server/content-ai/proposer-factory.ts")),
+        server.ssrLoadModule(appModuleId("src/content/storage/filesystem/store.ts")), server.ssrLoadModule(appModuleId("server/site-project-local/dev-reader.ts")),
+      ]);
+      const { workspaceDomainRoots } = await import("../src/shared/workspace-scope");
+      const { lstat } = await import("node:fs/promises");
+      const configured = { provider: await contentFactory.createHostContentAiProvider(assistantConfig), canApply: assistantConfig.permission === "apply", proposalRoot: join(context.composerConfig.paths.data, "content-ai"), contentFields: assistantConfig.contentFields ?? [] };
+      const create = reviewModule.createHostReviewService as typeof createHostReviewService;
+      hostReview = create({
+        config: context.composerConfig, drafts: service.drafts, renderer: hostRenderer as unknown as Parameters<typeof create>[0]["renderer"], documentCache,
+        options: async () => ({ composerConfig: context.composerConfig, pack: context.pack, renderer: await hostCapture!.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig }), packIdentity: await hostCapture!.resolveAuthoringPackIdentity({ composerConfig: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity }) }),
+        assertSourcesCurrent: assertDocumentSourcesCurrent,
+        resolveOwnership: ownershipModule.resolveHostOwnership,
+        content: async workspaceId => {
+          const root = workspaceDomainRoots(context.composerConfig.paths, workspaceId).content;
+          const stat = await lstat(join(root, "current.json"));
+          if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Original Content recovery store is unavailable.");
+          const content = await contentStoreModule.createFilesystemContentStore({ contentRoot: root });
+          const readActivated = () => releaseReader.readActivatedSiteRelease({ workspaceRoot, pack: context.pack, packIdentity: context.packIdentity, stylesPath: context.composerConfig.paths.styles });
+          return { service: await contentModule.createNativeContentAiService(content, readActivated, configured), ...await contentModule.createNativeContentAiStager(content, readActivated, configured) };
+        },
+      });
+    }
+    const runner = runnerModule.createAssistantRunner({ store, service, provider: providerModule.createModelProvider(assistantConfig), config: assistantConfig, lease, capture, hostReview, siteName: (state: { workspace: { metadata: { name: string } } }) => state.workspace.metadata.name });
     assistantRunner = runner;
-    const installed = apiModule.installAssistantApi(server, { service, store, runner, config: assistantConfig, lease, coordinator, capability, approvalCapability, peers, capture });
+    const installed = apiModule.installAssistantApi(server, { service, store, runner, config: assistantConfig, lease, coordinator, capability, approvalCapability, peers, capture, hostReview });
     assistant = { endpoint: installed.endpoint, name: assistantConfig.name };
   }
   server.middlewares.use(async (req, res, next) => {

@@ -242,7 +242,7 @@ export async function compileAuthoringWorkspaceSnapshot(options: CompileAuthorin
 function safeRelativePath(value: string): boolean {
   return !!value && !isAbsolute(value) && !value.includes("\\") && !value.includes("\0") && value.split("/").every(part => !!part && part !== "." && part !== "..");
 }
-async function capturePublicFiles(options: Pick<CaptureAuthoringWorkspaceOptions, "composerConfig" | "publicFiles">): Promise<CapturedPublicFile[]> {
+export async function capturePublicFiles(options: Pick<CaptureAuthoringWorkspaceOptions, "composerConfig" | "publicFiles">): Promise<CapturedPublicFile[]> {
   const result: CapturedPublicFile[] = [];
   const root = await realpath(options.composerConfig.workspaceRoot);
   const manifest = options.publicFiles ?? await publicDirectoryManifest(root, options.composerConfig.hostDocument?.publicDir);
