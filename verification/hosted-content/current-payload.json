@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "10f331bc2212c407693909d1e6eb6d03e73ccb72",
-  "payloadSha256": "74588162cae99c97133978ff78e146eeb99502260885c33401b5d95ca9feb2e1",
-  "rawPackageJsonSha256": "f0f6ef8c2486dd62d586f767a34747cb243085377b7ef830f2e3300a6373fd5a",
+  "packageOutputSha": "33b0e1c7334a47aced71e9daa8d251f92cdbb4de",
+  "payloadSha256": "49163406018043459049289f607bf617dacbf01ab99d663f0e84f1d73318d77a",
+  "rawPackageJsonSha256": "02501b242ee5f2315b7bbe7bb21dfbeeec3db37c17f1b3c661dacc6fc80efd30",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -2466,9 +2466,9 @@
     },
     {
       "path": "src/features/assistant/assistant-route.tsx",
-      "bytes": 31572,
+      "bytes": 31897,
       "mode": 420,
-      "sha256": "0dcde4105f4cc5c73f82470005d3681f9411a7178e1b116e42f6f9afd368d952"
+      "sha256": "532b446575344adbc891edea21df89439ef769a2a7c1ef2b32635353f9000180"
     },
     {
       "path": "src/features/assistant/assistant.css",
@@ -2481,6 +2481,12 @@
       "bytes": 15517,
       "mode": 420,
       "sha256": "5243eb541f60dba5bc4c37e39d25ea6b77d0addbafc02b5adc7d6550470457c8"
+    },
+    {
+      "path": "src/features/assistant/draft-refresh.ts",
+      "bytes": 877,
+      "mode": 420,
+      "sha256": "1d7faca5f7b8834eea1b4671ae1a8c0d8f2ce97902768e12e38727bee9770a47"
     },
     {
       "path": "src/features/assistant/memory-dialog.tsx",
