@@ -1,4 +1,4 @@
-import { canonicalHostRoute } from "../src/features/host-document/navigation";
+import { canonicalHostRoute } from "../src/shared/host-route";
 import { watch } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";

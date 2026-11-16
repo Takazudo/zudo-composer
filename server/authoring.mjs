@@ -540,7 +540,7 @@ async function initialize(options) {
 	return registry.complete(workspaceId);
 }
 //#endregion
-//#region src/features/host-document/navigation.ts
+//#region src/shared/host-route.ts
 /** Only an exact captured path or its single directory trailing-slash alias. */
 function canonicalHostRoute(pathname, pathnames) {
 	if (pathnames.includes(pathname)) return pathname;

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { canonicalHostRoute } from "../navigation";
+import { canonicalHostRoute } from "../../../shared/host-route";
 import { knownVisitorUrl } from "../protocol";
 it("resolves only captured directory slash aliases without rewriting the visitor URL", () => {
   const paths = ["/", "/lessons", "/contact", "/404.html"];

@@ -1,4 +1,4 @@
-import { canonicalHostRoute } from "./navigation";
+import { canonicalHostRoute } from "../../shared/host-route";
 import { z } from "zod";
 import type { HostDocumentPreview, HostDocumentTarget } from "../../../server/host-document/types";
 const identitySchema = z.object({ workspaceId: z.string(), revision: z.string(), pathname: z.string(), packId: z.string(), packVersion: z.string(), rendererId: z.string(), rendererVersion: z.string(), rendererDigest: z.string() }).strict();

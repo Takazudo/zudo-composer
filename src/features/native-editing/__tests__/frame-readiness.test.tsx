@@ -37,6 +37,9 @@ it("keeps Undo disabled until the exact delayed current frame renders, including
   await waitFor(() => expect(mock.revision).toBeGreaterThan(0));
   const undo = screen.getByRole("button", { name: "Undo apply" }) as HTMLButtonElement;
   expect(undo.disabled).toBe(true);
+  expect(screen.getAllByRole("status")).toHaveLength(1);
+  expect(screen.getByRole("status").textContent).toContain("Receipt apply");
+  expect(screen.getByRole("status").textContent).toContain("Waiting for the current page");
   await act(async () => { mock.options.onReady?.(); });
   expect(undo.disabled).toBe(true);
   const old = ack();

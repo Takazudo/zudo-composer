@@ -1,4 +1,4 @@
-import { canonicalHostRoute } from "../../src/features/host-document/navigation";
+import { canonicalHostRoute } from "../../src/shared/host-route";
 import { previewEnvelopeValue } from "../../src/features/composer/preview/wire";
 import { randomUUID } from "node:crypto";
 import type { CompositionNode } from "../../src/composer/model/types";
