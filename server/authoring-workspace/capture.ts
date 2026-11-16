@@ -75,7 +75,7 @@ function validateIdentities(options: Pick<CaptureAuthoringWorkspaceOptions, "ren
     || !/^[a-f0-9]{64}$/.test(options.packIdentity.digest)) throw new Error("Capture requires explicit renderer and immutable component-pack identities.");
 }
 
-async function openCapture(options: CaptureAuthoringWorkspaceOptions) {
+async function openCapture(options: Pick<CaptureAuthoringWorkspaceOptions, "composerConfig" | "pack">) {
   const host = await captureHost({ config: options.composerConfig, pack: options.pack });
   const { registry, compositions, content, mappings, sitemaps, assets } = host.stores;
   const recordSource = <T>(id: string, store: { mutationToken(): Promise<WorkspaceToken>; snapshot(): Promise<{ mutationToken: WorkspaceToken; records: T }> }): WorkspaceSnapshotSource<T> => ({
@@ -97,6 +97,21 @@ async function openCapture(options: CaptureAuthoringWorkspaceOptions) {
   return { host, sources };
 }
 
+function nativeProject(host: Awaited<ReturnType<typeof openCapture>>["host"], values: Readonly<Record<string, unknown>>): SiteProject {
+  const project = projectFromWorkspace(values.workspace as typeof host.workspace);
+  const native = { compositions: "files", content: "content-filesystem", mappings: "mapping-filesystem", sitemaps: "sitemap-filesystem" } as const;
+  for (const domain of Object.keys(native) as (keyof typeof native)[]) {
+    if (project.providers[domain].length !== 1 || project.providers[domain][0]!.id !== native[domain]) throw new Error("Capture requires exactly the four native filesystem providers.");
+  }
+  project.providers.compositions[0]!.records = values.compositions as SiteProject["providers"]["compositions"][number]["records"];
+  project.providers.mappings[0]!.records = values.mappings as SiteProject["providers"]["mappings"][number]["records"];
+  project.providers.sitemaps[0]!.records = values.sitemaps as SiteProject["providers"]["sitemaps"][number]["records"];
+  const content = values.content as Awaited<ReturnType<typeof host.stores.content.readAll>>;
+  project.providers.content[0]!.models = [...content.models];
+  project.providers.content[0]!.entries = [...content.entries];
+  return project;
+}
+
 /** Offline capture requires Save and a stopped editor. A live server must hold its
  * authoring lease and flush browser sessions before invoking this operation. */
 export async function captureAuthoringWorkspace(options: CaptureAuthoringWorkspaceOptions): Promise<AuthoringWorkspaceSnapshot> {
@@ -107,17 +122,7 @@ export async function captureAuthoringWorkspace(options: CaptureAuthoringWorkspa
     const outcome = await captureWorkspaceSnapshot(host.workspaceId, sessions, sources);
     if (outcome.status !== "ready") throw new Error(`Workspace capture ${outcome.status}; save and retry.`);
     const { capture } = outcome;
-    const project = projectFromWorkspace(capture.values.workspace as typeof host.workspace);
-    const native = { compositions: "files", content: "content-filesystem", mappings: "mapping-filesystem", sitemaps: "sitemap-filesystem" } as const;
-    for (const domain of Object.keys(native) as (keyof typeof native)[]) {
-      if (project.providers[domain].length !== 1 || project.providers[domain][0]!.id !== native[domain]) throw new Error("Capture requires exactly the four native filesystem providers.");
-    }
-    project.providers.compositions[0]!.records = capture.values.compositions as SiteProject["providers"]["compositions"][number]["records"];
-    project.providers.mappings[0]!.records = capture.values.mappings as SiteProject["providers"]["mappings"][number]["records"];
-    project.providers.sitemaps[0]!.records = capture.values.sitemaps as SiteProject["providers"]["sitemaps"][number]["records"];
-    const content = capture.values.content as Awaited<ReturnType<typeof host.stores.content.readAll>>;
-    project.providers.content[0]!.models = [...content.models];
-    project.providers.content[0]!.entries = [...content.entries];
+    const project = nativeProject(host, capture.values);
     const validation = validateSiteProject(project, { componentPack: options.pack.manifest });
     if (!validation.ok) throw new Error(`Captured project is invalid: ${validation.diagnostics.map(({ message }) => message).join(" ")}`);
     const snapshot = capture.values.assets as AssetSnapshot;
@@ -154,13 +159,55 @@ export async function isAuthoringWorkspaceSnapshotCurrent(options: CaptureAuthor
   });
 }
 
-function validateSnapshot(snapshot: AuthoringWorkspaceSnapshot, options: Pick<CaptureAuthoringWorkspaceOptions, "pack" | "packIdentity" | "renderer">) {
-  validateIdentities(options);
+/** Migration preflight only: verifies the saved source independently of the newly
+ * installed pack/renderer. This does NOT establish build compatibility or switch
+ * authority. Keep the source fenced, and recheck after staging before activation. */
+export async function isAuthoringWorkspaceSourceCurrent(
+  options: Pick<CaptureAuthoringWorkspaceOptions, "composerConfig" | "pack" | "publicFiles">,
+  snapshot: AuthoringWorkspaceSnapshot,
+): Promise<boolean> {
+  snapshot = structuredClone(snapshot);
+  validateSnapshotIntegrity(snapshot);
+  return executeAuthoringOperation(options.composerConfig.workspaceRoot, async () => {
+    const { host, sources } = await openCapture(options);
+    const sessions = createWorkspaceSaveRegistry();
+    const outcome = await captureWorkspaceSnapshot(host.workspaceId, sessions, sources);
+    if (outcome.status !== "ready") return false;
+    const { capture } = outcome;
+    if (snapshot.workspaceId !== host.workspaceId || digest(snapshot.tokens) !== digest(capture.tokens)
+      || digest(snapshot.project) !== digest(nativeProject(host, capture.values))
+      || digest(snapshot.assets.snapshot) !== digest(capture.values.assets)
+      || digest(snapshot.publicFiles) !== digest(await capturePublicFiles(options))) return false;
+    const expectedAssets = new Map(snapshot.assets.lock.pins.map(pin => [pin.url.slice(1), pin]));
+    if (snapshot.assets.files.length !== expectedAssets.size) throw new Error("Captured asset file set differs from the lock.");
+    for (const file of snapshot.assets.files) {
+      const pin = expectedAssets.get(file.fileName);
+      if (!pin || file.checksum !== pin.checksum || file.byteLength !== pin.byteLength) throw new Error("Captured asset identity differs from the lock.");
+      expectedAssets.delete(file.fileName);
+      if (!/^uploaded-assets\/sha256-[a-f0-9]{64}\.[a-z0-9]+$/.test(file.fileName)) throw new Error("Unsafe captured asset path.");
+      const handle = await open(join(options.composerConfig.paths.assets, "versions", basename(file.fileName)), constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        if (!(await handle.stat()).isFile()) return false;
+        const bytes = await handle.readFile();
+        if (bytes.byteLength !== file.byteLength || hash(bytes) !== file.checksum || bytes.toString("base64") !== file.base64) return false;
+      } finally { await handle.close(); }
+    }
+    if (digest(snapshot.publicFiles) !== digest(await capturePublicFiles(options))) return false;
+    return checkWorkspaceCapture(capture, host.workspaceId, sessions, sources);
+  });
+}
+
+function validateSnapshotIntegrity(snapshot: AuthoringWorkspaceSnapshot) {
   const { digest: expected, ...body } = snapshot;
   if (snapshot.schemaVersion !== 1 || expected !== digest(body)) throw new Error("Workspace snapshot digest mismatch.");
-  if (digest(snapshot.componentPack) !== digest(manifestIdentity(options)) || digest(snapshot.renderer) !== digest(options.renderer)) throw new Error("Workspace snapshot component-pack or renderer identity mismatch.");
   if (!validateAssetSnapshot(snapshot.assets.snapshot) || !validateAssetReferenceLock(snapshot.assets.lock)
     || snapshot.assets.snapshot.mutationToken !== snapshot.assets.lock.mutationToken) throw new Error("Workspace snapshot Assets identity is invalid.");
+}
+
+function validateSnapshot(snapshot: AuthoringWorkspaceSnapshot, options: Pick<CaptureAuthoringWorkspaceOptions, "pack" | "packIdentity" | "renderer">) {
+  validateIdentities(options);
+  validateSnapshotIntegrity(snapshot);
+  if (digest(snapshot.componentPack) !== digest(manifestIdentity(options)) || digest(snapshot.renderer) !== digest(options.renderer)) throw new Error("Workspace snapshot component-pack or renderer identity mismatch.");
 }
 
 /** Compiles only the captured bytes; later drafts and root source files are irrelevant. */
@@ -195,7 +242,7 @@ export async function compileAuthoringWorkspaceSnapshot(options: CompileAuthorin
 function safeRelativePath(value: string): boolean {
   return !!value && !isAbsolute(value) && !value.includes("\\") && !value.includes("\0") && value.split("/").every(part => !!part && part !== "." && part !== "..");
 }
-async function capturePublicFiles(options: CaptureAuthoringWorkspaceOptions): Promise<CapturedPublicFile[]> {
+async function capturePublicFiles(options: Pick<CaptureAuthoringWorkspaceOptions, "composerConfig" | "publicFiles">): Promise<CapturedPublicFile[]> {
   const result: CapturedPublicFile[] = [];
   const root = await realpath(options.composerConfig.workspaceRoot);
   const manifest = options.publicFiles ?? await publicDirectoryManifest(root, options.composerConfig.hostDocument?.publicDir);
