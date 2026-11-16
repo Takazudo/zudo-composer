@@ -87,18 +87,18 @@ function authorSite(compositionOrder?: "id") {
 }
 
 describe("defineSite", () => {
-  it("compiles public identity bindings and qualified pins without replacing deleted selections", async () => {
+  it.each(["attachment", "entry-field"] as const)("compiles public identity bindings and qualified pins through %s without replacing deleted selections", async (placement) => {
     const site = defineSite({ id: "identity-site", name: "Identity", componentPack });
-    const courses = site.model({ name: "Courses", kind: "collection", fields: [{ key: "label", kind: "text" }, { key: "order", kind: "number" }] });
-    const consultation = site.entry(courses, { id: "consultation", values: { label: "Consultation", order: 2 } });
-    site.entry(courses, { id: "tuition", values: { label: "Tuition", order: 1 } });
+    const courses = site.model({ name: "Courses", kind: "collection", fields: [{ key: "label", kind: "text" }, { key: "order", kind: "number" }, { key: "slug", kind: "slug" }] });
+    const consultation = site.entry(courses, { id: "consultation", values: { label: "Consultation", order: 2, slug: "consultation" } });
+    site.entry(courses, { id: "tuition", values: { label: "Tuition", order: 1, slug: "tuition" } });
     const card = site.page({ name: "Course card", root: [node("t.card", {}, {}, "card")] });
     const mapping = site.mapping({ name: "Pinned course", model: courses, composition: card,
       mode: { kind: "collection", pins: [entryRef(consultation)], sort: [{ field: "order", direction: "asc" }], limit: 1 },
       bindings: [{ field: "label", nodeId: "card", prop: "title" }, { source: { kind: "entry-id" }, nodeId: "card", prop: "href" }] });
     const home = site.page({ name: "Home", root: [node("t.grid", {}, {}, "grid")] });
-    site.attach(mapping, { nodeId: "grid", slotId: "items" });
-    site.sitemap({ name: "Site", root: { title: "Home", page: home } });
+    if (placement === "attachment") site.attach(mapping, { nodeId: "grid", slotId: "items" });
+    site.sitemap({ name: "Site", root: { title: "Home", page: home, children: placement === "entry-field" ? [{ title: "Courses", slug: "courses", mapping, route: "entry-field", field: "slug" }] : [] } });
     const project = site.toSiteProject();
     expect(validateSiteProject(project, { componentPack: componentPack.manifest }).ok).toBe(true);
     expect(mapping.record.document.mode).toMatchObject({ query: { pins: [entryRef(consultation)] } });
@@ -111,16 +111,20 @@ describe("defineSite", () => {
         await writeFile(projectPath, canonicalStringifyJson(project as never));
         return compileStaticSite({ projectPath, pack: componentPack, assetsStoreRoot: join(root, "assets") });
       };
+      const selectedProps = (compiled: Awaited<ReturnType<typeof compile>>) => {
+        expect(compiled.build.routes.map(({ pathname }) => pathname)).toEqual(placement === "attachment" ? ["/"] : ["/", "/courses/consultation"]);
+        return placement === "attachment" ? compiled.build.routes[0]!.composition.document.root[0]!.slots.items?.map((item) => item.props) : compiled.build.routes[1]!.composition.document.root.map((item) => item.props);
+      };
       const first = await compile();
-      expect(first.build.routes[0]!.composition.document.root[0]!.slots.items?.map((item) => item.props)).toMatchObject([{ title: "Consultation", href: "consultation" }]);
+      expect(selectedProps(first)).toMatchObject([{ title: "Consultation", href: "consultation" }]);
       const saved = project.providers.content[0]!.entries.find((item) => item.id === consultation.id)!;
       saved.values[courses.fieldId("label")] = "Renamed consultation";
       saved.values[courses.fieldId("order")] = 99;
       project.providers.content[0]!.entries.reverse();
       const reordered = await compile();
-      expect(reordered.build.routes[0]!.composition.document.root[0]!.slots.items?.map((item) => item.props)).toMatchObject([{ title: "Renamed consultation", href: "consultation" }]);
+      expect(selectedProps(reordered)).toMatchObject([{ title: "Renamed consultation", href: "consultation" }]);
       project.providers.content[0]!.entries = project.providers.content[0]!.entries.filter((item) => item.id !== consultation.id);
-      await expect(compile()).rejects.toThrow();
+      await expect(compile()).rejects.toThrow(/Pinned Entry.*was not found/);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 

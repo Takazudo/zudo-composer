@@ -32,13 +32,14 @@ assert.deepEqual(catalog.records.map((r) => ({ fileName: r.document.fileName, ur
 assert.equal(authoring.slugify("Packed site"), "packed-site");
 // Public selected-entry metadata source and collection pins survive packed installation.
 const identitySite = authoring.defineSite({ id: "identity-proof", name: "Identity proof", componentPack: pack });
-const identityModel = identitySite.model({ name: "Courses", kind: "collection", fields: [{ key: "label", kind: "text" }] });
-const identityEntry = identitySite.entry(identityModel, { id: "stable-course", values: { label: "Renamed course" } });
+const identityModel = identitySite.model({ name: "Courses", kind: "collection", fields: [{ key: "label", kind: "text" }, { key: "slug", kind: "slug" }] });
+const identityEntry = identitySite.entry(identityModel, { id: "stable-course", values: { label: "Consultation", slug: "consultation" } });
+identitySite.entry(identityModel, { id: "other-course", values: { label: "Another course", slug: "other" } });
 const identityPage = identitySite.page({ name: "Identity card", root: [authoring.node("proof.banner", { headline: "Static" }, {}, "identity-banner")] });
 const identityMapping = identitySite.mapping({ name: "Identity mapping", model: identityModel, composition: identityPage,
-  mode: { kind: "collection", pins: [authoring.entryRef(identityEntry)], limit: 1 },
+  mode: { kind: "collection", pins: [authoring.entryRef(identityEntry)], sort: [{ field: "label", direction: "asc" }], limit: 1 },
   bindings: [{ source: { kind: "entry-id" }, nodeId: "identity-banner", prop: "headline" }] });
-identitySite.sitemap({ name: "Identity sitemap", root: { title: "Identity", mapping: identityMapping } });
+identitySite.sitemap({ name: "Identity sitemap", root: { title: "Identity", page: identityPage, children: [{ title: "Courses", slug: "courses", mapping: identityMapping, route: "entry-field", field: "slug" }] } });
 const identityProject = identitySite.toSiteProject();
 assert.deepEqual(identityMapping.record.document.bindings[0], { id: "identity-mapping-entry-id-headline", source: { kind: "entry-id" }, target: { nodeId: "identity-banner", prop: "headline" }, transform: { kind: "identity" } });
 assert.deepEqual(identityMapping.record.document.mode.query.pins, [authoring.entryRef(identityEntry)]);
@@ -46,7 +47,18 @@ assert.equal(authoring.validateSiteProject(identityProject, { componentPack: pac
 const identityPath = join(workspaceRoot, "identity-project.json");
 await writeFile(identityPath, authoring.canonicalStringifyJson(identityProject));
 const identityCompiled = await siteBuild.compileStaticSite({ projectPath: identityPath, pack, assetsStoreRoot });
-assert.equal(identityCompiled.build.routes[0].composition.document.root[0].props.headline, "stable-course");
+assert.deepEqual(identityCompiled.build.routes.map(({ pathname }) => pathname), ["/", "/courses/consultation"]);
+assert.equal(identityCompiled.build.routes[1].composition.document.root[0].props.headline, "stable-course");
+const savedIdentityEntry = identityProject.providers.content[0].entries.find(({ id }) => id === identityEntry.id);
+savedIdentityEntry.values[identityModel.fieldId("label")] = "ZZ renamed consultation";
+identityProject.providers.content[0].entries.reverse();
+await writeFile(identityPath, authoring.canonicalStringifyJson(identityProject));
+const reorderedIdentity = await siteBuild.compileStaticSite({ projectPath: identityPath, pack, assetsStoreRoot });
+assert.deepEqual(reorderedIdentity.build.routes.map(({ pathname }) => pathname), ["/", "/courses/consultation"]);
+assert.equal(reorderedIdentity.build.routes[1].composition.document.root[0].props.headline, "stable-course");
+identityProject.providers.content[0].entries = identityProject.providers.content[0].entries.filter(({ id }) => id !== identityEntry.id);
+await writeFile(identityPath, authoring.canonicalStringifyJson(identityProject));
+await assert.rejects(siteBuild.compileStaticSite({ projectPath: identityPath, pack, assetsStoreRoot }), /Pinned Entry.*was not found/);
 
 const site = authoring.defineSite({ id: "installed-proof", name: "Installed proof", componentPack: pack });
 const home = site.page({ id: "home", name: "Home", root: [authoring.node("proof.banner", { headline: "Packed site" }, {}, "banner")] });
