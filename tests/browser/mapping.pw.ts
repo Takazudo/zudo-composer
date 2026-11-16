@@ -192,6 +192,13 @@ test("an unbound target binds from its chip's compatible-source menu", async ({ 
 
   const entry = page.getByRole("combobox", { name: "Sample Entry" });
   const frame = page.frameLocator('iframe[title="Resolved Mapping preview"]');
+  // Collection preview intentionally renders every matching entry. Verify
+  // each identity there, then use Single mode to prove sample replacement.
+  for (const id of ["article-first-question", "article-moving-parts", "article-small-loops"]) {
+    await expect(frame.getByText(id, { exact: true })).toHaveCount(1);
+  }
+  const mode = page.getByRole("combobox", { name: "Mapping mode", exact: true });
+  await mode.selectOption("single");
   await selectOptionMatching(entry, /article-first-question/);
   await expect(frame.getByText("article-first-question", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Save", exact: true }).click();
@@ -206,6 +213,7 @@ test("an unbound target binds from its chip's compatible-source menu", async ({ 
     settle: "shell",
   });
   await expect(identityRow.getByRole("combobox")).toHaveCount(0);
+  await expect(mode).toHaveValue("single");
   await expect(chip).toHaveCount(0);
   await selectOptionMatching(entry, /article-first-question/);
   await expect(frame.getByText("article-first-question", { exact: true })).toBeVisible();
