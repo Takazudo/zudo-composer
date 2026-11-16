@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "5e16a34363a0763a5a8bd852805117ff79e5c2f9",
-  "payloadSha256": "b8c5758a5ef03940bd2d7de18df89c346bad8d28df33d262b0705678da07442b",
-  "rawPackageJsonSha256": "83d8037fc91bdaf7dd0ea789d50a33c8b50ff9e645390d1e678150c0ea660495",
+  "packageOutputSha": "cafc1e44025e4537da049a63220844f592ed3336",
+  "payloadSha256": "bfe902e7bbf14107e5cb94464d9b48b273ac89cb9cdff7672b59f5980de4a325",
+  "rawPackageJsonSha256": "6c0df57a8b68df0a01411b53001d96a65ec28f98c8ce8622922eae3983de4228",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -222,9 +222,9 @@
     },
     {
       "path": "plugins/assistant-api.ts",
-      "bytes": 15036,
+      "bytes": 15024,
       "mode": 420,
-      "sha256": "b1da78ed8c6b1fff996d29e4f8a987116edd63c4d0e316400681cca64601f7eb"
+      "sha256": "ceac8b56bea8cf2edc5ee575fbac29dc16e5ebde8f11bcd6af451d5e5d9e02c3"
     },
     {
       "path": "plugins/component-pack-plugin.d.mts",
@@ -408,9 +408,9 @@
     },
     {
       "path": "plugins/native-edit-api.ts",
-      "bytes": 24163,
+      "bytes": 24151,
       "mode": 420,
-      "sha256": "79e12e1b872ba8066634510b9e7682fdc60e44587bb089d917ba6ae32f2b244c"
+      "sha256": "07ce5e8bdf5622a6d79a1aafaefbedd978a574d0d26173738dd5ebb484a0fafe"
     },
     {
       "path": "plugins/release-api-plugin.ts",
@@ -540,15 +540,15 @@
     },
     {
       "path": "server/assistant/runner.ts",
-      "bytes": 48369,
+      "bytes": 48357,
       "mode": 420,
-      "sha256": "d9f849143a276da9ff798ecc51a2edfa5f47e383dc96dedf4abd7d64ae84d30a"
+      "sha256": "265008ce588ecd94948ff68b53b2f6e42c682c2c6ebe4d40e179ffd44404c97e"
     },
     {
       "path": "server/assistant/store.ts",
-      "bytes": 22927,
+      "bytes": 22915,
       "mode": 420,
-      "sha256": "7a581a2dfd8195b8b074ad9b6c4305a187a37461ae80c0823e889d5e5098346b"
+      "sha256": "af9c9a9289e29a6f3e49eeb0d6e63ec6a2435b0cb4de5957cbcbd841e414b2f0"
     },
     {
       "path": "server/assistant/structured-turn.ts",
@@ -918,9 +918,9 @@
     },
     {
       "path": "server/host-document/ownership.ts",
-      "bytes": 7941,
+      "bytes": 7929,
       "mode": 420,
-      "sha256": "c9004ce2cd5f598a6ba6cb3ba96be27a0e3759a45852b47ed366b63163aece2e"
+      "sha256": "39fc4b7b3f8de998f336241aeaf2a84951dace59c0cc4dccec67c77b6dcdf275"
     },
     {
       "path": "server/host-document/render.ts",
@@ -930,9 +930,9 @@
     },
     {
       "path": "server/host-document/review-service.ts",
-      "bytes": 25715,
+      "bytes": 25691,
       "mode": 420,
-      "sha256": "3f2be654cc16ff8e2e9f3f10be2d206eabff4e76baaa9820aee4d21947a7e7e2"
+      "sha256": "e4b4521cd771452e718c0c60bdee94ac604f67ff301b3209cc4d16453778019d"
     },
     {
       "path": "server/host-document/review-store.ts",
@@ -2532,21 +2532,21 @@
     },
     {
       "path": "src/features/assistant/host-assistant-route.tsx",
-      "bytes": 9961,
+      "bytes": 9972,
       "mode": 420,
-      "sha256": "8b05574bfa5e2a9fe98256f0559db33e6110cb86f48853da5971a546ecca4fcc"
+      "sha256": "3859a2601beae64c537789cffeceb45259653cf876f43e548030f09e84389718"
     },
     {
       "path": "src/features/assistant/host-review-card.tsx",
-      "bytes": 5526,
+      "bytes": 5537,
       "mode": 420,
-      "sha256": "ff3f3eb8b995c1b1dff3da9f219ec449db9a77782d42daf563e99d32c60eeefd"
+      "sha256": "558b36d902089ec43984974bdaaba6f331fed0f1d7daf1285b9840d4b3693436"
     },
     {
       "path": "src/features/assistant/host-review-frame.tsx",
-      "bytes": 2806,
+      "bytes": 2817,
       "mode": 420,
-      "sha256": "7dfc97d75ceca287f79ca768bd793c1e9127508c5531d78b798c175de6d083da"
+      "sha256": "3b24c9a464d950d63f23657f6f23b9f8a23a5522dd87e643fb59c24c57cfc9fe"
     },
     {
       "path": "src/features/assistant/host-review-recovery.ts",
@@ -2555,16 +2555,10 @@
       "sha256": "392eb56d2ff5b8d39a5bdc15dae6dc25bb899ca4e0432d3d929e4d13d6be5526"
     },
     {
-      "path": "src/features/assistant/host-review-types.ts",
-      "bytes": 3278,
-      "mode": 420,
-      "sha256": "4f41ba21889560dcf17d22057ad0d8a8ef6f4bce48b0864a877541026aa364ed"
-    },
-    {
       "path": "src/features/assistant/host-selection.ts",
-      "bytes": 1770,
+      "bytes": 1781,
       "mode": 420,
-      "sha256": "0c2215e07df41ae4e71e2ae4ef2b88349d05f5d17a15e2c9576010063a6db349"
+      "sha256": "d782bcea3eef46526267fb37fc5908f06e7dab66171caef971cee2e7e6095e05"
     },
     {
       "path": "src/features/assistant/memory-dialog.tsx",
@@ -2586,9 +2580,9 @@
     },
     {
       "path": "src/features/assistant/types.ts",
-      "bytes": 4065,
+      "bytes": 4076,
       "mode": 420,
-      "sha256": "5356d2c5703185b62eaa2305279f332fc8b65be0c412ec2d32426889bf51d789"
+      "sha256": "618f690e30b02111bd13a15bce6d2560994a5de6b78a342149673a1cd7120672"
     },
     {
       "path": "src/features/composer/active-pack.ts",
@@ -4029,6 +4023,12 @@
       "bytes": 5899,
       "mode": 420,
       "sha256": "8e5a7c90c2f5f0f2b74524bfdba1669616ec04caed522c18a3b6217a477d66fe"
+    },
+    {
+      "path": "src/shared/host-review-types.ts",
+      "bytes": 3269,
+      "mode": 420,
+      "sha256": "0e58b55f3ef3f55b1178ec543f7f19837adf64bb7b6804046775077e83d2a854"
     },
     {
       "path": "src/shared/host-route.ts",
