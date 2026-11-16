@@ -1481,6 +1481,17 @@ interface DraftReceipt {
         jsxDigest: string;
     }[];
 }
+/** Trusted server-only guard; never parsed from browser or model input. */
+type DraftCommitGuard = (input: {
+    state: HostCapture;
+    compositions: {
+        mutationToken: string;
+        records: readonly CompositionRecord[];
+    };
+    draftId: string;
+    revision: number;
+    candidateDigest: string;
+}) => Promise<void>;
 
 interface SafeRootFilesystemOperations {
     mkdir(path: string, options: {
@@ -2029,6 +2040,13 @@ declare class FilesystemCompositionStore implements CompositionLifecycleStore {
         readonly label: "Local files";
         readonly storageLabel: "Development composition files";
     };
+    /** Internal read barrier for another domain's reviewed commit. The callback
+     * must not reenter this Composition store or mutate its root. A foreign
+     * uncertain commit must not strand our read-only writer lock. */
+    withSnapshotBarrier<T>(action: (snapshot: {
+        mutationToken: string;
+        records: readonly CompositionRecord[];
+    }) => Promise<T>): Promise<T>;
     /** Content fingerprint, not a filesystem transaction or notification counter. */
     snapshot(): Promise<{
         mutationToken: string;
@@ -2316,7 +2334,14 @@ interface NativeEditingConfig {
 }
 
 type AssistantEffort = "low" | "medium" | "high";
+interface AssistantContentFieldPolicy {
+    providerId: string;
+    modelId: string;
+    fieldIds: readonly string[];
+}
 interface AssistantCommonConfig {
+    /** Trusted Content field IDs; omitted retains the standalone Article defaults. */
+    contentFields?: readonly AssistantContentFieldPolicy[];
     /** Default display name; a site-scoped stored name may replace it. */
     name: string;
     /** `propose` permits conversation, drafts and review but never Apply. */
@@ -2924,7 +2949,7 @@ declare function createEditingService$1(options: CaptureHostOptions): {
                 candidateDigest: string | null;
             };
         }>;
-        apply(input: unknown): Promise<DraftReceipt>;
+        apply(input: unknown, guard?: DraftCommitGuard): Promise<DraftReceipt>;
         receipt(input: unknown): Promise<{
             status: DraftStatus;
             applied: DraftReceipt | null;

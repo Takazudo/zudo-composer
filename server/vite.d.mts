@@ -825,7 +825,14 @@ interface NativeEditingConfig {
 }
 
 type AssistantEffort = "low" | "medium" | "high";
+interface AssistantContentFieldPolicy {
+    providerId: string;
+    modelId: string;
+    fieldIds: readonly string[];
+}
 interface AssistantCommonConfig {
+    /** Trusted Content field IDs; omitted retains the standalone Article defaults. */
+    contentFields?: readonly AssistantContentFieldPolicy[];
     /** Default display name; a site-scoped stored name may replace it. */
     name: string;
     /** `propose` permits conversation, drafts and review but never Apply. */

@@ -6005,6 +6005,34 @@ var FilesystemCompositionStore = class FilesystemCompositionStore {
 	provideJsx;
 	now;
 	provider = COMPOSITION_PROVIDERS.files;
+	/** Internal read barrier for another domain's reviewed commit. The callback
+	* must not reenter this Composition store or mutate its root. A foreign
+	* uncertain commit must not strand our read-only writer lock. */
+	async withSnapshotBarrier(action) {
+		const outcome = await this.run("list", async () => {
+			const closure = await this.readDependencyClosure("list");
+			if (closure.entries.some(({ outcome }) => outcome.status !== "loaded")) throw operationError("list", "validation", "Invalid canonical Composition prevents snapshot capture.");
+			const canonical = (value) => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, canonical(child)])) : value;
+			const records = cloneJson([...closure.records].sort((a, b) => a.id.localeCompare(b.id)));
+			const mutationToken = createHash("sha256").update(JSON.stringify(canonical(records))).digest("hex");
+			try {
+				return {
+					ok: true,
+					value: await action({
+						mutationToken,
+						records
+					})
+				};
+			} catch (error) {
+				return {
+					ok: false,
+					error
+				};
+			}
+		});
+		if (!outcome.ok) throw outcome.error;
+		return outcome.value;
+	}
 	/** Content fingerprint, not a filesystem transaction or notification counter. */
 	async snapshot() {
 		const read = async () => {
