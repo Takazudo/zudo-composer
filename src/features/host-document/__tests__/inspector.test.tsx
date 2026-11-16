@@ -41,7 +41,7 @@ it("exposes shared ownership reasons and refuses controls instead of shadowing b
 
 it("uses declared enum and boolean controls and preserves omitted optional fields", () => {
   const schema = { ...component, fields: [
-    { prop: "mode", label: "Mode", schema: { type: "string" as const, enum: ["quiet", "loud"] }, editor: { kind: "select" as const } },
+    { prop: "mode", label: "Mode", schema: { type: "string" as const, enum: ["quiet", "loud"] as const }, editor: { kind: "select" as const } },
     { prop: "enabled", label: "Enabled", schema: { type: "boolean" as const }, editor: { kind: "boolean" as const } },
     { prop: "optional", label: "Optional heading", schema: { type: "string" as const }, editor: { kind: "text" as const } },
   ] };

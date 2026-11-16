@@ -20,10 +20,10 @@ it("does not enroll an empty, unresponsive iframe before the saved document arri
 });
 
 it("blocks refresh, selection, and workspace flush while a field draft is unsaved; discard restores navigation", async () => {
-  const { defineComponentPack, defineComponent } = await import("@zudo-composer/component-contract");
+  const { defineComponentPack } = await import("@zudo-composer/component-contract");
   const { fireEvent } = await import("@testing-library/preact");
   const sessions = createWorkspaceSaveRegistry();
-  const pack = defineComponentPack({ packId: "proof", packVersion: "1.0.0", components: [defineComponent<{ text: string }>()(() => null, { id: "paragraph", schemaVersion: 1, title: "Paragraph", description: "Text", category: "Test", source: { module: "proof/components", exportKind: "named", exportName: "Paragraph" }, defaults: { text: "" }, fields: [{ kind: "text", prop: "text", label: "Text" }] })] });
+  const pack = defineComponentPack({ packId: "proof", packVersion: "1.0.0", components: [{ component: () => null, id: "paragraph", schemaVersion: 1, title: "Paragraph", description: "Text", category: "Test", source: { module: "proof/components", exportKind: "named", exportName: "Paragraph" }, defaults: { text: "" }, fields: [{ kind: "text", prop: "text", label: "Text" }] }] });
   Object.assign(mocks.integration, { sessions, componentProvider: { manifest: pack.manifest } });
   const identity = { workspaceId: "proof", pathname: "/", revision: "a".repeat(64), packId: "proof", packVersion: "1", rendererId: "proof", rendererVersion: "1", rendererDigest: "b".repeat(64) };
   const targets = ["first", "second"].map(id => ({ renderedNodeId: id, parentRenderedNodeId: null, slotId: null, providerId: "files", recordId: "page", nodeId: id, componentId: "paragraph", props: { text: id }, entries: [], capabilities: { fields: { allowed: true }, structure: { allowed: true }, placement: { allowed: false }, uses: ["/"], insertSlots: [] } }));
