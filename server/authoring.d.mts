@@ -1477,6 +1477,14 @@ interface HostDocumentTarget {
     componentId: string;
     parentRenderedNodeId: string | null;
     slotId: string | null;
+    /** Local page placeholder that owns this materialized root's arrangement. */
+    placement?: {
+        providerId: string;
+        recordId: string;
+        nodeId: string;
+        parentNodeId: string | null;
+        slotId: string | null;
+    };
     props: JsonObject;
     entries: readonly {
         providerId: string;

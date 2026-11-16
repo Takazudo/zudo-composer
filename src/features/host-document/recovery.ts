@@ -3,7 +3,7 @@ import type { HostDocumentIdentity } from "../../../server/host-document/types";
 
 const name = z.string().min(1).max(256);
 const identity = z.object({ workspaceId: name, revision: z.string().regex(/^[a-f0-9]{64}$/), pathname: name, packId: name, packVersion: name, rendererId: name, rendererVersion: name, rendererDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
-const request = z.object({ workspaceId: name, revision: z.string().regex(/^[a-f0-9]{64}$/), pathname: name, operationId: z.uuid(), target: z.object({ renderedNodeId: name, providerId: name, recordId: name, nodeId: name }).strict(), change: z.discriminatedUnion("kind", [z.object({ kind: z.literal("field"), prop: name, value: z.json() }).strict(), z.object({ kind: z.literal("reorder"), direction: z.enum(["up", "down"]) }).strict(), z.object({ kind: z.literal("remove") }).strict()]) }).strict();
+const request = z.object({ workspaceId: name, revision: z.string().regex(/^[a-f0-9]{64}$/), pathname: name, operationId: z.uuid(), target: z.object({ renderedNodeId: name, providerId: name, recordId: name, nodeId: name }).strict(), change: z.discriminatedUnion("kind", [z.object({ kind: z.literal("field"), prop: name, value: z.json() }).strict(), z.object({ kind: z.literal("reorder"), direction: z.enum(["up", "down"]) }).strict(), z.object({ kind: z.literal("reorder-placement"), direction: z.enum(["up", "down"]) }).strict(), z.object({ kind: z.literal("remove") }).strict()]) }).strict();
 const envelope = z.object({ version: z.literal(1), origin: z.string().url(), actorId: z.uuid(), sessionId: z.uuid(), identity, request }).strict();
 export type PendingHostEdit = z.infer<typeof envelope>;
 const ownerKey = "zudo-host-document-actor-v1";

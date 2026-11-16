@@ -54,3 +54,12 @@ storage; clearing browser data removes its recovery pointers, not server receipt
 This initial host document route does not yet implement structural insertion,
 guarded Undo, mixed-domain proposals, or host-rendered Assistant candidates.
 Those must be accepted separately before claiming full authoring adoption.
+
+A mapped root can expose a separate **page placement** when its immediate
+unmaterialized parent is a placeholder in the route's local Composition. The
+`reorder-placement` operation moves that entire local placeholder within its
+parent slot. The server derives the placement from the reviewed route and source
+target; callers cannot supply arbitrary placement coordinates. The inspector
+names the placement owner separately from the shared source. Nested shared
+children have no such local placement, and shared Content, Mapping templates and
+shared Composition bytes retain their existing mutation guards.

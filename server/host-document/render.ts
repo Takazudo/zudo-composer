@@ -27,6 +27,15 @@ function hostRoute(route: SiteCompiledRoute): { route: SiteCompiledRoute; target
     linked.outlet.target.parentId = `host-source-${linked.outlet.target.parentId}`;
   }
   visit(rendered.composition.document.root, rendered.composition.local, null, null, linked ? "host-local-" : "");
+  // Only an immediate, unmaterialized local parent is an editable placement.
+  // Never climb through shared children to infer a broader operation.
+  for (const target of targets) {
+    if (!target.entries.length) continue;
+    const parent = targets.find(value => value.renderedNodeId === target.parentRenderedNodeId);
+    if (!parent || parent.entries.length || parent.providerId !== route.composition.local.providerId || parent.recordId !== route.composition.local.recordId) continue;
+    const grandparent = targets.find(value => value.renderedNodeId === parent.parentRenderedNodeId);
+    target.placement = { providerId: parent.providerId, recordId: parent.recordId, nodeId: parent.nodeId, parentNodeId: grandparent?.nodeId ?? null, slotId: parent.slotId };
+  }
   return { route: rendered, targets };
 }
 export function hostDocumentTargets(route: SiteCompiledRoute): HostDocumentTarget[] {

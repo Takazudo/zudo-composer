@@ -11,7 +11,7 @@ describe("durable host edit recovery", () => {
   it("retains exact request across a browser-session restart and clears only after receipt storage", () => {
     const local = storage(), ids = [id("1"), id("2")];
     const first = createHostEditRecovery(local, storage(), "http://localhost:4000", () => ids.shift()!);
-    const pending = first.save(identity, request());
+    const pending = first.save(identity, { ...request(), change: { kind: "reorder-placement", direction: "up" } });
     const restarted = createHostEditRecovery(local, storage(), "http://localhost:4000", () => id("4"));
     expect(restarted.sessionId).not.toBe(first.sessionId);
     expect(restarted.list(identity)).toEqual([pending]);
