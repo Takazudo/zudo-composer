@@ -168,7 +168,7 @@ test("an unbound target binds from its chip's compatible-source menu", async ({ 
   // offers the read-only selected Entry identity. No field disappeared.
   await expect(menu.getByRole("menuitem")).toHaveCount(6);
   for (const label of ["Heading", "Introduction", "Published on", "Body", "Slug"]) {
-    await expect(menu.getByText(label, { exact: true })).toHaveCount(1);
+    await expect(menu.getByRole("menuitem").filter({ has: page.getByText(label, { exact: true }) })).toHaveCount(1);
   }
   await expect(menu.getByRole("menuitem").filter({ hasText: "Entry identity" })).toContainText("Selected record ID · text");
   await menu.getByRole("menuitem").filter({ hasText: "Slug" }).click();
