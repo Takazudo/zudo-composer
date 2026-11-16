@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "1d7bb65c7b53989816bf144c7a25f9d7d6046662",
-  "payloadSha256": "0ee608f4a7fae6484e2d7a7933a24add3ad5780a5aa9d942c7998daf212ccd60",
-  "rawPackageJsonSha256": "1ee32d559a924d812b73f41a69c8871d1c033aeeffef056149238c40317a3fe7",
+  "packageOutputSha": "87b399f0d35e016ad4193238fd2d9f606d7dd59a",
+  "payloadSha256": "1e06b7c8213104b5c2aaa853a0af8f3f773185a3be6d7c0f5c853eb34e7d18fb",
+  "rawPackageJsonSha256": "8f291f1e809010ece116fd21da41650767ce37621e70629cce6e114eb1f2d639",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -2886,9 +2886,9 @@
     },
     {
       "path": "src/features/composer/ui/inspector/inspector-field.tsx",
-      "bytes": 32594,
+      "bytes": 32686,
       "mode": 420,
-      "sha256": "64f9a5ba1e16a628bf6b90efe3787ac7275463faeceb888ac7a059d48f76d4c0"
+      "sha256": "1e6e65bda43b87adc60cbc5e50537c3d2f21bf85c833906fb12e59773c2013c9"
     },
     {
       "path": "src/features/composer/ui/inspector/inspector-panel.tsx",
@@ -3222,9 +3222,9 @@
     },
     {
       "path": "src/features/host-document/inspector.tsx",
-      "bytes": 6930,
+      "bytes": 7385,
       "mode": 420,
-      "sha256": "dd2dc45568d98d0da23788a93772a9be861dd0ade30c854d707d775924eb8505"
+      "sha256": "7b5c46fbb658ca95e1cefb1c384014159b9a5e1e8ff29f395a419afb33eba503"
     },
     {
       "path": "src/features/host-document/page.css",
