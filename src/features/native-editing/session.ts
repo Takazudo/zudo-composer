@@ -1,3 +1,4 @@
+import { waitForAuthoringSessionReady } from "./session-readiness";
 import { AUTHORING_READ_HEADER, retryAuthoringRead } from "../../shared/authoring-read-retry";
 import { fileProviderConfig } from "virtual:composer-file-provider-config";
 import { createFrameInputGuard } from "./frame-input-guard";
@@ -98,14 +99,7 @@ async function ready(signal?: AbortSignal) {
 }
 /** Wait for this exact browser epoch to resume; never sends or replays an operation. */
 export async function waitForNativeAuthoringReady(signal?: AbortSignal): Promise<void> {
-  let requestEpoch = epoch;
-  await retryAuthoringRead("native-authoring-readiness", { headers: { [AUTHORING_READ_HEADER]: "1" }, signal }, async waitingSignal => {
-    if (coordinated && requestEpoch >= 0 && (!connected || epoch !== requestEpoch)) throw Object.assign(new Error("Authoring session changed. Reopen current records."), { code: "stale-browser" });
-    await ready(waitingSignal);
-    if (requestEpoch < 0) requestEpoch = epoch;
-    if (epoch !== requestEpoch) throw Object.assign(new Error("Authoring revision changed."), { code: "stale-browser" });
-    return new Response(null, { status: 204 });
-  });
+  await waitForAuthoringSessionReady(() => ({ coordinated, connected, epoch }), ready, signal);
 }
 const authoringFetch: typeof fetch = async (input, init) => {
   if (!coordinated) return globalThis.fetch(input, init);
