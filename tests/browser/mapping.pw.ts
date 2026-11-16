@@ -164,14 +164,54 @@ test("an unbound target binds from its chip's compatible-source menu", async ({ 
   await chip.click();
 
   const menu = page.getByRole("menu", { name: "Bind SectionHeading.eyebrow to…" });
-  // A text prop takes every string-producing field of the model — all five
-  // here — and would take none of a boolean or number one.
-  await expect(menu.getByRole("menuitem")).toHaveCount(5);
+  // A text prop keeps all five string-producing fields and additionally
+  // offers the read-only selected Entry identity. No field disappeared.
+  await expect(menu.getByRole("menuitem")).toHaveCount(6);
+  for (const label of ["Heading", "Introduction", "Published on", "Body", "Slug"]) {
+    await expect(menu.getByText(label, { exact: true })).toHaveCount(1);
+  }
+  await expect(menu.getByRole("menuitem").filter({ hasText: "Entry identity" })).toContainText("Selected record ID · text");
   await menu.getByRole("menuitem").filter({ hasText: "Slug" }).click();
 
   await expect(page.locator(".cms-mapping-status")).toHaveCount(5);
   await expect(page.locator('.cms-mapping-status[data-status="ready"]')).toHaveCount(5);
   await expect(chip).toHaveCount(0);
+
+  // Preserve the field-binding proof above, then exercise the metadata branch
+  // on the same target through ordinary UI actions.
+  await page.getByRole("button", { name: "Binding actions for Slug → SectionHeading.eyebrow", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Remove binding", exact: true }).click();
+  await expect(page.locator(".cms-mapping-status")).toHaveCount(4);
+  await chip.click();
+  await menu.getByRole("menuitem").filter({ hasText: "Entry identity" }).click();
+  const identityRow = page.getByRole("table", { name: "Bindings" }).getByRole("row").filter({ hasText: "Read-only record metadata" });
+  await expect(identityRow).toHaveCount(1);
+  await expect(identityRow).toContainText("Entry identity · unchanged");
+  await expect(identityRow.getByRole("combobox")).toHaveCount(0);
+  await expect(page.locator('.cms-mapping-status[data-status="ready"]')).toHaveCount(5);
+
+  const entry = page.getByRole("combobox", { name: "Sample Entry" });
+  const frame = page.frameLocator('iframe[title="Resolved Mapping preview"]');
+  await selectOptionMatching(entry, /article-first-question/);
+  await expect(frame.getByText("article-first-question", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.locator(".cms-topbar__status")).toHaveAttribute("data-state", "saved");
+  await documentReady({
+    id: "mapping-entry-identity-reload", kind: "reload",
+    transition: ({ remainingMs }) => page.reload({ timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(identityRow).toContainText("Entry identity · unchanged", { timeout: remainingMs() });
+      await expect(page.locator('.cms-mapping-status[data-status="ready"]')).toHaveCount(5, { timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
+  await expect(identityRow.getByRole("combobox")).toHaveCount(0);
+  await expect(chip).toHaveCount(0);
+  await selectOptionMatching(entry, /article-first-question/);
+  await expect(frame.getByText("article-first-question", { exact: true })).toBeVisible();
+  await selectOptionMatching(entry, /article-small-loops/);
+  await expect(frame.getByText("article-small-loops", { exact: true })).toBeVisible();
+  await expect(frame.getByText("article-first-question", { exact: true })).toHaveCount(0);
   expect(failures).toEqual([]);
 });
 
