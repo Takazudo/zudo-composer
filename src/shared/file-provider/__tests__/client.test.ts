@@ -75,6 +75,7 @@ describe("domain file provider client", () => {
     expect(init.method).toBe("POST");
     expect(init.cache).toBe("no-store");
     expect(init.credentials).toBe("same-origin");
+    expect(new Headers(init.headers).get("x-zudo-authoring-read")).toBe("1");
     expect(init.headers).toMatchObject({
       "x-zudo-composer-capability": "dev-capability",
       "x-zudo-composer-operation": "snapshot",
@@ -149,6 +150,7 @@ describe("domain file provider client", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect((init.headers as Record<string, string>)["x-zudo-composer-operation"]).toBe("transaction");
+    expect(new Headers(init.headers).has("x-zudo-authoring-read")).toBe(false);
     expect(JSON.parse(init.body as string)).toEqual({ expectedMutationToken: "before", steps });
   });
 

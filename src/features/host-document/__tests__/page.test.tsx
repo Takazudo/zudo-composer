@@ -8,9 +8,10 @@ afterEach(() => { cleanup(); localStorage.clear(); sessionStorage.clear(); vi.cl
 it("does not enroll an empty, unresponsive iframe before the saved document arrives", async () => {
   let finish!: (value: unknown) => void;
   mocks.request.mockReturnValue(new Promise(resolve => { finish = resolve; }));
-  const { container } = render(<HostDocumentPage />);
+  const { container, getByRole } = render(<HostDocumentPage />);
   await waitFor(() => expect(mocks.request).toHaveBeenCalled());
   expect(container.querySelector("iframe")).toBeNull();
+  expect(getByRole("status").textContent).toBe("Opening saved page…");
   finish({ identity: { workspaceId: "proof", pathname: "/", revision: "a".repeat(64), packId: "proof", packVersion: "1", rendererId: "proof", rendererVersion: "1", rendererDigest: "b".repeat(64) }, frameId: "frame", html: "<html><body>Saved</body></html>", routes: [], targets: [] });
   await waitFor(() => expect(container.querySelector("iframe")?.getAttribute("srcdoc")).toContain("Saved"));
 });

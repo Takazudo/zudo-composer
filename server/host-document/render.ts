@@ -27,7 +27,7 @@ function hostRoute(route: SiteCompiledRoute): { route: SiteCompiledRoute; target
     visit(linked.document.root, linked.ref, null, null, "host-source-");
     linked.outlet.target.parentId = `host-source-${linked.outlet.target.parentId}`;
   }
-  visit(rendered.composition.document.root, rendered.composition.local, null, null, linked ? "host-local-" : "");
+  visit(rendered.composition.document.root, rendered.composition.local, linked?.outlet.target.parentId ?? null, linked?.outlet.target.slotId ?? null, linked ? "host-local-" : "");
   // Only an immediate, unmaterialized local parent is an editable placement.
   // Never climb through shared children to infer a broader operation.
   for (const target of targets) {

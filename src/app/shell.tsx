@@ -108,6 +108,7 @@ export function Shell({ children, path, themeController, themeSnapshot, summary,
   const [railState, setRailState] = useState<RailState>(readRailState);
   const [counts, setCounts] = useState<WorkspaceCounts | null>(null);
   const [models, setModels] = useState<NavigationModel[]>([]);
+  const modelLoading = useRef(false);
   const [modelError, setModelError] = useState<string | null>(null);
   const [pins, setPins] = useState(readPins);
   const [mobile, setMobile] = useState(() => typeof window.matchMedia === "function" && window.matchMedia("(max-width: 760px)").matches);
@@ -177,9 +178,16 @@ export function Shell({ children, path, themeController, themeSnapshot, summary,
     return () => document.removeEventListener("keydown", keyboard);
   });
 
+  useLayoutEffect(() => {
+    const resumed = () => { if (modelError && !modelLoading.current) setModelGeneration(value => value + 1); };
+    window.addEventListener("native-authoring-resumed", resumed);
+    return () => window.removeEventListener("native-authoring-resumed", resumed);
+  }, [modelError]);
+
   useEffect(() => {
     if (!integration) return;
     let live = true;
+    modelLoading.current = true;
     void (async () => {
       const initialized = await integration.initialization.initialize();
       if (initialized.status !== "ready") throw initialized.error;
@@ -193,7 +201,7 @@ export function Shell({ children, path, themeController, themeSnapshot, summary,
         setModels(values.flatMap((value) => value.status === "fulfilled" ? [value.value] : []));
         setModelError(catalog.failures.length || values.some((value) => value.status === "rejected") ? "Some Content models or providers are unavailable." : null);
       }
-    })().catch((cause: unknown) => { if (live) { setModels([]); setModelError(cause instanceof Error ? cause.message : "Content models unavailable."); } });
+    })().catch((cause: unknown) => { if (live) { setModels([]); setModelError(cause instanceof Error ? cause.message : "Content models unavailable."); } }).finally(() => { if (live) modelLoading.current = false; });
     return () => { live = false; };
   }, [integration, modelGeneration]);
 

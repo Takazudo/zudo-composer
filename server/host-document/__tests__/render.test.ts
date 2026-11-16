@@ -18,6 +18,7 @@ describe("host document renderer", () => {
   it("qualifies repeated node IDs across a linked template and local composition", async () => {
     const linked = { ...route, composition: { ...route.composition, document: { ...route.composition.document, root: [node("same")] }, linkedSource: { ref: { providerId: "files", recordId: "template" }, document: { ...route.composition.document, root: [node("same")] }, outlet: { id: "main", label: "Main", target: { parentId: "same", slotId: "main" } } } } };
     const targets = hostDocumentTargets(linked);
+    expect(targets.find(target => target.renderedNodeId === "host-local-same")).toMatchObject({ parentRenderedNodeId: "host-source-same", slotId: "main", providerId: "files", recordId: "lessons", nodeId: "same" });
     expect(targets.map(value => [value.renderedNodeId, value.recordId, value.nodeId])).toEqual([["host-source-same", "template", "same"], ["host-local-same", "lessons", "same"]]);
     expect(linked.composition.document.root[0]!.id).toBe("same");
   });

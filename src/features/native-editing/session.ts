@@ -1,3 +1,4 @@
+import { AUTHORING_READ_HEADER, retryAuthoringRead } from "../../shared/authoring-read-retry";
 import { fileProviderConfig } from "virtual:composer-file-provider-config";
 import { createFrameInputGuard } from "./frame-input-guard";
 import { installAuthoringFetch } from "../../shared/authoring-fetch";
@@ -73,7 +74,7 @@ if (coordinated) {
       // appeared after preparation. Disconnects unlock input and lose that proof.
       if (inputLocked && !isPending() && !frameInput?.busy()) window.location.reload();
       else { freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-stale")); }
-    } else freeze(false);
+    } else { freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-resumed")); }
   });
   hot!.on("vite:ws:disconnect", () => { connected = false; settle(false); freeze(false); });
   hot!.on("native:invalidated", () => window.dispatchEvent(new CustomEvent("native-authoring-invalidated")));
@@ -83,22 +84,31 @@ export function attachNativeAuthoringState(pending: () => boolean, flush: () => 
   isPending = pending; flushPending = flush; enrolled = true; if (coordinated) bind();
   return () => { if (isPending === pending) isPending = () => true; };
 }
-async function ready() {
+async function ready(signal?: AbortSignal) {
+  signal?.throwIfAborted();
   if (!coordinated) return;
   enrolled = true;
-  if (frozen) throw new Error("Authoring is reconciling. Input is retained.");
+  if (frozen) throw Object.assign(new Error("Authoring is reconciling. Input is retained."), { code: "authoring-busy" });
   const online = connected || await new Promise<boolean>(resolve => {
-    const finish = (value: boolean) => { clearTimeout(timer); waiting.delete(finish); resolve(value); };
-    const timer = setTimeout(() => finish(false), 5000); waiting.add(finish); bind();
+    const abort = () => finish(false);
+    const finish = (value: boolean) => { clearTimeout(timer); signal?.removeEventListener("abort", abort); waiting.delete(finish); resolve(value); };
+    const timer = setTimeout(() => finish(false), 5000); waiting.add(finish); signal?.addEventListener("abort", abort, { once: true }); if (signal?.aborted) abort(); else bind();
   });
   if (!online) throw new Error("Authoring coordination is disconnected. No write was sent.");
 }
 const authoringFetch: typeof fetch = async (input, init) => {
   if (!coordinated) return globalThis.fetch(input, init);
-  await ready();
-  const headers = new Headers(init?.headers);
-  headers.set("x-zudo-native-client", clientId); headers.set("x-zudo-native-epoch", String(epoch));
-  return globalThis.fetch(input, { ...init, headers });
+  const readOnly = new Headers(init?.headers).get(AUTHORING_READ_HEADER) === "1";
+  let requestEpoch = epoch;
+  return retryAuthoringRead(input, init, async signal => {
+    if (readOnly && requestEpoch >= 0 && (!connected || epoch !== requestEpoch)) throw Object.assign(new Error("Authoring session changed. Reopen current records."), { code: "stale-browser" });
+    await ready(signal);
+    if (requestEpoch < 0) requestEpoch = epoch;
+    if (readOnly && epoch !== requestEpoch) throw Object.assign(new Error("Authoring revision changed."), { code: "stale-browser" });
+    const headers = new Headers(init?.headers);
+    headers.set("x-zudo-native-client", clientId); headers.set("x-zudo-native-epoch", String(epoch));
+    return globalThis.fetch(input, { ...init, headers, signal });
+  });
 };
 if (coordinated) {
   const reset = installAuthoringFetch(authoringFetch);

@@ -67,3 +67,7 @@ shared Composition bytes retain their existing mutation guards.
 ### Host JSX runtime
 
 Set `hostDocument.jsxImportSource` to the host framework’s public JSX runtime prefix when its renderer imports TSX (for example, `@takazudo/zfb/zudo-react`). The default is `preact`. Composer evaluates this trusted server renderer in a separate module graph with the declared runtime, so the editor’s Preact preset and previously loaded component pack cannot rewrite or cache its component output. The configured runtime is covered by the attested configuration file in renderer identity. This does not change Composer’s own UI or component-pack runtime.
+
+### Component hierarchy
+
+The page tree follows rendered parent and named-slot relationships, including local page roots inside a linked template outlet. Labels use the installed component manifest’s titles; canonical IDs and qualified owners remain available in inspector details. Expand contextual containers to reach their children, or select a rendered component to reveal all of its ancestors automatically. Arrow keys navigate and expand the tree; Enter or Space selects the exact owner. No component is omitted by a guessed prominence rule. Packs without semantic prominence metadata still expose their wrappers as contextual, initially collapsed branches; reducing excessive wrappers and mapping fragments remains part of the Pinsel T4 model normalization.

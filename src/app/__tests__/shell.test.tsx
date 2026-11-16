@@ -313,3 +313,15 @@ describe("Shell notifications", () => {
     expect(trigger).toHaveFocus();
   });
 });
+
+it("retries a failed model catalog after same-epoch authoring resume, preserving healthy catalogs", async () => {
+  const listModels = vi.fn().mockRejectedValueOnce(Object.assign(new Error("Authoring read did not settle in time."), { name: "TimeoutError" })).mockResolvedValue({ entries: [], failures: [] });
+  const integration = { initialization: { initialize: async () => ({ status: "ready" }) }, contentCatalog: { listModels }, subscribeChanges: () => () => {} } as unknown as ProductionProviderIntegration;
+  render(<WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}><ShellHarness /></WorkspaceContext.Provider>);
+  await waitFor(() => expect(screen.getByText("Authoring read did not settle in time.")).toBeTruthy());
+  await act(async () => { window.dispatchEvent(new CustomEvent("native-authoring-resumed")); });
+  await waitFor(() => expect(listModels).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.queryByText("Authoring read did not settle in time.")).toBeNull());
+  await act(async () => { window.dispatchEvent(new CustomEvent("native-authoring-resumed")); });
+  expect(listModels).toHaveBeenCalledTimes(2);
+});

@@ -587,7 +587,7 @@ function hostRoute(route) {
 		visit(linked.document.root, linked.ref, null, null, "host-source-");
 		linked.outlet.target.parentId = `host-source-${linked.outlet.target.parentId}`;
 	}
-	visit(rendered.composition.document.root, rendered.composition.local, null, null, linked ? "host-local-" : "");
+	visit(rendered.composition.document.root, rendered.composition.local, linked?.outlet.target.parentId ?? null, linked?.outlet.target.slotId ?? null, linked ? "host-local-" : "");
 	for (const target of targets) {
 		if (!target.entries.length) continue;
 		const parent = targets.find((value) => value.renderedNodeId === target.parentRenderedNodeId);

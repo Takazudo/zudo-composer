@@ -1,3 +1,4 @@
+import { AUTHORING_READ_HEADER } from "../authoring-read-retry";
 import { notifyPersistenceChange } from "../persistence-generation";
 import {
   FILE_PROVIDER_TRANSACTION_OPERATION,
@@ -9,6 +10,8 @@ import {
 } from "./protocol";
 
 const encoder = new TextEncoder();
+// Unknown operations, initialization and transactions are intentionally excluded.
+const retryableReads = new Set(["list", "get", "snapshot", "read-all", "list-models", "get-model", "get-entry", "count-entries", "page-entries", "scan-entries", "selection", "generation", "find-seeding", "missing-directories"]);
 
 export interface FileProviderCallOptions {
   /** Emit a `zudo-workspace-persistence-v1` refresh hint after a success. */
@@ -90,6 +93,7 @@ export class DomainFileProviderClient<Operation extends string, DomainError exte
           [this.config.capabilityHeader]: this.config.capability,
           [this.config.operationHeader]: operation,
           ...workspaceHeaders,
+          ...(!options.mutates && retryableReads.has(operation) ? { [AUTHORING_READ_HEADER]: "1" } : {}),
         },
         body,
         cache: "no-store",
