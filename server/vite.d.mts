@@ -853,6 +853,16 @@ interface CliAssistantConfig extends AssistantCommonConfig {
 }
 type AssistantConfig = AnthropicAssistantConfig | FakeAssistantConfig | CliAssistantConfig;
 
+interface HostDocumentConfig {
+    module: string;
+    rendererId: string;
+    rendererVersion: string;
+    /** Trusted host JSX runtime package; defaults to Preact. Evaluated in an isolated server graph. */
+    jsxImportSource?: string;
+    /** Explicit host-relative public document assets; never inferred from a parent directory. */
+    publicDir?: string;
+}
+
 /** Absolute paths derived from the settings. Node-side only, never serialized. */
 interface ComposerPaths {
     workspaceRoot: string;
@@ -866,6 +876,8 @@ interface ComposerPaths {
     styles: string;
 }
 interface ResolvedComposerConfig {
+    authoringAuthority: "source" | "workspace" | undefined;
+    hostDocument: HostDocumentConfig | undefined;
     nativeEditing: NativeEditingConfig | undefined;
     assistant: AssistantConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */

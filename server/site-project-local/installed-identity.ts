@@ -47,6 +47,13 @@ type DigestMode = { readonly kind: "directory" } | { readonly kind: "contract" }
 
 const compareCodePoints = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
+// A private Cloud checkout/cache uses 0600/0700 where CI uses 0644/0755.
+// Those local access permissions do not change the installed package's bytes
+// or canonical seed identity. Preserve Git's owner-executable distinction for
+// files and use a canonical directory mode. The exact actual modes are still
+// checked below to detect changes while the tree is being read.
+const portableFileMode = (mode: number): number => mode & 0o100 ? 0o755 : 0o644;
+
 function assertStrictlySorted(values: readonly string[], label: string): void {
   for (let index = 1; index < values.length; index += 1) if (compareCodePoints(values[index - 1]!, values[index]!) >= 0) throw new Error(`Pack source graph ${label} must be sorted and unique.`);
 }
@@ -92,7 +99,7 @@ async function packageDigest(directory: string, mode: DigestMode): Promise<strin
     const before = await lstat(path);
     if (before.isSymbolicLink() || await realpath(root) !== pinned || await realpath(path) !== join(pinned, relative)) throw new Error("Installed package tree contains a link or changed root.");
     if (before.isDirectory() && !graphOnly) {
-      const names = (await readdir(path)).sort().filter((name) => contractOnly || name !== "node_modules"); entries.push([relative, "directory", before.mode & 0o777, ""]);
+      const names = (await readdir(path)).sort().filter((name) => contractOnly || name !== "node_modules"); entries.push([relative, "directory", 0o755, ""]);
       for (const name of names) await visit(join(path, name), relative ? `${relative}/${name}` : name);
       if (JSON.stringify((await readdir(path)).sort().filter((name) => contractOnly || name !== "node_modules")) !== JSON.stringify(names)) throw new Error("Installed package directory changed during hashing.");
     } else if (before.isFile()) {
@@ -104,7 +111,7 @@ async function packageDigest(directory: string, mode: DigestMode): Promise<strin
         else if (manifest) hash.update(hostManifestProjection(await handle.readFile("utf8")));
         else for await (const chunk of handle.createReadStream({ autoClose: false })) hash.update(chunk);
         const after = await handle.stat(); if (after.size !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs) throw new Error("Installed package file changed during hashing.");
-        entries.push(manifest ? [relative, "manifest", 0, hash.digest("hex")] : [relative, "file", before.mode & 0o777, hash.digest("hex")]);
+        entries.push(manifest ? [relative, "manifest", 0, hash.digest("hex")] : [relative, "file", portableFileMode(before.mode), hash.digest("hex")]);
       } finally { await handle.close(); }
     } else throw new Error("Installed package contains a non-regular entry.");
     const after = await lstat(path); if (after.ino !== before.ino || after.dev !== before.dev || after.mode !== before.mode || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs || after.isSymbolicLink() || await realpath(path) !== join(pinned, relative)) throw new Error("Installed package entry changed during hashing.");

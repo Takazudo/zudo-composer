@@ -1258,6 +1258,16 @@ interface CliAssistantConfig extends AssistantCommonConfig {
 }
 type AssistantConfig = AnthropicAssistantConfig | FakeAssistantConfig | CliAssistantConfig;
 
+interface HostDocumentConfig {
+    module: string;
+    rendererId: string;
+    rendererVersion: string;
+    /** Trusted host JSX runtime package; defaults to Preact. Evaluated in an isolated server graph. */
+    jsxImportSource?: string;
+    /** Explicit host-relative public document assets; never inferred from a parent directory. */
+    publicDir?: string;
+}
+
 /** Absolute paths derived from the settings. Node-side only, never serialized. */
 interface ComposerPaths {
     workspaceRoot: string;
@@ -1271,6 +1281,8 @@ interface ComposerPaths {
     styles: string;
 }
 interface ResolvedComposerConfig {
+    authoringAuthority: "source" | "workspace" | undefined;
+    hostDocument: HostDocumentConfig | undefined;
     nativeEditing: NativeEditingConfig | undefined;
     assistant: AssistantConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */
@@ -1291,4 +1303,224 @@ declare function initializeAuthoringWorkspace(options: {
     workspaceId: string;
 }): Promise<WorkspaceRecord>;
 
-export { ASSET_PROVIDER_ID, COMPOSITION_PROVIDER_ID, CONTENT_PROVIDER_ID, DEFAULT_TIMESTAMP, MAPPING_PROVIDER_ID, SITEMAP_PROVIDER_ID, assetAuthoringUrl, assetMimeTypeForExtension, canonicalStringifyJson, createFilesystemAssetStore, defineSite, entryRef, imageUse, initializeAuthoringWorkspace, node, slugify, validateSiteProject };
+type WorkspaceToken = string | number;
+
+interface LockedAssetPin extends AssetVersionPin {
+    fileName?: string;
+    metadataRevision: number;
+    headVersionId: string;
+}
+interface AssetReferenceLock {
+    schemaVersion: 1;
+    providerId: string;
+    mutationToken: string;
+    pins: LockedAssetPin[];
+}
+
+type LinkedJsxModuleKind = "standalone" | "global-template" | "linked-consumer";
+
+interface SitemapRouteAncestor {
+    nodeId: string;
+    pathname: string;
+    displayTitle: string;
+    selectedEntry?: SitemapEntryRef;
+}
+
+interface SiteCompiledModule {
+    recordId: string;
+    moduleSpecifier: string;
+    kind: LinkedJsxModuleKind;
+    code: string;
+}
+interface SiteCompiledRouteSource {
+    kind: "composition" | "mapping";
+    ref: SiteProjectRecordRef;
+}
+interface SiteCompiledRouteComposition {
+    /** Stable provider-qualified identity of the canonical local Composition. */
+    local: SiteProjectRecordRef;
+    /** Deterministic route-variant identity used only for source planning. */
+    routeRecordId: string;
+    /** Evaluated local document. Its canonical source id is deliberately retained. */
+    document: CompositionDocument;
+    linkedSource?: {
+        ref: SiteProjectRecordRef;
+        outlet: {
+            id: string;
+            label: string;
+            target: {
+                parentId: string;
+                slotId: string;
+            };
+        };
+        document: CompositionDocument;
+    };
+}
+interface SiteCompiledRoute {
+    materializationSources?: readonly {
+        renderedNodeId: string;
+        providerId: string;
+        recordId: string;
+        nodeId: string;
+        attachmentId: string;
+        entries: readonly {
+            providerId: string;
+            modelId: string;
+            recordId: string;
+        }[];
+    }[];
+    pathname: string;
+    /** Plain per-route title resolved during compilation; delivery never infers it from rendered content. */
+    displayTitle: string;
+    sitemapNode: {
+        id: string;
+        path: string;
+    };
+    source: SiteCompiledRouteSource;
+    selectedEntry?: SitemapEntryRef;
+    ancestors: readonly SitemapRouteAncestor[];
+    composition: SiteCompiledRouteComposition;
+    modules: readonly SiteCompiledModule[];
+}
+
+interface ResolvedComponentPack {
+  /** The config `pack` value, verbatim. */
+  specifier: string;
+  /** Scope + name, without the export subpath. */
+  packageName: string;
+  /** Directory of the resolved package. */
+  packageRoot: string;
+  /** Absolute path of the pack module. */
+  entryPath: string;
+}
+
+interface AuthoringRendererIdentity {
+    id: string;
+    version: string;
+    module: string;
+    digest: string;
+}
+interface AuthoringPackIdentity {
+    specifier: string;
+    source: string;
+    digest: string;
+    compiler: string;
+    contractDigest: string;
+}
+interface AuthoringPublicFile {
+    fileName: string;
+    sourcePath: string;
+}
+interface CapturedPublicFile {
+    fileName: string;
+    base64: string;
+    checksum: string;
+    byteLength: number;
+}
+interface AuthoringWorkspaceSnapshot {
+    schemaVersion: 1;
+    digest: string;
+    workspaceId: string;
+    tokens: Readonly<Record<string, WorkspaceToken>>;
+    project: SiteProject;
+    componentPack: AuthoringPackIdentity & {
+        manifestDigest: string;
+    };
+    renderer: AuthoringRendererIdentity;
+    publicFiles: CapturedPublicFile[];
+    assets: {
+        snapshot: AssetSnapshot;
+        lock: AssetReferenceLock;
+        files: {
+            fileName: string;
+            base64: string;
+            checksum: string;
+            byteLength: number;
+        }[];
+    };
+}
+interface CaptureAuthoringWorkspaceOptions {
+    composerConfig: ResolvedComposerConfig;
+    /** Explicit shipping manifest. Paths are normalized, workspace-relative files. */
+    publicFiles?: readonly AuthoringPublicFile[];
+    pack: TrustedComponentPack;
+    packIdentity: AuthoringPackIdentity;
+    renderer: AuthoringRendererIdentity;
+}
+declare function resolveAuthoringPackIdentity(options: {
+    composerConfig: ResolvedComposerConfig;
+    pack: TrustedComponentPack;
+    packIdentity: ResolvedComponentPack;
+}): Promise<AuthoringPackIdentity>;
+declare function resolveAuthoringRendererIdentity(options: {
+    composerConfig: ResolvedComposerConfig;
+}): Promise<AuthoringRendererIdentity>;
+/** Offline capture requires Save and a stopped editor. A live server must hold its
+ * authoring lease and flush browser sessions before invoking this operation. */
+declare function captureAuthoringWorkspace(options: CaptureAuthoringWorkspaceOptions): Promise<AuthoringWorkspaceSnapshot>;
+/** Reopen durable stores and compare their tokens; Content generation also rejects edit/revert. */
+declare function isAuthoringWorkspaceSnapshotCurrent(options: CaptureAuthoringWorkspaceOptions, snapshot: AuthoringWorkspaceSnapshot): Promise<boolean>;
+
+interface HostDocumentIdentity {
+    workspaceId: string;
+    revision: string;
+    pathname: string;
+    packId: string;
+    packVersion: string;
+    rendererId: string;
+    rendererVersion: string;
+    rendererDigest: string;
+}
+interface HostDocumentTarget {
+    renderedNodeId: string;
+    providerId: string;
+    recordId: string;
+    nodeId: string;
+    componentId: string;
+    parentRenderedNodeId: string | null;
+    slotId: string | null;
+    /** Local page placeholder that owns this materialized root's arrangement. */
+    placement?: {
+        providerId: string;
+        recordId: string;
+        nodeId: string;
+        parentNodeId: string | null;
+        slotId: string | null;
+    };
+    props: JsonObject;
+    entries: readonly {
+        providerId: string;
+        modelId: string;
+        recordId: string;
+    }[];
+}
+interface HostDocumentRenderInput {
+    route: SiteCompiledRoute;
+    project?: SiteProject;
+    identity: HostDocumentIdentity;
+    targets: readonly HostDocumentTarget[];
+}
+/** Trusted host code, never model-generated source. Mark selectable elements with data-composer-target. */
+interface HostDocumentRenderer {
+    renderDocument(input: HostDocumentRenderInput): string | Promise<string>;
+}
+interface HostDocumentPreview {
+    identity: HostDocumentIdentity;
+    frameId: string;
+    html: string;
+    navigation?: {
+        url: string;
+        pathnames: readonly string[];
+    };
+    targets: readonly HostDocumentTarget[];
+}
+
+declare function hostDocumentTargets(route: SiteCompiledRoute): HostDocumentTarget[];
+/** Only this tool-owned bridge enters authoring output; static builds call the host renderer directly. */
+declare function renderHostDocument(renderer: HostDocumentRenderer, route: SiteCompiledRoute, identity: HostDocumentIdentity, project?: SiteProject, navigation?: {
+    url: string;
+    pathnames: readonly string[];
+}): Promise<HostDocumentPreview>;
+
+export { ASSET_PROVIDER_ID, COMPOSITION_PROVIDER_ID, CONTENT_PROVIDER_ID, DEFAULT_TIMESTAMP, MAPPING_PROVIDER_ID, SITEMAP_PROVIDER_ID, assetAuthoringUrl, assetMimeTypeForExtension, canonicalStringifyJson, captureAuthoringWorkspace, createFilesystemAssetStore, defineSite, entryRef, hostDocumentTargets, imageUse, initializeAuthoringWorkspace, isAuthoringWorkspaceSnapshotCurrent, node, renderHostDocument, resolveAuthoringPackIdentity, resolveAuthoringRendererIdentity, slugify, validateSiteProject };
+export type { AuthoringPackIdentity, AuthoringPublicFile, AuthoringRendererIdentity, AuthoringWorkspaceSnapshot, CaptureAuthoringWorkspaceOptions, CapturedPublicFile, HostDocumentIdentity, HostDocumentPreview, HostDocumentRenderInput, HostDocumentRenderer, HostDocumentTarget };

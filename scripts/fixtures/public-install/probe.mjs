@@ -7,11 +7,11 @@ import * as editing from "zudo-composer/editing";
 import * as siteBuild from "zudo-composer/site-build";
 import { loadHostContext } from "zudo-composer/vite";
 
-assert.deepEqual(Object.keys(authoring).sort(), ["ASSET_PROVIDER_ID", "COMPOSITION_PROVIDER_ID", "CONTENT_PROVIDER_ID", "DEFAULT_TIMESTAMP", "MAPPING_PROVIDER_ID", "SITEMAP_PROVIDER_ID", "assetAuthoringUrl", "assetMimeTypeForExtension", "canonicalStringifyJson", "createFilesystemAssetStore", "defineSite", "entryRef", "imageUse", "initializeAuthoringWorkspace", "node", "slugify", "validateSiteProject"]);
+assert.deepEqual(Object.keys(authoring).sort(), ["ASSET_PROVIDER_ID", "COMPOSITION_PROVIDER_ID", "CONTENT_PROVIDER_ID", "DEFAULT_TIMESTAMP", "MAPPING_PROVIDER_ID", "SITEMAP_PROVIDER_ID", "assetAuthoringUrl", "assetMimeTypeForExtension", "canonicalStringifyJson", "captureAuthoringWorkspace", "createFilesystemAssetStore", "defineSite", "entryRef", "hostDocumentTargets", "imageUse", "initializeAuthoringWorkspace", "isAuthoringWorkspaceSnapshotCurrent", "node", "renderHostDocument", "resolveAuthoringPackIdentity", "resolveAuthoringRendererIdentity", "slugify", "validateSiteProject"]);
 assert.deepEqual(Object.keys(editing), ["createEditingService"]);
 assert.equal(typeof editing.createEditingService, "function");
 assert.equal(typeof authoring.initializeAuthoringWorkspace, "function");
-assert.deepEqual(Object.keys(siteBuild).sort(), ["SITE_HEADERS", "SITE_MANIFEST", "compileStaticSite", "createSiteManifest", "siteHeaders", "verifySiteStaticArtifact"]);
+assert.deepEqual(Object.keys(siteBuild).sort(), ["SITE_HEADERS", "SITE_MANIFEST", "compileAuthoringWorkspaceSnapshot", "compileStaticSite", "createSiteManifest", "siteHeaders", "verifySiteStaticArtifact"]);
 assert.equal(authoring.assetAuthoringUrl("proof"), "/uploaded-assets/asset-proof");
 assert.equal(authoring.assetMimeTypeForExtension("PDF"), "application/pdf");
 assert.equal(authoring.canonicalStringifyJson({ z: 1, a: [2] }), '{"a":[2],"z":1}\n');
@@ -44,6 +44,32 @@ const compiled = await siteBuild.compileStaticSite({ projectPath, pack, assetsSt
 assert.deepEqual(compiled.build.routes.map(({ pathname }) => pathname), ["/"]);
 assert.equal(compiled.project.id, project.id);
 assert.match(compiled.projectSourceRevision, /^[a-f0-9]{64}$/);
+
+// Offline, disposable native workspace: use only installed public exports.
+await authoring.initializeAuthoringWorkspace({ composerConfig, pack, project, workspaceId: "installed-native-proof" });
+const captureOptions = { composerConfig, pack,
+  packIdentity: await authoring.resolveAuthoringPackIdentity({ composerConfig, pack, packIdentity }),
+  renderer: await authoring.resolveAuthoringRendererIdentity({ composerConfig }),
+};
+const nativeSnapshot = await authoring.captureAuthoringWorkspace(captureOptions);
+assert.equal(nativeSnapshot.workspaceId, "installed-native-proof");
+assert.equal(await authoring.isAuthoringWorkspaceSnapshotCurrent(captureOptions, nativeSnapshot), true);
+const exact = await siteBuild.compileAuthoringWorkspaceSnapshot({ ...captureOptions, snapshot: JSON.parse(JSON.stringify(nativeSnapshot)) });
+assert.deepEqual(exact.build.routes.map(({ pathname }) => pathname), ["/"]);
+assert.deepEqual(exact.project, nativeSnapshot.project);
+const route = exact.build.routes[0];
+assert.equal(authoring.hostDocumentTargets(route)[0].nodeId, "banner");
+const hostRenderer = await import("public-entry-host/components");
+const preview = await authoring.renderHostDocument(hostRenderer, route, {
+  workspaceId: nativeSnapshot.workspaceId, revision: nativeSnapshot.digest, pathname: route.pathname,
+  packId: pack.manifest.packId, packVersion: pack.manifest.packVersion,
+  rendererId: captureOptions.renderer.id, rendererVersion: captureOptions.renderer.version, rendererDigest: captureOptions.renderer.digest,
+}, exact.project);
+assert.equal(preview.identity.revision, nativeSnapshot.digest);
+assert.ok(preview.html.includes("zudo-host-document-v1"));
+assert.deepEqual(preview.targets, authoring.hostDocumentTargets(route));
+const tampered = globalThis.structuredClone(nativeSnapshot); tampered.project.name = "Not reviewed";
+await assert.rejects(siteBuild.compileAuthoringWorkspaceSnapshot({ ...captureOptions, snapshot: tampered }), /digest mismatch/);
 
 const directory = join(workspaceRoot, "dist-site");
 await mkdir(directory);

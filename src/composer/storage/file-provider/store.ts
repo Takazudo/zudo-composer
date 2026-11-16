@@ -1,3 +1,4 @@
+import { AUTHORING_READ_HEADER } from "../../../shared/authoring-read-retry";
 import { authoringFetch } from "../../../shared/authoring-fetch";
 import { fileProviderConfig } from "virtual:composer-file-provider-config";
 import { notifyPersistenceChange } from "../../../shared/persistence-generation";
@@ -350,6 +351,7 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
           "content-type": "application/json",
           [this.config.capabilityHeader]: this.config.capability,
           [this.config.workspaceHeader]: this.workspace(),
+          ...(["list", "get", "snapshot"].includes(operation) && (!fields.outputsById || Object.keys(fields.outputsById).length === 0) ? { [AUTHORING_READ_HEADER]: "1" } : {}),
         },
         body: JSON.stringify({ operation, ...fields }),
         cache: "no-store",

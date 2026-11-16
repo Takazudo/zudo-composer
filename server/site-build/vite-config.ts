@@ -22,6 +22,7 @@ export async function resolveStaticSiteConfig(options: Pick<BuildSiteOptions, "w
   const sourceRevision = resolveSiteSourceRevision(options.sourceRevision, options.env);
   const hostRoot = resolveWorkspaceRoot(options.workspaceRoot);
   const { composerConfig, pack } = await loadHostContext({ workspaceRoot: hostRoot, env: options.env });
+  if (composerConfig.authoringAuthority === "workspace") throw new Error("Native workspace authority requires compileAuthoringWorkspaceSnapshot and the trusted host renderer; build-site cannot read root site-project.json.");
   const { paths, settings, configPath } = composerConfig;
   const compiled = await compileStaticSite({ projectPath: resolve(hostRoot, "site-project.json"), pack, assetsStoreRoot: paths.assets });
   const outDir = resolve(hostRoot, "dist-site");

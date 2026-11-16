@@ -14,6 +14,8 @@ import type {
   ResolvedComposerConfig,
 } from "zudo-composer/config";
 import * as authoring from "zudo-composer/authoring";
+import type { HostDocumentPreview, HostDocumentTarget, HostDocumentRenderer, AuthoringWorkspaceSnapshot, AuthoringPackIdentity, AuthoringRendererIdentity, CaptureAuthoringWorkspaceOptions } from "zudo-composer/authoring";
+import * as siteBuild from "zudo-composer/site-build";
 import * as editing from "zudo-composer/editing";
 import type { EditRequest, EditPlan, EditReceipt } from "zudo-composer/editing";
 import { compileStaticSite, createSiteManifest, type StaticSiteCompilation, type SiteManifest, type ToolIdentity } from "zudo-composer/site-build";
@@ -25,7 +27,31 @@ import type { InlineConfig, Plugin, ViteDevServer } from "vite";
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
-export type AuthoringExports = Assert<Equal<keyof typeof authoring, "ASSET_PROVIDER_ID" | "COMPOSITION_PROVIDER_ID" | "CONTENT_PROVIDER_ID" | "DEFAULT_TIMESTAMP" | "MAPPING_PROVIDER_ID" | "SITEMAP_PROVIDER_ID" | "assetAuthoringUrl" | "assetMimeTypeForExtension" | "createFilesystemAssetStore" | "canonicalStringifyJson" | "defineSite" | "entryRef" | "imageUse" | "initializeAuthoringWorkspace" | "node" | "slugify" | "validateSiteProject">>;
+export type AuthoringExports = Assert<Equal<keyof typeof authoring, "ASSET_PROVIDER_ID" | "COMPOSITION_PROVIDER_ID" | "CONTENT_PROVIDER_ID" | "DEFAULT_TIMESTAMP" | "MAPPING_PROVIDER_ID" | "SITEMAP_PROVIDER_ID" | "assetAuthoringUrl" | "assetMimeTypeForExtension" | "createFilesystemAssetStore" | "canonicalStringifyJson" | "captureAuthoringWorkspace" | "defineSite" | "entryRef" | "hostDocumentTargets" | "imageUse" | "initializeAuthoringWorkspace" | "isAuthoringWorkspaceSnapshotCurrent" | "node" | "renderHostDocument" | "resolveAuthoringPackIdentity" | "resolveAuthoringRendererIdentity" | "slugify" | "validateSiteProject">>;
+export type SiteBuildExports = Assert<Equal<keyof typeof siteBuild, "SITE_HEADERS" | "SITE_MANIFEST" | "compileAuthoringWorkspaceSnapshot" | "compileStaticSite" | "createSiteManifest" | "siteHeaders" | "verifySiteStaticArtifact">>;
+export type CaptureReturn = Assert<Equal<Awaited<ReturnType<typeof authoring.captureAuthoringWorkspace>>, AuthoringWorkspaceSnapshot>>;
+export type CaptureOptions = Assert<Equal<Parameters<typeof authoring.captureAuthoringWorkspace>[0], CaptureAuthoringWorkspaceOptions>>;
+export type CapturePackIdentity = Assert<Equal<Awaited<ReturnType<typeof authoring.resolveAuthoringPackIdentity>>, AuthoringPackIdentity>>;
+export type CaptureRendererIdentity = Assert<Equal<Awaited<ReturnType<typeof authoring.resolveAuthoringRendererIdentity>>, AuthoringRendererIdentity>>;
+export type ExactCompileReturn = Assert<Equal<Awaited<ReturnType<typeof siteBuild.compileAuthoringWorkspaceSnapshot>>, StaticSiteCompilation>>;
+export type ExactCompileSnapshot = Assert<Equal<Parameters<typeof siteBuild.compileAuthoringWorkspaceSnapshot>[0]["snapshot"], AuthoringWorkspaceSnapshot>>;
+export type DocumentTargets = Assert<Equal<ReturnType<typeof authoring.hostDocumentTargets>, HostDocumentTarget[]>>;
+export type DocumentPreview = Assert<Equal<Awaited<ReturnType<typeof authoring.renderHostDocument>>, HostDocumentPreview>>;
+export type DocumentRenderer = Assert<Equal<Parameters<typeof authoring.renderHostDocument>[0], HostDocumentRenderer>>;
+export type CaptureFreshness = Assert<Equal<Awaited<ReturnType<typeof authoring.isAuthoringWorkspaceSnapshotCurrent>>, boolean>>;
+export async function captureConsumer(context: HostContext): Promise<StaticSiteCompilation> {
+  const options: CaptureAuthoringWorkspaceOptions = { composerConfig: context.composerConfig, pack: context.pack,
+    packIdentity: await authoring.resolveAuthoringPackIdentity(context),
+    renderer: await authoring.resolveAuthoringRendererIdentity(context),
+  };
+  const snapshot = await authoring.captureAuthoringWorkspace(options);
+  await authoring.isAuthoringWorkspaceSnapshotCurrent(options, snapshot);
+  return siteBuild.compileAuthoringWorkspaceSnapshot({ ...options, snapshot });
+}
+// @ts-expect-error Exact compilation requires the reviewed snapshot and full identities.
+siteBuild.compileAuthoringWorkspaceSnapshot({ pack: {} });
+// @ts-expect-error A mutable workspace path is not an immutable snapshot.
+siteBuild.compileAuthoringWorkspaceSnapshot({ snapshot: "cms/workspaces/current" });
 export type EditingExports = Assert<Equal<keyof typeof editing, "createEditingService">>;
 export type EditingOptions = Assert<Equal<Parameters<typeof editing.createEditingService>[0], { workspaceRoot?: string } | undefined>>;
 type EditingService = Awaited<ReturnType<typeof editing.createEditingService>>;

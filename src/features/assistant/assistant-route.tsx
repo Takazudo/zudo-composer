@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useWorkspace } from "../../app/workspace-context";
 import { formatIntent, notifyRouteSelection } from "../../app/route-intents";
 import type { SitemapNode } from "../../sitemapper/model/types";
 import { NativePageFrame } from "../native-editing/page-frame";
 import { assistantConfig, assistantEvents, assistantRequest, nativeEditRequest } from "../native-editing/session";
 import type { NativeInspection } from "../native-editing/types";
-import type { ReviewAnnotatedMessage } from "../composer/preview/protocol";
+import type { ComposerPreviewSnapshot, ReviewAnnotatedMessage } from "../composer/preview/protocol";
 import { subscribePersistenceChanges } from "../../shared/persistence-generation";
 import { ChatPanel, type Attachment, type LiveRun } from "./chat-panel";
+import { createDraftRefreshController } from "./draft-refresh";
 import { ReviewPanel } from "./review-panel";
 import { MemoryDialog } from "./memory-dialog";
 import { annotationId, buildReviewAnnotations } from "./review-model";
@@ -36,6 +37,7 @@ export function AssistantRoute() {
   const [view, setView] = useState<"current" | "draft">("draft");
   const [selecting, setSelecting] = useState(true);
   const [selection, setSelection] = useState<MessageContext["selection"]>(null);
+  const [renderedSnapshot, setRenderedSnapshot] = useState<ComposerPreviewSnapshot | null>(null);
   const [evidence, setEvidence] = useState<ReadonlySet<string>>(new Set());
   const [annotated, setAnnotated] = useState<{ key: string; results: ReviewAnnotatedMessage["results"] } | null>(null);
   const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
@@ -83,7 +85,9 @@ export function AssistantRoute() {
     return () => { current = false; };
   }, [integration]);
   const refreshStatus = useCallback(() => assistantRequest<AssistantStatus>("status", workspaceId).then(value => { if (mounted.current) { setStatus(value); setStatusError(null); } }, cause => { if (mounted.current) setStatusError(cause.message); }), [workspaceId]);
-  const refreshDraft = useCallback(() => assistantRequest<DraftView>("draft", workspaceId).then(value => { if (mounted.current) setDraft(value); return value; }, cause => { if (mounted.current) setReviewError(cause.message); return null; }), [workspaceId]);
+  const draftReads = useMemo(() => createDraftRefreshController(value => { if (mounted.current) setDraft(value); }, cause => { if (mounted.current) setReviewError(cause instanceof Error ? cause.message : "Draft could not be refreshed."); }), [workspaceId]);
+  useLayoutEffect(() => () => draftReads.dispose(), [draftReads]);
+  const refreshDraft = useCallback(() => draftReads.refresh(() => assistantRequest<DraftView>("draft", workspaceId)), [workspaceId, draftReads]);
   const inspectSequence = useRef(0);
   const refreshInspection = useCallback(() => {
     if (!page) return;
@@ -268,11 +272,13 @@ export function AssistantRoute() {
   };
 
   // ── review actions ────────────────────────────────────────────────────
+  const frameReady = !!snapshot && renderedSnapshot === snapshot;
   const changedPages = open?.pages.filter(entry => entry.changed) ?? [];
   const unreviewed = changedPages.filter(entry => !open?.candidateDigest || !evidence.has(`${open.candidateDigest}|${keyOf(entry.page)}`));
-  const applyBlocker = !open ? null : draft?.permission !== "apply" ? "This host allows review but not Apply." : open.stale.length || !open.dependenciesCurrent ? "Revalidate before applying." : !open.changes.length ? "No changes remain." : live ? "Wait for the current reply to finish." : unreviewed.length ? `Open the Draft view of ${unreviewed.map(entry => entry.page.pageId).join(", ")} and let it finish rendering.` : null;
+  const applyBlocker = !open ? null : !frameReady ? "Wait for the displayed page to finish rendering." : draft?.permission !== "apply" ? "This host allows review but not Apply." : open.stale.length || !open.dependenciesCurrent ? "Revalidate before applying." : !open.changes.length ? "No changes remain." : live ? "Wait for the current reply to finish." : unreviewed.length ? `Open the Draft view of ${unreviewed.map(entry => entry.page.pageId).join(", ")} and let it finish rendering.` : null;
   const canApply = !!open?.candidateDigest && !applyBlocker && !reviewBusy;
-  const act = async (action: () => Promise<unknown>) => {
+  const act = async (action: () => Promise<unknown>, requiresFrame = false) => {
+    if (requiresFrame && !frameReady) { setReviewError("Wait for the displayed page to finish rendering."); return; }
     setReviewBusy(true); setReviewError(null);
     try { await action(); } catch (cause) { setReviewError(cause instanceof Error ? cause.message : "The operation failed. Check the receipt before retrying."); }
     finally { setReviewBusy(false); void refreshDraft(); refreshInspection(); }
@@ -283,10 +289,10 @@ export function AssistantRoute() {
     const recovered = await assistantRequest<{ status: string }>("receipt", workspaceId, { draftId: target.id });
     if (recovered.status === "applied") return;
     await assistantRequest("applyDraft", workspaceId, { draftId: target.id, revision: target.revision, approve: target.candidateDigest }, true);
-  });
+  }, true);
   const withdraw = (change: DraftChange, cascade = false) => act(async () => {
     const result = await assistantRequest<DraftView | { requiresCascade: true; dependents: { id: string; kind: string; reason: string | null }[] }>("withdraw", workspaceId, { draftId: open!.id, revision: open!.revision, changeId: change.id, ...(cascade ? { cascade: true } : {}) });
-    if ("requiresCascade" in result) setDependents({ change, items: result.dependents }); else setDependents(null);
+    if ("requiresCascade" in result) setDependents({ change, items: result.dependents }); else { draftReads.accept(result); setDependents(null); }
   });
 
   // ── layout ────────────────────────────────────────────────────────────
@@ -343,6 +349,7 @@ export function AssistantRoute() {
         {pageError && <p role="alert" class="cms-assistant-error">{pageError}</p>}
         {inspection?.writeBlockers.length ? <p role="status" class="cms-assistant-warning">This page is read-only for the Assistant: {inspection.writeBlockers.join(" ")}</p> : null}
         {snapshot && inspection ? <NativePageFrame title={showDraft ? "Draft page preview" : "Current page preview"} provider={integration.componentProvider} snapshot={snapshot} review={nativeReview} selecting={selecting && !showDraft} identity={inspection.identity} draftRevision={inspection.revision}
+          onRenderReady={value => setRenderedSnapshot(value ? snapshot : null)}
           onSelect={nodeId => {
             const node = inspection.allTargets.find(target => target.nodeId === nodeId);
             const value = { nodeId, ...(node ? { componentId: node.componentId, label: integration.componentProvider.manifest.components.find(component => component.id === node.componentId)?.title ?? node.componentId } : {}) };
@@ -351,12 +358,12 @@ export function AssistantRoute() {
           onEvidence={value => { if (value && open?.candidateDigest && nativeReview) setEvidence(previous => new Set([...previous, `${open.candidateDigest}|${pageKey}`])); }}
           onError={message => setPageError(message)} onReviewAnnotated={onAnnotated} focusAnnotation={focus} /> : !pageError && <p role="status">Opening page…</p>}
       </div>
-      <ReviewPanel view={draft} currentPage={pageKey} evidence={evidence} fallback={fallback} busy={reviewBusy} canApply={canApply} applyBlocker={applyBlocker} error={reviewError}
+      <ReviewPanel view={draft} currentPage={pageKey} evidence={evidence} fallback={fallback} busy={reviewBusy} frameReady={frameReady} canApply={canApply} applyBlocker={applyBlocker} error={reviewError}
         onOpen={openChange} onPage={value => { setView("draft"); choosePage(keyOf(value)); }} onWithdraw={change => void withdraw(change)}
         onApply={() => void apply()} onDiscard={() => { if (confirm("Discard all unstaged AI changes? Saved pages are not affected.")) void act(() => assistantRequest("discard", workspaceId, { draftId: open!.id, revision: open!.revision })); }}
         onRevalidate={() => void act(() => assistantRequest("revalidate", workspaceId, { draftId: open!.id, revision: open!.revision }))}
-        onUndo={() => void act(() => assistantRequest("undoDraft", workspaceId, { draftId: draft!.draft!.id, approve: draft!.draft!.applied!.candidateDigest }, true))}
-        onRecover={() => void act(async () => { if (draft?.draft) await assistantRequest("receipt", workspaceId, { draftId: draft.draft.id }); })}
+        onUndo={() => void act(() => assistantRequest("undoDraft", workspaceId, { draftId: draft!.draft!.id, approve: draft!.draft!.applied!.candidateDigest }, true), true)}
+        onRecover={() => void act(async () => { if (draft?.draft) await assistantRequest("receipt", workspaceId, { draftId: draft.draft.id }); }, false)}
         dependents={dependents} onConfirmDependents={() => { if (dependents) void withdraw(dependents.change, true); }} onCancelDependents={() => setDependents(null)} />
     </section>
     {memoryOpen && <MemoryDialog workspaceId={workspaceId} siteName={siteName} onClose={() => setMemoryOpen(false)} onChanged={memory => setStatus(current => current ? { ...current, memory } : current)} />}

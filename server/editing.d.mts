@@ -2330,6 +2330,16 @@ interface CliAssistantConfig extends AssistantCommonConfig {
 }
 type AssistantConfig = AnthropicAssistantConfig | FakeAssistantConfig | CliAssistantConfig;
 
+interface HostDocumentConfig {
+    module: string;
+    rendererId: string;
+    rendererVersion: string;
+    /** Trusted host JSX runtime package; defaults to Preact. Evaluated in an isolated server graph. */
+    jsxImportSource?: string;
+    /** Explicit host-relative public document assets; never inferred from a parent directory. */
+    publicDir?: string;
+}
+
 /** Absolute paths derived from the settings. Node-side only, never serialized. */
 interface ComposerPaths {
     workspaceRoot: string;
@@ -2343,6 +2353,8 @@ interface ComposerPaths {
     styles: string;
 }
 interface ResolvedComposerConfig {
+    authoringAuthority: "source" | "workspace" | undefined;
+    hostDocument: HostDocumentConfig | undefined;
     nativeEditing: NativeEditingConfig | undefined;
     assistant: AssistantConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */
@@ -2361,7 +2373,7 @@ interface CaptureHostOptions {
     packIdentity: ResolvedComponentPack;
 }
 /** Open only existing stores: inspection must never initialize CMS state. */
-declare function captureHost(options: CaptureHostOptions): Promise<{
+declare function captureHost<T extends Pick<CaptureHostOptions, "config" | "pack">>(options: T): Promise<T & {
     manifest: ComponentCatalog;
     workspaceId: string;
     workspace: WorkspaceRecord;
@@ -2388,11 +2400,8 @@ declare function captureHost(options: CaptureHostOptions): Promise<{
         mappings: readonly MappingRecord[];
     };
     assets: AssetSnapshot;
-    config: ResolvedComposerConfig;
-    pack: TrustedComponentPack;
-    packIdentity: ResolvedComponentPack;
 }>;
-type HostCapture = Awaited<ReturnType<typeof captureHost>>;
+type HostCapture = Awaited<ReturnType<typeof captureHost<CaptureHostOptions>>>;
 interface InspectPageRequest {
     workspaceId: string;
     page: string;

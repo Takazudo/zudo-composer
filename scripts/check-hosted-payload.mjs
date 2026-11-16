@@ -27,7 +27,9 @@ try {
   execFileSync("corepack", ["pnpm", "pack", "--pack-destination", temporary], { cwd: root, stdio: "pipe", maxBuffer: 16 * 1024 * 1024 });
   const tarballs = (await readdir(temporary)).filter(name => name.endsWith(".tgz"));
   assert.equal(tarballs.length, 1, "Expected exactly one tool package tarball");
-  execFileSync("tar", ["-xzf", join(temporary, tarballs[0]), "-C", temporary], { stdio: "pipe" });
+  // Attest archive permissions, not permissions reduced by the caller's umask.
+  // Cloud uses 077 while CI commonly uses 022; -p preserves the shipped modes.
+  execFileSync("tar", ["-xpzf", join(temporary, tarballs[0]), "-C", temporary], { stdio: "pipe" });
   /** @type {{path: string, bytes: number, mode: number, sha256: string}[]} */
   const files = [];
   let rawPackageJsonSha256 = "";

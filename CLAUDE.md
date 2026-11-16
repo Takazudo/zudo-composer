@@ -1,3 +1,10 @@
+## Full Composer adoption phase
+
+Load `docs/structural-authoring.md` for ownership, host rendering, capture, AI and
+consumer acceptance rules. Pinsel integration is tracked at
+https://github.com/zudolab/pinsel/issues/51. Demo clean-break authority does not
+apply to consumer drafts or recovery stores. Production delivery stays stopped.
+
 # Repository guidance
 
 ## Permanent ownership

@@ -18,6 +18,7 @@ export {
   type ResolvedComposerConfig,
   type NativeEditingConfig,
   type AssistantConfig,
+  type HostDocumentConfig,
 } from "./config";
 export {
   loadComposerConfig,

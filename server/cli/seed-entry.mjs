@@ -16,6 +16,7 @@ if ("error" in parsed) {
 } else if (parsed.command === "seed") {
   try {
     const { composerConfig, pack, packIdentity } = await loadHostContext(parsed.options);
+    if (composerConfig.authoringAuthority === "workspace") throw new Error("Native workspace authority forbids source reseeding. Use explicit staged initializeAuthoringWorkspace for a new workspace.");
     const source = parsed.options.from ?? resolve(composerConfig.workspaceRoot, "site-project.json");
     const project = JSON.parse(await readFile(source, "utf8"));
     const evaluate = createModuleEvaluator(APP_ROOT);

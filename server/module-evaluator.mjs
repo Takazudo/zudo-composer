@@ -18,9 +18,10 @@ import { resolveComposerModules } from "../plugins/module-resolution.mjs";
 
 /**
  * @param {string} root Host root for config/pack modules; APP_ROOT for tool modules.
+ * @param {{jsxImportSource?: string}} [options] Trusted isolated host renderer runtime; default remains Preact.
  * @returns {(modulePath: string) => Promise<Record<string, unknown>>}
  */
-export function createModuleEvaluator(root) {
+export function createModuleEvaluator(root, options = {}) {
   return async (modulePath) => {
     const nodeEnv = process.env.NODE_ENV;
     // Vite's runnerImport resolves its own config with command "serve" before
@@ -38,8 +39,10 @@ export function createModuleEvaluator(root) {
         root,
         resolve: resolveComposerModules(),
         // The Preact preset does not run here, so state the JSX runtime for
-        // both tool and host `.tsx` modules; the default would import React.
-        oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
+        // tool/pack `.tsx` modules. A document host may select its own runtime.
+        // Each runnerImport owns a new graph: never reuse the dev server's
+        // Preact-transformed pack/component cache for the document renderer.
+        oxc: { jsx: { runtime: "automatic", importSource: options.jsxImportSource ?? "preact" } },
       });
       return /** @type {Record<string, unknown>} */ (module);
     } finally {

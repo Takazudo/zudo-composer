@@ -16,6 +16,8 @@
   "include": [
     "server/__tests__/**/*.ts",
     "server/cli/**/*.ts",
+    "server/authoring-workspace/**/*.ts",
+    "server/host-document/**/*.ts",
     "server/cli/*.d.mts",
     "server/dev-server.d.mts",
     "plugins/composer-app-html.d.mts",

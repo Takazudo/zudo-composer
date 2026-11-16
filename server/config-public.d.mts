@@ -65,6 +65,16 @@ interface CliAssistantConfig extends AssistantCommonConfig {
 }
 type AssistantConfig = AnthropicAssistantConfig | FakeAssistantConfig | CliAssistantConfig;
 
+interface HostDocumentConfig {
+    module: string;
+    rendererId: string;
+    rendererVersion: string;
+    /** Trusted host JSX runtime package; defaults to Preact. Evaluated in an isolated server graph. */
+    jsxImportSource?: string;
+    /** Explicit host-relative public document assets; never inferred from a parent directory. */
+    publicDir?: string;
+}
+
 /**
  * Every setting a host may declare. Path settings are relative to the host
  * project root; `pack` is a module specifier.
@@ -144,6 +154,10 @@ type ComposerSettingDefaults = Omit<ComposerSettings, "pack">;
  * paths, so they are peeled off before the merge and never reach `settings`.
  */
 interface ComposerConfigOverrides {
+    /** Explicit authority; workspace permits native editing even alongside generated source artifacts. */
+    authoringAuthority?: "source" | "workspace";
+    /** Trusted host-owned whole-document renderer, isolated from the editor framework. */
+    hostDocument?: HostDocumentConfig;
     nativeEditing?: NativeEditingConfig;
     /** Explicit AI Assistant opt-in; requires `nativeEditing` for writable pages. */
     assistant?: Partial<AssistantConfig>;
@@ -176,6 +190,8 @@ interface ComposerPaths {
     styles: string;
 }
 interface ResolvedComposerConfig {
+    authoringAuthority: "source" | "workspace" | undefined;
+    hostDocument: HostDocumentConfig | undefined;
     nativeEditing: NativeEditingConfig | undefined;
     assistant: AssistantConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */
@@ -196,4 +212,4 @@ interface ComposerRuntime {
 declare function defineComposerConfig(config: ComposerConfig): ComposerConfig;
 
 export { defineComposerConfig };
-export type { AssistantConfig, ComposerConfig, ComposerConfigInput, ComposerConfigOverrides, ComposerPaths, ComposerRuntime, ComposerSettingDefaults, ComposerSettings, NativeEditingConfig, ResolvedComposerConfig };
+export type { AssistantConfig, ComposerConfig, ComposerConfigInput, ComposerConfigOverrides, ComposerPaths, ComposerRuntime, ComposerSettingDefaults, ComposerSettings, HostDocumentConfig, NativeEditingConfig, ResolvedComposerConfig };

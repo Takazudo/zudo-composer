@@ -36,7 +36,7 @@ async function requireExistingRecordStore(root: string): Promise<void> {
 }
 
 /** Open only existing stores: inspection must never initialize CMS state. */
-export async function captureHost(options: CaptureHostOptions) {
+export async function captureHost<T extends Pick<CaptureHostOptions, "config" | "pack">>(options: T) {
   const { config } = options;
   const registryRoot = join(config.paths.data, "workspaces");
   await requireExistingRecordStore(registryRoot);
@@ -63,14 +63,14 @@ export async function captureHost(options: CaptureHostOptions) {
   if (generation !== await registry.generation() || workspaceId !== await registry.selection()) throw new Error("Workspace selection changed during inspection. Retry.");
   return {
     ...options, manifest: createComponentCatalog(options.pack.manifest), workspaceId, workspace,
-    sourceAuthored: await present(join(config.workspaceRoot, "site-project.ts")) || await present(join(config.workspaceRoot, "site-project.json")),
+    sourceAuthored: config.authoringAuthority === "source" || (config.authoringAuthority !== "workspace" && (await present(join(config.workspaceRoot, "site-project.ts")) || await present(join(config.workspaceRoot, "site-project.json")))),
     stores: { registry, compositions, sitemaps, mappings, assets, content },
     tokens: { registry: generation, compositions: compositionSnapshot.mutationToken, sitemaps: sitemapSnapshot.mutationToken, mappings: mappingSnapshot.mutationToken, assets: assetSnapshot.mutationToken, content: contentSnapshot.mutationToken },
     records: { compositions: compositionSnapshot.records, sitemaps: sitemapSnapshot.records, mappings: mappingSnapshot.records },
     assets: assetSnapshot,
   };
 }
-export type HostCapture = Awaited<ReturnType<typeof captureHost>>;
+export type HostCapture = Awaited<ReturnType<typeof captureHost<CaptureHostOptions>>>;
 export interface InspectPageRequest { workspaceId: string; page: string; sitemapId?: string }
 export type NativeKind = Exclude<keyof NativeEditingConfig, "source">;
 export interface NativeTarget { nodeId: string; kind: NativeKind; ordinal: number; componentId: string; props: Record<string, unknown> }

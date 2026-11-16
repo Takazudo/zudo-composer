@@ -102,7 +102,10 @@
     "!src/hosted-demo",
     "docs/hosted-content.md",
     "docs/native-editing.md",
-    "docs/assistant.md"
+    "docs/assistant.md",
+    "docs/structural-authoring.md",
+    "docs/host-document-renderer.md",
+    "docs/native-workspace-capture.md"
   ],
   "engines": {
     "node": ">=24 <25",
@@ -213,6 +216,7 @@
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/preact": "^3.2.4",
+    "@types/jsdom": "28.0.3",
     "@types/node": "^26.4.0",
     "@zudo-composer/component-contract": "workspace:*",
     "@zudo-composer/fixture-themeset": "workspace:*",

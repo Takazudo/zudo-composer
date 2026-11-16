@@ -2,6 +2,11 @@
 // operations; callers never need the repository's scripts or visitor entry.
 export { compileStaticSite, type StaticSiteCompilation } from "../site-build/compile.js";
 export {
+  compileAuthoringWorkspaceSnapshot,
+  type AuthoringWorkspaceSnapshot,
+  type CompileAuthoringWorkspaceSnapshotOptions,
+} from "../authoring-workspace/capture.js";
+export {
   SITE_HEADERS,
   SITE_MANIFEST,
   createSiteManifest,

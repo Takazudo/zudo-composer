@@ -384,6 +384,8 @@ export const readyMessageSchema = z.object({ ...envelope, type: z.literal("ready
 
 export const nativeSelectMessageSchema = z.object({ ...envelope, type: z.literal("native-select"), revision: revisionSchema, nodeId: z.string().min(1), nativePage: nativePageSchema }).strict();
 export type NativeSelectMessage = z.infer<typeof nativeSelectMessageSchema>;
+export const nativePageRenderedMessageSchema = z.object({ ...envelope, type: z.literal("native-page-rendered"), revision: revisionSchema, nativePage: nativePageSchema }).strict();
+export type NativePageRenderedMessage = z.infer<typeof nativePageRenderedMessageSchema>;
 export const renderedMessageSchema = z.object({ ...envelope, type: z.literal("rendered"), revision: revisionSchema, nativeReview: nativeReviewSchema }).strict();
 export type RenderedMessage = z.infer<typeof renderedMessageSchema>;
 /** Which annotations got word-level highlights and which fell back to an explicit block marker. */
@@ -543,6 +545,7 @@ export const requestHistoryMessageSchema = z
 export const PREVIEW_TO_PARENT_MEMBERS = [
   readyMessageSchema,
   renderedMessageSchema,
+  nativePageRenderedMessageSchema,
   reviewAnnotatedMessageSchema,
   z.object({ ...envelope, type: z.literal("authoring-settled"), nonce: z.string().regex(/^[a-f0-9]{64}$/), clean: z.boolean() }).strict(),
   nativeSelectMessageSchema,
@@ -703,6 +706,9 @@ export function reviewAnnotatedMessage(pack: PreviewPackIdentity, revision: numb
 }
 export function focusAnnotationMessage(pack: PreviewPackIdentity, key: string, id: string) {
   return { ...envelopeValue(pack), type: "focus-annotation" as const, key, id };
+}
+export function nativePageRenderedMessage(pack: PreviewPackIdentity, revision: number, nativePage: NativePageIdentity): NativePageRenderedMessage {
+  return { ...envelopeValue(pack), type: "native-page-rendered", revision, nativePage };
 }
 export function renderedMessage(pack: PreviewPackIdentity, revision: number, nativeReview: NativeReviewIdentity): RenderedMessage {
   return { ...envelopeValue(pack), type: "rendered", revision, nativeReview };

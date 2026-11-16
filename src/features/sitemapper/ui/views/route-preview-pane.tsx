@@ -1,3 +1,4 @@
+import { hostDocumentAvailable } from "../../../native-editing/session";
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 
@@ -123,7 +124,7 @@ export function RoutePreviewPane({ document, authoredRoutes, expansion, selected
                 columns={columns}
                 rows={routes}
                 rowKey={routeIdentity}
-                rowActions={(route) => <Button size="xs" variant="ghost" aria-pressed={selectedId === route.nodeId} onClick={() => onSelect(route.nodeId)}>Inspect</Button>}
+                rowActions={(route) => <>{hostDocumentAvailable && <a href={`/composer?native=1&sitemap=${encodeURIComponent(document.id)}&page=${encodeURIComponent(route.nodeId)}`}>Open page</a>}<Button size="xs" variant="ghost" aria-pressed={selectedId === route.nodeId} onClick={() => onSelect(route.nodeId)}>Inspect</Button></>}
                 rowDetail={(route) => {
                   const details = routeDiagnostics(route, diagnostics);
                   return details.length ? <div class="sg-sitemapper-route-preview__row-detail">{details.map((diagnostic, index) => <button type="button" class="sg-sitemapper-diagnostic-link" key={`${diagnostic.code}:${index}`} onClick={() => onSelect(route.nodeId)}>{diagnostic.message}</button>)}</div> : null;

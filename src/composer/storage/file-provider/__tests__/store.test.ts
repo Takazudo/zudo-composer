@@ -124,6 +124,8 @@ describe("browser file-provider adapter", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const first = JSON.parse(String(fetchMock.mock.calls[0]![1]?.body));
     const second = JSON.parse(String(fetchMock.mock.calls[1]![1]?.body));
+    expect(new Headers(fetchMock.mock.calls[0]![1]?.headers).get("x-zudo-authoring-read")).toBe("1");
+    expect(new Headers(fetchMock.mock.calls[1]![1]?.headers).has("x-zudo-authoring-read")).toBe(false);
     expect(first.outputsById).toEqual({});
     expect(second.outputsById.alpha).toMatchObject({ status: "generated" });
   });
