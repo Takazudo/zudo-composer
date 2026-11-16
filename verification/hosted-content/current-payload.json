@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "9ad8bac4f7ede83fcf3a78f7b516d222152cea6f",
-  "payloadSha256": "91551101e1432899d428cd3db1f979a2bfa3cda12c9552930f38a13e5baac32c",
-  "rawPackageJsonSha256": "9412045f125eeee1a79d8a89010477602a8404dee01c9295b408a4223344d8e2",
+  "packageOutputSha": "533be688e51ff150bce5e9bc87d2b07e62ebaec3",
+  "payloadSha256": "f68ed3d382fea81d0fa96105d38a4e95f6110021620e28b2dc1f815b612b3b42",
+  "rawPackageJsonSha256": "ed0bb7a141c3ce70927d400c17545e266b7f73217d13d40f436a9249027921db",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -47,6 +47,12 @@
       "sha256": "f6184ef3b9210fa65ec48b11fbc2ae97a0fe82828402df1c699ae445c02957c3"
     },
     {
+      "path": "docs/mapping-entry-identity.md",
+      "bytes": 4441,
+      "mode": 420,
+      "sha256": "aac1dfe26cecd17e861aa8ebbbbba3595dd08498ccac0eb29495e3bda59076ea"
+    },
+    {
       "path": "docs/native-editing.md",
       "bytes": 17132,
       "mode": 420,
@@ -72,9 +78,9 @@
     },
     {
       "path": "package.json",
-      "bytes": 9906,
+      "bytes": 9939,
       "mode": 420,
-      "sha256": "46bc136abc1adb9d756d035333ee4cfdae15d9401bc406f3e7f95e9d0a93c148"
+      "sha256": "18d172e5c231fc860d8fd2659f278a712a05d09eb56c3e19660fedfff26c8713"
     },
     {
       "path": "packages/image-editor/src/core/encode.ts",
