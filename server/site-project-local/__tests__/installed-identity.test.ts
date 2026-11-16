@@ -6,6 +6,37 @@ import { installedContractDigest, installedPackageDigest, installedPackGraphDige
 import { createSiteProjectApiService } from "../../../src/site-project/api/service";
 import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
 describe("installed pack tree attestation", () => {
+  it("keeps package, contract and graph identities portable across private and shared checkout permissions", async () => {
+    const { parent } = await fixture();
+    const root = join(parent, "permissions");
+    const dist = join(root, "dist");
+    const manifest = join(root, "package.json");
+    const runtime = join(dist, "index.js");
+    await mkdir(dist, { recursive: true });
+    await writeFile(manifest, '{"name":"permissions","version":"1.0.0"}');
+    await writeFile(runtime, "export const value = 1;");
+    const graph = { files: ["dist/index.js"], dependencies: [] };
+    const identities = () => Promise.all([
+      installedPackageDigest(root), installedContractDigest(root), installedPackGraphDigest(root, graph),
+    ]);
+    // The same Git/package bytes can be materialized under umask 077 in a
+    // private Cloud cache and under 022 in CI. Neither changes the toolchain.
+    for (const directory of [root, dist]) await chmod(directory, 0o700);
+    for (const file of [manifest, runtime]) await chmod(file, 0o600);
+    const privateModes = await identities();
+    for (const directory of [root, dist]) await chmod(directory, 0o755);
+    for (const file of [manifest, runtime]) await chmod(file, 0o644);
+    expect(await identities()).toEqual(privateModes);
+    // Git's executable distinction still matters in every identity mode.
+    await chmod(runtime, 0o755);
+    const executableModes = await identities();
+    executableModes.forEach((digest, index) => expect(digest).not.toBe(privateModes[index]));
+    await chmod(runtime, 0o700);
+    expect(await identities()).toEqual(executableModes);
+    await writeFile(runtime, "export const value = 2;");
+    (await identities()).forEach((digest, index) => expect(digest).not.toBe(executableModes[index]));
+  });
+
   it("hashes stable paths/modes/bytes and detects runtime tampering", async () => {
     const { parent, dependencies } = await fixture(); const root = join(parent, "installed"); await mkdir(root); await mkdir(join(root, "src"));
     const runtime = join(root, "src", "runtime.js"); await writeFile(runtime, "export const value = 1;", { mode: 0o644 });

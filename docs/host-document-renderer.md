@@ -42,8 +42,14 @@ recompiles the complete project, and commits canonical JSON/derived source/recei
 through the reviewed-edit journal with an exact snapshot token. Mapping-owned
 source compositions and linked/global template structure are refused here. Bound
 values link to their Content owners instead of becoming shadow props. Pending
-requests retain their exact operation ID across reload; recover that request
-before starting another save.
+requests are retained in browser-profile local storage before transmission, scoped
+by origin, browser actor, workspace and renderer/pack identity. Each operation has
+its own immutable pointer so tabs cannot overwrite one another. A new browser
+session can explicitly recover an earlier request with the same operation ID;
+recovery is never automatic. A later guard refusal does not erase an uncertain
+original request. Receipt storage precedes pointer removal. Unavailable storage
+disables saving. This survives browser restart when that profile retains local
+storage; clearing browser data removes its recovery pointers, not server receipts.
 
 This initial host document route does not yet implement structural insertion,
 guarded Undo, mixed-domain proposals, or host-rendered Assistant candidates.
