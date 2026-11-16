@@ -1,13 +1,18 @@
 import { cleanup, render, waitFor } from "@testing-library/preact";
 import { afterEach, expect, it, vi } from "vitest";
 import { createWorkspaceSaveRegistry } from "../../../app/workspace-sessions";
+import { notifyPersistenceChange } from "../../../shared/persistence-generation";
+import { COMPOSITION_FILE_PROVIDER_CHANNEL } from "../../../composer/storage/file-provider";
+import { createProductionProviderIntegration } from "../../../app/provider-integration";
+import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../../test/workspace-providers";
 import { HostDocumentPage } from "../page";
 const mocks = vi.hoisted(() => ({ request: vi.fn(), integration: { workspace: { id: "proof" }, subscribeChanges: () => () => {} } }));
 Object.assign(mocks.integration, { sessions: createWorkspaceSaveRegistry() });
 vi.mock("../../native-editing/session", () => ({ nativeEditRequest: mocks.request }));
 vi.mock("../protocol", async importOriginal => ({ ...await importOriginal<typeof import("../protocol")>(), matchesHostDocumentFrame: () => true }));
 vi.mock("../../../app/workspace-context", () => ({ useWorkspace: () => ({ integration: mocks.integration }) }));
-afterEach(() => { cleanup(); localStorage.clear(); sessionStorage.clear(); vi.clearAllMocks(); });
+const hosts: TemporaryWorkspaceProviders[] = [];
+afterEach(async () => { cleanup(); await Promise.all(hosts.splice(0).map(host => host.dispose())); localStorage.clear(); sessionStorage.clear(); vi.clearAllMocks(); });
 it("does not enroll an empty, unresponsive iframe before the saved document arrives", async () => {
   let finish!: (value: unknown) => void;
   mocks.request.mockReturnValue(new Promise(resolve => { finish = resolve; }));
@@ -22,9 +27,11 @@ it("does not enroll an empty, unresponsive iframe before the saved document arri
 it("blocks refresh, selection, and workspace flush while a field draft is unsaved; discard restores navigation", async () => {
   const { defineComponentPack } = await import("@zudo-composer/component-contract");
   const { fireEvent } = await import("@testing-library/preact");
-  const sessions = createWorkspaceSaveRegistry();
+  const host = await createTemporaryWorkspaceProviders(); hosts.push(host);
+  const integration = createProductionProviderIntegration({ createProviders: host.createProviders, assetProvider: null });
+  const sessions = integration.sessions;
   const pack = defineComponentPack({ packId: "proof", packVersion: "1.0.0", components: [{ component: () => null, id: "paragraph", schemaVersion: 1, title: "Paragraph", description: "Text", category: "Test", source: { module: "proof/components", exportKind: "named", exportName: "Paragraph" }, defaults: { text: "" }, fields: [{ kind: "text", prop: "text", label: "Text" }] }] });
-  Object.assign(mocks.integration, { sessions, componentProvider: { manifest: pack.manifest } });
+  Object.assign(mocks.integration, { sessions, subscribeChanges: integration.subscribeChanges, componentProvider: { manifest: pack.manifest } });
   const identity = { workspaceId: "proof", pathname: "/", revision: "a".repeat(64), packId: "proof", packVersion: "1", rendererId: "proof", rendererVersion: "1", rendererDigest: "b".repeat(64) };
   const targets = ["first", "second"].map(id => ({ renderedNodeId: id, parentRenderedNodeId: null, slotId: null, providerId: "files", recordId: "page", nodeId: id, componentId: "paragraph", props: { text: id }, entries: [], capabilities: { fields: { allowed: true }, structure: { allowed: true }, placement: { allowed: false }, uses: ["/"], insertSlots: [] } }));
   const preview = { identity, frameId: "frame", documentUrl: "about:blank", targets, routes: [] };
@@ -36,6 +43,7 @@ it("blocks refresh, selection, and workspace flush while a field draft is unsave
   send({ type: "select", target: { renderedNodeId: "first", providerId: "files", recordId: "page", nodeId: "first" } });
   fireEvent.input(await view.findByRole("textbox", { name: "Text" }), { target: { value: "Unsaved" } });
   expect((await sessions.flush()).status).toBe("failed");
+  expect((view.getByRole("button", { name: "Save field" }) as HTMLButtonElement).disabled).toBe(false);
   const requests = mocks.request.mock.calls.length;
   const { createHostEditRecovery } = await import("../recovery");
   const recovery = createHostEditRecovery(localStorage, sessionStorage, window.location.origin);
@@ -51,9 +59,9 @@ it("blocks refresh, selection, and workspace flush while a field draft is unsave
   send({ type: "select", target: { renderedNodeId: "second", providerId: "files", recordId: "page", nodeId: "second" } });
   expect((view.getByRole("textbox", { name: "Text" }) as HTMLInputElement).value).toBe("Unsaved");
   expect(mocks.request.mock.calls).toHaveLength(requests);
-  fireEvent(window, new Event("native-authoring-invalidated"));
+  notifyPersistenceChange(COMPOSITION_FILE_PROVIDER_CHANNEL);
   expect((view.getByRole("textbox", { name: "Text" }) as HTMLInputElement).value).toBe("Unsaved");
-  expect((view.getByRole("button", { name: "Save field" }) as HTMLButtonElement).disabled).toBe(true);
+  await waitFor(() => expect((view.getByRole("button", { name: "Save field" }) as HTMLButtonElement).disabled).toBe(true));
   fireEvent.click(view.getByRole("button", { name: "Discard local draft" }));
   expect((await sessions.flush()).status).toBe("ready");
   fireEvent.click(view.getByRole("button", { name: "Refresh saved page" }));
@@ -80,4 +88,13 @@ it("blocks refresh, selection, and workspace flush while a field draft is unsave
   await waitFor(() => expect(writes).toBe(2));
   await waitFor(() => expect(view.queryByRole("button", { name: /Recover pending save/ })).toBeNull());
   expect((await sessions.flush()).status).toBe("ready");
+  await waitFor(() => { send({ type: "ready" }); expect(view.getByRole("status").textContent).toBe("Saved snapshot rendered"); });
+  send({ type: "select", target: { renderedNodeId: "first", providerId: "files", recordId: "page", nodeId: "first" } });
+  fireEvent.input(await view.findByRole("textbox", { name: "Text" }), { target: { value: "Retain on source change" } });
+  expect((view.getByRole("button", { name: "Save field" }) as HTMLButtonElement).disabled).toBe(false);
+  fireEvent(window, new Event("native-authoring-invalidated"));
+  expect((view.getByRole("button", { name: "Save field" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((view.getByRole("textbox", { name: "Text" }) as HTMLInputElement).value).toBe("Retain on source change");
+  expect(writes).toBe(2);
+  fireEvent.click(view.getByRole("button", { name: "Discard local draft" }));
 });

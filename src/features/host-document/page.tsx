@@ -80,7 +80,10 @@ export function HostDocumentPage() {
     const invalidate = () => { invalidated.current = true; setCurrent(false); setError("Workspace changed. Refresh the saved page before editing its selected owner."); };
     window.addEventListener("message", onMessage);
     window.addEventListener("native-authoring-invalidated", invalidate);
-    const stop = integration.subscribeChanges(invalidate);
+    // Session generation tracks unsaved input, not a change to the captured
+    // canonical snapshot. Its flush guard still blocks unrelated operations;
+    // invalidating here would disable the draft's own explicit Save action.
+    const stop = integration.subscribeChanges(channel => { if (channel !== "sessions") invalidate(); });
     return () => { window.removeEventListener("message", onMessage); window.removeEventListener("native-authoring-invalidated", invalidate); stop(); };
   }, [preview, integration, selected]);
   useEffect(() => {
