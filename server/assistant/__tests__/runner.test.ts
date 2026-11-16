@@ -11,6 +11,8 @@ import { captureHost } from "../../edit/inspect";
 import { defineSite, node } from "../../../src/site-project/authoring";
 import { createFilesystemAssetStore } from "../../../src/assets/storage/filesystem/store";
 import { openAssistantStore, type RunEvent } from "../store";
+import type { RunnerOptions } from "../runner";
+import type { HostReviewCard, InspectedOwner } from "../../../src/features/assistant/host-review-types";
 import { createAssistantRunner } from "../runner";
 import { ProviderError, type ModelProvider, type ProviderRequest, type ProviderTurn } from "../provider";
 import { parseAssistant } from "../../config/assistant";
@@ -27,7 +29,7 @@ function fakeProvider(script: Script, status: ReturnType<ModelProvider["status"]
 const text = (value: string): ProviderTurn => ({ content: [{ type: "text", text: value }], stopReason: "end_turn" });
 const tool = (name: string, input: unknown, id = `tool-${name}-${Math.random().toString(16).slice(2)}`): ProviderTurn => ({ content: [{ type: "tool_use", id, name, input }], stopReason: "tool_use" });
 
-async function fixture(script: Script, status?: ReturnType<ModelProvider["status"]>, longText = false) {
+async function fixture(script: Script, status?: ReturnType<ModelProvider["status"]>, longText = false, hostReview?: RunnerOptions["hostReview"]) {
   const root = await mkdtemp(join(tmpdir(), "assistant-runner-")); roots.push(root);
   await cp(resolve("fixtures/edit-host"), root, { recursive: true });
   await writeFile(join(root, "package.json"), JSON.stringify({ name: "native-edit-host", version: "1.0.0", type: "module", exports: { "./components": "./components/pack.mjs" }, dependencies: { preact: "10.27.2", "@zudo-composer/component-contract": "workspace:*" } }));
@@ -48,7 +50,7 @@ async function fixture(script: Script, status?: ReturnType<ModelProvider["status
   const service = createEditingService(options);
   const store = await openAssistantStore(host.composerConfig.paths.data);
   const fake = fakeProvider(script, status);
-  const runner = createAssistantRunner({ store, service, provider: fake.provider, config: parseAssistant({ name: "Nightjar Bot" })!, lease: { execute: action => action() }, capture: () => captureHost(options), siteName: capture => capture.workspace.metadata.name });
+  const runner = createAssistantRunner({ hostReview, store, service, provider: fake.provider, config: parseAssistant({ name: "Nightjar Bot" })!, lease: { execute: action => action() }, capture: () => captureHost(options), siteName: capture => capture.workspace.metadata.name });
   const scope = { host: await (await import("node:fs/promises")).realpath(root), workspaceId: "proof" };
   const homeJson = join(host.composerConfig.paths.compositions, "workspace-v1-proof", "composition-home.composition.json");
   return { runner, store, service, fake, scope, homeJson };
@@ -316,4 +318,44 @@ describe("restricted Assistant runner", () => {
     expect(recalled.body).toBe("Prefer metric units.");
     expect(recalled.used.revision).toBe(1);
   });
+});
+
+
+const hostSelection = { revision: "a".repeat(64), pathname: "/", target: { renderedNodeId: "bound", providerId: "files", recordId: "shared", nodeId: "bound" }, prop: "text" };
+const contentOwner: InspectedOwner = { capabilityId: "review-capability", baseDigest: hostSelection.revision, pathname: "/", target: hostSelection.target, field: { prop: "text", label: "Price", current: "100" }, owner: { domain: "content", entry: { providerId: "content-filesystem", modelId: "course", recordId: "consultation" }, fieldIds: ["course-price"] }, capabilities: { fields: [{ id: "course-price", label: "Price", kind: "text" }], insertSlots: [] }, affectedUses: [{ pathname: "/", target: hostSelection.target, prop: "text" }] };
+const contentCard: HostReviewCard = { id: "review-price", workspaceId: "proof", operation: { domain: "content", proposalId: "proposal-price", contentCandidateDigest: "b".repeat(64) }, baseDigest: hostSelection.revision, candidateDigest: "c".repeat(64), summary: "Price", ownerLabel: "Course/consultation", affectedUses: contentOwner.affectedUses, routes: [{ pathname: "/", title: "Home" }], status: "open" };
+it("feeds actual ownership rules/tools to the model and stages Content once without Composition shadowing or model Apply", async () => {
+  const staged: unknown[] = [];
+  const state = await fixture((_request, call) => call === 1 ? tool("inspect_owner", {}) : call === 2 ? tool("propose_content", { capabilityId: contentOwner.capabilityId, values: { "course-price": "120" }, summary: "Requested price" }, "price-tool") : text("Ready for separate Content review."), undefined, false, {
+    inspect: async (_input, fence) => { await fence.assertActive(); return contentOwner; },
+    stageContent: async (input, fence) => { await fence.assertActive(); staged.push({ input, toolCallId: fence.toolCallId }); return contentCard; },
+    reviewComposition: async () => { throw new Error("Content must not use Composition draft"); },
+  });
+  const before = await readFile(state.homeJson, "utf8"), conversation = await state.store.createConversation(state.scope);
+  const result = await state.runner.start("proof", { conversationId: conversation.id, clientTurnId: turn(), text: "Set shared course price to120", context: { ...context, hostSelection } });
+  expect((await complete(state.runner, result.runId)).status).toBe("completed");
+  expect(staged).toEqual([{ input: { workspaceId: "proof", capabilityId: "review-capability", values: { "course-price": "120" }, summary: "Requested price" }, toolCallId: "price-tool" }]);
+  expect(state.fake.requests).toHaveLength(3);
+  expect(state.fake.requests[0]!.system).toContain("Never shadow a bound Content value");
+  expect(state.fake.requests[0]!.tools.map(tool => tool.name)).toContain("inspect_owner");
+  expect(state.fake.requests[0]!.tools.map(tool => tool.name)).not.toContain("applyHostReview");
+  expect(JSON.stringify(state.fake.requests[1]!.messages)).toContain("course-price");
+  expect((await state.store.conversation(state.scope, conversation.id)).messages.at(-1)?.hostReviews).toEqual([{ reviewId: "review-price", domain: "content" }]);
+  expect(await readFile(state.homeJson, "utf8")).toBe(before);
+});
+it("does not advertise a staged Content review after the active run is cancelled", async () => {
+  let release!: () => void, started!: () => void;
+  const reached = new Promise<void>(resolve => { started = resolve; });
+  const paused = new Promise<void>(resolve => { release = resolve; });
+  const state = await fixture((_request, call) => call === 1 ? tool("inspect_owner", {}) : tool("propose_content", { capabilityId: contentOwner.capabilityId, values: { "course-price": "120" }, summary: "Requested price" }), undefined, false, {
+    inspect: async () => contentOwner,
+    stageContent: async () => { started(); await paused; return contentCard; },
+    reviewComposition: async () => { throw new Error("unexpected"); },
+  });
+  const conversation = await state.store.createConversation(state.scope);
+  const result = await state.runner.start("proof", { conversationId: conversation.id, clientTurnId: turn(), text: "Change price", context: { ...context, hostSelection } });
+  await reached;
+  const stop = state.runner.stopAll(run => run.id === result.runId);
+  release(); await stop; await state.runner.settled(result.runId);
+  expect((await state.store.conversation(state.scope, conversation.id)).messages.at(-1)?.hostReviews).toBeUndefined();
 });

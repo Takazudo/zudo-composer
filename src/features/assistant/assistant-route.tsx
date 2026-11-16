@@ -3,7 +3,7 @@ import { useWorkspace } from "../../app/workspace-context";
 import { formatIntent, notifyRouteSelection } from "../../app/route-intents";
 import type { SitemapNode } from "../../sitemapper/model/types";
 import { NativePageFrame } from "../native-editing/page-frame";
-import { assistantConfig, assistantEvents, assistantRequest, nativeEditRequest } from "../native-editing/session";
+import { hostDocumentAvailable, assistantConfig, assistantEvents, assistantRequest, nativeEditRequest } from "../native-editing/session";
 import type { NativeInspection } from "../native-editing/types";
 import type { ComposerPreviewSnapshot, ReviewAnnotatedMessage } from "../composer/preview/protocol";
 import { subscribePersistenceChanges } from "../../shared/persistence-generation";
@@ -13,6 +13,7 @@ import { ReviewPanel } from "./review-panel";
 import { MemoryDialog } from "./memory-dialog";
 import { annotationId, buildReviewAnnotations } from "./review-model";
 import type { AssistantStatus, ChatMessage, Conversation, ConversationSummary, DraftChange, DraftView, MessageContext, PageRef, RunRecord } from "./types";
+import { HostAssistantRoute } from "./host-assistant-route";
 import "./assistant.css";
 
 const keyOf = (page: PageRef) => `${page.sitemapId}/${page.pageId}`;
@@ -21,7 +22,9 @@ const write = (key: string, value: unknown) => { try { if (value === null) sessi
 /** Handoff read once by Composer so returning keeps the same selected block. */
 export const RETURN_SELECTION_KEY = "zudo-composer-return-selection";
 
-export function AssistantRoute() {
+export function AssistantRoute() { return hostDocumentAvailable ? <HostAssistantRoute /> : <OrdinaryAssistantRoute />; }
+
+function OrdinaryAssistantRoute() {
   const workspace = useWorkspace()!;
   const integration = workspace.integration;
   const workspaceId = integration.workspace.id!;
