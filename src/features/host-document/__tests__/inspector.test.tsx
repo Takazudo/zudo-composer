@@ -57,3 +57,21 @@ it("uses declared enum and boolean controls and preserves omitted optional field
   fireEvent.click(view.getByRole("button", { name: "Save field" }));
   expect(onSave).toHaveBeenLastCalledWith({ kind: "field", prop: "enabled", value: true });
 });
+
+it("saves the typed multiline value when draft observers render before the input event finishes", async () => {
+  const { useState } = await import("preact/hooks");
+  const { flushSync } = await import("preact/compat");
+  const onSave = vi.fn(async () => {});
+  function ObservedInspector() {
+    const [notifications, setNotifications] = useState(0);
+    return <div data-draft-notifications={notifications}><HostInspector target={{ ...target, props: { ...target.props, body: "" } }} component={component} disabled={false} onDirty={() => flushSync(() => setNotifications(value => value + 1))} onSave={onSave} /></div>;
+  }
+  const view = render(<ObservedInspector />);
+  const textarea = view.getByRole("textbox", { name: "Body" }) as HTMLTextAreaElement;
+  textarea.focus();
+  fireEvent.input(textarea, { target: { value: "Typed multiline proof\nSecond line" } });
+  expect(onSave).not.toHaveBeenCalled();
+  fireEvent.blur(textarea);
+  fireEvent.click(view.getByRole("button", { name: "Save field" }));
+  expect(onSave).toHaveBeenCalledExactlyOnceWith({ kind: "field", prop: "body", value: "Typed multiline proof\nSecond line" });
+});

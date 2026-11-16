@@ -37,11 +37,19 @@ export function HostInspector({ target, component, disabled, saving = false, onD
     <fieldset disabled={disabled || !capabilities?.fields.allowed}><legend>Component fields</legend>{component?.fields.map(field => {
       const value = draft?.prop === field.prop ? draft.value : target.props[field.prop];
       const omitted = value === undefined;
-      return <div key={`${field.prop}:${generation}`} class="cms-host-inspector-field" onInputCapture={event => {
+      return <div key={`${field.prop}:${generation}`} class="cms-host-inspector-field" onInput={event => {
         if (disabled || !capabilities?.fields.allowed || (active.current && active.current !== field.prop)) return;
-        stage(field.prop, value);
+        // Typed controls own the complete value through onCommit. Never stage
+        // the old prop in capture: a draft observer may render before the
+        // target receives input, swallowing that event and saving the old value.
         const input = event.target;
-        if (input instanceof HTMLInputElement && input.type === "number") setInvalidInputs(previous => { const next = new Set(previous); if (!input.value.trim() || !input.validity.valid) next.add(input.id); else next.delete(input.id); return next; });
+        if (input instanceof HTMLInputElement && input.type === "number") {
+          const invalid = !input.value.trim() || !input.validity.valid;
+          // Invalid numeric drafts intentionally do not call onCommit. Track
+          // their unsaved state after the control handled the input event.
+          if (invalid) stage(field.prop, value);
+          setInvalidInputs(previous => { const next = new Set(previous); if (invalid) next.add(input.id); else next.delete(input.id); return next; });
+        }
       }}>
         {omitted ? <p>{field.label}: omitted. Adding or removing optional top-level properties is not supported here.</p> : <InspectorField field={field} value={value} disabled={disabled || !capabilities?.fields.allowed || (!!draft && draft.prop !== field.prop)} onCommit={(next, _path, structural) => { if (structural) setInvalidInputs(new Set()); stage(field.prop, next); }} />}
       </div>;
