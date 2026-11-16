@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "533be688e51ff150bce5e9bc87d2b07e62ebaec3",
-  "payloadSha256": "f68ed3d382fea81d0fa96105d38a4e95f6110021620e28b2dc1f815b612b3b42",
-  "rawPackageJsonSha256": "ed0bb7a141c3ce70927d400c17545e266b7f73217d13d40f436a9249027921db",
+  "packageOutputSha": "1d7bb65c7b53989816bf144c7a25f9d7d6046662",
+  "payloadSha256": "0ee608f4a7fae6484e2d7a7933a24add3ad5780a5aa9d942c7998daf212ccd60",
+  "rawPackageJsonSha256": "1ee32d559a924d812b73f41a69c8871d1c033aeeffef056149238c40317a3fe7",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -3234,9 +3234,9 @@
     },
     {
       "path": "src/features/host-document/page.tsx",
-      "bytes": 14117,
+      "bytes": 14395,
       "mode": 420,
-      "sha256": "d2385f7ab3e9baab3483394b726618ee029811aac4fbcc239c98a43a8268cc28"
+      "sha256": "c590b3069ae2df4e9d728611bc4cd50ee3fc9b8912df6f5d39f683193e492bcc"
     },
     {
       "path": "src/features/host-document/protocol.ts",
