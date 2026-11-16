@@ -107,6 +107,7 @@
     "docs/host-assistant-ownership.md",
     "docs/structural-authoring.md",
     "docs/mapping-entry-identity.md",
+    "docs/mapping-reference-queries.md",
     "docs/host-document-renderer.md",
     "docs/native-workspace-capture.md"
   ],
