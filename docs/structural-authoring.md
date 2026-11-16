@@ -1,0 +1,95 @@
+# Structural authoring and host ownership
+
+Composer is a reusable authoring product. Pinsel is the acceptance consumer for
+[full adoption](https://github.com/zudolab/pinsel/issues/51). A generic feature is
+not accepted for that effort until an independent immutable install uses it in
+Pinsel's real scenario. The component contract establishes schema compatibility;
+it does not establish rendering compatibility between Preact and another runtime.
+
+## Ownership before editing
+
+A Sitemap describes route-backed pages and hierarchy. Internal compositions,
+patterns, and Mapping fragments are not additional public pages. A semantic
+component instance has an ID independent of order, typed fields, and named slots
+with constraints. Its parent owns arrangement and slot order; the child owns its
+supported content and presentation properties. Decorative wrappers do not need
+to become prominent authoring nodes.
+
+Content records own shared values. A placement references those records through
+Mapping; it must not silently copy a bound value to Composition props. Show the
+source record and affected uses when editing a shared value. A live reference and
+a detached pattern copy have different semantics and must be distinguishable.
+Identify selections by provider, composition record and canonical node ID, using
+materialization provenance for repeated rendered nodes. A node ID alone is not
+globally unique. Route and positional context belong to the trusted host renderer.
+
+## Native authority and capture
+
+A host explicitly selects native workspace authority. Generated build artifacts
+must neither make that workspace read-only nor reseed it during startup.
+Initialization imports Composition, Content, Mapping and Sitemap into staged
+native filesystem stores. It is not a transaction across all four domains and
+is not a hybrid D1 Content/filesystem structure adapter. A failed stage cannot be
+represented as an activated complete workspace.
+
+A reviewable capture must bind workspace/schema identity, all four domains,
+component and renderer identity, and referenced Assets. Reuse durable mutation
+tokens and session coordination. Flush or refuse unsaved editor sessions; verify
+a common stable read interval, refuse or retry changed state, and build from the
+reviewed immutable capture rather than recapturing current state. Snapshot A must
+remain buildable after later draft B without changing B. Do not expose private
+storage paths or require hosts to assemble snapshots through unrelated reads.
+
+## Host document preview
+
+A trusted host document adapter renders the entire compiled route with the host's
+production renderer. Composer does not acquire a dependency on that application
+runtime and does not require a handwritten Preact duplicate. Keep preview CSS and
+assets in the isolated document. Bind render acknowledgements and selected owners
+to the exact workspace revision, route, component pack and renderer identity.
+Check the iframe sender and origin and reject stale or foreign messages.
+
+## AI uses the same ownership and validation
+
+The in-product Assistant must receive the current selection, owners, references,
+architectural constraints and supported capabilities through its actual provider
+context/tool path. This Markdown is development guidance, not proof that a
+restricted model receives it. Proposals do not mutate canonical data before
+explicit Apply. Human and AI edits use the same validators and owner domains.
+Refuse stale proposals, recover lost responses through receipts, and guard Undo
+against subsequent edits. Mixed-domain requests require proven atomicity or
+separate clearly reviewed operations; never silently apply only half a request.
+Unsupported requests must explain the missing capability.
+
+## Cross-repository acceptance workflow
+
+1. Specify a Pinsel scenario and reproduce the generic limitation.
+2. Implement and document the smallest justified generic capability in Composer.
+3. Review it, generate public façades, and run focused and current-head gates.
+4. The integration manager pins the exact immutable package and contract revisions
+   in Pinsel, updates its lockfile and compatibility ledger, and frozen-installs.
+5. Verify the same Pinsel scenario through its renderer, persistence, restart and
+   exact static output. Independent review follows executable docs without chat.
+6. Merge eligible reviewed work under repository policy, confirm integration and
+   record actual source/package/workspace/scenario/check evidence in task issues.
+
+The manager owns root manifests, lockfiles, dependency pins and shared public
+exports. Parallel workers own disjoint files; shared schema changes are serialized.
+Preserve demo regeneration and installed boundary gates. Historical fixtures stay
+as historical migration proof while newly authored states use stronger current
+contracts. Never weaken a test merely to obtain green CI.
+
+## Data and delivery holds
+
+Composer demo clean-break authority does not authorize deletion of consumer data.
+Pinsel's Git baseline is not the owner's current local D1 draft. Actual cutover
+needs the exact export and an authorized reachable host: rehearse, fence legacy
+writes, capture final revision, stage and validate, then switch one authority.
+Retain original stores/history/snapshots as read-only recovery and restore original
+authority on failure. Cloud implementation does not imply owner-data cutover.
+
+Fake providers prove deterministic integration, not authenticated inference.
+Record unavailable live-provider acceptance as NOT_RUN with the exact missing
+configuration; preserve the owner's model, effort and service tier. Current work
+authorizes no deployment, package publication, remote D1 changes, domain changes
+or real inquiry delivery. Production delivery remains stopped.
