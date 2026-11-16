@@ -71,7 +71,37 @@ it("saves the typed multiline value when draft observers render before the input
   textarea.focus();
   fireEvent.input(textarea, { target: { value: "Typed multiline proof\nSecond line" } });
   expect(onSave).not.toHaveBeenCalled();
+  expect(view.getByRole("textbox", { name: "Body" })).toBe(textarea);
+  expect(document.activeElement).toBe(textarea);
+  expect(textarea.value).toBe("Typed multiline proof\nSecond line");
   fireEvent.blur(textarea);
   fireEvent.click(view.getByRole("button", { name: "Save field" }));
   expect(onSave).toHaveBeenCalledExactlyOnceWith({ kind: "field", prop: "body", value: "Typed multiline proof\nSecond line" });
+});
+
+
+it("accepts schema-valid decimals with no step and retains explicit step constraints", () => {
+  const onSave = vi.fn(async () => {});
+  const view = render(<HostInspector target={target} component={component} disabled={false} onDirty={() => {}} onSave={onSave} />);
+  const number = view.getByRole("spinbutton", { name: "Count" }) as HTMLInputElement;
+  number.focus();
+  fireEvent.input(number, { target: { value: "1.25" } });
+  expect(number.validity.valid).toBe(true);
+  expect(onSave).not.toHaveBeenCalled();
+  expect((view.getByRole("button", { name: "Save field" }) as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(view.getByRole("button", { name: "Save field" }));
+  expect(onSave).toHaveBeenCalledExactlyOnceWith({ kind: "field", prop: "count", value: 1.25 });
+  fireEvent.click(view.getByRole("button", { name: "Discard local draft" }));
+  const constrained = { ...component, fields: [{ prop: "count", label: "Count", schema: { type: "number" as const, step: 0.5 }, editor: { kind: "number" as const } }] };
+  view.rerender(<HostInspector target={target} component={constrained} disabled={false} onDirty={() => {}} onSave={onSave} />);
+  const stepped = view.getByRole("spinbutton", { name: "Count" }) as HTMLInputElement;
+  stepped.focus();
+  fireEvent.input(stepped, { target: { value: "1.25" } });
+  expect(stepped.validity.stepMismatch).toBe(true);
+  expect((view.getByRole("button", { name: "Save field" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(onSave).toHaveBeenCalledTimes(1);
+  fireEvent.input(stepped, { target: { value: "1.5" } });
+  expect(stepped.validity.valid).toBe(true);
+  fireEvent.click(view.getByRole("button", { name: "Save field" }));
+  expect(onSave).toHaveBeenLastCalledWith({ kind: "field", prop: "count", value: 1.5 });
 });

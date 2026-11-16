@@ -530,7 +530,8 @@ function ScalarNumberEditor({
         value={draft}
         min={min}
         max={max}
-        step={step}
+        // An omitted contract step accepts any finite number; HTML defaults to 1.
+        step={step ?? "any"}
         disabled={disabled}
         aria-invalid={error !== null ? "true" : undefined}
         // A labelled field is described by `Field`'s own error element; only the
