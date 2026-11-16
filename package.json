@@ -103,6 +103,7 @@
     "docs/hosted-content.md",
     "docs/native-editing.md",
     "docs/assistant.md",
+    "docs/assistant-content-policy.md",
     "docs/structural-authoring.md",
     "docs/mapping-entry-identity.md",
     "docs/host-document-renderer.md",
