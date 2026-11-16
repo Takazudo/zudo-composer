@@ -190,6 +190,12 @@ test("an unbound target binds from its chip's compatible-source menu", async ({ 
   await expect(identityRow.getByRole("combobox")).toHaveCount(0);
   await expect(page.locator('.cms-mapping-status[data-status="ready"]')).toHaveCount(5);
 
+  // Binding edits use explicit Save. Persist this before changing mode,
+  // whose attachment-coordinated mutation deliberately flushes on its own.
+  const save = page.getByRole("button", { name: "Save", exact: true });
+  await save.click();
+  await expect(page.locator(".cms-topbar__status")).toHaveAttribute("data-state", "saved");
+
   const entry = page.getByRole("combobox", { name: "Sample Entry" });
   const frame = page.frameLocator('iframe[title="Resolved Mapping preview"]');
   // Collection preview intentionally renders every matching entry. Verify
@@ -201,8 +207,8 @@ test("an unbound target binds from its chip's compatible-source menu", async ({ 
   await mode.selectOption("single");
   await selectOptionMatching(entry, /article-first-question/);
   await expect(frame.getByText("article-first-question", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.locator(".cms-topbar__status")).toHaveAttribute("data-state", "saved");
+  await expect(save).toBeDisabled();
   await documentReady({
     id: "mapping-entry-identity-reload", kind: "reload",
     transition: ({ remainingMs }) => page.reload({ timeout: remainingMs() }),
