@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useWorkspace } from "../../app/workspace-context";
 import { formatIntent, notifyRouteSelection } from "../../app/route-intents";
 import type { SitemapNode } from "../../sitemapper/model/types";
@@ -8,6 +8,7 @@ import type { NativeInspection } from "../native-editing/types";
 import type { ComposerPreviewSnapshot, ReviewAnnotatedMessage } from "../composer/preview/protocol";
 import { subscribePersistenceChanges } from "../../shared/persistence-generation";
 import { ChatPanel, type Attachment, type LiveRun } from "./chat-panel";
+import { createDraftRefreshController } from "./draft-refresh";
 import { ReviewPanel } from "./review-panel";
 import { MemoryDialog } from "./memory-dialog";
 import { annotationId, buildReviewAnnotations } from "./review-model";
@@ -84,7 +85,9 @@ export function AssistantRoute() {
     return () => { current = false; };
   }, [integration]);
   const refreshStatus = useCallback(() => assistantRequest<AssistantStatus>("status", workspaceId).then(value => { if (mounted.current) { setStatus(value); setStatusError(null); } }, cause => { if (mounted.current) setStatusError(cause.message); }), [workspaceId]);
-  const refreshDraft = useCallback(() => assistantRequest<DraftView>("draft", workspaceId).then(value => { if (mounted.current) setDraft(value); return value; }, cause => { if (mounted.current) setReviewError(cause.message); return null; }), [workspaceId]);
+  const draftReads = useMemo(() => createDraftRefreshController(value => { if (mounted.current) setDraft(value); }, cause => { if (mounted.current) setReviewError(cause instanceof Error ? cause.message : "Draft could not be refreshed."); }), [workspaceId]);
+  useLayoutEffect(() => () => draftReads.dispose(), [draftReads]);
+  const refreshDraft = useCallback(() => draftReads.refresh(() => assistantRequest<DraftView>("draft", workspaceId)), [workspaceId, draftReads]);
   const inspectSequence = useRef(0);
   const refreshInspection = useCallback(() => {
     if (!page) return;
@@ -289,7 +292,7 @@ export function AssistantRoute() {
   }, true);
   const withdraw = (change: DraftChange, cascade = false) => act(async () => {
     const result = await assistantRequest<DraftView | { requiresCascade: true; dependents: { id: string; kind: string; reason: string | null }[] }>("withdraw", workspaceId, { draftId: open!.id, revision: open!.revision, changeId: change.id, ...(cascade ? { cascade: true } : {}) });
-    if ("requiresCascade" in result) setDependents({ change, items: result.dependents }); else setDependents(null);
+    if ("requiresCascade" in result) setDependents({ change, items: result.dependents }); else { draftReads.accept(result); setDependents(null); }
   });
 
   // ── layout ────────────────────────────────────────────────────────────
