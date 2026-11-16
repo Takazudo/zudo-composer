@@ -17,6 +17,8 @@ import { resolveWorkspaceRoot } from "../../plugins/roots.mjs";
 import { defineComposerConfig } from "./define.mjs";
 import { parseNativeEditing, type NativeEditingConfig } from "./native-editing";
 import { parseAssistant, type AssistantConfig } from "./assistant";
+import { parseHostDocument, type HostDocumentConfig } from "./host-document";
+export type { HostDocumentConfig } from "./host-document";
 export type { NativeEditingConfig } from "./native-editing";
 export type { AssistantConfig } from "./assistant";
 import {
@@ -48,6 +50,10 @@ const PACK_SPECIFIER_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|
  * paths, so they are peeled off before the merge and never reach `settings`.
  */
 export interface ComposerConfigOverrides {
+  /** Explicit authority; workspace permits native editing even alongside generated source artifacts. */
+  authoringAuthority?: "source" | "workspace";
+  /** Trusted host-owned whole-document renderer, isolated from the editor framework. */
+  hostDocument?: HostDocumentConfig;
   nativeEditing?: NativeEditingConfig;
   /** Explicit AI Assistant opt-in; requires `nativeEditing` for writable pages. */
   assistant?: Partial<AssistantConfig>;
@@ -86,6 +92,8 @@ export interface ComposerPaths {
 }
 
 export interface ResolvedComposerConfig {
+  authoringAuthority: "source" | "workspace" | undefined;
+  hostDocument: HostDocumentConfig | undefined;
   nativeEditing: NativeEditingConfig | undefined;
   assistant: AssistantConfig | undefined;
   /** Absolute host project root. Every relative setting resolves against it. */
@@ -170,6 +178,9 @@ function assertPack(value: string | undefined, configPath: string): string {
  * top-level merge over a complete default table.
  */
 export function composer(user: ComposerConfigInput = {}, runtime: ComposerRuntime = {}): ResolvedComposerConfig {
+  if (user.authoringAuthority !== undefined && user.authoringAuthority !== "source" && user.authoringAuthority !== "workspace") {
+    fail('`authoringAuthority` must be "source" or "workspace".');
+  }
   // (2) Peel the non-serializable, machine-specific overrides off first.
   const { workspaceRoot: configuredRoot, configPath: configuredConfigPath, ...settingCandidates } = user;
   const workspaceRoot = resolveWorkspaceRoot(configuredRoot);
@@ -208,6 +219,8 @@ export function composer(user: ComposerConfigInput = {}, runtime: ComposerRuntim
   };
 
   return {
+    authoringAuthority: user.authoringAuthority,
+    hostDocument: parseHostDocument(user.hostDocument),
     workspaceRoot,
     configPath,
     nativeEditing: parseNativeEditing(user.nativeEditing),

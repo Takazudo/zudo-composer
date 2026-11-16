@@ -19,3 +19,17 @@ export { createFilesystemAssetStore } from "../../src/assets/storage/filesystem/
 export { canonicalStringifyJson } from "../../src/site-project/model/canonical.js";
 export { validateSiteProject } from "../../src/site-project/model/validation.js";
 export { initializeAuthoringWorkspace } from "../edit/initialize-workspace.js";
+export {
+  captureAuthoringWorkspace,
+  isAuthoringWorkspaceSnapshotCurrent,
+  resolveAuthoringPackIdentity,
+  resolveAuthoringRendererIdentity,
+  type AuthoringRendererIdentity,
+  type AuthoringPackIdentity,
+  type AuthoringWorkspaceSnapshot,
+  type CaptureAuthoringWorkspaceOptions,
+  type AuthoringPublicFile,
+  type CapturedPublicFile,
+} from "../authoring-workspace/capture.js";
+export type { HostDocumentRenderer, HostDocumentRenderInput, HostDocumentIdentity, HostDocumentTarget, HostDocumentPreview } from "../host-document/types.js";
+export { renderHostDocument, hostDocumentTargets } from "../host-document/render.js";

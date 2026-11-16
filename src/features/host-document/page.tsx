@@ -1,0 +1,84 @@
+import { useEffect, useRef, useState } from "preact/hooks";
+import { useWorkspace } from "../../app/workspace-context";
+import { formatIntent } from "../../app/route-intents";
+import { nativeEditRequest } from "../native-editing/session";
+import type { HostDocumentPreview, HostDocumentTarget } from "../../../server/host-document/types";
+import { acceptHostDocumentMessage, confirmedFirstAttemptRefusal } from "./protocol";
+import "./page.css";
+
+type Preview = HostDocumentPreview & { routes: { pathname: string; title: string; pageId: string }[] };
+export function HostDocumentPage() {
+  const integration = useWorkspace()!.integration;
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [selected, setSelected] = useState<HostDocumentTarget | null>(null);
+  const [fieldValue, setFieldValue] = useState("");
+  const [fieldName, setFieldName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const pendingKey = `zudo-host-document-pending-v1:${integration.workspace.id}`;
+  const [pending, setPending] = useState<Record<string, unknown> | null>(() => { try { return JSON.parse(sessionStorage.getItem(pendingKey) ?? "null"); } catch { return null; } });
+  const [error, setError] = useState<string | null>(null);
+  const [current, setCurrent] = useState(false);
+  const [selecting, setSelecting] = useState(true);
+  const frame = useRef<HTMLIFrameElement>(null);
+  const sequence = useRef(0);
+  const invalidated = useRef(false);
+  const refresh = async (pathname?: string) => {
+    const request = ++sequence.current;
+    invalidated.current = false;
+    setCurrent(false); setError(null); setPreview(null); setSelected(null);
+    try {
+      const value = await nativeEditRequest<Preview>("document-preview", { workspaceId: integration.workspace.id, ...(pathname ? { pathname } : new URLSearchParams(window.location.search).get("page") ? { pageId: new URLSearchParams(window.location.search).get("page") } : {}) });
+      if (request === sequence.current) setPreview(value);
+    } catch (cause) { if (request === sequence.current) setError(cause instanceof Error ? cause.message : "Page preview unavailable."); }
+  };
+  useEffect(() => { void refresh(); return () => { sequence.current++; }; }, [integration]);
+  useEffect(() => {
+    if (!preview) return;
+    const onMessage = (event: MessageEvent) => {
+      const message = acceptHostDocumentMessage(event, frame.current?.contentWindow ?? null, window.location.origin, preview);
+      if (message?.type === "ready" && !invalidated.current) setCurrent(true);
+      if (message?.type === "select") setSelected(message.target);
+    };
+    const invalidate = () => { invalidated.current = true; setCurrent(false); setError("Workspace changed. Refresh the saved page before editing its selected owner."); };
+    window.addEventListener("message", onMessage);
+    window.addEventListener("native-authoring-invalidated", invalidate);
+    const stop = integration.subscribeChanges(invalidate);
+    return () => { window.removeEventListener("message", onMessage); window.removeEventListener("native-authoring-invalidated", invalidate); stop(); };
+  }, [preview, integration]);
+  useEffect(() => {
+    if (!preview || !current) return;
+    const send = (value: Record<string, unknown>) => frame.current?.contentWindow?.postMessage({ protocol: "zudo-host-document-v1", frameId: preview.frameId, ...value }, window.location.origin);
+    send({ type: "mode", selecting });
+    send({ type: "highlight", renderedNodeId: selected?.renderedNodeId ?? null });
+  }, [preview, selected, selecting, current]);
+  const submit = async (request: Record<string, unknown>, recovering = true) => {
+    if (busy) return;
+    setBusy(true); setError(null);
+    try {
+      const receipt = await nativeEditRequest("document-edit", request, true);
+      sessionStorage.setItem(`${pendingKey}:receipt`, JSON.stringify(receipt));
+      sessionStorage.removeItem(pendingKey); setPending(null);
+      await refresh(String(request.pathname));
+    } catch (cause) {
+      const code = cause && typeof cause === "object" && "code" in cause ? cause.code : null;
+      const refused = confirmedFirstAttemptRefusal(recovering, code);
+      if (refused) { sessionStorage.removeItem(pendingKey); setPending(null); }
+      setError(`${cause instanceof Error ? cause.message : "Response unavailable."}${refused ? " No change was accepted." : " The original outcome remains uncertain. The exact operation is retained; recover it before another edit."}`);
+    }
+    finally { setBusy(false); }
+  };
+  const apply = async (change: unknown) => {
+    if (!preview || !selected || !current || busy || pending) return;
+    const { renderedNodeId, providerId, recordId, nodeId } = selected;
+    const request = { workspaceId: preview.identity.workspaceId, revision: preview.identity.revision, pathname: preview.identity.pathname, operationId: crypto.randomUUID(), target: { renderedNodeId, providerId, recordId, nodeId }, change };
+    sessionStorage.setItem(pendingKey, JSON.stringify(request)); setPending(request);
+    await submit(request, false);
+  };
+  useEffect(() => { setFieldName(""); setFieldValue(""); }, [selected?.renderedNodeId]);
+  return <main class="cms-host-document">
+    <header><h1>Page authoring</h1><label>Page <select disabled={!preview} value={preview?.identity.pathname ?? ""} onChange={event => void refresh(event.currentTarget.value)}>{preview?.routes.map(route => <option key={route.pathname} value={route.pathname}>{route.title} · {route.pathname}</option>)}</select></label><button type="button" onClick={() => void refresh(preview?.identity.pathname)}>Refresh saved page</button><button type="button" aria-pressed={selecting} onClick={() => setSelecting(!selecting)}>{selecting ? "Select components" : "Browse page"}</button><p role="status">{current ? "Saved snapshot rendered" : "Preview not current"}</p>{error && <p role="alert">{error}</p>}{pending && <button type="button" disabled={busy} onClick={() => void submit(pending)}>Recover pending save</button>}</header>
+    <nav aria-label="Page component tree"><h2>Components</h2>{preview?.targets.map(target => <button key={target.renderedNodeId} type="button" aria-current={selected?.renderedNodeId === target.renderedNodeId ? "true" : undefined} disabled={!current} onClick={() => setSelected(target)}>{target.componentId} · {target.nodeId}{target.slotId ? ` (${target.slotId})` : ""}</button>)}</nav>
+    <section aria-label="Rendered page"><iframe ref={frame} title="Host rendered page" sandbox="allow-scripts allow-same-origin" srcDoc={preview?.html} /></section>
+    <aside aria-label="Selected component inspector"><h2>Inspector</h2>{selected ? <><p>{selected.componentId}</p><p>Owner: <code>{selected.providerId}/{selected.recordId}/{selected.nodeId}</code></p><dl>{Object.entries(selected.props).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{typeof value === "string" ? value : JSON.stringify(value)}</dd></div>)}</dl>{current && <fieldset disabled={busy || !!pending}><legend>Local component properties</legend><label>Property <select value={fieldName} onChange={event => { const prop = event.currentTarget.value; setFieldName(prop); setFieldValue(typeof selected.props[prop] === "string" ? selected.props[prop] as string : JSON.stringify(selected.props[prop])); }}><option value="">Choose property</option>{Object.keys(selected.props).map(prop => <option key={prop} value={prop}>{prop}</option>)}</select></label><label>Value {typeof selected.props[fieldName] === "number" ? <input type="number" value={fieldValue} onInput={event => setFieldValue(event.currentTarget.value)} /> : typeof selected.props[fieldName] === "boolean" ? <select value={fieldValue} onChange={event => setFieldValue(event.currentTarget.value)}><option value="true">Yes</option><option value="false">No</option></select> : <textarea value={fieldValue} onInput={event => setFieldValue(event.currentTarget.value)} />}</label><button type="button" disabled={!fieldName} onClick={() => { try { void apply({ kind: "field", prop: fieldName, value: typeof selected.props[fieldName] === "string" ? fieldValue : JSON.parse(fieldValue) }); } catch { setError("Enter a valid JSON value."); } }}>Save property</button><button type="button" onClick={() => void apply({ kind: "reorder", direction: "up" })}>Move up</button><button type="button" onClick={() => void apply({ kind: "reorder", direction: "down" })}>Move down</button><p>Shared bound fields and linked template structure are refused here; use their owning source.</p></fieldset>}{current && <a href={formatIntent({ route: "composer", providerId: selected.providerId, compositionId: selected.recordId })}>Edit owning composition</a>}{selected.entries.length > 0 && <><h3>Shared Content sources</h3>{selected.entries.map(entry => <p key={`${entry.providerId}/${entry.recordId}`}><a href={formatIntent({ route: "content", providerId: entry.providerId, modelId: entry.modelId, entryId: entry.recordId })}>{entry.modelId}/{entry.recordId}</a></p>)}<p>Bound values belong to these shared records. Editing them affects every live use.</p></>}</> : <p>Select a component in the page or tree.</p>}</aside>
+  </main>;
+}

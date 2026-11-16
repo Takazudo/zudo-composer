@@ -4,6 +4,84 @@ import { JsonValue, ComponentPackManifest, TrustedComponentPack } from '@zudo-co
 /** A persisted record id in its provider's namespace. */
 type RecordId = string;
 
+declare const ASSET_TYPES: readonly ["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/zip", "text/plain", "text/csv", "application/json"];
+
+/** The only Assets document schema understood by this build. */
+declare const ASSET_SCHEMA_VERSION: 1;
+type AssetSchemaVersion = typeof ASSET_SCHEMA_VERSION;
+type AssetType = (typeof ASSET_TYPES)[number];
+/** Persisted Assets metadata. Binary bytes are stored by providers separately. */
+interface AssetDocument {
+    schemaVersion: AssetSchemaVersion;
+    id: RecordId;
+    fileName: string;
+    folderId: string | null;
+    note: string;
+    state: "active" | "trash";
+    currentVersionId: string;
+    versions: AssetVersion[];
+}
+interface AssetVersion {
+    /** SHA-256 identifies immutable bytes, independently of the mutable head. */
+    id: string;
+    mimeType: AssetType;
+    byteLength: number;
+    checksum: string;
+    url: string;
+    createdAt: string;
+}
+/** The canonical record envelope persisted by a Assets provider. */
+interface AssetRecord {
+    id: RecordId;
+    revision: number;
+    createdAt: string;
+    updatedAt: string;
+    document: AssetDocument;
+}
+interface AssetFolder {
+    id: string;
+    parentId: string | null;
+    name: string;
+    state: "active" | "trash";
+    revision: number;
+    createdAt: string;
+    updatedAt: string;
+}
+/** One atomic global metadata snapshot, separate from SiteProject providers. */
+interface AssetSnapshot {
+    schemaVersion: AssetSchemaVersion;
+    mutationToken: string;
+    records: AssetRecord[];
+    folders: AssetFolder[];
+}
+/** Stable provider-qualified identity used by authoring references. */
+interface AssetAssetRef {
+    providerId: string;
+    assetId: string;
+}
+/** Exact immutable version identity used by release/pin operations. */
+interface AssetVersionRef extends AssetAssetRef {
+    versionId: string;
+}
+interface AssetVersionPin extends AssetVersionRef {
+    checksum: string;
+    byteLength: number;
+    mimeType: AssetType;
+    url: string;
+}
+
+interface LockedAssetPin extends AssetVersionPin {
+    fileName?: string;
+    metadataRevision: number;
+    headVersionId: string;
+}
+interface AssetReferenceLock {
+    schemaVersion: 1;
+    providerId: string;
+    mutationToken: string;
+    pins: LockedAssetPin[];
+}
+
 /** A JSON object — the shape of a node's `props`. */
 type JsonObject = {
     [key: string]: JsonValue;
@@ -603,6 +681,58 @@ declare function compileStaticSite(options: {
     assetsStoreRoot: string;
 }): Promise<StaticSiteCompilation>;
 
+type WorkspaceToken = string | number;
+
+interface AuthoringRendererIdentity {
+    id: string;
+    version: string;
+    module: string;
+    digest: string;
+}
+interface AuthoringPackIdentity {
+    specifier: string;
+    source: string;
+    digest: string;
+    compiler: string;
+    contractDigest: string;
+}
+interface CapturedPublicFile {
+    fileName: string;
+    base64: string;
+    checksum: string;
+    byteLength: number;
+}
+interface AuthoringWorkspaceSnapshot {
+    schemaVersion: 1;
+    digest: string;
+    workspaceId: string;
+    tokens: Readonly<Record<string, WorkspaceToken>>;
+    project: SiteProject;
+    componentPack: AuthoringPackIdentity & {
+        manifestDigest: string;
+    };
+    renderer: AuthoringRendererIdentity;
+    publicFiles: CapturedPublicFile[];
+    assets: {
+        snapshot: AssetSnapshot;
+        lock: AssetReferenceLock;
+        files: {
+            fileName: string;
+            base64: string;
+            checksum: string;
+            byteLength: number;
+        }[];
+    };
+}
+interface CompileAuthoringWorkspaceSnapshotOptions {
+    snapshot: AuthoringWorkspaceSnapshot;
+    pack: TrustedComponentPack;
+    packIdentity: AuthoringPackIdentity;
+    renderer: AuthoringRendererIdentity;
+}
+/** Compiles only the captured bytes; later drafts and root source files are irrelevant. */
+declare function compileAuthoringWorkspaceSnapshot(options: CompileAuthoringWorkspaceSnapshotOptions): Promise<StaticSiteCompilation>;
+
 /**
  * Hashed Vite output is immutable; pinned asset versions get the same per-file
  * rules the hosted demo serves them with.
@@ -651,5 +781,5 @@ type SiteManifest = {
     files: Record<string, string>;
 };
 
-export { SITE_HEADERS, SITE_MANIFEST, compileStaticSite, createSiteManifest, siteHeaders, verifySiteStaticArtifact };
-export type { SiteManifest, StaticSiteCompilation, ToolIdentity };
+export { SITE_HEADERS, SITE_MANIFEST, compileAuthoringWorkspaceSnapshot, compileStaticSite, createSiteManifest, siteHeaders, verifySiteStaticArtifact };
+export type { AuthoringWorkspaceSnapshot, CompileAuthoringWorkspaceSnapshotOptions, SiteManifest, StaticSiteCompilation, ToolIdentity };

@@ -145,3 +145,5 @@ export async function assistantEvents(workspaceId: string, runId: string, afterS
     }
   }
 }
+
+export const hostDocumentAvailable = nativeEditingAvailable && config?.hostDocument === true;

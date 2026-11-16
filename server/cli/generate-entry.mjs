@@ -19,6 +19,7 @@ if ("error" in parsed) {
 } else if (parsed.command === "generate") {
   try {
     const { composerConfig, pack } = await loadHostContext({ workspaceRoot: parsed.options.workspaceRoot });
+    if (composerConfig.authoringAuthority === "workspace") throw new Error("Native workspace authority forbids source generation. Capture the saved workspace and build that exact snapshot.");
     const generator = /** @type {typeof import("./generate.js")} */ (
       await createModuleEvaluator(APP_ROOT)(resolve(APP_ROOT, "server/cli/generate.ts"))
     );

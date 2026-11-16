@@ -10,7 +10,7 @@ import { createBrowserCoordinator } from "../server/edit/browser-coordinator.mjs
 import { loadHostContext } from "../server/host-context.mjs";
 import { editDigest, createEditingService, type EditPlan, type EditReceipt } from "../server/edit/service";
 
-const command = z.object({ operation: z.enum(["inspect", "resolve", "plan", "review", "apply", "receipt", "discard", "supersede", "undo"]), input: z.unknown(), expected: z.object({ revision: z.string().regex(/^[a-f0-9]{64}$/), identity: z.object({ workspaceId: z.string(), sitemapId: z.string(), pageId: z.string(), providerId: z.literal("files"), recordId: z.string() }).strict() }).strict().optional() }).strict();
+const command = z.object({ operation: z.enum(["inspect", "resolve", "plan", "review", "apply", "receipt", "discard", "supersede", "undo", "document-preview", "document-edit"]), input: z.unknown(), expected: z.object({ revision: z.string().regex(/^[a-f0-9]{64}$/), identity: z.object({ workspaceId: z.string(), sitemapId: z.string(), pageId: z.string(), providerId: z.literal("files"), recordId: z.string() }).strict() }).strict().optional() }).strict();
 const bindSchema = z.object({ clientId: z.uuid(), capability: z.string(), epoch: z.number().int().nonnegative().nullable() }).strict();
 const answerSchema = z.object({ clientId: z.uuid(), challenge: z.uuid(), epoch: z.number().int().nonnegative(), clean: z.boolean() }).strict();
 const unbindSchema = z.object({ clientId: z.uuid(), capability: z.string() }).strict();
@@ -40,6 +40,15 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
   const module = await server.ssrLoadModule(appModuleId("server/edit/service.ts"));
   const service = module.createEditingService({ config: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity }) as ReturnType<typeof createEditingService>;
   await service.initializeSourceEpoch();
+  const hostDocument = context.composerConfig.hostDocument;
+  const hostCapture = hostDocument ? await server.ssrLoadModule(appModuleId("server/authoring-workspace/capture.ts")) : null;
+  const hostRendererIdentity = hostCapture ? await hostCapture.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig }) : null;
+  const hostRenderer = hostDocument ? await server.ssrLoadModule(hostDocument.module) : null;
+  const assertDocumentSourcesCurrent = async () => {
+    await service.initializeSourceEpoch();
+    if (!hostCapture || !hostRendererIdentity || editDigest(await hostCapture.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig })) !== editDigest(hostRendererIdentity)) throw Object.assign(new Error("Host renderer source changed. Restart authoring before preview or save."), { code: "stale-plan" });
+  };
+  if (hostDocument) await assertDocumentSourcesCurrent();
   const assistantConfig = context.composerConfig.assistant;
   let assistant: { endpoint: string; name: string } | undefined;
   let assistantRunner: { stopAll(): Promise<void> } | undefined;
@@ -96,7 +105,7 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
     const timer = setTimeout(() => req.destroy(), 5000);
     try {
       const request = command.parse(JSON.parse(await readBody(req, 256 * 1024) as string)); clearTimeout(timer);
-      if (["apply", "undo"].includes(request.operation) && req.headers["x-zudo-native-approval"] !== approvalCapability) return respond(403, { ok: false, error: { code: "approval-required", message: "Explicit operator approval required." } });
+      if (["apply", "undo", "document-edit"].includes(request.operation) && req.headers["x-zudo-native-approval"] !== approvalCapability) return respond(403, { ok: false, error: { code: "approval-required", message: "Explicit operator approval required." } });
       const execute = async () => {
         if (["plan", "resolve"].includes(request.operation)) {
           const input = request.input as { workspaceId: string; page: string; sitemapId?: string };
@@ -104,6 +113,33 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
           if (!request.expected || editDigest(page.record) !== request.expected.revision || editDigest(page.identity) !== editDigest(request.expected.identity)) throw Object.assign(new Error("Wrong target revision"), { code: "stale-plan" });
         }
         switch (request.operation) {
+          case "document-edit": {
+            await assertDocumentSourcesCurrent();
+            const host = context.composerConfig.hostDocument;
+            if (!host) throw Object.assign(new Error("Host renderer is not configured."), { code: "unsupported-capability" });
+            const captureModule = await server.ssrLoadModule(appModuleId("server/authoring-workspace/capture.ts"));
+            const editModule = await server.ssrLoadModule(appModuleId("server/host-document/edit.ts"));
+            return editModule.editHostDocument({ composerConfig: context.composerConfig, pack: context.pack, renderer: await captureModule.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig }), packIdentity: await captureModule.resolveAuthoringPackIdentity({ composerConfig: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity }) }, request.input);
+          }
+          case "document-preview": {
+            await assertDocumentSourcesCurrent();
+            const host = context.composerConfig.hostDocument;
+            if (!host) throw Object.assign(new Error("Host document renderer is not configured."), { code: "unsupported-capability" });
+            const input = z.object({ workspaceId: z.string().min(1), pathname: z.string().startsWith("/").optional(), pageId: z.string().min(1).optional() }).strict().parse(request.input);
+            const captureModule = await server.ssrLoadModule(appModuleId("server/authoring-workspace/capture.ts"));
+            const renderModule = await server.ssrLoadModule(appModuleId("server/host-document/render.ts"));
+            const renderer = hostRenderer;
+            if (typeof renderer?.renderDocument !== "function") throw new Error("Host document module has no renderDocument export.");
+            const options = { composerConfig: context.composerConfig, pack: context.pack, renderer: await captureModule.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig }), packIdentity: await captureModule.resolveAuthoringPackIdentity({ composerConfig: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity }) };
+            const snapshot = await captureModule.captureAuthoringWorkspace(options);
+            if (snapshot.workspaceId !== input.workspaceId) throw Object.assign(new Error("Workspace changed."), { code: "wrong-workspace" });
+            const compiled = await captureModule.compileAuthoringWorkspaceSnapshot({ ...options, snapshot });
+            const routes = compiled.build.routes.map((route: { pathname: string; displayTitle: string; sitemapNode: { id: string } }) => ({ pathname: route.pathname, title: route.displayTitle, pageId: route.sitemapNode.id }));
+            const route = compiled.build.routes.find((value: { pathname: string; sitemapNode: { id: string } }) => input.pathname ? value.pathname === input.pathname : input.pageId ? value.sitemapNode.id === input.pageId : false) ?? (!input.pathname && !input.pageId ? compiled.build.routes[0] : undefined);
+            if (!route) throw Object.assign(new Error("Route unavailable."), { code: "not-found" });
+            const preview = await renderModule.renderHostDocument(renderer, route, { workspaceId: snapshot.workspaceId, revision: snapshot.digest, pathname: route.pathname, packId: context.pack.manifest.packId, packVersion: context.pack.manifest.packVersion, rendererId: host.rendererId, rendererVersion: host.rendererVersion, rendererDigest: snapshot.renderer.digest }, snapshot.project);
+            return { ...preview, routes };
+          }
           case "plan": {
             const plan = await service.plan(request.input);
             const { page } = await service.inspectBrowserReview({ planId: plan.id });
@@ -134,7 +170,7 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
       };
       const result = ["inspect", "review", "receipt"].includes(request.operation)
         ? await execute()
-        : await coordinator.run(clientId, () => lease.execute(execute), ["apply", "undo"].includes(request.operation));
+        : await coordinator.run(clientId, () => lease.execute(execute), ["apply", "undo", "document-edit"].includes(request.operation));
       respond(200, { ok: true, result });
     } catch (error) {
       const internalCode = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "invalid-request";
@@ -145,7 +181,7 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
     } finally { clearTimeout(timer); activeRequests--; }
   });
   return {
-    config: { endpoint: "/__zudo-native-edit", capability, approvalCapability, pack: { packId: context.pack.manifest.packId, packVersion: context.pack.manifest.packVersion }, ...(assistant ? { assistant } : {}) },
+    config: { endpoint: "/__zudo-native-edit", capability, approvalCapability, pack: { packId: context.pack.manifest.packId, packVersion: context.pack.manifest.packVersion }, ...(assistant ? { assistant } : {}), ...(context.composerConfig.hostDocument ? { hostDocument: true } : {}) },
     isProvider: (req: { url?: string }) => /^\/__zudo_composer_[a-z_]*provider$/.test(req.url ?? "") || req.url === "/__zudo-release",
     provider: (req: { headers: Record<string, unknown> }, action: () => unknown) => coordinator.provider(String(req.headers["x-zudo-native-client"] ?? ""), Number(req.headers["x-zudo-native-epoch"]), action),
     // Awaited on shutdown so no CLI process tree outlives the authoring server.
