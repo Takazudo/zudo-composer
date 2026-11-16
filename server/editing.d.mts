@@ -127,54 +127,6 @@ interface ComponentCatalog {
     ids(): string[];
 }
 
-/** One component kind a region accepts, with its own children rule (if any). */
-interface GrammarAcceptedKind {
-    id: string;
-    title: string;
-    description: string;
-    /** `null` when the kind has no slot of its own that narrows its children. */
-    accepts: string[] | null;
-}
-/** The container slot rule backing one template's page-kind outlet. */
-interface GrammarRegion {
-    outletLabel: string;
-    componentId: string;
-    componentTitle: string;
-    slotId: string;
-    slotLabel: string;
-    cardinality: SlotCardinality;
-    min?: number;
-    max?: number;
-    accepts: GrammarAcceptedKind[] | "any";
-}
-/** One page kind: a Global template whose outlet targets a container slot. */
-interface GrammarTemplate {
-    id: string;
-    name: string;
-    /** `null` when the outlet's target slot declares no `accepts` and no cardinality/min/max bound — any component, any count. */
-    region: GrammarRegion | null;
-    open: boolean;
-}
-/** A published Global template left out because its outlet does not resolve against the manifest. */
-interface GrammarUnavailableTemplate {
-    id: string;
-    name: string;
-    reason: string;
-}
-interface Grammar {
-    pack: {
-        id: string;
-        version: string;
-    };
-    templates: GrammarTemplate[];
-    /** Skipped templates, mirroring the resolver treating an unresolvable template as unavailable. */
-    unavailableTemplates: GrammarUnavailableTemplate[];
-    /** Pages bound to no template use the ordinary unrestricted virtual root. */
-    openRoot: {
-        accepts: "any";
-    };
-}
-
 interface PersistedSnapshot<T> {
     mutationToken: number | string;
     records: readonly T[];
@@ -772,13 +724,38 @@ type MappingTransform =
     kind: "prefix";
     prefix: string;
 };
-interface MappingBinding {
+interface MappingFieldBinding {
+    source?: never;
     id: RecordId;
     sourceFieldId: RecordId;
     projection: MappingSourceProjection;
     target: MappingTarget;
     transform: MappingTransform;
 }
+/** Shared evaluator/grammar contract: record metadata is never a writable Content field. */
+declare const MAPPING_ENTRY_IDENTITY_CAPABILITY: {
+    readonly source: {
+        readonly kind: "entry-id";
+    };
+    readonly targetKind: "text";
+    readonly transform: {
+        readonly kind: "identity";
+    };
+    readonly readOnly: true;
+};
+interface MappingEntryIdentityBinding {
+    id: RecordId;
+    source: {
+        kind: "entry-id";
+    };
+    sourceFieldId?: never;
+    projection?: never;
+    target: MappingTarget;
+    transform: {
+        kind: "identity";
+    };
+}
+type MappingBinding = MappingFieldBinding | MappingEntryIdentityBinding;
 interface MappingDocument {
     schemaVersion: typeof MAPPING_SCHEMA_VERSION;
     id: RecordId;
@@ -886,6 +863,57 @@ declare const MAPPING_PROVIDERS: {
 type MappingProviderDescriptor = Omit<(typeof MAPPING_PROVIDERS)[keyof typeof MAPPING_PROVIDERS], "label"> & {
     readonly label: string;
 };
+
+/** One component kind a region accepts, with its own children rule (if any). */
+interface GrammarAcceptedKind {
+    id: string;
+    title: string;
+    description: string;
+    /** `null` when the kind has no slot of its own that narrows its children. */
+    accepts: string[] | null;
+}
+/** The container slot rule backing one template's page-kind outlet. */
+interface GrammarRegion {
+    outletLabel: string;
+    componentId: string;
+    componentTitle: string;
+    slotId: string;
+    slotLabel: string;
+    cardinality: SlotCardinality;
+    min?: number;
+    max?: number;
+    accepts: GrammarAcceptedKind[] | "any";
+}
+/** One page kind: a Global template whose outlet targets a container slot. */
+interface GrammarTemplate {
+    id: string;
+    name: string;
+    /** `null` when the outlet's target slot declares no `accepts` and no cardinality/min/max bound — any component, any count. */
+    region: GrammarRegion | null;
+    open: boolean;
+}
+/** A published Global template left out because its outlet does not resolve against the manifest. */
+interface GrammarUnavailableTemplate {
+    id: string;
+    name: string;
+    reason: string;
+}
+interface Grammar {
+    mappingSources: {
+        entryIdentity: typeof MAPPING_ENTRY_IDENTITY_CAPABILITY;
+    };
+    pack: {
+        id: string;
+        version: string;
+    };
+    templates: GrammarTemplate[];
+    /** Skipped templates, mirroring the resolver treating an unresolvable template as unavailable. */
+    unavailableTemplates: GrammarUnavailableTemplate[];
+    /** Pages bound to no template use the ordinary unrestricted virtual root. */
+    openRoot: {
+        accepts: "any";
+    };
+}
 
 /** The only Sitemap document schema version understood by this build. */
 declare const SITEMAP_SCHEMA_VERSION: 3;
@@ -2330,7 +2358,12 @@ interface CliAssistantConfig extends AssistantCommonConfig {
 }
 type AssistantConfig = AnthropicAssistantConfig | FakeAssistantConfig | CliAssistantConfig;
 
+type HostComponentPresentation = Record<string, {
+    labelProp?: string;
+    transparent?: boolean;
+}>;
 interface HostDocumentConfig {
+    componentPresentation?: HostComponentPresentation;
     module: string;
     rendererId: string;
     rendererVersion: string;

@@ -292,13 +292,27 @@ type MappingTransform =
     kind: "prefix";
     prefix: string;
 };
-interface MappingBinding {
+interface MappingFieldBinding {
+    source?: never;
     id: RecordId;
     sourceFieldId: RecordId;
     projection: MappingSourceProjection;
     target: MappingTarget;
     transform: MappingTransform;
 }
+interface MappingEntryIdentityBinding {
+    id: RecordId;
+    source: {
+        kind: "entry-id";
+    };
+    sourceFieldId?: never;
+    projection?: never;
+    target: MappingTarget;
+    transform: {
+        kind: "identity";
+    };
+}
+type MappingBinding = MappingFieldBinding | MappingEntryIdentityBinding;
 interface MappingDocument {
     schemaVersion: typeof MAPPING_SCHEMA_VERSION;
     id: RecordId;
@@ -619,7 +633,8 @@ interface Entry {
     modelId: string;
     record: ContentEntryRecord;
 }
-interface BindingInput {
+interface FieldBindingInput {
+    source?: never;
     field: string;
     nodeId: string;
     prop: string;
@@ -627,7 +642,21 @@ interface BindingInput {
     transform?: MappingTransform;
     id?: string;
 }
+type BindingInput = FieldBindingInput | {
+    source: {
+        kind: "entry-id";
+    };
+    field?: never;
+    projection?: never;
+    nodeId: string;
+    prop: string;
+    id?: string;
+    transform?: {
+        kind: "identity";
+    };
+};
 interface CollectionModeInput {
+    pins?: MappingCollectionQuery["pins"];
     kind: "collection";
     sort?: {
         field: string;
@@ -1258,7 +1287,12 @@ interface CliAssistantConfig extends AssistantCommonConfig {
 }
 type AssistantConfig = AnthropicAssistantConfig | FakeAssistantConfig | CliAssistantConfig;
 
+type HostComponentPresentation = Record<string, {
+    labelProp?: string;
+    transparent?: boolean;
+}>;
 interface HostDocumentConfig {
+    componentPresentation?: HostComponentPresentation;
     module: string;
     rendererId: string;
     rendererVersion: string;
@@ -1460,6 +1494,10 @@ declare function resolveAuthoringRendererIdentity(options: {
 declare function captureAuthoringWorkspace(options: CaptureAuthoringWorkspaceOptions): Promise<AuthoringWorkspaceSnapshot>;
 /** Reopen durable stores and compare their tokens; Content generation also rejects edit/revert. */
 declare function isAuthoringWorkspaceSnapshotCurrent(options: CaptureAuthoringWorkspaceOptions, snapshot: AuthoringWorkspaceSnapshot): Promise<boolean>;
+/** Migration preflight only: verifies the saved source independently of the newly
+ * installed pack/renderer. This does NOT establish build compatibility or switch
+ * authority. Keep the source fenced, and recheck after staging before activation. */
+declare function isAuthoringWorkspaceSourceCurrent(options: Pick<CaptureAuthoringWorkspaceOptions, "composerConfig" | "pack" | "publicFiles">, snapshot: AuthoringWorkspaceSnapshot): Promise<boolean>;
 
 interface HostDocumentIdentity {
     workspaceId: string;
@@ -1472,6 +1510,35 @@ interface HostDocumentIdentity {
     rendererDigest: string;
 }
 interface HostDocumentTarget {
+    presentation?: {
+        label: string;
+        kindTitle: string;
+        transparent: boolean;
+    };
+    capabilities?: {
+        fields: {
+            allowed: boolean;
+            reason?: string;
+        };
+        structure: {
+            allowed: boolean;
+            reason?: string;
+        };
+        placement: {
+            allowed: boolean;
+            reason?: string;
+        };
+        uses: readonly string[];
+        insertSlots: readonly {
+            slotId: string;
+            label: string;
+            reason?: string;
+            components: readonly {
+                id: string;
+                title: string;
+            }[];
+        }[];
+    };
     renderedNodeId: string;
     providerId: string;
     recordId: string;
@@ -1522,5 +1589,5 @@ declare function renderHostDocument(renderer: HostDocumentRenderer, route: SiteC
     pathnames: readonly string[];
 }): Promise<HostDocumentPreview>;
 
-export { ASSET_PROVIDER_ID, COMPOSITION_PROVIDER_ID, CONTENT_PROVIDER_ID, DEFAULT_TIMESTAMP, MAPPING_PROVIDER_ID, SITEMAP_PROVIDER_ID, assetAuthoringUrl, assetMimeTypeForExtension, canonicalStringifyJson, captureAuthoringWorkspace, createFilesystemAssetStore, defineSite, entryRef, hostDocumentTargets, imageUse, initializeAuthoringWorkspace, isAuthoringWorkspaceSnapshotCurrent, node, renderHostDocument, resolveAuthoringPackIdentity, resolveAuthoringRendererIdentity, slugify, validateSiteProject };
+export { ASSET_PROVIDER_ID, COMPOSITION_PROVIDER_ID, CONTENT_PROVIDER_ID, DEFAULT_TIMESTAMP, MAPPING_PROVIDER_ID, SITEMAP_PROVIDER_ID, assetAuthoringUrl, assetMimeTypeForExtension, canonicalStringifyJson, captureAuthoringWorkspace, createFilesystemAssetStore, defineSite, entryRef, hostDocumentTargets, imageUse, initializeAuthoringWorkspace, isAuthoringWorkspaceSnapshotCurrent, isAuthoringWorkspaceSourceCurrent, node, renderHostDocument, resolveAuthoringPackIdentity, resolveAuthoringRendererIdentity, slugify, validateSiteProject };
 export type { AuthoringPackIdentity, AuthoringPublicFile, AuthoringRendererIdentity, AuthoringWorkspaceSnapshot, CaptureAuthoringWorkspaceOptions, CapturedPublicFile, HostDocumentIdentity, HostDocumentPreview, HostDocumentRenderInput, HostDocumentRenderer, HostDocumentTarget };

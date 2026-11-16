@@ -1583,6 +1583,15 @@ function planLinkedJsxModules(options) {
 	};
 }
 //#endregion
+//#region src/mapping/model/types.ts
+/** Shared evaluator/grammar contract: record metadata is never a writable Content field. */
+var MAPPING_ENTRY_IDENTITY_CAPABILITY = {
+	source: { kind: "entry-id" },
+	targetKind: "text",
+	transform: { kind: "identity" },
+	readOnly: true
+};
+//#endregion
 //#region src/mapping/model/validate.ts
 var RECORD_KEYS$1 = [
 	"id",
@@ -1704,12 +1713,19 @@ function validateMappingRecord(value) {
 	for (let index = 0; index < document.bindings.length; index += 1) {
 		const binding = document.bindings[index];
 		const path = `document.bindings[${index}]`;
-		if (!isPlainObject(binding) || !exact(binding, BINDING_KEYS) || !isSafeRecordId(binding.id) || !isSafeRecordId(binding.sourceFieldId)) return fail("invalid-binding", "Binding identity is malformed.", path);
+		if (!isPlainObject(binding) || !isSafeRecordId(binding.id)) return fail("invalid-binding", "Binding identity is malformed.", path);
+		const identity = Object.hasOwn(binding, "source");
+		if (identity ? !exact(binding, [
+			"id",
+			"source",
+			"target",
+			"transform"
+		]) || !isPlainObject(binding.source) || !exact(binding.source, ["kind"]) || binding.source.kind !== "entry-id" : !exact(binding, BINDING_KEYS) || !isSafeRecordId(binding.sourceFieldId)) return fail("invalid-binding", "Binding must select exactly one field or entry identity source.", path);
 		if (ids.has(binding.id)) return fail("duplicate-binding-id", `Duplicate binding id "${binding.id}".`, `${path}.id`);
 		ids.add(binding.id);
 		if (!isPlainObject(binding.target) || !exact(binding.target, ["nodeId", "prop"]) || typeof binding.target.nodeId !== "string" || !binding.target.nodeId || typeof binding.target.prop !== "string" || !binding.target.prop) return fail("invalid-binding", "Binding target is malformed.", `${path}.target`);
-		if (!validateMappingSourceProjection(binding.projection)) return fail("invalid-binding", "Binding source projection is malformed.", `${path}.projection`);
-		if (!validateMappingTransform(binding.transform)) return fail("malformed-transform", "Binding transform is malformed.", `${path}.transform`);
+		if (!identity && !validateMappingSourceProjection(binding.projection)) return fail("invalid-binding", "Binding source projection is malformed.", `${path}.projection`);
+		if (!validateMappingTransform(binding.transform) || identity && binding.transform.kind !== "identity") return fail("malformed-transform", "Binding transform is malformed.", `${path}.transform`);
 	}
 	return {
 		ok: true,
@@ -2134,10 +2150,10 @@ async function resolveMappingDefinition(mapping, catalogs, manifest) {
 	const seenTargets = /* @__PURE__ */ new Set();
 	const bindings = [];
 	for (const binding of mapping.document.bindings) {
-		const source = sourceById.get(binding.sourceFieldId);
+		const source = binding.source ? void 0 : sourceById.get(binding.sourceFieldId);
 		const key = targetKey(binding.target);
 		const target = targetByKey.get(key);
-		if (!source) diagnostics.push({
+		if (!binding.source && !source) diagnostics.push({
 			scope: "definition",
 			severity: "blocking",
 			code: "source-field-missing",
@@ -2165,6 +2181,32 @@ async function resolveMappingDefinition(mapping, catalogs, manifest) {
 				target: binding.target,
 				message: structuredTarget?.message ?? (nodeExists ? `Target field "${binding.target.prop}" no longer exists on node "${binding.target.nodeId}".` : `Target node "${binding.target.nodeId}" no longer exists.`)
 			});
+		}
+		if (binding.source) {
+			if (binding.transform.kind !== MAPPING_ENTRY_IDENTITY_CAPABILITY.transform.kind) diagnostics.push({
+				scope: "definition",
+				severity: "blocking",
+				code: "invalid-transform-config",
+				bindingId: binding.id,
+				message: "Entry identity supports only the identity transform."
+			});
+			else if (target && target.kind !== MAPPING_ENTRY_IDENTITY_CAPABILITY.targetKind) diagnostics.push({
+				scope: "definition",
+				severity: "blocking",
+				code: "incompatible-binding",
+				bindingId: binding.id,
+				target: binding.target,
+				message: "Entry identity supports only scalar text targets."
+			});
+			else if (target && !seenTargets.has(`accepted:${key}`)) {
+				bindings.push({
+					binding,
+					source: null,
+					target
+				});
+				seenTargets.add(`accepted:${key}`);
+			}
+			continue;
 		}
 		const projection = source ? resolveMappingProjectionDefinition(source, binding.projection) : void 0;
 		if (projection?.status === "invalid") diagnostics.push({
@@ -2256,6 +2298,37 @@ function evaluateResolvedMapping(definition, entry, options = {}) {
 		unchangedStaticCount: mapping.document.bindings.length
 	};
 	for (const resolved of definition.bindings) {
+		if (!resolved.source) {
+			const { binding, target } = resolved;
+			if (!isSafeRecordId(entry.id)) {
+				entryDiagnostics.push({
+					scope: "entry",
+					severity: "blocking",
+					code: "invalid-source-value",
+					entryId: entry.id,
+					bindingId: binding.id,
+					target: binding.target,
+					message: "Selected Entry identity must be a safe record ID."
+				});
+				continue;
+			}
+			const node = findNode(document.root, target.target.nodeId);
+			if (node) {
+				node.props[target.target.prop] = entry.id;
+				appliedBindings.push({
+					bindingId: binding.id,
+					source: {
+						kind: "entry-id",
+						providerId: mapping.document.contentModel.providerId,
+						modelId: entry.modelId,
+						recordId: entry.id
+					},
+					target: { ...target.target },
+					value: entry.id
+				});
+			}
+			continue;
+		}
 		const { binding, source, target } = resolved;
 		const value = entry.values[source.id];
 		if (value === void 0 || typeof value === "string" && value.trim().length === 0) {
@@ -2499,7 +2572,7 @@ function evaluateCollectionQuery(options) {
 		if (pin.providerId !== providerId) {
 			diagnostics.push({
 				code: "pin-provider-mismatch",
-				severity: "nonblocking",
+				severity: "blocking",
 				entryId: pin.recordId,
 				message: `Pinned Entry "${pin.recordId}" belongs to another provider.`
 			});
@@ -2508,7 +2581,7 @@ function evaluateCollectionQuery(options) {
 		if (pin.modelId !== model.id) {
 			diagnostics.push({
 				code: "pin-model-mismatch",
-				severity: "nonblocking",
+				severity: "blocking",
 				entryId: pin.recordId,
 				message: `Pinned Entry "${pin.recordId}" belongs to another model.`
 			});
@@ -2519,7 +2592,7 @@ function evaluateCollectionQuery(options) {
 			const existing = allEntriesById.get(pin.recordId);
 			diagnostics.push({
 				code: existing ? "pin-model-mismatch" : "pin-not-found",
-				severity: "nonblocking",
+				severity: "blocking",
 				entryId: pin.recordId,
 				message: existing ? `Pinned Entry "${pin.recordId}" belongs to another model.` : `Pinned Entry "${pin.recordId}" was not found.`
 			});
@@ -2528,7 +2601,7 @@ function evaluateCollectionQuery(options) {
 		if (!eligible(entry, query)) {
 			diagnostics.push({
 				code: "pin-ineligible",
-				severity: "nonblocking",
+				severity: "blocking",
 				entryId: entry.id,
 				message: `Pinned Entry "${entry.id}" is not eligible for the publication policy.`
 			});
@@ -2539,6 +2612,11 @@ function evaluateCollectionQuery(options) {
 			pinned.push(entry);
 		}
 	}
+	if (diagnostics.some((item) => item.severity === "blocking")) return {
+		status: "blocked",
+		entries: [],
+		diagnostics
+	};
 	const matched = all.filter((entry) => eligible(entry, query) && !seen.has(entry.id) && query.conditions.every((condition) => conditionMatches(entry.values[condition.fieldId], condition))).sort((left, right) => {
 		for (const sort of query.sort) {
 			const compared = compareValues(left.values[sort.fieldId], right.values[sort.fieldId]);
@@ -5037,7 +5115,7 @@ function validateSiteProject(value, context) {
 		const nodeIds = composition ? new Set(compositionNodePaths(composition.document.root, "").keys()) : void 0;
 		mapping.document.bindings.forEach((binding, bindingIndex) => {
 			const bindingPath = `${path}.bindings[${bindingIndex}]`;
-			if (model && !model.document.fields.some((field) => field.id === binding.sourceFieldId)) diagnostic(diagnostics, "dangling-mapping-field", `${bindingPath}.sourceFieldId`, `Mapping source field ${JSON.stringify(binding.sourceFieldId)} does not exist in Content model ${JSON.stringify(model.id)}.`);
+			if (!binding.source && model && !model.document.fields.some((field) => field.id === binding.sourceFieldId)) diagnostic(diagnostics, "dangling-mapping-field", `${bindingPath}.sourceFieldId`, `Mapping source field ${JSON.stringify(binding.sourceFieldId)} does not exist in Content model ${JSON.stringify(model.id)}.`);
 			if (nodeIds && !nodeIds.has(binding.target.nodeId)) diagnostic(diagnostics, "dangling-mapping-target", `${bindingPath}.target.nodeId`, `Mapping target node ${JSON.stringify(binding.target.nodeId)} does not exist in Composition ${JSON.stringify(composition.id)}.`);
 			else if (mappingTargets && !mappingTargets.has(recordRefKey(binding.target.nodeId, binding.target.prop))) diagnostic(diagnostics, "dangling-mapping-target", `${bindingPath}.target.prop`, `Mapping target field ${JSON.stringify(binding.target.prop)} is not an available scalar field on node ${JSON.stringify(binding.target.nodeId)}.`);
 		});

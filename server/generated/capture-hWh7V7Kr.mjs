@@ -37,6 +37,258 @@ var ASSET_VERSIONED_CAPABILITIES = Object.freeze({
 	permanentDelete: false
 });
 //#endregion
+//#region src/shared/json.ts
+/**
+* Recursively decides whether a value is JSON-safe: only strings, finite
+* numbers, booleans, null, arrays, and plain objects — never functions,
+* `undefined`, symbols, bigints, class instances, or circular references.
+* `ancestors` tracks the CURRENT path only (backtracked after each branch) so
+* a shared reference in a DAG is not mistaken for a cycle.
+*/
+function isJsonSafe(value, ancestors = /* @__PURE__ */ new Set()) {
+	if (value === null) return true;
+	const t = typeof value;
+	if (t === "string" || t === "boolean") return true;
+	if (t === "number") return Number.isFinite(value);
+	if (t !== "object") return false;
+	const obj = value;
+	const proto = Object.getPrototypeOf(obj);
+	if (!Array.isArray(obj) && proto !== Object.prototype && proto !== null) return false;
+	if (ancestors.has(obj)) return false;
+	ancestors.add(obj);
+	let ok;
+	if (Array.isArray(obj)) {
+		const expectedNames = Array.from({ length: obj.length }, (_item, index) => String(index)).concat("length");
+		ok = Object.getOwnPropertySymbols(obj).length === 0 && Object.getOwnPropertyNames(obj).every((name) => expectedNames.includes(name)) && Array.from({ length: obj.length }, (_item, index) => index).every((index) => Object.hasOwn(obj, index) && isJsonSafe(obj[index], ancestors));
+	} else {
+		const record = obj;
+		ok = Object.getOwnPropertySymbols(record).length === 0 && Reflect.ownKeys(record).length === Object.keys(record).length && Object.values(record).every((child) => isJsonSafe(child, ancestors));
+	}
+	ancestors.delete(obj);
+	return ok;
+}
+/** Narrowing guard: is `value` a plain (non-array) JSON object? */
+function isPlainObject(value) {
+	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+	const proto = Object.getPrototypeOf(value);
+	return proto === Object.prototype || proto === null;
+}
+/**
+* Structural deep clone of a JSON-safe value. Rejects anything that would not
+* round-trip exactly, then uses JSON to produce a fresh, unshared tree.
+*/
+function cloneJson(value) {
+	if (!isJsonSafe(value)) throw new TypeError("Cannot clone a value that does not round-trip through JSON exactly.");
+	return JSON.parse(JSON.stringify(value));
+}
+//#endregion
+//#region src/shared/id-factory.ts
+/** Lower-cases a hint into an id-safe fragment (letters, digits, dashes). */
+function slugHint(hint) {
+	if (!hint) return "node";
+	return hint.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "node";
+}
+/**
+* A collision-resistant factory for production runtime use. Prefers
+* `crypto.randomUUID` when present, falling back to a timestamp+counter id in
+* environments without it.
+*/
+function createUuidIdFactory() {
+	let counter = 0;
+	return (hint) => {
+		counter += 1;
+		const cryptoObj = globalThis.crypto;
+		const unique = cryptoObj?.randomUUID ? cryptoObj.randomUUID() : `${Date.now().toString(36)}-${counter.toString(36)}`;
+		return hint ? `${slugHint(hint)}-${unique}` : unique;
+	};
+}
+//#endregion
+//#region src/shared/record-identity.ts
+/**
+* Lower-case, case-stable ids safe to embed in owned filenames and URL paths.
+* Dots, separators, percent escapes, whitespace, and leading/trailing
+* punctuation are deliberately excluded. IDs are capped to keep filenames
+* portable across providers.
+*/
+var RECORD_ID_PATTERN = /^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$/;
+function isSafeRecordId(value) {
+	return typeof value === "string" && RECORD_ID_PATTERN.test(value);
+}
+//#endregion
+//#region src/mapping/model/types.ts
+/** Shared evaluator/grammar contract: record metadata is never a writable Content field. */
+var MAPPING_ENTRY_IDENTITY_CAPABILITY = {
+	source: { kind: "entry-id" },
+	targetKind: "text",
+	transform: { kind: "identity" },
+	readOnly: true
+};
+var MappingPersistenceError = class extends Error {
+	operation;
+	code;
+	retryable;
+	name = "MappingPersistenceError";
+	constructor(operation, code, message, retryable, options) {
+		super(message, options);
+		this.operation = operation;
+		this.code = code;
+		this.retryable = retryable;
+	}
+	/**
+	* Structured context the shared file-provider transport forwards verbatim.
+	* `retryable` is not derivable from the code alone, so it has to cross the
+	* wire rather than be re-guessed browser-side.
+	*/
+	get details() {
+		return { retryable: this.retryable };
+	}
+};
+var MAPPING_PROVIDERS = { filesystem: {
+	id: "mapping-filesystem",
+	label: "Project files"
+} };
+//#endregion
+//#region src/mapping/model/validate.ts
+var RECORD_KEYS$2 = [
+	"id",
+	"createdAt",
+	"updatedAt",
+	"document"
+];
+var DOCUMENT_KEYS$2 = [
+	"schemaVersion",
+	"id",
+	"name",
+	"contentModel",
+	"composition",
+	"mode",
+	"bindings"
+];
+var BINDING_KEYS = [
+	"id",
+	"sourceFieldId",
+	"projection",
+	"target",
+	"transform"
+];
+function fail$3(code, message, path, foundSchemaVersion) {
+	return {
+		ok: false,
+		issue: {
+			code,
+			message,
+			...path ? { path } : {},
+			...foundSchemaVersion === void 0 ? {} : { foundSchemaVersion }
+		}
+	};
+}
+function exact(value, keys) {
+	return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+}
+function timestamp(value) {
+	if (typeof value !== "string") return false;
+	const date = new Date(value);
+	return Number.isFinite(date.getTime()) && date.toISOString() === value;
+}
+function providerId(value) {
+	return typeof value === "string" && value.length > 0 && value.length <= 128 && /^[a-z0-9][a-z0-9_-]*$/.test(value);
+}
+function ref(value) {
+	return isPlainObject(value) && exact(value, ["providerId", "recordId"]) && providerId(value.providerId) && isSafeRecordId(value.recordId);
+}
+function mode(value) {
+	if (!isPlainObject(value) || typeof value.kind !== "string") return false;
+	if (value.kind === "single") return exact(value, ["kind"]);
+	if (value.kind !== "collection" || !exact(value, ["kind", "query"]) || !isPlainObject(value.query)) return false;
+	const query = value.query;
+	if (!exact(query, [
+		"publication",
+		"conditions",
+		"sort",
+		"pins",
+		"limit"
+	]) || !["published-only", "include-drafts"].includes(String(query.publication)) || !Number.isInteger(query.limit) || Number(query.limit) < 1 || Number(query.limit) > 1e3) return false;
+	if (!Array.isArray(query.conditions) || !query.conditions.every((item) => isPlainObject(item) && isSafeRecordId(item.fieldId) && [
+		"equals",
+		"not-equals",
+		"contains",
+		"exists"
+	].includes(String(item.operator)) && (item.operator === "exists" ? exact(item, ["fieldId", "operator"]) : exact(item, [
+		"fieldId",
+		"operator",
+		"value"
+	])))) return false;
+	if (!Array.isArray(query.sort) || !query.sort.every((item) => isPlainObject(item) && exact(item, ["fieldId", "direction"]) && isSafeRecordId(item.fieldId) && ["asc", "desc"].includes(String(item.direction)))) return false;
+	if (!Array.isArray(query.pins) || !query.pins.every((item) => isPlainObject(item) && exact(item, [
+		"providerId",
+		"modelId",
+		"recordId"
+	]) && providerId(item.providerId) && isSafeRecordId(item.modelId) && isSafeRecordId(item.recordId))) return false;
+	return true;
+}
+function validateMappingTransform(value) {
+	if (!isPlainObject(value) || typeof value.kind !== "string") return false;
+	if (value.kind === "prefix") return exact(value, ["kind", "prefix"]) && typeof value.prefix === "string" && Array.from(value.prefix).length <= 80;
+	return (value.kind === "identity" || value.kind === "date-medium" || value.kind === "truncate-160") && exact(value, ["kind"]);
+}
+function validateMappingSourceProjection(value) {
+	if (!isPlainObject(value) || typeof value.kind !== "string") return false;
+	if ([
+		"value",
+		"asset-url",
+		"asset-download",
+		"reference-id",
+		"route-link"
+	].includes(value.kind)) return exact(value, ["kind"]);
+	if (value.kind === "asset-text") return exact(value, ["kind", "field"]) && [
+		"alt",
+		"caption",
+		"label",
+		"title",
+		"description"
+	].includes(String(value.field));
+	return value.kind === "object-field" && exact(value, ["kind", "fieldIds"]) && Array.isArray(value.fieldIds) && value.fieldIds.length > 0 && value.fieldIds.every(isSafeRecordId);
+}
+function validateMappingRecord(value) {
+	if (!isPlainObject(value) || !exact(value, RECORD_KEYS$2)) return fail$3("invalid-record", "Mapping record must contain exactly its canonical envelope fields.");
+	if (!isJsonSafe(value)) return fail$3("not-json-safe", "Mapping record must be JSON-safe.");
+	if (!isSafeRecordId(value.id)) return fail$3("unsafe-id", "Mapping id must be a safe record id.", "id");
+	if (!timestamp(value.createdAt) || !timestamp(value.updatedAt)) return fail$3("invalid-timestamp", "Mapping timestamps must be canonical ISO timestamps.");
+	if (value.updatedAt < value.createdAt) return fail$3("invalid-timestamp-order", "updatedAt cannot precede createdAt.");
+	if (isPlainObject(value.document) && typeof value.document.schemaVersion === "number" && value.document.schemaVersion > 2) return fail$3("future-schema", "Mapping uses a newer schema version.", "document.schemaVersion", value.document.schemaVersion);
+	if (!isPlainObject(value.document) || !exact(value.document, DOCUMENT_KEYS$2)) return fail$3("malformed-document", "Mapping document must contain exactly its canonical fields.");
+	const document = value.document;
+	if (document.schemaVersion !== 2) return fail$3("malformed-document", "Mapping schema version is invalid.");
+	if (!isSafeRecordId(document.id) || document.id !== value.id) return fail$3("id-mismatch", "Record id must match its safe document id.");
+	if (typeof document.name !== "string" || !document.name.trim()) return fail$3("malformed-document", "Mapping name must be non-empty.", "document.name");
+	if (!ref(document.contentModel)) return fail$3("invalid-ref", "Content-model reference is malformed.", "document.contentModel");
+	if (!ref(document.composition)) return fail$3("invalid-ref", "Composition reference is malformed.", "document.composition");
+	if (!mode(document.mode)) return fail$3("malformed-document", "Mapping mode/query is malformed.", "document.mode");
+	if (!Array.isArray(document.bindings)) return fail$3("malformed-document", "Bindings must be an array.", "document.bindings");
+	const ids = /* @__PURE__ */ new Set();
+	for (let index = 0; index < document.bindings.length; index += 1) {
+		const binding = document.bindings[index];
+		const path = `document.bindings[${index}]`;
+		if (!isPlainObject(binding) || !isSafeRecordId(binding.id)) return fail$3("invalid-binding", "Binding identity is malformed.", path);
+		const identity = Object.hasOwn(binding, "source");
+		if (identity ? !exact(binding, [
+			"id",
+			"source",
+			"target",
+			"transform"
+		]) || !isPlainObject(binding.source) || !exact(binding.source, ["kind"]) || binding.source.kind !== "entry-id" : !exact(binding, BINDING_KEYS) || !isSafeRecordId(binding.sourceFieldId)) return fail$3("invalid-binding", "Binding must select exactly one field or entry identity source.", path);
+		if (ids.has(binding.id)) return fail$3("duplicate-binding-id", `Duplicate binding id "${binding.id}".`, `${path}.id`);
+		ids.add(binding.id);
+		if (!isPlainObject(binding.target) || !exact(binding.target, ["nodeId", "prop"]) || typeof binding.target.nodeId !== "string" || !binding.target.nodeId || typeof binding.target.prop !== "string" || !binding.target.prop) return fail$3("invalid-binding", "Binding target is malformed.", `${path}.target`);
+		if (!identity && !validateMappingSourceProjection(binding.projection)) return fail$3("invalid-binding", "Binding source projection is malformed.", `${path}.projection`);
+		if (!validateMappingTransform(binding.transform) || identity && binding.transform.kind !== "identity") return fail$3("malformed-transform", "Binding transform is malformed.", `${path}.transform`);
+	}
+	return {
+		ok: true,
+		record: value
+	};
+}
+//#endregion
 //#region src/assets/model/asset-kinds.mjs
 /** @typedef {"image" | "document" | "archive" | "text"} AssetKindName */
 /** @typedef {{ extension: string, kind: AssetKindName, previewable: boolean, inline: boolean }} AssetKindDescriptor */
@@ -238,93 +490,15 @@ function sniffAsset(bytes, declaredMimeType) {
 	};
 }
 //#endregion
-//#region src/shared/id-factory.ts
-/** Lower-cases a hint into an id-safe fragment (letters, digits, dashes). */
-function slugHint(hint) {
-	if (!hint) return "node";
-	return hint.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "node";
-}
-/**
-* A collision-resistant factory for production runtime use. Prefers
-* `crypto.randomUUID` when present, falling back to a timestamp+counter id in
-* environments without it.
-*/
-function createUuidIdFactory() {
-	let counter = 0;
-	return (hint) => {
-		counter += 1;
-		const cryptoObj = globalThis.crypto;
-		const unique = cryptoObj?.randomUUID ? cryptoObj.randomUUID() : `${Date.now().toString(36)}-${counter.toString(36)}`;
-		return hint ? `${slugHint(hint)}-${unique}` : unique;
-	};
-}
-//#endregion
-//#region src/shared/json.ts
-/**
-* Recursively decides whether a value is JSON-safe: only strings, finite
-* numbers, booleans, null, arrays, and plain objects — never functions,
-* `undefined`, symbols, bigints, class instances, or circular references.
-* `ancestors` tracks the CURRENT path only (backtracked after each branch) so
-* a shared reference in a DAG is not mistaken for a cycle.
-*/
-function isJsonSafe(value, ancestors = /* @__PURE__ */ new Set()) {
-	if (value === null) return true;
-	const t = typeof value;
-	if (t === "string" || t === "boolean") return true;
-	if (t === "number") return Number.isFinite(value);
-	if (t !== "object") return false;
-	const obj = value;
-	const proto = Object.getPrototypeOf(obj);
-	if (!Array.isArray(obj) && proto !== Object.prototype && proto !== null) return false;
-	if (ancestors.has(obj)) return false;
-	ancestors.add(obj);
-	let ok;
-	if (Array.isArray(obj)) {
-		const expectedNames = Array.from({ length: obj.length }, (_item, index) => String(index)).concat("length");
-		ok = Object.getOwnPropertySymbols(obj).length === 0 && Object.getOwnPropertyNames(obj).every((name) => expectedNames.includes(name)) && Array.from({ length: obj.length }, (_item, index) => index).every((index) => Object.hasOwn(obj, index) && isJsonSafe(obj[index], ancestors));
-	} else {
-		const record = obj;
-		ok = Object.getOwnPropertySymbols(record).length === 0 && Reflect.ownKeys(record).length === Object.keys(record).length && Object.values(record).every((child) => isJsonSafe(child, ancestors));
-	}
-	ancestors.delete(obj);
-	return ok;
-}
-/** Narrowing guard: is `value` a plain (non-array) JSON object? */
-function isPlainObject(value) {
-	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-	const proto = Object.getPrototypeOf(value);
-	return proto === Object.prototype || proto === null;
-}
-/**
-* Structural deep clone of a JSON-safe value. Rejects anything that would not
-* round-trip exactly, then uses JSON to produce a fresh, unshared tree.
-*/
-function cloneJson(value) {
-	if (!isJsonSafe(value)) throw new TypeError("Cannot clone a value that does not round-trip through JSON exactly.");
-	return JSON.parse(JSON.stringify(value));
-}
-//#endregion
-//#region src/shared/record-identity.ts
-/**
-* Lower-case, case-stable ids safe to embed in owned filenames and URL paths.
-* Dots, separators, percent escapes, whitespace, and leading/trailing
-* punctuation are deliberately excluded. IDs are capped to keep filenames
-* portable across providers.
-*/
-var RECORD_ID_PATTERN = /^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$/;
-function isSafeRecordId(value) {
-	return typeof value === "string" && RECORD_ID_PATTERN.test(value);
-}
-//#endregion
 //#region src/assets/model/validate.ts
-var RECORD_KEYS$2 = [
+var RECORD_KEYS$1 = [
 	"id",
 	"revision",
 	"createdAt",
 	"updatedAt",
 	"document"
 ];
-var DOCUMENT_KEYS$2 = [
+var DOCUMENT_KEYS$1 = [
 	"schemaVersion",
 	"id",
 	"fileName",
@@ -339,7 +513,7 @@ var FILE_NAME_SEPARATOR_PATTERN = /[\\/]/u;
 function exactKeys$2(value, keys) {
 	return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 }
-function fail$3(code, message, path, foundSchemaVersion) {
+function fail$2(code, message, path, foundSchemaVersion) {
 	return {
 		ok: false,
 		issue: {
@@ -379,22 +553,22 @@ function isValidAssetChecksum(value) {
 }
 /** Validate one canonical Assets record without mutating or upgrading it. */
 function validateAssetRecord(value) {
-	if (!isPlainObject(value)) return fail$3("invalid-record", "Assets record must be a plain object.");
-	if (!exactKeys$2(value, RECORD_KEYS$2)) return fail$3("invalid-record", "Assets record must contain exactly its canonical envelope fields.");
-	if (!isJsonSafe(value)) return fail$3("not-json-safe", "Assets record must be JSON-safe.");
-	if (!isSafeRecordId(value.id)) return fail$3("unsafe-id", "Assets id must be a safe record id.", "id");
-	if (!isAssetRevision(value.revision)) return fail$3("invalid-record", "Assets revision must be a positive safe integer.");
-	if (!isCanonicalAssetTimestamp(value.createdAt) || !isCanonicalAssetTimestamp(value.updatedAt)) return fail$3("invalid-timestamp", "Assets timestamps must be canonical ISO timestamps.");
-	if (value.updatedAt < value.createdAt) return fail$3("invalid-timestamp-order", "updatedAt cannot precede createdAt.");
-	if (isPlainObject(value.document) && typeof value.document.schemaVersion === "number" && value.document.schemaVersion > 1) return fail$3("future-schema", "Assets uses a newer schema version.", "document.schemaVersion", value.document.schemaVersion);
-	if (!isPlainObject(value.document) || !exactKeys$2(value.document, DOCUMENT_KEYS$2)) return fail$3("malformed-document", "Assets document must contain exactly its canonical fields.");
+	if (!isPlainObject(value)) return fail$2("invalid-record", "Assets record must be a plain object.");
+	if (!exactKeys$2(value, RECORD_KEYS$1)) return fail$2("invalid-record", "Assets record must contain exactly its canonical envelope fields.");
+	if (!isJsonSafe(value)) return fail$2("not-json-safe", "Assets record must be JSON-safe.");
+	if (!isSafeRecordId(value.id)) return fail$2("unsafe-id", "Assets id must be a safe record id.", "id");
+	if (!isAssetRevision(value.revision)) return fail$2("invalid-record", "Assets revision must be a positive safe integer.");
+	if (!isCanonicalAssetTimestamp(value.createdAt) || !isCanonicalAssetTimestamp(value.updatedAt)) return fail$2("invalid-timestamp", "Assets timestamps must be canonical ISO timestamps.");
+	if (value.updatedAt < value.createdAt) return fail$2("invalid-timestamp-order", "updatedAt cannot precede createdAt.");
+	if (isPlainObject(value.document) && typeof value.document.schemaVersion === "number" && value.document.schemaVersion > 1) return fail$2("future-schema", "Assets uses a newer schema version.", "document.schemaVersion", value.document.schemaVersion);
+	if (!isPlainObject(value.document) || !exactKeys$2(value.document, DOCUMENT_KEYS$1)) return fail$2("malformed-document", "Assets document must contain exactly its canonical fields.");
 	const document = value.document;
-	if (document.schemaVersion !== 1) return fail$3("malformed-document", "Assets schema version is invalid.", "document.schemaVersion");
-	if (!isSafeRecordId(document.id) || document.id !== value.id) return fail$3("id-mismatch", "Record id must match its safe document id.", "document.id");
-	if (!isValidAssetFileName(document.fileName)) return fail$3("invalid-file-name", "Assets fileName must be a non-empty safe display name.", "document.fileName");
-	if (document.folderId !== null && !isSafeRecordId(document.folderId)) return fail$3("malformed-document", "Assets folderId must be a logical id or null.");
-	if (typeof document.note !== "string" || document.note.length > 1e4 || document.state !== "active" && document.state !== "trash") return fail$3("malformed-document", "Assets note or state is invalid.");
-	if (!Array.isArray(document.versions) || document.versions.length === 0) return fail$3("malformed-document", "Assets requires an immutable version.");
+	if (document.schemaVersion !== 1) return fail$2("malformed-document", "Assets schema version is invalid.", "document.schemaVersion");
+	if (!isSafeRecordId(document.id) || document.id !== value.id) return fail$2("id-mismatch", "Record id must match its safe document id.", "document.id");
+	if (!isValidAssetFileName(document.fileName)) return fail$2("invalid-file-name", "Assets fileName must be a non-empty safe display name.", "document.fileName");
+	if (document.folderId !== null && !isSafeRecordId(document.folderId)) return fail$2("malformed-document", "Assets folderId must be a logical id or null.");
+	if (typeof document.note !== "string" || document.note.length > 1e4 || document.state !== "active" && document.state !== "trash") return fail$2("malformed-document", "Assets note or state is invalid.");
+	if (!Array.isArray(document.versions) || document.versions.length === 0) return fail$2("malformed-document", "Assets requires an immutable version.");
 	const ids = /* @__PURE__ */ new Set();
 	for (const version of document.versions) {
 		if (!isPlainObject(version) || !exactKeys$2(version, [
@@ -404,14 +578,14 @@ function validateAssetRecord(value) {
 			"checksum",
 			"url",
 			"createdAt"
-		])) return fail$3("malformed-document", "Invalid immutable version fields.");
-		if (!isValidAssetType(version.mimeType)) return fail$3("invalid-mime-type", "Invalid version MIME type.");
-		if (!isValidAssetByteLength(version.byteLength) || version.byteLength === 0) return fail$3("invalid-byte-length", "Invalid version byte length.");
-		if (!isValidAssetChecksum(version.checksum) || version.id !== version.checksum || ids.has(version.checksum)) return fail$3("invalid-checksum", "Invalid or duplicate version identity.");
-		if (version.url !== assetVersionUrl(version.checksum, version.mimeType) || !isCanonicalAssetTimestamp(version.createdAt) || version.createdAt < value.createdAt || version.createdAt > value.updatedAt) return fail$3("malformed-document", "Invalid version URL or timestamp.");
+		])) return fail$2("malformed-document", "Invalid immutable version fields.");
+		if (!isValidAssetType(version.mimeType)) return fail$2("invalid-mime-type", "Invalid version MIME type.");
+		if (!isValidAssetByteLength(version.byteLength) || version.byteLength === 0) return fail$2("invalid-byte-length", "Invalid version byte length.");
+		if (!isValidAssetChecksum(version.checksum) || version.id !== version.checksum || ids.has(version.checksum)) return fail$2("invalid-checksum", "Invalid or duplicate version identity.");
+		if (version.url !== assetVersionUrl(version.checksum, version.mimeType) || !isCanonicalAssetTimestamp(version.createdAt) || version.createdAt < value.createdAt || version.createdAt > value.updatedAt) return fail$2("malformed-document", "Invalid version URL or timestamp.");
 		ids.add(version.checksum);
 	}
-	if (typeof document.currentVersionId !== "string" || !ids.has(document.currentVersionId)) return fail$3("malformed-document", "Current version must exist.");
+	if (typeof document.currentVersionId !== "string" || !ids.has(document.currentVersionId)) return fail$2("malformed-document", "Current version must exist.");
 	return {
 		ok: true,
 		value
@@ -2618,7 +2792,7 @@ var ENTRY_KEYS = [
 	"generation"
 ];
 var FIELD_KEY_PATTERN = /^[a-z][A-Za-z0-9]{0,63}$/;
-function fail$2(code, message, path, foundSchemaVersion) {
+function fail$1(code, message, path, foundSchemaVersion) {
 	return {
 		ok: false,
 		issue: {
@@ -2641,65 +2815,65 @@ function isContentFieldKey(value) {
 	return typeof value === "string" && FIELD_KEY_PATTERN.test(value);
 }
 function validateEnvelopeTimestamps(value) {
-	if (!isCanonicalContentTimestamp(value.createdAt) || !isCanonicalContentTimestamp(value.updatedAt)) return fail$2("invalid-timestamp", "createdAt and updatedAt must be canonical ISO timestamps.");
-	if (value.updatedAt < value.createdAt) return fail$2("invalid-timestamp-order", "updatedAt cannot precede createdAt.");
+	if (!isCanonicalContentTimestamp(value.createdAt) || !isCanonicalContentTimestamp(value.updatedAt)) return fail$1("invalid-timestamp", "createdAt and updatedAt must be canonical ISO timestamps.");
+	if (value.updatedAt < value.createdAt) return fail$1("invalid-timestamp-order", "updatedAt cannot precede createdAt.");
 }
 function validateField(value, index, depth = 0) {
 	const path = `document.fields[${index}]`;
-	if (!isPlainObject(value) || !validateSchema(value, FIELD_KEYS.filter((key) => key !== "kind"), depth)) return fail$2("invalid-field", "Field must contain exactly its canonical schema fields (maximum nesting 16).", path);
-	if (!isSafeRecordId(value.id)) return fail$2("unsafe-id", "Field id must be a safe record id.", `${path}.id`);
-	if (!isContentFieldKey(value.key)) return fail$2("invalid-field", "Field key must be lower-camel and 1-64 characters.", `${path}.key`);
-	if (typeof value.label !== "string" || value.label.trim().length === 0) return fail$2("invalid-field", "Field label must be non-empty.", `${path}.label`);
-	if (typeof value.required !== "boolean") return fail$2("invalid-field", "Field required must be boolean.", `${path}.required`);
-	if (typeof value.kind !== "string" || !CONTENT_FIELD_KINDS.includes(value.kind)) return fail$2("invalid-field", "Field kind is unsupported.", `${path}.kind`);
+	if (!isPlainObject(value) || !validateSchema(value, FIELD_KEYS.filter((key) => key !== "kind"), depth)) return fail$1("invalid-field", "Field must contain exactly its canonical schema fields (maximum nesting 16).", path);
+	if (!isSafeRecordId(value.id)) return fail$1("unsafe-id", "Field id must be a safe record id.", `${path}.id`);
+	if (!isContentFieldKey(value.key)) return fail$1("invalid-field", "Field key must be lower-camel and 1-64 characters.", `${path}.key`);
+	if (typeof value.label !== "string" || value.label.trim().length === 0) return fail$1("invalid-field", "Field label must be non-empty.", `${path}.label`);
+	if (typeof value.required !== "boolean") return fail$1("invalid-field", "Field required must be boolean.", `${path}.required`);
+	if (typeof value.kind !== "string" || !CONTENT_FIELD_KINDS.includes(value.kind)) return fail$1("invalid-field", "Field kind is unsupported.", `${path}.kind`);
 	return {
 		ok: true,
 		value
 	};
 }
 function validateContentModelRecord(value) {
-	if (!isPlainObject(value) || !exactKeys$1(value, MODEL_RECORD_KEYS)) return fail$2("invalid-record", "Content model record must contain exactly its canonical envelope fields.");
-	if (!isJsonSafe(value)) return fail$2("not-json-safe", "Content model record must be JSON-safe.");
-	if (!isSafeRecordId(value.id)) return fail$2("unsafe-id", "Content model id must be a safe record id.", "id");
+	if (!isPlainObject(value) || !exactKeys$1(value, MODEL_RECORD_KEYS)) return fail$1("invalid-record", "Content model record must contain exactly its canonical envelope fields.");
+	if (!isJsonSafe(value)) return fail$1("not-json-safe", "Content model record must be JSON-safe.");
+	if (!isSafeRecordId(value.id)) return fail$1("unsafe-id", "Content model id must be a safe record id.", "id");
 	const timestampFailure = validateEnvelopeTimestamps(value);
 	if (timestampFailure) return timestampFailure;
-	if (!isPlainObject(value.document) || !exactKeys$1(value.document, [...MODEL_DOCUMENT_KEYS, ...Object.hasOwn(value.document, "presentation") ? ["presentation"] : []])) return fail$2("malformed-document", "Content model document must contain exactly its canonical fields.");
+	if (!isPlainObject(value.document) || !exactKeys$1(value.document, [...MODEL_DOCUMENT_KEYS, ...Object.hasOwn(value.document, "presentation") ? ["presentation"] : []])) return fail$1("malformed-document", "Content model document must contain exactly its canonical fields.");
 	const document = value.document;
-	if (typeof document.schemaVersion === "number" && document.schemaVersion > 1) return fail$2("future-schema", "Content model uses a newer schema version.", "document.schemaVersion", document.schemaVersion);
-	if (document.schemaVersion !== 1) return fail$2("malformed-document", "Content model schema version is invalid.");
-	if (!isSafeRecordId(document.id) || document.id !== value.id) return fail$2("id-mismatch", "Record id must match its safe document id.");
-	if (typeof document.name !== "string" || document.name.trim().length === 0) return fail$2("malformed-document", "Content model name must be non-empty.", "document.name");
-	if (typeof document.description !== "string") return fail$2("malformed-document", "Content model description must be a string.", "document.description");
-	if (document.kind !== "collection" && document.kind !== "single") return fail$2("malformed-document", "Content model kind is invalid.", "document.kind");
-	if (!Array.isArray(document.fields)) return fail$2("malformed-document", "Content model fields must be an array.", "document.fields");
+	if (typeof document.schemaVersion === "number" && document.schemaVersion > 1) return fail$1("future-schema", "Content model uses a newer schema version.", "document.schemaVersion", document.schemaVersion);
+	if (document.schemaVersion !== 1) return fail$1("malformed-document", "Content model schema version is invalid.");
+	if (!isSafeRecordId(document.id) || document.id !== value.id) return fail$1("id-mismatch", "Record id must match its safe document id.");
+	if (typeof document.name !== "string" || document.name.trim().length === 0) return fail$1("malformed-document", "Content model name must be non-empty.", "document.name");
+	if (typeof document.description !== "string") return fail$1("malformed-document", "Content model description must be a string.", "document.description");
+	if (document.kind !== "collection" && document.kind !== "single") return fail$1("malformed-document", "Content model kind is invalid.", "document.kind");
+	if (!Array.isArray(document.fields)) return fail$1("malformed-document", "Content model fields must be an array.", "document.fields");
 	const ids = /* @__PURE__ */ new Set();
 	const keys = /* @__PURE__ */ new Set();
 	for (let index = 0; index < document.fields.length; index += 1) {
 		const field = validateField(document.fields[index], index);
 		if (!field.ok) return field;
-		if (ids.has(field.value.id)) return fail$2("duplicate-field-id", `Duplicate field id "${field.value.id}".`);
-		if (keys.has(field.value.key)) return fail$2("duplicate-field-key", `Duplicate field key "${field.value.key}".`);
+		if (ids.has(field.value.id)) return fail$1("duplicate-field-id", `Duplicate field id "${field.value.id}".`);
+		if (keys.has(field.value.key)) return fail$1("duplicate-field-key", `Duplicate field key "${field.value.key}".`);
 		ids.add(field.value.id);
 		keys.add(field.value.key);
 	}
-	if (document.presentation !== void 0 && !validatePresentation(document.presentation, ids)) return fail$2("malformed-document", "Presentation must use unique ids and existing field ids.", "document.presentation");
+	if (document.presentation !== void 0 && !validatePresentation(document.presentation, ids)) return fail$1("malformed-document", "Presentation must use unique ids and existing field ids.", "document.presentation");
 	return {
 		ok: true,
 		value
 	};
 }
 function validateContentEntryRecord(value) {
-	if (!isPlainObject(value) || !exactKeys$1(value, ENTRY_KEYS)) return fail$2("invalid-record", "Content Entry must contain exactly its canonical fields.");
-	if (!isJsonSafe(value)) return fail$2("not-json-safe", "Content Entry must be JSON-safe.");
-	if (typeof value.schemaVersion === "number" && value.schemaVersion > 1) return fail$2("future-schema", "Content Entry uses a newer schema version.", "schemaVersion", value.schemaVersion);
-	if (value.schemaVersion !== 1) return fail$2("invalid-record", "Content Entry schema version is invalid.");
-	if (!isSafeRecordId(value.id) || !isSafeRecordId(value.modelId)) return fail$2("unsafe-id", "Entry id and modelId must be safe record ids.");
-	if (value.lifecycle !== "draft" && value.lifecycle !== "published") return fail$2("invalid-record", "Entry lifecycle must be draft or published.");
-	if (!Number.isSafeInteger(value.generation) || value.generation < 0) return fail$2("invalid-record", "Entry generation must be a nonnegative safe integer.");
+	if (!isPlainObject(value) || !exactKeys$1(value, ENTRY_KEYS)) return fail$1("invalid-record", "Content Entry must contain exactly its canonical fields.");
+	if (!isJsonSafe(value)) return fail$1("not-json-safe", "Content Entry must be JSON-safe.");
+	if (typeof value.schemaVersion === "number" && value.schemaVersion > 1) return fail$1("future-schema", "Content Entry uses a newer schema version.", "schemaVersion", value.schemaVersion);
+	if (value.schemaVersion !== 1) return fail$1("invalid-record", "Content Entry schema version is invalid.");
+	if (!isSafeRecordId(value.id) || !isSafeRecordId(value.modelId)) return fail$1("unsafe-id", "Entry id and modelId must be safe record ids.");
+	if (value.lifecycle !== "draft" && value.lifecycle !== "published") return fail$1("invalid-record", "Entry lifecycle must be draft or published.");
+	if (!Number.isSafeInteger(value.generation) || value.generation < 0) return fail$1("invalid-record", "Entry generation must be a nonnegative safe integer.");
 	const timestampFailure = validateEnvelopeTimestamps(value);
 	if (timestampFailure) return timestampFailure;
-	if (!isPlainObject(value.values)) return fail$2("invalid-value", "Entry values must be a plain object.", "values");
-	for (const fieldId of Object.keys(value.values)) if (!isSafeRecordId(fieldId)) return fail$2("unsafe-id", "Entry value keys must be safe field ids.", `values.${fieldId}`);
+	if (!isPlainObject(value.values)) return fail$1("invalid-value", "Entry values must be a plain object.", "values");
+	for (const fieldId of Object.keys(value.values)) if (!isSafeRecordId(fieldId)) return fail$1("unsafe-id", "Entry value keys must be safe field ids.", `values.${fieldId}`);
 	return {
 		ok: true,
 		value
@@ -3193,166 +3367,6 @@ function contentEntryDigest(entry) {
 		createdAt: entry.createdAt,
 		values: entry.values
 	});
-}
-//#endregion
-//#region src/mapping/model/types.ts
-var MappingPersistenceError = class extends Error {
-	operation;
-	code;
-	retryable;
-	name = "MappingPersistenceError";
-	constructor(operation, code, message, retryable, options) {
-		super(message, options);
-		this.operation = operation;
-		this.code = code;
-		this.retryable = retryable;
-	}
-	/**
-	* Structured context the shared file-provider transport forwards verbatim.
-	* `retryable` is not derivable from the code alone, so it has to cross the
-	* wire rather than be re-guessed browser-side.
-	*/
-	get details() {
-		return { retryable: this.retryable };
-	}
-};
-var MAPPING_PROVIDERS = { filesystem: {
-	id: "mapping-filesystem",
-	label: "Project files"
-} };
-//#endregion
-//#region src/mapping/model/validate.ts
-var RECORD_KEYS$1 = [
-	"id",
-	"createdAt",
-	"updatedAt",
-	"document"
-];
-var DOCUMENT_KEYS$1 = [
-	"schemaVersion",
-	"id",
-	"name",
-	"contentModel",
-	"composition",
-	"mode",
-	"bindings"
-];
-var BINDING_KEYS = [
-	"id",
-	"sourceFieldId",
-	"projection",
-	"target",
-	"transform"
-];
-function fail$1(code, message, path, foundSchemaVersion) {
-	return {
-		ok: false,
-		issue: {
-			code,
-			message,
-			...path ? { path } : {},
-			...foundSchemaVersion === void 0 ? {} : { foundSchemaVersion }
-		}
-	};
-}
-function exact(value, keys) {
-	return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
-}
-function timestamp(value) {
-	if (typeof value !== "string") return false;
-	const date = new Date(value);
-	return Number.isFinite(date.getTime()) && date.toISOString() === value;
-}
-function providerId(value) {
-	return typeof value === "string" && value.length > 0 && value.length <= 128 && /^[a-z0-9][a-z0-9_-]*$/.test(value);
-}
-function ref(value) {
-	return isPlainObject(value) && exact(value, ["providerId", "recordId"]) && providerId(value.providerId) && isSafeRecordId(value.recordId);
-}
-function mode(value) {
-	if (!isPlainObject(value) || typeof value.kind !== "string") return false;
-	if (value.kind === "single") return exact(value, ["kind"]);
-	if (value.kind !== "collection" || !exact(value, ["kind", "query"]) || !isPlainObject(value.query)) return false;
-	const query = value.query;
-	if (!exact(query, [
-		"publication",
-		"conditions",
-		"sort",
-		"pins",
-		"limit"
-	]) || !["published-only", "include-drafts"].includes(String(query.publication)) || !Number.isInteger(query.limit) || Number(query.limit) < 1 || Number(query.limit) > 1e3) return false;
-	if (!Array.isArray(query.conditions) || !query.conditions.every((item) => isPlainObject(item) && isSafeRecordId(item.fieldId) && [
-		"equals",
-		"not-equals",
-		"contains",
-		"exists"
-	].includes(String(item.operator)) && (item.operator === "exists" ? exact(item, ["fieldId", "operator"]) : exact(item, [
-		"fieldId",
-		"operator",
-		"value"
-	])))) return false;
-	if (!Array.isArray(query.sort) || !query.sort.every((item) => isPlainObject(item) && exact(item, ["fieldId", "direction"]) && isSafeRecordId(item.fieldId) && ["asc", "desc"].includes(String(item.direction)))) return false;
-	if (!Array.isArray(query.pins) || !query.pins.every((item) => isPlainObject(item) && exact(item, [
-		"providerId",
-		"modelId",
-		"recordId"
-	]) && providerId(item.providerId) && isSafeRecordId(item.modelId) && isSafeRecordId(item.recordId))) return false;
-	return true;
-}
-function validateMappingTransform(value) {
-	if (!isPlainObject(value) || typeof value.kind !== "string") return false;
-	if (value.kind === "prefix") return exact(value, ["kind", "prefix"]) && typeof value.prefix === "string" && Array.from(value.prefix).length <= 80;
-	return (value.kind === "identity" || value.kind === "date-medium" || value.kind === "truncate-160") && exact(value, ["kind"]);
-}
-function validateMappingSourceProjection(value) {
-	if (!isPlainObject(value) || typeof value.kind !== "string") return false;
-	if ([
-		"value",
-		"asset-url",
-		"asset-download",
-		"reference-id",
-		"route-link"
-	].includes(value.kind)) return exact(value, ["kind"]);
-	if (value.kind === "asset-text") return exact(value, ["kind", "field"]) && [
-		"alt",
-		"caption",
-		"label",
-		"title",
-		"description"
-	].includes(String(value.field));
-	return value.kind === "object-field" && exact(value, ["kind", "fieldIds"]) && Array.isArray(value.fieldIds) && value.fieldIds.length > 0 && value.fieldIds.every(isSafeRecordId);
-}
-function validateMappingRecord(value) {
-	if (!isPlainObject(value) || !exact(value, RECORD_KEYS$1)) return fail$1("invalid-record", "Mapping record must contain exactly its canonical envelope fields.");
-	if (!isJsonSafe(value)) return fail$1("not-json-safe", "Mapping record must be JSON-safe.");
-	if (!isSafeRecordId(value.id)) return fail$1("unsafe-id", "Mapping id must be a safe record id.", "id");
-	if (!timestamp(value.createdAt) || !timestamp(value.updatedAt)) return fail$1("invalid-timestamp", "Mapping timestamps must be canonical ISO timestamps.");
-	if (value.updatedAt < value.createdAt) return fail$1("invalid-timestamp-order", "updatedAt cannot precede createdAt.");
-	if (isPlainObject(value.document) && typeof value.document.schemaVersion === "number" && value.document.schemaVersion > 2) return fail$1("future-schema", "Mapping uses a newer schema version.", "document.schemaVersion", value.document.schemaVersion);
-	if (!isPlainObject(value.document) || !exact(value.document, DOCUMENT_KEYS$1)) return fail$1("malformed-document", "Mapping document must contain exactly its canonical fields.");
-	const document = value.document;
-	if (document.schemaVersion !== 2) return fail$1("malformed-document", "Mapping schema version is invalid.");
-	if (!isSafeRecordId(document.id) || document.id !== value.id) return fail$1("id-mismatch", "Record id must match its safe document id.");
-	if (typeof document.name !== "string" || !document.name.trim()) return fail$1("malformed-document", "Mapping name must be non-empty.", "document.name");
-	if (!ref(document.contentModel)) return fail$1("invalid-ref", "Content-model reference is malformed.", "document.contentModel");
-	if (!ref(document.composition)) return fail$1("invalid-ref", "Composition reference is malformed.", "document.composition");
-	if (!mode(document.mode)) return fail$1("malformed-document", "Mapping mode/query is malformed.", "document.mode");
-	if (!Array.isArray(document.bindings)) return fail$1("malformed-document", "Bindings must be an array.", "document.bindings");
-	const ids = /* @__PURE__ */ new Set();
-	for (let index = 0; index < document.bindings.length; index += 1) {
-		const binding = document.bindings[index];
-		const path = `document.bindings[${index}]`;
-		if (!isPlainObject(binding) || !exact(binding, BINDING_KEYS) || !isSafeRecordId(binding.id) || !isSafeRecordId(binding.sourceFieldId)) return fail$1("invalid-binding", "Binding identity is malformed.", path);
-		if (ids.has(binding.id)) return fail$1("duplicate-binding-id", `Duplicate binding id "${binding.id}".`, `${path}.id`);
-		ids.add(binding.id);
-		if (!isPlainObject(binding.target) || !exact(binding.target, ["nodeId", "prop"]) || typeof binding.target.nodeId !== "string" || !binding.target.nodeId || typeof binding.target.prop !== "string" || !binding.target.prop) return fail$1("invalid-binding", "Binding target is malformed.", `${path}.target`);
-		if (!validateMappingSourceProjection(binding.projection)) return fail$1("invalid-binding", "Binding source projection is malformed.", `${path}.projection`);
-		if (!validateMappingTransform(binding.transform)) return fail$1("malformed-transform", "Binding transform is malformed.", `${path}.transform`);
-	}
-	return {
-		ok: true,
-		record: value
-	};
 }
 //#endregion
 //#region src/mapping/model/codec.ts
@@ -4068,7 +4082,7 @@ function validateSiteProject(value, context) {
 		const nodeIds = composition ? new Set(compositionNodePaths(composition.document.root, "").keys()) : void 0;
 		mapping.document.bindings.forEach((binding, bindingIndex) => {
 			const bindingPath = `${path}.bindings[${bindingIndex}]`;
-			if (model && !model.document.fields.some((field) => field.id === binding.sourceFieldId)) diagnostic(diagnostics, "dangling-mapping-field", `${bindingPath}.sourceFieldId`, `Mapping source field ${JSON.stringify(binding.sourceFieldId)} does not exist in Content model ${JSON.stringify(model.id)}.`);
+			if (!binding.source && model && !model.document.fields.some((field) => field.id === binding.sourceFieldId)) diagnostic(diagnostics, "dangling-mapping-field", `${bindingPath}.sourceFieldId`, `Mapping source field ${JSON.stringify(binding.sourceFieldId)} does not exist in Content model ${JSON.stringify(model.id)}.`);
 			if (nodeIds && !nodeIds.has(binding.target.nodeId)) diagnostic(diagnostics, "dangling-mapping-target", `${bindingPath}.target.nodeId`, `Mapping target node ${JSON.stringify(binding.target.nodeId)} does not exist in Composition ${JSON.stringify(composition.id)}.`);
 			else if (mappingTargets && !mappingTargets.has(recordRefKey(binding.target.nodeId, binding.target.prop))) diagnostic(diagnostics, "dangling-mapping-target", `${bindingPath}.target.prop`, `Mapping target field ${JSON.stringify(binding.target.prop)} is not an available scalar field on node ${JSON.stringify(binding.target.nodeId)}.`);
 		});
@@ -8512,7 +8526,7 @@ function evaluateCollectionQuery(options) {
 		if (pin.providerId !== providerId) {
 			diagnostics.push({
 				code: "pin-provider-mismatch",
-				severity: "nonblocking",
+				severity: "blocking",
 				entryId: pin.recordId,
 				message: `Pinned Entry "${pin.recordId}" belongs to another provider.`
 			});
@@ -8521,7 +8535,7 @@ function evaluateCollectionQuery(options) {
 		if (pin.modelId !== model.id) {
 			diagnostics.push({
 				code: "pin-model-mismatch",
-				severity: "nonblocking",
+				severity: "blocking",
 				entryId: pin.recordId,
 				message: `Pinned Entry "${pin.recordId}" belongs to another model.`
 			});
@@ -8532,7 +8546,7 @@ function evaluateCollectionQuery(options) {
 			const existing = allEntriesById.get(pin.recordId);
 			diagnostics.push({
 				code: existing ? "pin-model-mismatch" : "pin-not-found",
-				severity: "nonblocking",
+				severity: "blocking",
 				entryId: pin.recordId,
 				message: existing ? `Pinned Entry "${pin.recordId}" belongs to another model.` : `Pinned Entry "${pin.recordId}" was not found.`
 			});
@@ -8541,7 +8555,7 @@ function evaluateCollectionQuery(options) {
 		if (!eligible(entry, query)) {
 			diagnostics.push({
 				code: "pin-ineligible",
-				severity: "nonblocking",
+				severity: "blocking",
 				entryId: entry.id,
 				message: `Pinned Entry "${entry.id}" is not eligible for the publication policy.`
 			});
@@ -8552,6 +8566,11 @@ function evaluateCollectionQuery(options) {
 			pinned.push(entry);
 		}
 	}
+	if (diagnostics.some((item) => item.severity === "blocking")) return {
+		status: "blocked",
+		entries: [],
+		diagnostics
+	};
 	const matched = all.filter((entry) => eligible(entry, query) && !seen.has(entry.id) && query.conditions.every((condition) => conditionMatches(entry.values[condition.fieldId], condition))).sort((left, right) => {
 		for (const sort of query.sort) {
 			const compared = compareValues(left.values[sort.fieldId], right.values[sort.fieldId]);
@@ -9702,10 +9721,10 @@ async function resolveMappingDefinition(mapping, catalogs, manifest) {
 	const seenTargets = /* @__PURE__ */ new Set();
 	const bindings = [];
 	for (const binding of mapping.document.bindings) {
-		const source = sourceById.get(binding.sourceFieldId);
+		const source = binding.source ? void 0 : sourceById.get(binding.sourceFieldId);
 		const key = targetKey(binding.target);
 		const target = targetByKey.get(key);
-		if (!source) diagnostics.push({
+		if (!binding.source && !source) diagnostics.push({
 			scope: "definition",
 			severity: "blocking",
 			code: "source-field-missing",
@@ -9733,6 +9752,32 @@ async function resolveMappingDefinition(mapping, catalogs, manifest) {
 				target: binding.target,
 				message: structuredTarget?.message ?? (nodeExists ? `Target field "${binding.target.prop}" no longer exists on node "${binding.target.nodeId}".` : `Target node "${binding.target.nodeId}" no longer exists.`)
 			});
+		}
+		if (binding.source) {
+			if (binding.transform.kind !== MAPPING_ENTRY_IDENTITY_CAPABILITY.transform.kind) diagnostics.push({
+				scope: "definition",
+				severity: "blocking",
+				code: "invalid-transform-config",
+				bindingId: binding.id,
+				message: "Entry identity supports only the identity transform."
+			});
+			else if (target && target.kind !== MAPPING_ENTRY_IDENTITY_CAPABILITY.targetKind) diagnostics.push({
+				scope: "definition",
+				severity: "blocking",
+				code: "incompatible-binding",
+				bindingId: binding.id,
+				target: binding.target,
+				message: "Entry identity supports only scalar text targets."
+			});
+			else if (target && !seenTargets.has(`accepted:${key}`)) {
+				bindings.push({
+					binding,
+					source: null,
+					target
+				});
+				seenTargets.add(`accepted:${key}`);
+			}
+			continue;
 		}
 		const projection = source ? resolveMappingProjectionDefinition(source, binding.projection) : void 0;
 		if (projection?.status === "invalid") diagnostics.push({
@@ -9824,6 +9869,37 @@ function evaluateResolvedMapping(definition, entry, options = {}) {
 		unchangedStaticCount: mapping.document.bindings.length
 	};
 	for (const resolved of definition.bindings) {
+		if (!resolved.source) {
+			const { binding, target } = resolved;
+			if (!isSafeRecordId(entry.id)) {
+				entryDiagnostics.push({
+					scope: "entry",
+					severity: "blocking",
+					code: "invalid-source-value",
+					entryId: entry.id,
+					bindingId: binding.id,
+					target: binding.target,
+					message: "Selected Entry identity must be a safe record ID."
+				});
+				continue;
+			}
+			const node = findNode(document.root, target.target.nodeId);
+			if (node) {
+				node.props[target.target.prop] = entry.id;
+				appliedBindings.push({
+					bindingId: binding.id,
+					source: {
+						kind: "entry-id",
+						providerId: mapping.document.contentModel.providerId,
+						modelId: entry.modelId,
+						recordId: entry.id
+					},
+					target: { ...target.target },
+					value: entry.id
+				});
+			}
+			continue;
+		}
 		const { binding, source, target } = resolved;
 		const value = entry.values[source.id];
 		if (value === void 0 || typeof value === "string" && value.trim().length === 0) {
@@ -11431,6 +11507,23 @@ async function openCapture(options) {
 		]
 	};
 }
+function nativeProject(host, values) {
+	const project = projectFromWorkspace(values.workspace);
+	const native = {
+		compositions: "files",
+		content: "content-filesystem",
+		mappings: "mapping-filesystem",
+		sitemaps: "sitemap-filesystem"
+	};
+	for (const domain of Object.keys(native)) if (project.providers[domain].length !== 1 || project.providers[domain][0].id !== native[domain]) throw new Error("Capture requires exactly the four native filesystem providers.");
+	project.providers.compositions[0].records = values.compositions;
+	project.providers.mappings[0].records = values.mappings;
+	project.providers.sitemaps[0].records = values.sitemaps;
+	const content = values.content;
+	project.providers.content[0].models = [...content.models];
+	project.providers.content[0].entries = [...content.entries];
+	return project;
+}
 /** Offline capture requires Save and a stopped editor. A live server must hold its
 * authoring lease and flush browser sessions before invoking this operation. */
 async function captureAuthoringWorkspace(options) {
@@ -11441,20 +11534,7 @@ async function captureAuthoringWorkspace(options) {
 		const outcome = await captureWorkspaceSnapshot(host.workspaceId, sessions, sources);
 		if (outcome.status !== "ready") throw new Error(`Workspace capture ${outcome.status}; save and retry.`);
 		const { capture } = outcome;
-		const project = projectFromWorkspace(capture.values.workspace);
-		const native = {
-			compositions: "files",
-			content: "content-filesystem",
-			mappings: "mapping-filesystem",
-			sitemaps: "sitemap-filesystem"
-		};
-		for (const domain of Object.keys(native)) if (project.providers[domain].length !== 1 || project.providers[domain][0].id !== native[domain]) throw new Error("Capture requires exactly the four native filesystem providers.");
-		project.providers.compositions[0].records = capture.values.compositions;
-		project.providers.mappings[0].records = capture.values.mappings;
-		project.providers.sitemaps[0].records = capture.values.sitemaps;
-		const content = capture.values.content;
-		project.providers.content[0].models = [...content.models];
-		project.providers.content[0].entries = [...content.entries];
+		const project = nativeProject(host, capture.values);
 		const validation = validateSiteProject(project, { componentPack: options.pack.manifest });
 		if (!validation.ok) throw new Error(`Captured project is invalid: ${validation.diagnostics.map(({ message }) => message).join(" ")}`);
 		const snapshot = capture.values.assets;
@@ -11517,12 +11597,48 @@ async function isAuthoringWorkspaceSnapshotCurrent(options, snapshot) {
 		}, host.workspaceId, createWorkspaceSaveRegistry(), sources);
 	});
 }
-function validateSnapshot(snapshot, options) {
-	validateIdentities(options);
+/** Migration preflight only: verifies the saved source independently of the newly
+* installed pack/renderer. This does NOT establish build compatibility or switch
+* authority. Keep the source fenced, and recheck after staging before activation. */
+async function isAuthoringWorkspaceSourceCurrent(options, snapshot) {
+	snapshot = structuredClone(snapshot);
+	validateSnapshotIntegrity(snapshot);
+	return executeAuthoringOperation(options.composerConfig.workspaceRoot, async () => {
+		const { host, sources } = await openCapture(options);
+		const sessions = createWorkspaceSaveRegistry();
+		const outcome = await captureWorkspaceSnapshot(host.workspaceId, sessions, sources);
+		if (outcome.status !== "ready") return false;
+		const { capture } = outcome;
+		if (snapshot.workspaceId !== host.workspaceId || digest(snapshot.tokens) !== digest(capture.tokens) || digest(snapshot.project) !== digest(nativeProject(host, capture.values)) || digest(snapshot.assets.snapshot) !== digest(capture.values.assets) || digest(snapshot.publicFiles) !== digest(await capturePublicFiles(options))) return false;
+		const expectedAssets = new Map(snapshot.assets.lock.pins.map((pin) => [pin.url.slice(1), pin]));
+		if (snapshot.assets.files.length !== expectedAssets.size) throw new Error("Captured asset file set differs from the lock.");
+		for (const file of snapshot.assets.files) {
+			const pin = expectedAssets.get(file.fileName);
+			if (!pin || file.checksum !== pin.checksum || file.byteLength !== pin.byteLength) throw new Error("Captured asset identity differs from the lock.");
+			expectedAssets.delete(file.fileName);
+			if (!/^uploaded-assets\/sha256-[a-f0-9]{64}\.[a-z0-9]+$/.test(file.fileName)) throw new Error("Unsafe captured asset path.");
+			const handle = await open(join(options.composerConfig.paths.assets, "versions", basename(file.fileName)), constants.O_RDONLY | constants.O_NOFOLLOW);
+			try {
+				if (!(await handle.stat()).isFile()) return false;
+				const bytes = await handle.readFile();
+				if (bytes.byteLength !== file.byteLength || hash(bytes) !== file.checksum || bytes.toString("base64") !== file.base64) return false;
+			} finally {
+				await handle.close();
+			}
+		}
+		if (digest(snapshot.publicFiles) !== digest(await capturePublicFiles(options))) return false;
+		return checkWorkspaceCapture(capture, host.workspaceId, sessions, sources);
+	});
+}
+function validateSnapshotIntegrity(snapshot) {
 	const { digest: expected, ...body } = snapshot;
 	if (snapshot.schemaVersion !== 1 || expected !== digest(body)) throw new Error("Workspace snapshot digest mismatch.");
-	if (digest(snapshot.componentPack) !== digest(manifestIdentity(options)) || digest(snapshot.renderer) !== digest(options.renderer)) throw new Error("Workspace snapshot component-pack or renderer identity mismatch.");
 	if (!validateAssetSnapshot(snapshot.assets.snapshot) || !validateAssetReferenceLock(snapshot.assets.lock) || snapshot.assets.snapshot.mutationToken !== snapshot.assets.lock.mutationToken) throw new Error("Workspace snapshot Assets identity is invalid.");
+}
+function validateSnapshot(snapshot, options) {
+	validateIdentities(options);
+	validateSnapshotIntegrity(snapshot);
+	if (digest(snapshot.componentPack) !== digest(manifestIdentity(options)) || digest(snapshot.renderer) !== digest(options.renderer)) throw new Error("Workspace snapshot component-pack or renderer identity mismatch.");
 }
 /** Compiles only the captured bytes; later drafts and root source files are irrelevant. */
 async function compileAuthoringWorkspaceSnapshot(options) {
@@ -11618,4 +11734,4 @@ async function publicDirectoryManifest(root, directory) {
 	return files;
 }
 //#endregion
-export { ASSET_IMMUTABLE_CACHE_CONTROL as C, ASSET_PROVIDERS as E, ASSET_CHECKSUM_URL_PATTERN as S, hostedAssetHeaders as T, createComponentCatalog as _, resolveAuthoringRendererIdentity as a, createFilesystemAssetStore as b, createFilesystemSitemapStore as c, createFilesystemCompositionStore as d, planLinkedJsxModules as f, validateSiteProject as g, acquireAuthoringLease as h, resolveAuthoringPackIdentity as i, createFilesystemMappingStore as l, workspaceDomainRoots as m, compileAuthoringWorkspaceSnapshot as n, captureSiteProjectAssetLock as o, createFilesystemWorkspaceRegistry as p, isAuthoringWorkspaceSnapshotCurrent as r, compileSiteProject as s, captureAuthoringWorkspace as t, createFilesystemContentStore as u, canonicalStringifyJson as v, assetMimeTypeForExtension as w, assetAuthoringUrl as x, serializeSiteProject as y };
+export { ASSET_CHECKSUM_URL_PATTERN as C, validateMappingRecord as D, hostedAssetHeaders as E, isPlainObject as O, assetAuthoringUrl as S, assetMimeTypeForExtension as T, validateSiteProject as _, resolveAuthoringPackIdentity as a, serializeSiteProject as b, compileSiteProject as c, createFilesystemContentStore as d, createFilesystemCompositionStore as f, acquireAuthoringLease as g, workspaceDomainRoots as h, isAuthoringWorkspaceSourceCurrent as i, ASSET_PROVIDERS as k, createFilesystemSitemapStore as l, createFilesystemWorkspaceRegistry as m, compileAuthoringWorkspaceSnapshot as n, resolveAuthoringRendererIdentity as o, planLinkedJsxModules as p, isAuthoringWorkspaceSnapshotCurrent as r, captureSiteProjectAssetLock as s, captureAuthoringWorkspace as t, createFilesystemMappingStore as u, createComponentCatalog as v, ASSET_IMMUTABLE_CACHE_CONTROL as w, createFilesystemAssetStore as x, canonicalStringifyJson as y };

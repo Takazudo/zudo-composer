@@ -207,7 +207,8 @@ it("migration source refuses rehashed asset omissions and duplicate captured fil
   const options = await fixture(); const snapshot = await captureAuthoringWorkspace(options);
   for (const files of [[], [snapshot.assets.files[0]!, snapshot.assets.files[0]!]]) {
     const altered = structuredClone(snapshot); altered.assets.files = files;
-    const { digest: _digest, ...body } = altered;
+    const { digest: originalDigest, ...body } = altered;
+    expect(originalDigest).toBe(snapshot.digest);
     altered.digest = createHash("sha256").update(canonicalStringifyJson(body as never)).digest("hex");
     await expect(isAuthoringWorkspaceSourceCurrent(options, altered)).rejects.toThrow("file set differs");
   }

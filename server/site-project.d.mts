@@ -302,13 +302,27 @@ type MappingTransform =
     kind: "prefix";
     prefix: string;
 };
-interface MappingBinding {
+interface MappingFieldBinding {
+    source?: never;
     id: RecordId;
     sourceFieldId: RecordId;
     projection: MappingSourceProjection;
     target: MappingTarget;
     transform: MappingTransform;
 }
+interface MappingEntryIdentityBinding {
+    id: RecordId;
+    source: {
+        kind: "entry-id";
+    };
+    sourceFieldId?: never;
+    projection?: never;
+    target: MappingTarget;
+    transform: {
+        kind: "identity";
+    };
+}
+type MappingBinding = MappingFieldBinding | MappingEntryIdentityBinding;
 interface MappingDocument {
     schemaVersion: typeof MAPPING_SCHEMA_VERSION;
     id: RecordId;
@@ -606,7 +620,8 @@ interface Entry {
     modelId: string;
     record: ContentEntryRecord;
 }
-interface BindingInput {
+interface FieldBindingInput {
+    source?: never;
     field: string;
     nodeId: string;
     prop: string;
@@ -614,7 +629,21 @@ interface BindingInput {
     transform?: MappingTransform;
     id?: string;
 }
+type BindingInput = FieldBindingInput | {
+    source: {
+        kind: "entry-id";
+    };
+    field?: never;
+    projection?: never;
+    nodeId: string;
+    prop: string;
+    id?: string;
+    transform?: {
+        kind: "identity";
+    };
+};
 interface CollectionModeInput {
+    pins?: MappingCollectionQuery["pins"];
     kind: "collection";
     sort?: {
         field: string;

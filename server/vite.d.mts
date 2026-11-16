@@ -339,13 +339,27 @@ type MappingTransform =
     kind: "prefix";
     prefix: string;
 };
-interface MappingBinding {
+interface MappingFieldBinding {
+    source?: never;
     id: RecordId;
     sourceFieldId: RecordId;
     projection: MappingSourceProjection;
     target: MappingTarget;
     transform: MappingTransform;
 }
+interface MappingEntryIdentityBinding {
+    id: RecordId;
+    source: {
+        kind: "entry-id";
+    };
+    sourceFieldId?: never;
+    projection?: never;
+    target: MappingTarget;
+    transform: {
+        kind: "identity";
+    };
+}
+type MappingBinding = MappingFieldBinding | MappingEntryIdentityBinding;
 interface MappingDocument {
     schemaVersion: typeof MAPPING_SCHEMA_VERSION;
     id: RecordId;
@@ -853,7 +867,12 @@ interface CliAssistantConfig extends AssistantCommonConfig {
 }
 type AssistantConfig = AnthropicAssistantConfig | FakeAssistantConfig | CliAssistantConfig;
 
+type HostComponentPresentation = Record<string, {
+    labelProp?: string;
+    transparent?: boolean;
+}>;
 interface HostDocumentConfig {
+    componentPresentation?: HostComponentPresentation;
     module: string;
     rendererId: string;
     rendererVersion: string;
