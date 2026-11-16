@@ -9,9 +9,11 @@ import type { ContentFieldDefinition, ContentModelRecord, ContentValueSchema } f
 import { isScalarQueryField } from "../../mapping";
 import type { MappingCollectionCondition, MappingCollectionConditionOperator, MappingCollectionQuery, MappingCollectionSort } from "../../mapping";
 import type { MappingEditorState } from "./controller";
+import { ReferenceQueryValue } from "./reference-query-value";
 import { entryLabel, fieldKindLabel } from "./presentation";
 
 export interface CollectionQueryPaneProps {
+  referenceEntries?: (target: { providerId: string; recordId: string }) => Promise<readonly { ref: { providerId: string; modelId: string; recordId: string }; label: string }[]>;
   state: MappingEditorState;
   onModeChange: (kind: "single" | "collection") => void;
   onQueryChange: (change: Partial<MappingCollectionQuery> | ((query: MappingCollectionQuery) => MappingCollectionQuery)) => void;
@@ -25,7 +27,7 @@ const OPERATORS: readonly { value: MappingCollectionConditionOperator; label: st
   { value: "exists", label: "exists" },
 ];
 
-export function CollectionQueryPane({ state, onModeChange, onQueryChange, onOpenPins }: CollectionQueryPaneProps): JSX.Element | null {
+export function CollectionQueryPane({ state, onModeChange, onQueryChange, onOpenPins, referenceEntries }: CollectionQueryPaneProps): JSX.Element | null {
   const mapping = state.mapping;
   if (!mapping) return null;
   const mode = mapping.document.mode;
@@ -60,8 +62,8 @@ export function CollectionQueryPane({ state, onModeChange, onQueryChange, onOpen
               <option value="include-drafts">Include drafts</option>
             </Select>
           </Field>
-          {unsupportedFields.length ? <p class="cms-mapping-query__help" role="status">Structured, asset and reference fields are unavailable for deterministic query authoring: {unsupportedFields.map((field) => field.label).join(", ")}.</p> : null}
-          <ConditionEditor query={query} fields={fields} onChange={onQueryChange} />
+          {unsupportedFields.length ? <p class="cms-mapping-query__help" role="status">Structured, asset and reference-list fields are unavailable for deterministic query authoring: {unsupportedFields.map((field) => field.label).join(", ")}.</p> : null}
+          <ConditionEditor referenceEntries={referenceEntries} query={query} fields={fields} onChange={onQueryChange} />
           <SortEditor query={query} fields={fields} onChange={onQueryChange} />
           <PaneSection title="Ordered pins" class="cms-mapping-query__nested" action={<Button size="sm" variant="ghost" onClick={onOpenPins}><PlusIcon size="sm" />Choose</Button>}>
             <p class="cms-mapping-query__help">Pinned records lead the filtered result, stay deduplicated, and count toward the limit.</p>
@@ -81,32 +83,35 @@ export function CollectionQueryPane({ state, onModeChange, onQueryChange, onOpen
   );
 }
 
-function ConditionEditor({ query, fields, onChange }: { query: MappingCollectionQuery; fields: readonly ContentFieldDefinition[]; onChange: CollectionQueryPaneProps["onQueryChange"] }): JSX.Element {
+function ConditionEditor({ query, fields, onChange, referenceEntries }: { referenceEntries: CollectionQueryPaneProps["referenceEntries"]; query: MappingCollectionQuery; fields: readonly ContentFieldDefinition[]; onChange: CollectionQueryPaneProps["onQueryChange"] }): JSX.Element {
   return (
-    <PaneSection title="Filters" class="cms-mapping-query__nested" action={<Button size="sm" variant="ghost" disabled={fields.length === 0} onClick={() => onChange((current) => ({ ...current, conditions: [...current.conditions, createCondition(fields[0]!, "equals")] }))}><FilterIcon size="sm" />Add filter</Button>}>
-      {query.conditions.length === 0 ? <p class="cms-mapping-query__empty">No filters. The query includes eligible records.</p> : <div class="cms-mapping-query__rows">{query.conditions.map((condition, index) => <ConditionRow key={`${index}:${condition.fieldId}`} condition={condition} index={index} fields={fields} onChange={onChange} />)}</div>}
+    <PaneSection title="Filters" class="cms-mapping-query__nested" action={<Button size="sm" variant="ghost" disabled={fields.length === 0} onClick={() => onChange((current) => ({ ...current, conditions: [...current.conditions, createCondition(fields[0]!, fields[0]!.kind === "reference" ? "exists" : "equals")] }))}><FilterIcon size="sm" />Add filter</Button>}>
+      {query.conditions.length === 0 ? <p class="cms-mapping-query__empty">No filters. The query includes eligible records.</p> : <div class="cms-mapping-query__rows">{query.conditions.map((condition, index) => <ConditionRow referenceEntries={referenceEntries} key={`${index}:${condition.fieldId}`} condition={condition} index={index} fields={fields} onChange={onChange} />)}</div>}
     </PaneSection>
   );
 }
 
-function ConditionRow({ condition, index, fields, onChange }: { condition: MappingCollectionCondition; index: number; fields: readonly ContentFieldDefinition[]; onChange: CollectionQueryPaneProps["onQueryChange"] }): JSX.Element {
+function ConditionRow({ condition, index, fields, onChange, referenceEntries }: { referenceEntries: CollectionQueryPaneProps["referenceEntries"]; condition: MappingCollectionCondition; index: number; fields: readonly ContentFieldDefinition[]; onChange: CollectionQueryPaneProps["onQueryChange"] }): JSX.Element {
   const field = fields.find((candidate) => candidate.id === condition.fieldId);
   const fieldValue = field ?? missingField(condition.fieldId);
   return <div class="cms-mapping-query__row" data-query-row="condition">
-    <Select size="sm" aria-label={`Filter ${index + 1} field`} value={condition.fieldId} onChange={(event) => { const next = fields.find((candidate) => candidate.id === event.currentTarget.value); if (next) onChange((query) => ({ ...query, conditions: query.conditions.map((item, candidate) => candidate === index ? createCondition(next, "equals") : item) })); }}>
+    <Select size="sm" aria-label={`Filter ${index + 1} field`} value={condition.fieldId} onChange={(event) => { const next = fields.find((candidate) => candidate.id === event.currentTarget.value); if (next) onChange((query) => ({ ...query, conditions: query.conditions.map((item, candidate) => candidate === index ? createCondition(next, next.kind === "reference" ? "exists" : "equals") : item) })); }}>
       {field ? null : <option value={condition.fieldId}>{fieldValue.label} · stale</option>}{fields.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label} · {fieldKindLabel(candidate.kind)}</option>)}
     </Select>
-    <Select size="sm" aria-label={`Filter ${index + 1} operator`} value={condition.operator} onChange={(event) => onChange((query) => ({ ...query, conditions: query.conditions.map((item, candidate) => candidate === index ? createCondition(fieldValue, event.currentTarget.value as MappingCollectionConditionOperator) : item) }))}>
+    <Select size="sm" aria-label={`Filter ${index + 1} operator`} value={condition.operator} onChange={(event) => { const operator = event.currentTarget.value as MappingCollectionConditionOperator; onChange((query) => ({ ...query, conditions: query.conditions.map((item, candidate) => candidate === index ? fieldValue.kind === "reference" && operator !== "exists" && item.value !== undefined ? { ...item, operator } : createCondition(fieldValue, operator) : item) })); }}>
+      {fieldValue.kind === "reference" && condition.operator === "contains" ? <option value="contains" disabled>contains · unsupported for references</option> : null}
       {OPERATORS.filter((operator) => fieldValue.kind === "list" ? operator.value === "contains" : operator.value !== "contains" || ["text", "long-text", "markdown", "slug", "url"].includes(fieldValue.kind)).map((operator) => <option key={operator.value} value={operator.value}>{operator.label}</option>)}
     </Select>
-    {condition.operator === "exists" ? <span class="cms-mapping-query__exists">has a value</span> : <ConditionValue field={fieldValue} condition={condition} index={index} onChange={onChange} />}
+    {condition.operator === "exists" ? <span class="cms-mapping-query__exists">has a value</span> : <ConditionValue referenceEntries={referenceEntries} field={fieldValue} condition={condition} index={index} onChange={onChange} />}
     <Button iconOnly variant="ghost" size="sm" aria-label={`Remove filter ${index + 1}`} onClick={() => onChange((query) => ({ ...query, conditions: query.conditions.filter((_, candidate) => candidate !== index) }))}><MinusIcon size="sm" /></Button>
   </div>;
 }
 
-function ConditionValue({ field, condition, index, onChange }: { field: ContentFieldDefinition; condition: MappingCollectionCondition; index: number; onChange: CollectionQueryPaneProps["onQueryChange"] }): JSX.Element {
+function ConditionValue({ field, condition, index, onChange, referenceEntries }: { referenceEntries: CollectionQueryPaneProps["referenceEntries"]; field: ContentFieldDefinition; condition: MappingCollectionCondition; index: number; onChange: CollectionQueryPaneProps["onQueryChange"] }): JSX.Element {
   const value = condition.value;
   const update = (next: unknown) => onChange((query) => ({ ...query, conditions: query.conditions.map((item, candidate) => candidate === index ? { ...item, value: next as MappingCollectionCondition["value"] } : item) }));
+  if (field.kind === "reference" && condition.operator === "contains") return <span class="cms-mapping-query__exists">Reference conditions support equals, does not equal and exists; choose a supported operator.</span>;
+  if (field.kind === "reference") return <ReferenceQueryValue target={field.target} value={value} label={`Filter ${index + 1} value`} load={referenceEntries} onChange={update} />;
   if (field.kind === "list") {
     if (!isPrimitiveQuerySchema(field.item)) return <span class="cms-mapping-query__exists">Structured list values are unsupported; remove this filter.</span>;
     if (field.item.kind === "choice") return <Select size="sm" aria-label={`Filter ${index + 1} value`} value={typeof value === "string" ? value : ""} onChange={(event) => update(event.currentTarget.value)}>{field.item.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select>;
@@ -148,7 +153,7 @@ function isPrimitiveQuerySchema(schema: ContentValueSchema): boolean {
 }
 
 function isSupportedQueryField(field: ContentFieldDefinition): boolean {
-  return isScalarQueryField(field) || (field.kind === "list" && isPrimitiveQuerySchema(field.item));
+  return field.kind === "reference" || isScalarQueryField(field) || (field.kind === "list" && isPrimitiveQuerySchema(field.item));
 }
 
 function createCondition(field: ContentFieldDefinition, operator: MappingCollectionConditionOperator): MappingCollectionCondition {

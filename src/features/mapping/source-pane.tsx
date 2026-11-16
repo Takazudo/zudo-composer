@@ -34,6 +34,7 @@ export interface SourcePaneProps {
   onSelectEntry: (entryId: string) => void;
   onModeChange: (kind: "single" | "collection") => void;
   onQueryChange: CollectionQueryPaneProps["onQueryChange"];
+  referenceEntries?: CollectionQueryPaneProps["referenceEntries"];
   onOpenPins: () => void;
 }
 
@@ -59,7 +60,7 @@ function targetMenuGroups(field: ContentFieldDefinition, targets: readonly Mappi
   }));
 }
 
-export function SourcePane({ state, rows, onBind, onSelectEntry, onModeChange, onQueryChange, onOpenPins }: SourcePaneProps): JSX.Element {
+export function SourcePane({ state, rows, onBind, onSelectEntry, onModeChange, onQueryChange, onOpenPins, referenceEntries }: SourcePaneProps): JSX.Element {
   const model = state.definition?.contentModel ?? null;
   const fields = model?.document.fields ?? [];
   const targets = state.definition?.targets ?? [];
@@ -119,7 +120,7 @@ export function SourcePane({ state, rows, onBind, onSelectEntry, onModeChange, o
             </ul>
           ) : null}
         </PaneSection>
-        <CollectionQueryPane state={state} onModeChange={onModeChange} onQueryChange={onQueryChange} onOpenPins={onOpenPins} />
+        <CollectionQueryPane referenceEntries={referenceEntries} state={state} onModeChange={onModeChange} onQueryChange={onQueryChange} onOpenPins={onOpenPins} />
         <PaneSection title="Sample entry">
           <Field label="Sample Entry" help="Used only to evaluate the preview.">
             <Select

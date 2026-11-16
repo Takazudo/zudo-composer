@@ -1,3 +1,4 @@
+import { entryLabel } from "./presentation";
 import type { ComponentCatalog, CompositionDocument } from "../../composer/model/types";
 import type { ContentCatalog, ContentCatalogEntry, ContentEntryRecord, ContentEntrySnapshot, ContentModelRecord } from "../../content";
 import {
@@ -256,6 +257,16 @@ export class MappingEditorController {
       await this.refreshResolution();
       await this.flush();
     });
+  }
+
+  /** Read-only qualified choices for a Reference query; never infer a provider from an Entry id. */
+  async referenceQueryEntries(target: ContentCatalogEntry["ref"]): Promise<readonly { ref: { providerId: string; modelId: string; recordId: string }; label: string }[]> {
+    const model = await this.catalogs.content.resolveModel(target);
+    if (model.status !== "resolved" || model.record.id !== target.recordId) throw new Error("The reference target model is unavailable.");
+    const outcome = await this.contentEntries.scan(target);
+    if (outcome.status !== "resolved") throw new Error(outcome.status === "not-found" ? "The reference target model was not found." : outcome.reason);
+    if (outcome.snapshot.model.id !== target.recordId || outcome.snapshot.entries.some(entry => entry.modelId !== target.recordId)) throw new Error("The reference catalog returned a different model.");
+    return outcome.snapshot.entries.map(entry => ({ ref: { providerId: target.providerId, modelId: target.recordId, recordId: entry.id }, label: entryLabel(entry, model.record) }));
   }
 
   async updateCollectionQuery(change: Partial<MappingCollectionQuery> | ((query: MappingCollectionQuery) => MappingCollectionQuery)): Promise<void> {

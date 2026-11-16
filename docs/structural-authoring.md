@@ -25,6 +25,8 @@ globally unique. Route and positional context belong to the trusted host rendere
 
 See [Mapping entry identity and explicit pins](mapping-entry-identity.md) for
 read-only record identity bindings and strict pinned selection semantics.
+[Qualified reference query filters](mapping-reference-queries.md) describes typed
+reference membership selection without replacing live queries with finite pins.
 
 ## Native authority and capture
 
