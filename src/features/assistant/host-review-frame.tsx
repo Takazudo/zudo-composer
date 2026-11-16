@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "preact/hooks";
 import { acceptHostDocumentMessage, matchesHostDocumentFrame } from "../host-document/protocol";
-import type { HostReviewAcknowledgement, HostReviewPreview } from "./host-review-types";
+import type { HostReviewAcknowledgement, HostReviewPreview } from "../../shared/host-review-types";
 import type { ProductionProviderIntegration } from "../../app/provider-integration";
 /** Acknowledgements come only from the displayed exact candidate document. */
 export function HostReviewFrame({ value, integration, onReady }: { value: HostReviewPreview; integration: ProductionProviderIntegration; onReady(value: HostReviewAcknowledgement | null, current?: () => boolean): void }) {

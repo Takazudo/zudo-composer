@@ -22,7 +22,7 @@ import { createNativeContentAiService, createNativeContentAiStager } from "../..
 import { createHostReviewService, type HostReviewDependencies } from "../review-service";
 import { resolveHostOwnership } from "../ownership";
 import { hostDocumentTargets } from "../render";
-import type { RunFence, HostReviewPreview } from "../../../src/features/assistant/host-review-types";
+import type { RunFence, HostReviewPreview } from "../../../src/shared/host-review-types";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const fence = (): RunFence => ({ conversationId: "conversation", runId: "run", turnId: "turn", toolCallId: "tool", signal: new AbortController().signal, assertActive: async () => {} });

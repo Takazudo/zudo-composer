@@ -16,7 +16,7 @@ import { createHostDocumentCache } from "../server/host-document/document-cache"
 import { loadHostContext } from "../server/host-context.mjs";
 import { editDigest, createEditingService, type EditPlan, type EditReceipt } from "../server/edit/service";
 import type { createHostReviewService } from "../server/host-document/review-service";
-import type { HostReviewService } from "../src/features/assistant/host-review-types";
+import type { HostReviewService } from "../src/shared/host-review-types";
 
 const command = z.object({ operation: z.enum(["inspect", "resolve", "plan", "review", "apply", "receipt", "discard", "supersede", "undo", "document-preview", "document-edit"]), input: z.unknown(), expected: z.object({ revision: z.string().regex(/^[a-f0-9]{64}$/), identity: z.object({ workspaceId: z.string(), sitemapId: z.string(), pageId: z.string(), providerId: z.literal("files"), recordId: z.string() }).strict() }).strict().optional() }).strict();
 const bindSchema = z.object({ clientId: z.uuid(), capability: z.string(), epoch: z.number().int().nonnegative().nullable() }).strict();

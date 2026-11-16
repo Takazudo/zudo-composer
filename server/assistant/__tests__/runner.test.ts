@@ -12,7 +12,7 @@ import { defineSite, node } from "../../../src/site-project/authoring";
 import { createFilesystemAssetStore } from "../../../src/assets/storage/filesystem/store";
 import { openAssistantStore, type RunEvent } from "../store";
 import type { RunnerOptions } from "../runner";
-import type { HostReviewCard, InspectedOwner } from "../../../src/features/assistant/host-review-types";
+import type { HostReviewCard, InspectedOwner } from "../../../src/shared/host-review-types";
 import { createAssistantRunner } from "../runner";
 import { ProviderError, type ModelProvider, type ProviderRequest, type ProviderTurn } from "../provider";
 import { parseAssistant } from "../../config/assistant";

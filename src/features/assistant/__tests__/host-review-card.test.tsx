@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, expect, it, vi } from "vitest";
 import { HostReviewCard } from "../host-review-card";
-import type { HostReviewAcknowledgement, HostReviewPreview } from "../host-review-types";
+import type { HostReviewAcknowledgement, HostReviewPreview } from "../../../shared/host-review-types";
 import type { ProductionProviderIntegration } from "../../../app/provider-integration";
 const mocks = vi.hoisted(() => ({ request: vi.fn(), current: true }));
 vi.mock("../../native-editing/session", () => ({ assistantRequest: mocks.request }));

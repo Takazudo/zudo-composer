@@ -22,7 +22,7 @@ import { captureAuthoringWorkspace, compileAuthoringWorkspaceSnapshot, capturePu
 import { hostDocumentTargets, renderHostDocument } from "./render";
 import type { HostDocumentRenderer, HostDocumentIdentity } from "./types";
 import { openHostReviewStore } from "./review-store";
-import type { HostReviewService, HostReviewCard, HostReviewAcknowledgement, InspectedOwner, RunFence, HostSelection, ContentFieldPolicy, AffectedUse, ReviewOperation } from "../../src/features/assistant/host-review-types";
+import type { HostReviewService, HostReviewCard, HostReviewAcknowledgement, InspectedOwner, RunFence, HostSelection, ContentFieldPolicy, AffectedUse, ReviewOperation } from "../../src/shared/host-review-types";
 
 type Drafts = ReturnType<typeof createEditingService>["drafts"];
 type Compilation = Awaited<ReturnType<typeof compileAuthoringWorkspaceSnapshot>>;
@@ -241,7 +241,7 @@ export function createHostReviewService(deps: HostReviewDependencies): HostRevie
       const options = await deps.options(), state = await captureHost({ config: options.composerConfig, pack: options.pack });
       const roots = workspaceDomainRoots(options.composerConfig.paths, input.workspaceId);
       const barriers = [join(options.composerConfig.paths.data, "workspaces"), roots.mappings, roots.sitemaps, options.composerConfig.paths.assets];
-      const withNextDomainBarrier = async (index: number): Promise<import("../../src/features/assistant/host-review-types").HostReviewOutcome> => index < barriers.length ? withMutationBarrier(barriers[index]!, () => withNextDomainBarrier(index + 1)) : state.stores.compositions.withSnapshotBarrier(async compositions => {
+      const withNextDomainBarrier = async (index: number): Promise<import("../../src/shared/host-review-types").HostReviewOutcome> => index < barriers.length ? withMutationBarrier(barriers[index]!, () => withNextDomainBarrier(index + 1)) : state.stores.compositions.withSnapshotBarrier(async compositions => {
         await checkLocked(review, state as HostCapture, compositions);
         const result = await (await deps.content(input.workspaceId)).service.apply({ proposalId: operation.proposalId, renderedCandidate: operation.contentCandidateDigest });
         return { domain: "content", reviewId: review.id, ...result };

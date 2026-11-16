@@ -1,4 +1,4 @@
-import type { HostReviewService } from "../src/features/assistant/host-review-types";
+import type { HostReviewService } from "../src/shared/host-review-types";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ViteDevServer } from "vite";
 import { z } from "zod";

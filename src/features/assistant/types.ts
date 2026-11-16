@@ -1,4 +1,4 @@
-import type { HostSelection } from "./host-review-types";
+import type { HostSelection } from "../../shared/host-review-types";
 import type { CompositionRecord } from "../../composer/library/types";
 import type { PreviewLinkedSourceContext } from "../composer/preview/protocol";
 

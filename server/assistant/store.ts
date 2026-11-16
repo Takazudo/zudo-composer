@@ -1,4 +1,4 @@
-import type { HostSelection } from "../../src/features/assistant/host-review-types";
+import type { HostSelection } from "../../src/shared/host-review-types";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { SafeRootFilesystem, commitDocument, type DurableExtraErrorCode } from "../../src/shared/node-fs";

@@ -1,7 +1,7 @@
 import type { ComponentPackManifest } from "@zudo-composer/component-contract";
 import type { AuthoringWorkspaceSnapshot, compileAuthoringWorkspaceSnapshot } from "../authoring-workspace/capture";
 import type { AssistantContentFieldPolicy } from "../config/assistant";
-import type { HostSelection, InspectedOwner, AffectedUse } from "../../src/features/assistant/host-review-types";
+import type { HostSelection, InspectedOwner, AffectedUse } from "../../src/shared/host-review-types";
 import type { SiteCompiledRoute } from "../../src/site-project/compiler/types";
 import type { HostDocumentTarget } from "./types";
 import { hostDocumentTargets } from "./render";

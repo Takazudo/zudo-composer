@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, expect, it, vi } from "vitest";
 import { HostReviewFrame } from "../host-review-frame";
-import type { HostReviewPreview } from "../host-review-types";
+import type { HostReviewPreview } from "../../../shared/host-review-types";
 import type { ProductionProviderIntegration } from "../../../app/provider-integration";
 afterEach(cleanup);
 it("accepts only the exact displayed candidate and revokes fresh Apply on canonical or URL changes", async () => {

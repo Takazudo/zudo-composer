@@ -1,6 +1,6 @@
-import type { HostDocumentIdentity, HostDocumentPreview, HostDocumentTarget } from "../../../server/host-document/types";
-import type { ContentEntryRef } from "../../content/model";
-import type { PageRef } from "../../../server/edit/draft-model";
+import type { HostDocumentIdentity, HostDocumentPreview, HostDocumentTarget } from "../../server/host-document/types";
+import type { ContentEntryRef } from "../content/model";
+import type { PageRef } from "../../server/edit/draft-model";
 
 export type QualifiedNode = Pick<HostDocumentTarget, "renderedNodeId" | "providerId" | "recordId" | "nodeId">;
 export interface HostSelection { revision: string; pathname: string; target: QualifiedNode; prop?: string }

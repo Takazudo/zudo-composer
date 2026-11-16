@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { assistantRequest } from "../native-editing/session";
 import { hostReviewRecoveryKey } from "./host-review-recovery";
 import { HostReviewFrame } from "./host-review-frame";
-import type { HostReviewCard as Card, HostReviewPreview, HostReviewAcknowledgement } from "./host-review-types";
+import type { HostReviewCard as Card, HostReviewPreview, HostReviewAcknowledgement } from "../../shared/host-review-types";
 import type { ProductionProviderIntegration } from "../../app/provider-integration";
 
 export function HostReviewCard({ reviewId, workspaceId, integration, blocked }: { reviewId: string; workspaceId: string; integration: ProductionProviderIntegration; blocked: boolean }) {

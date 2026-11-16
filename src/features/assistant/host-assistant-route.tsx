@@ -6,7 +6,7 @@ import { takeHostSelection } from "./host-selection";
 import { pendingHostReviewIds } from "./host-review-recovery";
 import { HostReviewCard } from "./host-review-card";
 import type { AssistantStatus, Conversation, ConversationSummary, RunRecord } from "./types";
-import type { HostSelection } from "./host-review-types";
+import type { HostSelection } from "../../shared/host-review-types";
 
 /** Host-specific authoring uses real documents; the ordinary Preact Assistant remains separate. */
 export function HostAssistantRoute() {

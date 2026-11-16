@@ -1,5 +1,5 @@
 import { hostSelectionSchema } from "../../src/shared/host-selection";
-import type { HostReviewService, InspectedOwner, RunFence } from "../../src/features/assistant/host-review-types";
+import type { HostReviewService, InspectedOwner, RunFence } from "../../src/shared/host-review-types";
 import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { z } from "zod";

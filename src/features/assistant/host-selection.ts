@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { HostSelection } from "./host-review-types";
+import type { HostSelection } from "../../shared/host-review-types";
 import { hostSelectionSchema } from "../../shared/host-selection";
 const name = z.string().min(1).max(256);
 const prefix = "zudo-host-assistant-selection-v1:";
