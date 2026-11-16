@@ -13,3 +13,10 @@
 .cms-host-document iframe { width: 100%; height: 100%; min-height: 35rem; border: 0; }
 .cms-host-document dd { margin-inline-start: 0; overflow-wrap: anywhere; }
 @media (width < 60rem) { .cms-host-document { grid-template-columns: 1fr; height: auto; } }
+.cms-host-inspector { display: grid; gap: 1rem; }
+.cms-host-inspector fieldset { min-width: 0; border: 0; padding: 0; margin: 0; display: grid; gap: .75rem; }
+.cms-host-inspector legend { font-weight: 600; margin-block-end: .5rem; }
+.cms-host-inspector section { display: flex; flex-wrap: wrap; gap: .5rem; }
+.cms-host-inspector section > h3, .cms-host-inspector section > p, .cms-host-inspector section > label { flex-basis: 100%; margin-block: .25rem; }
+.cms-host-inspector-field { min-width: 0; }
+.cms-host-tree-options { display: flex; gap: .5rem; align-items: center; margin-block-end: .75rem; font-size: .875rem; }

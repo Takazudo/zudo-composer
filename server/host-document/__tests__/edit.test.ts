@@ -10,10 +10,12 @@ import { defineSite, node } from "../../../src/site-project/authoring";
 import { createFilesystemAssetStore } from "../../../src/assets/storage/filesystem/store";
 import { hostDocumentTargets } from "../render";
 import { captureAuthoringWorkspace, compileAuthoringWorkspaceSnapshot } from "../../authoring-workspace/capture";
+import { describeHostDocumentTargets } from "../capabilities";
+import { validateHostComponentPresentation } from "../../config/host-document";
 import { editHostDocument } from "../edit";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-async function fixture(shared = false, consultation = false) {
+async function fixture(shared = false, consultation = false, localSlot = false) {
   const workspaceRoot = await mkdtemp(join(tmpdir(), "host-edit-")); roots.push(workspaceRoot);
   const pack = defineComponentPack({ packId: "proof", packVersion: "1.0.0", components: [defineComponent<{ items: unknown[] }>()((props: { items: unknown[] }) => props.items, { id: "group", schemaVersion: 1, title: "Group", description: "Placement", category: "Proof", source: { module: "proof/components", exportKind: "named", exportName: "Group" }, defaults: {}, fields: [], slots: [{ id: "items", prop: "items", label: "Items", cardinality: "many", accepts: ["paragraph", "group"] }] }), defineComponent<{ text: string }>()((props: { text: string }) => props.text, { id: "paragraph", schemaVersion: 1, title: "Paragraph", description: "Proof", category: "Proof", source: { module: "proof/components", exportKind: "named", exportName: "Paragraph" }, defaults: { text: "" }, fields: [{ kind: "text", prop: "text", label: "Text" }] })] });
   const composerConfig = composer({ workspaceRoot, pack: "proof/components", authoringAuthority: "workspace", nativeEditing: { source: "workspace" } }, { env: {} });
@@ -29,6 +31,7 @@ async function fixture(shared = false, consultation = false) {
     page.record.document.root.push({ id: "consultation", componentId: "group", componentVersion: 1, props: {}, slots: { items: [] } });
     site.attach(mapping, { composition: page, nodeId: "consultation", slotId: "items" });
   }
+  if (localSlot) page.record.document.root.push({ id: "local-group", componentId: "group", componentVersion: 1, props: {}, slots: { items: [] } });
   await initializeAuthoringWorkspace({ composerConfig, pack, project: site.toSiteProject(), workspaceId: "proof" });
   return { composerConfig, pack, packIdentity: { specifier: "proof/components", source: "self", digest: "a".repeat(64), compiler: "proof-compiler", contractDigest: "b".repeat(64) }, renderer: { id: "proof", version: "1", module: "proof/renderer", digest: "c".repeat(64) } };
 }
@@ -80,4 +83,40 @@ it("moves the local placement of a mapped Consultation root without editing its 
   expect(after.project.providers.compositions[0]!.records.find(record => record.id === "home")!.document.root.map(node => node.id)).toEqual(["first", "consultation", "second"]);
   await expect(editHostDocument(options, { ...request, operationId: randomUUID() })).rejects.toMatchObject({ code: "stale-plan" });
   expect((await captureAuthoringWorkspace(options)).digest).toBe(after.digest);
+});
+
+it("inserts a stable local node and recovers its exact receipt without duplicate children", async () => {
+  const options = await fixture(false, false, true), before = await captureAuthoringWorkspace(options);
+  const nodeId = randomUUID();
+  const request = { workspaceId: "proof", pathname: "/", revision: before.digest, operationId: randomUUID(), target: { renderedNodeId: "local-group", providerId: "files", recordId: "home", nodeId: "local-group" }, change: { kind: "insert", slotId: "items", componentId: "paragraph", nodeId } };
+  const receipt = await editHostDocument(options, request);
+  expect(await editHostDocument(options, request)).toEqual(receipt);
+  const after = await captureAuthoringWorkspace(options);
+  expect(after.project.providers.compositions[0]!.records[0]!.document.root.at(-1)!.slots.items).toEqual([{ id: nodeId, componentId: "paragraph", componentVersion: 1, props: { text: "" }, slots: {} }]);
+  for (const change of [{ ...request.change }, { ...request.change, slotId: "unknown", nodeId: randomUUID() }, { ...request.change, componentId: "unknown", nodeId: randomUUID() }, { ...request.change, nodeId: "invalid" }]) await expect(editHostDocument(options, { ...request, revision: after.digest, operationId: randomUUID(), change })).rejects.toThrow();
+  expect((await captureAuthoringWorkspace(options)).digest).toBe(after.digest);
+});
+it("refuses insertion into a Mapping-populated local slot without writes", async () => {
+  const options = await fixture(false, true), before = await captureAuthoringWorkspace(options);
+  await expect(editHostDocument(options, { workspaceId: "proof", pathname: "/", revision: before.digest, operationId: randomUUID(), target: { renderedNodeId: "consultation", providerId: "files", recordId: "home", nodeId: "consultation" }, change: { kind: "insert", slotId: "items", componentId: "paragraph", nodeId: randomUUID() } })).rejects.toMatchObject({ code: "unsupported-scope" });
+  expect((await captureAuthoringWorkspace(options)).digest).toBe(before.digest);
+});
+
+it("describes semantic labels and supported defaults while distinguishing shared owners and local placement", async () => {
+  const options = await fixture(false, true, true), snapshot = await captureAuthoringWorkspace(options);
+  const compiled = await compileAuthoringWorkspaceSnapshot({ ...options, snapshot });
+  const targets = describeHostDocumentTargets(hostDocumentTargets(compiled.build.routes[0]!), snapshot.project, options.pack.manifest, { group: { transparent: true }, paragraph: { labelProp: "text" } }, new Map([["files/lessons-consultation", ["/", "/lessons"]]]));
+  const first = targets.find(target => target.nodeId === "first")!;
+  expect(first.presentation).toEqual({ label: "First", kindTitle: "Paragraph", transparent: false });
+  const local = targets.find(target => target.nodeId === "local-group")!;
+  expect(local.capabilities?.insertSlots[0]?.components.map(value => value.id)).toContain("paragraph");
+  expect(local.presentation?.transparent).toBe(true);
+  const shared = targets.find(target => target.nodeId === "section")!;
+  expect(shared.capabilities?.fields.allowed).toBe(false);
+  expect(shared.capabilities?.structure.allowed).toBe(false);
+  expect(shared.capabilities?.placement.allowed).toBe(true);
+  expect(shared.capabilities?.uses).toEqual(["/", "/lessons"]);
+  expect(targets.find(target => target.nodeId === "consultation")?.capabilities?.insertSlots[0]?.reason).toContain("Mapping/Content");
+  expect(() => validateHostComponentPresentation({ missing: {} }, options.pack.manifest)).toThrow("Unknown");
+  expect(() => validateHostComponentPresentation({ paragraph: { labelProp: "invented" } }, options.pack.manifest)).toThrow("textual field");
 });

@@ -6,17 +6,17 @@ import { editDigest } from "../edit/service";
 import { executeAuthoringOperation } from "../edit/authoring-lease.mjs";
 import { EditError } from "../edit/plans";
 import { hostDocumentTargets } from "./render";
-import { updateProps, reorderNode, removeNode } from "../../src/composer/model/commands";
+import { updateProps, reorderNode, removeNode, addNode } from "../../src/composer/model/commands";
 import { planLinkedJsxModules } from "../../src/composer/source/plan-linked-jsx";
 import { withMutationBarrier } from "../../src/shared/node-fs";
 import { workspaceDomainRoots } from "../../src/shared/workspace-scope";
 import { compileSiteProject } from "../../src/site-project/compiler";
 import { validateSiteProject } from "../../src/site-project/model/validation";
-import type { SitemapNode } from "../../src/sitemapper/model/types";
+import { localOwnerReason, mappedSlot } from "./capabilities";
 import type { JsonObject } from "../../src/composer/model/types";
 
 const name = z.string().min(1).max(256);
-export const documentEditSchema = z.object({ workspaceId: name, revision: z.string().regex(/^[a-f0-9]{64}$/), pathname: name, operationId: z.uuid(), target: z.object({ renderedNodeId: name, providerId: name, recordId: name, nodeId: name }).strict(), change: z.discriminatedUnion("kind", [z.object({ kind: z.literal("field"), prop: name, value: z.json() }).strict(), z.object({ kind: z.literal("reorder"), direction: z.enum(["up", "down"]) }).strict(), z.object({ kind: z.literal("reorder-placement"), direction: z.enum(["up", "down"]) }).strict(), z.object({ kind: z.literal("remove") }).strict()]) }).strict();
+export const documentEditSchema = z.object({ workspaceId: name, revision: z.string().regex(/^[a-f0-9]{64}$/), pathname: name, operationId: z.uuid(), target: z.object({ renderedNodeId: name, providerId: name, recordId: name, nodeId: name }).strict(), change: z.discriminatedUnion("kind", [z.object({ kind: z.literal("field"), prop: name, value: z.json() }).strict(), z.object({ kind: z.literal("reorder"), direction: z.enum(["up", "down"]) }).strict(), z.object({ kind: z.literal("reorder-placement"), direction: z.enum(["up", "down"]) }).strict(), z.object({ kind: z.literal("remove") }).strict(), z.object({ kind: z.literal("insert"), slotId: name, componentId: name, nodeId: z.uuid() }).strict()]) }).strict();
 
 /** One explicit human operation, validated by the same pure commands and journal used by Composition. */
 export async function editHostDocument(options: CaptureAuthoringWorkspaceOptions, input: unknown) {
@@ -43,16 +43,16 @@ async function editHostDocumentLeased(options: CaptureAuthoringWorkspaceOptions,
     if (!resolved || resolved.providerId !== "files") throw new EditError("unsupported-target", "The qualified target is not part of this reviewed page.");
     const owner = request.change.kind === "reorder-placement" ? resolved.placement : resolved;
     if (!owner) throw new EditError("unsupported-scope", "This shared child has no direct local page placement. Select its placed section.");
-    const flatten = (nodes: readonly SitemapNode[]): SitemapNode[] => nodes.flatMap(node => [node, ...flatten(node.children)]);
-    const directUses = snapshot.project.providers.sitemaps.flatMap(provider => provider.records.flatMap(record => flatten(record.document.root))).filter(node => node.source.kind === "composition" && node.source.ref.providerId === owner.providerId && node.source.ref.recordId === owner.recordId);
-    if (directUses.length > 1) throw new EditError("unsupported-scope", "This composition is shared by multiple routes. Review affected uses in its owning editor.");
+    const ownershipReason = localOwnerReason(snapshot.project, owner);
+    if (ownershipReason) throw new EditError("unsupported-scope", ownershipReason);
     const state = await captureHost({ config: options.composerConfig, pack: options.pack });
     const record = state.records.compositions.find(value => value.id === owner.recordId);
     if (!record || record.document.binding || record.document.publication?.kind === "global-template") throw new EditError("unsupported-scope", "Edit linked/global arrangement through its explicit source editor.");
     if (state.records.mappings.some(mapping => mapping.document.composition.providerId === owner.providerId && mapping.document.composition.recordId === owner.recordId)) throw new EditError("unsupported-scope", "This presentation is a shared Mapping source. Edit its explicit owner after reviewing affected uses.");
     const bound = state.records.mappings.some(mapping => mapping.document.composition.providerId === owner.providerId && mapping.document.composition.recordId === owner.recordId && mapping.document.bindings.some(binding => binding.target.nodeId === owner.nodeId && (request.change.kind !== "field" || binding.target.prop === request.change.prop)));
     if (bound) throw new EditError("unsupported-scope", "This value or node is owned by Mapping/Content. Open its shared source.");
-    const result = request.change.kind === "field" ? updateProps(record.document, state.manifest, owner.nodeId, { [request.change.prop]: request.change.value } as JsonObject) : (request.change.kind === "reorder" || request.change.kind === "reorder-placement") ? reorderNode(record.document, state.manifest, owner.nodeId, request.change.direction) : removeNode(record.document, state.manifest, owner.nodeId);
+    if (request.change.kind === "insert" && mappedSlot(snapshot.project, owner, request.change.slotId)) throw new EditError("unsupported-scope", "This slot is owned by Mapping/Content.");
+    const result = request.change.kind === "insert" ? addNode(record.document, state.manifest, { parentId: owner.nodeId, slotId: request.change.slotId, index: 0 }, request.change.componentId, () => request.change.kind === "insert" ? request.change.nodeId : "") : request.change.kind === "field" ? updateProps(record.document, state.manifest, owner.nodeId, { [request.change.prop]: request.change.value } as JsonObject) : (request.change.kind === "reorder" || request.change.kind === "reorder-placement") ? reorderNode(record.document, state.manifest, owner.nodeId, request.change.direction) : removeNode(record.document, state.manifest, owner.nodeId);
     if (!result.ok) throw new EditError("component-invalid", result.error);
     const candidate = { ...record, updatedAt: new Date().toISOString(), document: result.document };
     const records = state.records.compositions.map(value => value.id === record.id ? candidate : value);
