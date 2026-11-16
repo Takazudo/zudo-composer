@@ -145,8 +145,18 @@ export interface ContentAiStageGuard { signal?: AbortSignal; beforePersist?(): P
 
 /** Internal trusted staging API. Never dispatched by the Content browser wire. No inference call. */
 export function createContentAiStager(options: ContentAiServiceOptions & { providerLabel: string }) {
-  return { stage: (request: ContentAiStageRequest, guard: ContentAiStageGuard = {}): Promise<ContentAiPrepareResult> =>
-    stageValidatedContentAi(options, request, options.providerLabel, guard) };
+  return {
+    stage: (request: ContentAiStageRequest, guard: ContentAiStageGuard = {}): Promise<ContentAiPrepareResult> =>
+      stageValidatedContentAi(options, request, options.providerLabel, guard),
+    /** Lookup only: recover the immutable proposal before checking current source state. */
+    async recover(raw: ContentAiStageRequest, guard: ContentAiStageGuard = {}): Promise<ContentAiPrepareResult | null> {
+      const request = structuredClone(raw);
+      guard.signal?.throwIfAborted();
+      if (request.preparationKey === undefined) throw new EditorialError("invalid-request", "Recovery requires a proposal preparation key.");
+      const identity = await preparationIdentity(options, request, options.providerLabel);
+      return readPreparedProposal(options, identity, guard);
+    },
+  };
 }
 
 async function sha256(value: unknown): Promise<string> {
@@ -154,24 +164,35 @@ async function sha256(value: unknown): Promise<string> {
   return [...new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes))].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function stageValidatedContentAi(options: ContentAiServiceOptions, raw: Omit<ContentAiStageRequest, "preparationKey"> & { preparationKey?: string }, provider: string, guard: ContentAiStageGuard): Promise<ContentAiPrepareResult> {
-  const request = structuredClone(raw);
-  guard.signal?.throwIfAborted();
+type StagingRequest = Omit<ContentAiStageRequest, "preparationKey"> & { preparationKey?: string };
+async function preparationIdentity(options: ContentAiServiceOptions, request: StagingRequest, provider: string) {
   if (typeof request.summary !== "string" || request.summary.length > 1000 || !request.values || typeof request.values !== "object" || Array.isArray(request.values) || Object.keys(request.values).length > 100) throw new EditorialError("invalid-request", "Malformed bounded Content proposal.");
   if (request.preparationKey !== undefined && (typeof request.preparationKey !== "string" || !request.preparationKey.trim() || request.preparationKey.length > 512)) throw new EditorialError("invalid-request", "Malformed proposal preparation key.");
   const keyDigest = request.preparationKey === undefined ? undefined : await sha256({ owner: options.owner, actorId: options.actor?.id ?? null, key: request.preparationKey });
   const payloadDigest = await sha256({ entry: request.entry, expected: request.expected, values: request.values, summary: request.summary, provider });
+  return { keyDigest, payloadDigest };
+}
+async function readPreparedProposal(options: ContentAiServiceOptions, identity: { keyDigest?: string; payloadDigest: string }, guard: ContentAiStageGuard): Promise<ContentAiPrepareResult | null> {
+  const { keyDigest, payloadDigest } = identity;
+  guard.signal?.throwIfAborted();
+  if (!keyDigest) return null;
+  const id = `stage-${keyDigest}`;
+  const record = await options.store.read(id);
+  if (!record) return null;
+  if (record.owner !== options.owner || record.actorId !== (options.actor?.id ?? null) || record.proposal.id !== id || record.preparation?.keyDigest !== keyDigest || record.preparation.payloadDigest !== payloadDigest) throw new EditorialError("operation-key-reuse", "This preparation key belongs to another proposal.");
+  guard.signal?.throwIfAborted();
+  await guard.beforePersist?.();
+  guard.signal?.throwIfAborted();
+  return { status: "proposed", proposal: structuredClone(record.proposal) };
+}
+
+async function stageValidatedContentAi(options: ContentAiServiceOptions, raw: Omit<ContentAiStageRequest, "preparationKey"> & { preparationKey?: string }, provider: string, guard: ContentAiStageGuard): Promise<ContentAiPrepareResult> {
+  const request = structuredClone(raw);
+  guard.signal?.throwIfAborted();
+  const identity = await preparationIdentity(options, request, provider);
+  const { keyDigest, payloadDigest } = identity;
   const id = keyDigest ? `stage-${keyDigest}` : options.createId();
-  const replay = async (): Promise<ContentAiPrepareResult | null> => {
-    if (!keyDigest) return null;
-    const record = await options.store.read(id);
-    if (!record) return null;
-    if (record.owner !== options.owner || record.actorId !== (options.actor?.id ?? null) || record.proposal.id !== id || record.preparation?.keyDigest !== keyDigest || record.preparation.payloadDigest !== payloadDigest) throw new EditorialError("operation-key-reuse", "This preparation key belongs to another proposal.");
-    guard.signal?.throwIfAborted();
-    await guard.beforePersist?.();
-    guard.signal?.throwIfAborted();
-    return { status: "proposed", proposal: structuredClone(record.proposal) };
-  };
+  const replay = () => readPreparedProposal(options, identity, guard);
   const prior = await replay();
   if (prior) return prior;
   const ai = options.boundary({ actor: options.actor, source: "content-ai" });

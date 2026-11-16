@@ -60,3 +60,5 @@ Tests: `server/config/__tests__/content-fields.test.ts`,
 `server/content-ai/__tests__/model-proposer.test.ts`; existing native/hosted
 editorial equivalence tests retain the Article behavior. Scripted or fake provider
 tests prove deterministic integration, not authenticated inference.
+
+The internal stager also supports lookup-only `recover(request, guard)`. It uses the same preparation key, owner, actor and payload fingerprint to recover an immutable proposal after a review-envelope response loss, even when current Content has changed. It never runs inference, validates against current Content or writes. The caller retains the active run/cancellation fence; recovery does not authorize Apply, which still requires review and current preconditions (or an already committed receipt).

@@ -62,6 +62,36 @@ describe("bounded Content-AI policy and trusted staging", () => {
     expect(f.proposer.propose).not.toHaveBeenCalled();
   });
 
+  it("recovers a persisted proposal without current-source reads or writes, retaining identity and cancellation fences", async () => {
+    const f = await fixture();
+    expect(await f.stager.recover(f.request)).toBeNull();
+    const first = await f.stager.stage(f.request);
+    await f.boundary({ actor: { id: "human" }, source: "content-editor" }).saveFields({ entry: f.entry, expected: f.request.expected, values: { [f.fieldId]: "Later" }, clear: [], operationKey: "human-after-staging" });
+    const before = await f.store.readAll();
+    const boundary = vi.fn(() => { throw new Error("Recovery must not open current Content"); });
+    const create = vi.fn(async () => { throw new Error("Recovery must not persist"); });
+    const reopened = createContentAiStager({ ...f.options, boundary, contentFields: [], proposer: null, providerLabel: f.proposer.label,
+      store: { read: (await openContentAiProposalStore(join(f.root, "proposals"))).read, create } });
+    const fence = vi.fn(async () => undefined);
+    expect(await reopened.recover(f.request, { beforePersist: fence })).toEqual(first);
+    expect(fence).toHaveBeenCalledTimes(1);
+    for (const changed of [{ ...f.request, expected: "changed" }, { ...f.request, values: { [f.fieldId]: "Changed" } }, { ...f.request, summary: "Changed" }]) {
+      await expect(reopened.recover(changed)).rejects.toMatchObject({ code: "operation-key-reuse" });
+    }
+    const abort = new AbortController();
+    await expect(reopened.recover(f.request, { signal: abort.signal, beforePersist: async () => abort.abort() })).rejects.toThrow();
+    const foreign = createContentAiStager({ ...f.options, owner: "foreign", providerLabel: f.proposer.label });
+    expect(await foreign.recover(f.request)).toBeNull();
+    const tampered = createContentAiStager({ ...f.options, providerLabel: f.proposer.label, store: { create, read: async id => {
+      const record = await f.options.store.read(id); return record && { ...record, actorId: "another-owner" };
+    } } });
+    await expect(tampered.recover(f.request)).rejects.toMatchObject({ code: "operation-key-reuse" });
+    expect(boundary).not.toHaveBeenCalled(); expect(create).not.toHaveBeenCalled(); expect(f.proposer.propose).not.toHaveBeenCalled();
+    expect(await f.store.readAll()).toEqual(before);
+    if (first.status !== "proposed") throw new Error("Expected proposal");
+    await expect(createContentAiService(f.options).apply({ proposalId: first.proposal.id, renderedCandidate: first.proposal.candidateDigest })).rejects.toMatchObject({ code: "revision-conflict" });
+  });
+
   it("cancels before private persistence and refuses stale Content without canonical writes", async () => {
     const f = await fixture(), create = vi.spyOn(f.options.store, "create");
     const abort = new AbortController();
