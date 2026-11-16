@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useWorkspace } from "../../app/workspace-context";
 import { formatIntent } from "../../app/route-intents";
-import { assistantConfig, assistantEvents, assistantRequest, nativeEditRequest } from "../native-editing/session";
+import { assistantConfig, assistantEvents, assistantRequest, nativeEditRequest, waitForNativeAuthoringReady } from "../native-editing/session";
 import { takeHostSelection } from "./host-selection";
 import { pendingHostReviewIds } from "./host-review-recovery";
 import { HostReviewCard } from "./host-review-card";
@@ -22,6 +22,7 @@ function ScopedHostAssistantRoute() {
   const [status, setStatus] = useState<AssistantStatus | null>(null), [error, setError] = useState<string | null>(handoff.error);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]), [conversation, setConversation] = useState<Conversation | null>(null);
   const [text, setText] = useState(""), [busy, setBusy] = useState(false), [runId, setRunId] = useState<string | null>(null), [reply, setReply] = useState("");
+  const [initializing, setInitializing] = useState(true);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const turn = useRef<string | null>(null), ticket = useRef(0), stream = useRef<AbortController | null>(null), sending = useRef(false);
   const read = async (id?: string) => {
@@ -46,15 +47,36 @@ function ScopedHostAssistantRoute() {
   };
   useEffect(() => {
     ticket.current++; const epoch = ticket.current;
-    void assistantRequest<AssistantStatus>("status", workspaceId, {}).then(value => { if (epoch === ticket.current) setStatus(value); }, cause => { if (epoch === ticket.current) setError(cause.message); });
-    try {
-      const id = sessionStorage.getItem(`${prefix}:conversation`);
-      void read(id ?? undefined).catch(cause => { if (epoch === ticket.current) setError(cause.message); });
-      const pending = sessionStorage.getItem(`${prefix}:run`);
-      if (pending) { const value = JSON.parse(pending); if (typeof value.id === "string" && typeof value.conversationId === "string") void follow(value.id, value.conversationId); }
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Recovery unavailable."); }
-    if (selection) void nativeEditRequest<{ documentUrl: string }>("document-preview", { workspaceId, pathname: selection.pathname }).then(value => { if (epoch === ticket.current) setDocumentUrl(value.documentUrl); }, cause => { if (epoch === ticket.current) setError(cause.message); });
-    return () => { ticket.current++; stream.current?.abort(); };
+    const initialization = new AbortController();
+    void (async () => {
+      // Capturing the saved document freezes this session. Finish that handshake
+      // before reading Assistant state or allowing a new conversation mutation.
+      try {
+        if (selection) {
+          const value = await nativeEditRequest<{ documentUrl: string }>("document-preview", { workspaceId, pathname: selection.pathname });
+          if (epoch !== ticket.current) return;
+          setDocumentUrl(value.documentUrl);
+        }
+      } catch (cause) { if (epoch === ticket.current) setError(cause instanceof Error ? cause.message : "Saved preview unavailable."); }
+      if (epoch !== ticket.current) return;
+      try {
+        await waitForNativeAuthoringReady(initialization.signal);
+        if (epoch !== ticket.current) return;
+        const results = await Promise.allSettled([
+          assistantRequest<AssistantStatus>("status", workspaceId, {}).then(value => { if (epoch === ticket.current) setStatus(value); }),
+          read(sessionStorage.getItem(`${prefix}:conversation`) ?? undefined),
+        ]);
+        const failed = results.find(result => result.status === "rejected");
+        if (failed?.status === "rejected") throw failed.reason;
+      } catch (cause) { if (epoch === ticket.current) setError(cause instanceof Error ? cause.message : "Assistant unavailable."); }
+      finally { if (epoch === ticket.current) setInitializing(false); }
+      if (epoch !== ticket.current) return;
+      try {
+        const pending = sessionStorage.getItem(`${prefix}:run`);
+        if (pending) { const value = JSON.parse(pending); if (typeof value.id === "string" && typeof value.conversationId === "string") void follow(value.id, value.conversationId); }
+      } catch (cause) { setError(cause instanceof Error ? cause.message : "Recovery unavailable."); }
+    })();
+    return () => { ticket.current++; initialization.abort(); stream.current?.abort(); };
   }, [workspaceId]);
   const send = async () => {
     if (!conversation || !selection || !text.trim() || busy || runId || sending.current) return;
@@ -68,9 +90,17 @@ function ScopedHostAssistantRoute() {
     finally { if (epoch === ticket.current) setBusy(false); sending.current = false; }
   };
   const createConversation = async () => {
-    if (sending.current || busy || runId) return;
+    if (initializing || sending.current || busy || runId) return;
     const epoch = ticket.current; sending.current = true; setBusy(true);
-    try { const value = await assistantRequest<Conversation>("createConversation", workspaceId, {}); if (epoch === ticket.current) await read(value.id); }
+    try {
+      const value = await assistantRequest<Conversation>("createConversation", workspaceId, {});
+      if (epoch !== ticket.current) return;
+      // The mutation response is authoritative even if a subsequent catalog
+      // refresh is refused by another tab's capture. Never replay creation.
+      setConversation(value); sessionStorage.setItem(`${prefix}:conversation`, value.id);
+      setConversations(items => [{ id: value.id, title: value.title, createdAt: value.createdAt, updatedAt: value.updatedAt, messages: value.messages.length, lastText: "" }, ...items.filter(item => item.id !== value.id)]);
+      await read(value.id);
+    }
     catch (cause) { if (epoch === ticket.current) setError(cause instanceof Error ? cause.message : "Conversation unavailable."); }
     finally { if (epoch === ticket.current) setBusy(false); sending.current = false; }
   };
@@ -80,7 +110,7 @@ function ScopedHostAssistantRoute() {
     {error && <p role="alert">{error}</p>}
     {selection ? <p>Selected owner: {selection.target.providerId}/{selection.target.recordId}/{selection.target.nodeId}{selection.prop ? ` · ${selection.prop}` : " · arrangement"}. The server re-resolves this exact saved revision before proposing.</p> : <p>Select a component/property in Page authoring and choose Ask Assistant. A previous conversation never supplies implicit edit authority.</p>}
     <label>Conversation <select disabled={busy || !!runId} value={conversation?.id ?? ""} onChange={event => void read(event.currentTarget.value).catch(cause => setError(cause.message))}><option value="">Choose conversation</option>{conversations.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
-    <button class="cms-btn" disabled={busy || !!runId} onClick={() => void createConversation()}>New conversation</button>
+    <button class="cms-btn" disabled={initializing || busy || !!runId} onClick={() => void createConversation()}>New conversation</button>
     <section aria-label="Conversation messages">{conversation?.messages.map(message => <article key={message.id}><strong>{message.role}</strong><p style={{ whiteSpace: "pre-wrap" }}>{message.text}</p></article>)}{runId && <p role="status">{reply || "Reply running…"}</p>}</section>
     <label>Request <textarea value={text} disabled={busy || !!runId} onInput={event => { setText(event.currentTarget.value); turn.current = null; }} /></label><button class="cms-btn" disabled={!selection || !conversation || !text.trim() || busy || !!runId || !status?.provider.ok} onClick={() => void send()}>Send</button>
     {runId && <><button class="cms-btn" onClick={() => void assistantRequest("stop", workspaceId, { runId }).then(() => conversation && follow(runId, conversation.id), cause => setError(cause.message))}>Stop reply</button><button class="cms-btn" onClick={() => { const value = JSON.parse(sessionStorage.getItem(`${prefix}:run`) ?? "null"); if (value) void follow(value.id, value.conversationId); }}>Recover reply</button></>}
