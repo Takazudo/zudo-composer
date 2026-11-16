@@ -172,7 +172,7 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
   }, [state.revision, state.selectNative, state.nativeReview]);
 
   useEffect(() => {
-    if (!state.nativeReview || !state.document || error || fatalError) return;
+    if ((!state.nativeReview && !state.nativePage) || !state.document || error || fatalError) return;
     let active = true;
     const revision = state.revision;
     const check = async () => {
@@ -211,7 +211,7 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
     };
     void check().catch(cause => { if (active) { failedRevision.current = revision; clientRef.current?.emitError(cause instanceof Error ? cause.message : "Candidate render failed."); } });
     return () => { active = false; };
-  }, [state.revision, state.nativeReview, state.document, state.linked, provider, error, fatalError]);
+  }, [state.revision, state.nativeReview, state.nativePage, state.document, state.linked, provider, error, fatalError]);
 
   // Review annotations follow the committed DOM of exactly this revision; stale marks are cleared first.
   useEffect(() => {

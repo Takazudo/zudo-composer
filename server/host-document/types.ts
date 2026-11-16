@@ -38,5 +38,6 @@ export interface HostDocumentPreview {
   identity: HostDocumentIdentity;
   frameId: string;
   html: string;
+  navigation?: { url: string; pathnames: readonly string[] };
   targets: readonly HostDocumentTarget[];
 }

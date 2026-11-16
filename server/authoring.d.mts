@@ -1508,12 +1508,19 @@ interface HostDocumentPreview {
     identity: HostDocumentIdentity;
     frameId: string;
     html: string;
+    navigation?: {
+        url: string;
+        pathnames: readonly string[];
+    };
     targets: readonly HostDocumentTarget[];
 }
 
 declare function hostDocumentTargets(route: SiteCompiledRoute): HostDocumentTarget[];
 /** Only this tool-owned bridge enters authoring output; static builds call the host renderer directly. */
-declare function renderHostDocument(renderer: HostDocumentRenderer, route: SiteCompiledRoute, identity: HostDocumentIdentity, project?: SiteProject): Promise<HostDocumentPreview>;
+declare function renderHostDocument(renderer: HostDocumentRenderer, route: SiteCompiledRoute, identity: HostDocumentIdentity, project?: SiteProject, navigation?: {
+    url: string;
+    pathnames: readonly string[];
+}): Promise<HostDocumentPreview>;
 
 export { ASSET_PROVIDER_ID, COMPOSITION_PROVIDER_ID, CONTENT_PROVIDER_ID, DEFAULT_TIMESTAMP, MAPPING_PROVIDER_ID, SITEMAP_PROVIDER_ID, assetAuthoringUrl, assetMimeTypeForExtension, canonicalStringifyJson, captureAuthoringWorkspace, createFilesystemAssetStore, defineSite, entryRef, hostDocumentTargets, imageUse, initializeAuthoringWorkspace, isAuthoringWorkspaceSnapshotCurrent, node, renderHostDocument, resolveAuthoringPackIdentity, resolveAuthoringRendererIdentity, slugify, validateSiteProject };
 export type { AuthoringPackIdentity, AuthoringPublicFile, AuthoringRendererIdentity, AuthoringWorkspaceSnapshot, CaptureAuthoringWorkspaceOptions, CapturedPublicFile, HostDocumentIdentity, HostDocumentPreview, HostDocumentRenderInput, HostDocumentRenderer, HostDocumentTarget };

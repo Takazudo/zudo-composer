@@ -48,3 +48,49 @@ it("answers only exact coordination probes after load and refuses inline drafts"
   send({ ...probe, packVersion: "other" }); send({ ...probe, extra: true }); send({ ...probe, nonce: "bad" });
   expect(posted).toHaveLength(count);
 });
+
+it("restores production Location before host scripts and preserves complete visitor URLs", async () => {
+  const { JSDOM } = await import("jsdom");
+  const visitorUrl = "/lessons/?course=consultation#pricing";
+  const preview = await renderHostDocument({ renderDocument: () => '<html><head><script>window.observed=[location.pathname,location.search,location.hash];</script></head><body>Host</body></html>' }, route, identity, undefined, { url: visitorUrl, pathnames: ["/lessons/", "/contact/"] });
+  const dom = new JSDOM(preview.html, { url: "http://localhost:4000/lessons/?course=consultation&__zudo_host_document=token#pricing", runScripts: "dangerously" });
+  try {
+    expect((dom.window as unknown as { observed: string[] }).observed).toEqual(["/lessons/", "?course=consultation", "#pricing"]);
+    expect(dom.window.document.querySelector('meta[name="zudo-host-document-frame"]')?.getAttribute("content")).toBe(preview.frameId);
+    expect(preview.navigation?.url).toBe(visitorUrl);
+  } finally { dom.window.close(); }
+  await expect(renderHostDocument({ renderDocument: () => "" }, route, identity, undefined, { url: "//foreign.test/lessons/", pathnames: ["/lessons/"] })).rejects.toThrow("captured route");
+});
+
+it("bridges known Browse links with query/hash, retains native fragments and revokes external navigation", async () => {
+  const preview = await renderHostDocument({ renderDocument: () => "<html><head></head><body></body></html>" }, { ...route, pathname: "/lessons" }, { ...identity, pathname: "/lessons" }, undefined, { url: "/lessons/?course=old", pathnames: ["/lessons", "/contact"] });
+  const scripts = [...preview.html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  const script = scripts.at(-1)![1]!;
+  const posted: unknown[] = [];
+  const parent = { location: { origin: "http://localhost:4000" }, postMessage: (value: unknown) => posted.push(value) };
+  const listeners: Record<string, (event?: unknown) => void> = {};
+  let click!: (event: unknown) => void;
+  const location = new URL("http://localhost:4000/lessons/?course=old");
+  class Element { constructor(readonly href: string) {} target = ""; hasAttribute() { return false; } closest() { return this; } }
+  const document = { readyState: "complete", querySelector: () => null, addEventListener: (_name: string, listener: typeof click) => { click = listener; } };
+  const history = { pushState(_data: unknown, _title: string, href: string) { location.href = new URL(href, location).href; }, replaceState(_data: unknown, _title: string, href: string) { location.href = new URL(href, location).href; } };
+  runInNewContext(script, { parent, document, location, URL, Element, history, addEventListener: (name: string, callback: (event?: unknown) => void) => { listeners[name] = callback; } });
+  listeners.message!({ source: parent, origin: parent.location.origin, data: { protocol: "zudo-host-document-v1", frameId: preview.frameId, type: "mode", selecting: false } });
+  const follow = (href: string) => {
+    let prevented = false;
+    click({ target: new Element(href), button: 0, preventDefault() { prevented = true; }, stopImmediatePropagation() {} });
+    return prevented;
+  };
+  expect(follow("/contact/?course=stable-id#inquiry")).toBe(true);
+  expect(posted.at(-1)).toMatchObject({ type: "navigate", visitorUrl: "/lessons/?course=old", url: "/contact/?course=stable-id#inquiry", identity: { ...identity, pathname: "/lessons" }, frameId: preview.frameId });
+  const count = posted.length;
+  expect(follow("#pricing")).toBe(false); expect(posted).toHaveLength(count);
+  location.hash = "#pricing"; listeners.hashchange!();
+  expect(posted.at(-1)).toMatchObject({ type: "navigate", visitorUrl: "/lessons/?course=old", url: "/lessons/?course=old#pricing" });
+  history.pushState(null, "", "/contact/?course=changed#inquiry");
+  expect(posted.at(-1)).toMatchObject({ type: "navigate", visitorUrl: "/lessons/?course=old#pricing", url: "/contact/?course=changed#inquiry" });
+  listeners.message!({ source: parent, origin: parent.location.origin, data: authoringProbeMessage(identity, "a".repeat(64)) });
+  expect(posted.at(-1)).toMatchObject({ type: "authoring-settled", clean: false });
+  history.replaceState(null, "", "/not-captured/"); expect(posted.at(-1)).toMatchObject({ type: "leaving" });
+  expect(follow("https://outside.test/")).toBe(false); expect(posted.at(-1)).toMatchObject({ type: "leaving" });
+});

@@ -27,6 +27,7 @@ import {
   readParentToPreview,
   readyMessage,
   renderedMessage,
+  nativePageRenderedMessage,
   reviewAnnotatedMessage,
   requestAddMessage,
   requestInsertMenuMessage,
@@ -172,6 +173,7 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
       post(readyMessage(pack));
     },
     emitRendered() {
+      if (state.nativePage) post(nativePageRenderedMessage(pack, state.revision, state.nativePage));
       if (state.nativeReview) post(renderedMessage(pack, state.revision, state.nativeReview));
     },
     emitSelect(nodeId) {

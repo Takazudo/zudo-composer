@@ -68,7 +68,7 @@ const preview = await authoring.renderHostDocument(hostRenderer, route, {
 assert.equal(preview.identity.revision, nativeSnapshot.digest);
 assert.ok(preview.html.includes("zudo-host-document-v1"));
 assert.deepEqual(preview.targets, authoring.hostDocumentTargets(route));
-const tampered = structuredClone(nativeSnapshot); tampered.project.name = "Not reviewed";
+const tampered = globalThis.structuredClone(nativeSnapshot); tampered.project.name = "Not reviewed";
 await assert.rejects(siteBuild.compileAuthoringWorkspaceSnapshot({ ...captureOptions, snapshot: tampered }), /digest mismatch/);
 
 const directory = join(workspaceRoot, "dist-site");

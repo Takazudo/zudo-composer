@@ -12,6 +12,6 @@ it("does not enroll an empty, unresponsive iframe before the saved document arri
   await waitFor(() => expect(mocks.request).toHaveBeenCalled());
   expect(container.querySelector("iframe")).toBeNull();
   expect(getByRole("status").textContent).toBe("Opening saved page…");
-  finish({ identity: { workspaceId: "proof", pathname: "/", revision: "a".repeat(64), packId: "proof", packVersion: "1", rendererId: "proof", rendererVersion: "1", rendererDigest: "b".repeat(64) }, frameId: "frame", html: "<html><body>Saved</body></html>", routes: [], targets: [] });
-  await waitFor(() => expect(container.querySelector("iframe")?.getAttribute("srcdoc")).toContain("Saved"));
+  finish({ identity: { workspaceId: "proof", pathname: "/", revision: "a".repeat(64), packId: "proof", packVersion: "1", rendererId: "proof", rendererVersion: "1", rendererDigest: "b".repeat(64) }, frameId: "frame", documentUrl: "/__zudo-host-document/token", html: "<html><body>Saved</body></html>", routes: [], targets: [] });
+  await waitFor(() => expect(container.querySelector("iframe")?.getAttribute("src")).toBe("/__zudo-host-document/token"));
 });

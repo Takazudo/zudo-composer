@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createComposerPreviewBridge } from "../../composer/preview/bridge";
-import { readParentToPreview, readPreviewToParent, renderMessage, renderedMessage, readyMessage, type MessageEventLike, type NativeReviewIdentity } from "../../composer/preview/protocol";
+import { readParentToPreview, readPreviewToParent, renderMessage, renderedMessage, nativePageRenderedMessage, readyMessage, type MessageEventLike, type NativeReviewIdentity } from "../../composer/preview/protocol";
 import { fixtureComponentManifest, createFixtureSampleDocument } from "../../composer/test-support/fixture-pack";
 
 const pack = { packId: fixtureComponentManifest.packId, packVersion: fixtureComponentManifest.packVersion };
@@ -42,4 +42,26 @@ describe("native successful-render evidence", () => {
     listener({ source: frameWindow, origin, data: renderedMessage(pack, bridge.revision, review) }); expect(accepted).toBe(1);
     bridge.dispose();
   });
+});
+
+it("accepts current-page readiness only for the exact retained frame session, owner and revision", () => {
+  let listener!: (event: MessageEventLike) => void;
+  const frameWindow = { postMessage() {} }, frame = { contentWindow: frameWindow };
+  let accepted = 0;
+  const bridge = createComposerPreviewBridge({ frame, location: { src: "/composer/preview", targetOrigin: origin }, hostWindow: { addEventListener(_, next) { listener = next; }, removeEventListener() {} }, pack, onNativePageRendered: () => accepted++ });
+  const document = createFixtureSampleDocument();
+  const nativePage = { identity: { workspaceId: "work", sitemapId: "site", pageId: "home", providerId: "files" as const, recordId: "home" }, draftRevision: "c".repeat(64), frameSession: review.frameSession };
+  bridge.render({ document, localRecordId: document.id, nativePage }, { mode: "preview", theme: "light", selectedId: null });
+  listener({ source: frameWindow, origin, data: readyMessage(pack) });
+  expect(accepted).toBe(0);
+  const send = (data: unknown, source: unknown = frameWindow) => listener({ source, origin, data });
+  send(nativePageRenderedMessage(pack, bridge.revision - 1, nativePage));
+  send(nativePageRenderedMessage(pack, bridge.revision, { ...nativePage, draftRevision: "d".repeat(64) }));
+  send(nativePageRenderedMessage(pack, bridge.revision, { ...nativePage, identity: { ...nativePage.identity, pageId: "other" } }));
+  send(nativePageRenderedMessage(pack, bridge.revision, nativePage), {});
+  expect(accepted).toBe(0);
+  send(nativePageRenderedMessage(pack, bridge.revision, nativePage)); expect(accepted).toBe(1);
+  frame.contentWindow = { postMessage() {} };
+  send(nativePageRenderedMessage(pack, bridge.revision, nativePage)); expect(accepted).toBe(1);
+  bridge.dispose();
 });

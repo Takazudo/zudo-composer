@@ -50,3 +50,23 @@ it("qualifies native page links without introducing a visitor or preview route",
   expect(parseIntent("/composer?native=1&native=1").status).toBe("invalid");
   expect(formatIntent({ route: "composer", mode: "page", sitemapId: "site", pageId: "home" })).toBe("/composer?native=1&sitemap=site&page=home");
 });
+
+describe("native visitor URLs across reload", () => {
+  it.each(["/lessons/", "/contact/?course=1#inquiry", "/contact/?course=stable-id&label=%E6%97%A5#form"])("round-trips the exact visitor URL %s", visitorUrl => {
+    const intent = { route: "composer", mode: "page", sitemapId: "site", pageId: "home", visitorUrl } as const;
+    const href = formatIntent(intent);
+    expect(parseIntent(new URL(href, "https://editor.test"))).toEqual({ status: "matched", intent });
+    const reloadUrl = new URL("/composer?native=1&sitemap=site&page=home", "https://editor.test");
+    reloadUrl.searchParams.set("visitor", visitorUrl);
+    expect(parseIntent(reloadUrl)).toEqual({ status: "matched", intent });
+  });
+  it.each(["", "//foreign.test/contact/", "https://foreign.test/contact/", "/\\foreign.test/contact/", "/contact/?x=%bad%", "/contact/?x=\nsecret"])("refuses malformed or foreign visitor URL %j", visitorUrl => {
+    expect(parseIntent(`/composer?native=1&visitor=${encodeURIComponent(visitorUrl)}`).status).toBe("invalid");
+    expect(() => formatIntent({ route: "composer", mode: "page", visitorUrl })).toThrow();
+  });
+  it("does not admit visitor state to Assistant, ordinary compositions or duplicated query fields", () => {
+    for (const query of ["assistant=1", "provider=files&composition=home", "new=1"]) expect(parseIntent(`/composer?${query}&visitor=%2Flessons%2F`).status).toBe("invalid");
+    expect(parseIntent("/composer?native=1&visitor=%2Flessons&visitor=%2Fcontact").status).toBe("invalid");
+    expect(() => formatIntent({ route: "composer", mode: "assistant", visitorUrl: "/lessons/" } as unknown as RouteIntent)).toThrow();
+  });
+});

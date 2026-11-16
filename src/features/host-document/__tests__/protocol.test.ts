@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acceptHostDocumentMessage, confirmedFirstAttemptRefusal } from "../protocol";
+import { acceptHostDocumentMessage, confirmedFirstAttemptRefusal, matchesHostDocumentFrame } from "../protocol";
 import type { HostDocumentPreview } from "../../../../server/host-document/types";
 const identity = { workspaceId: "pinsel", revision: "a".repeat(64), pathname: "/lessons/", packId: "pinsel", packVersion: "1", rendererId: "zfb", rendererVersion: "1", rendererDigest: "b".repeat(64) };
 const target = { renderedNodeId: "mapped-price", providerId: "files", recordId: "consultation", nodeId: "price", componentId: "price", parentRenderedNodeId: null, slotId: null, props: {}, entries: [] };
@@ -28,4 +28,41 @@ it("never discards an uncertain original request because recovery now fails its 
     expect(confirmedFirstAttemptRefusal(false, code)).toBe(true);
   }
   expect(confirmedFirstAttemptRefusal(false, "commit-uncertain")).toBe(false);
+});
+
+it("binds visitor query/hash and accepts only captured same-origin navigation", () => {
+  const navigable = { ...preview, navigation: { url: "/lessons/?course=old#pricing", pathnames: ["/lessons/", "/contact/"] } };
+  const receiveNavigation = (data: unknown) => acceptHostDocumentMessage({ data, source, origin: "https://host.test" }, source, "https://host.test", navigable);
+  const message = { ...ready, visitorUrl: navigable.navigation.url, type: "navigate", url: "/contact/?course=stable-id#inquiry" };
+  expect(receiveNavigation(message)).toEqual({ type: "navigate", url: message.url });
+  for (const url of ["//foreign.test/contact/", "https://foreign.test/contact/", "/not-captured/", "javascript:alert(1)"]) expect(receiveNavigation({ ...message, url })).toBeNull();
+  expect(receiveNavigation({ ...message, visitorUrl: "/lessons/?course=other#pricing" })).toBeNull();
+  expect(receiveNavigation({ ...message, type: "ready", url: undefined })).toBeNull();
+  expect(receiveNavigation({ ...ready, visitorUrl: "/lessons/?course=other#pricing" })).toBeNull();
+  const fragment = "/lessons/?course=old#next";
+  expect(receiveNavigation({ ...message, visitorUrl: fragment, url: fragment })).toEqual({ type: "navigate", url: fragment });
+});
+
+it("requires the issued marker and complete post-bootstrap URL on every frame load", () => {
+  const navigable = { ...preview, navigation: { url: "/lessons/?course=stable#price", pathnames: ["/lessons/"] } };
+  const document = window.document.implementation.createHTMLDocument();
+  const marker = document.createElement("meta"); marker.name = "zudo-host-document-frame"; marker.content = preview.frameId; document.head.append(marker);
+  const frame = { contentDocument: document, contentWindow: { location: { href: "https://host.test/lessons/?course=stable#price" } } } as unknown as HTMLIFrameElement;
+  expect(matchesHostDocumentFrame(frame, navigable, "https://host.test")).toBe(true);
+  marker.remove(); expect(matchesHostDocumentFrame(frame, navigable, "https://host.test")).toBe(false);
+  document.head.append(marker); marker.content = "other-frame"; expect(matchesHostDocumentFrame(frame, navigable, "https://host.test")).toBe(false);
+  marker.content = preview.frameId;
+  for (const href of ["https://foreign.test/lessons/?course=stable#price", "https://host.test/lessons/?course=wrong#price", "https://host.test/lessons/?course=stable#other"]) {
+    Object.defineProperty(frame, "contentWindow", { configurable: true, value: { location: { href } } });
+    expect(matchesHostDocumentFrame(frame, navigable, "https://host.test")).toBe(false);
+  }
+});
+
+it("permits only a fragment change in the last pre-edit frame check", () => {
+  const navigable = { ...preview, navigation: { url: "/lessons/?course=stable#old", pathnames: ["/lessons/"] } };
+  const frame = { contentDocument: { querySelector: () => ({ getAttribute: () => preview.frameId }) }, contentWindow: { location: { href: "https://host.test/lessons/?course=stable#new" } } } as unknown as HTMLIFrameElement;
+  expect(matchesHostDocumentFrame(frame, navigable, "https://host.test")).toBe(false);
+  expect(matchesHostDocumentFrame(frame, navigable, "https://host.test", true)).toBe(true);
+  Object.defineProperty(frame, "contentWindow", { value: { location: { href: "https://host.test/lessons/?course=other#new" } } });
+  expect(matchesHostDocumentFrame(frame, navigable, "https://host.test", true)).toBe(false);
 });

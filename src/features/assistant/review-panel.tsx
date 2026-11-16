@@ -40,7 +40,7 @@ function AddedDetail({ change }: { change: DraftChange }) {
 
 export interface ReviewPanelProps {
   view: DraftView | null; currentPage: string; evidence: ReadonlySet<string>; fallback: ReadonlySet<string>;
-  busy: boolean; canApply: boolean; applyBlocker: string | null; error: string | null;
+  busy: boolean; frameReady: boolean; canApply: boolean; applyBlocker: string | null; error: string | null;
   onOpen(change: DraftChange): void; onPage(page: PageRef): void; onWithdraw(change: DraftChange): void;
   onApply(): void; onDiscard(): void; onRevalidate(): void; onUndo(): void; onRecover(): void;
   dependents: { change: DraftChange; items: { id: string; kind: string; reason: string | null }[] } | null; onConfirmDependents(): void; onCancelDependents(): void;
@@ -55,7 +55,8 @@ export function ReviewPanel(props: ReviewPanelProps) {
     <p role="status">Receipt {draft.status === "applied" ? draft.applied?.operationId : draft.undone?.operationId} · {new Date((draft.status === "applied" ? draft.applied?.committedAt : draft.undone?.committedAt) ?? "").toLocaleString("en")}</p>
     <p class="cms-assistant-hint">Applied changes are saved authoring data in Composer. They are not published or deployed.</p>
     {props.error && <p role="alert" class="cms-assistant-error">{props.error}</p>}
-    {draft.status === "applied" && <button type="button" class="cms-btn cms-btn--sm" disabled={props.busy} onClick={props.onUndo}>Undo apply</button>}
+    {draft.status === "applied" && !props.frameReady && <p role="status">Waiting for the current page to finish rendering before Undo.</p>}
+    {draft.status === "applied" && <button type="button" class="cms-btn cms-btn--sm" disabled={props.busy || !props.frameReady} onClick={props.onUndo}>Undo apply</button>}
   </section>;
   const changes = draft.changes;
   const pages = draft.pages.filter(page => page.changed);
@@ -93,7 +94,7 @@ export function ReviewPanel(props: ReviewPanelProps) {
     </div>}
     {props.error && <p role="alert" class="cms-assistant-error">{props.error}</p>}
     <div class="cms-assistant-review__actions">
-      <button type="button" class="cms-btn cms-btn--primary" disabled={props.busy || !props.canApply} aria-describedby="assistant-apply-state" onClick={props.onApply}>Apply to Composer</button>
+      <button type="button" class="cms-btn cms-btn--primary" disabled={props.busy || !props.frameReady || !props.canApply} aria-describedby="assistant-apply-state" onClick={props.onApply}>Apply to Composer</button>
       <button type="button" class="cms-btn cms-btn--ghost cms-btn--sm" disabled={props.busy} onClick={props.onDiscard}>Discard all</button>
       <button type="button" class="cms-btn cms-btn--ghost cms-btn--sm" disabled={props.busy} onClick={props.onRecover}>Check receipt</button>
     </div>

@@ -540,6 +540,17 @@ async function initialize(options) {
 	return registry.complete(workspaceId);
 }
 //#endregion
+//#region src/features/host-document/navigation.ts
+/** Only an exact captured path or its single directory trailing-slash alias. */
+function canonicalHostRoute(pathname, pathnames) {
+	if (pathnames.includes(pathname)) return pathname;
+	if (pathname === "/" || !pathname.startsWith("/") || pathname.endsWith("//")) return null;
+	const stem = pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
+	if (/\.[^/]+$/.test(stem)) return null;
+	const alias = pathname.endsWith("/") ? stem : `${pathname}/`;
+	return pathnames.includes(alias) ? alias : null;
+}
+//#endregion
 //#region src/features/composer/preview/wire.ts
 /** Envelope discriminator — keeps Composer traffic off other message buses. */
 var COMPOSER_PREVIEW_CHANNEL = "composer-preview";
@@ -611,8 +622,16 @@ function hostDocumentTargets(route) {
 }
 var scriptJson = (value) => JSON.stringify(value).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 /** Only this tool-owned bridge enters authoring output; static builds call the host renderer directly. */
-async function renderHostDocument(renderer, route, identity, project) {
+async function renderHostDocument(renderer, route, identity, project, navigation) {
 	if (identity.pathname !== route.pathname) throw new Error("Document route identity differs from the compiled route.");
+	if (navigation) {
+		const url = new URL(navigation.url, "http://document.invalid");
+		if (!navigation.url.startsWith("/") || url.origin !== "http://document.invalid" || canonicalHostRoute(url.pathname, navigation.pathnames) !== identity.pathname) throw new Error("Visitor URL must identify the captured route.");
+		navigation = {
+			...navigation,
+			url: url.pathname + url.search + url.hash
+		};
+	}
 	const rendered = hostRoute(route);
 	const targets = rendered.targets;
 	const html = await renderer.renderDocument({
@@ -623,17 +642,23 @@ async function renderHostDocument(renderer, route, identity, project) {
 	});
 	if (typeof html !== "string" || !/<\/body\s*>/i.test(html)) throw new Error("Host renderer must return a complete HTML document with a body.");
 	const frameId = randomUUID();
-	const bridge = `<script>(()=>{const coordination=${scriptJson(previewEnvelopeValue(identity))},identity=${scriptJson(identity)},frameId=${scriptJson(frameId)},targets=${scriptJson(targets.map(({ renderedNodeId, providerId, recordId, nodeId }) => ({
+	const bridge = `<script>(()=>{const navigation=${scriptJson(navigation ?? null)},coordination=${scriptJson(previewEnvelopeValue(identity))},identity=${scriptJson(identity)},frameId=${scriptJson(frameId)},targets=${scriptJson(targets.map(({ renderedNodeId, providerId, recordId, nodeId }) => ({
 		renderedNodeId,
 		providerId,
 		recordId,
 		nodeId
-	})))};const origin=parent.location.origin;let selecting=true;const send=(type,target)=>parent.postMessage({protocol:"zudo-host-document-v1",type,identity,frameId,...(target?{target}:{})},origin);addEventListener("message",event=>{if(event.source!==parent||event.origin!==origin)return;const data=event.data;if(data?.type==="authoring-probe"){if(!data||Object.keys(data).length!==6||Object.keys(coordination).some(key=>data[key]!==coordination[key])||typeof data.nonce!=="string"||!/^[a-f0-9]{64}$/.test(data.nonce))return;const clean=document.readyState==="complete"&&!document.querySelector('[data-zc-inline-editing], [data-zc-prose-editing], [data-zc-prose-chrome], [contenteditable]:not([contenteditable="false"])');parent.postMessage({...coordination,type:"authoring-settled",nonce:data.nonce,clean},origin);return;}if(data?.protocol!=="zudo-host-document-v1"||data.frameId!==frameId)return;if(data.type==="mode")selecting=data.selecting===true;if(data.type==="highlight"){document.querySelectorAll("[data-composer-selected]").forEach(el=>el.removeAttribute("data-composer-selected"));for(const el of document.querySelectorAll("[data-composer-target]"))if(el.getAttribute("data-composer-target")===data.renderedNodeId){el.setAttribute("data-composer-selected","");el.scrollIntoView({block:"nearest"});}}});document.addEventListener("click",event=>{if(!selecting)return;const el=event.target instanceof Element?event.target.closest("[data-composer-target]"):null;const target=targets.find(value=>value.renderedNodeId===el?.getAttribute("data-composer-target"));if(!target)return;event.preventDefault();event.stopImmediatePropagation();send("select",target);},true);const ready=()=>send("ready");if(document.readyState==="complete")ready();else addEventListener("load",ready,{once:true});})();<\/script><style>[data-composer-selected]{outline:2px solid Highlight;outline-offset:2px}</style>`;
+	})))};const canonicalHostRoute=${canonicalHostRoute.toString()};const origin=parent.location.origin;let selecting=true;const url=()=>location.pathname+location.search+location.hash;const send=(type,payload={})=>parent.postMessage({protocol:"zudo-host-document-v1",type,identity,frameId,...(navigation?{visitorUrl:url()}:{}),...payload},origin);addEventListener("message",event=>{if(event.source!==parent||event.origin!==origin)return;const data=event.data;if(data?.type==="authoring-probe"){if(!data||Object.keys(data).length!==6||Object.keys(coordination).some(key=>data[key]!==coordination[key])||typeof data.nonce!=="string"||!/^[a-f0-9]{64}$/.test(data.nonce))return;const clean=document.readyState==="complete"&&(!navigation||url().split("#")[0]===navigation.url.split("#")[0])&&!document.querySelector('[data-zc-inline-editing], [data-zc-prose-editing], [data-zc-prose-chrome], [contenteditable]:not([contenteditable="false"])');parent.postMessage({...coordination,type:"authoring-settled",nonce:data.nonce,clean},origin);return;}if(data?.protocol!=="zudo-host-document-v1"||data.frameId!==frameId)return;if(data.type==="mode")selecting=data.selecting===true;if(data.type==="highlight"){document.querySelectorAll("[data-composer-selected]").forEach(el=>el.removeAttribute("data-composer-selected"));for(const el of document.querySelectorAll("[data-composer-target]"))if(el.getAttribute("data-composer-target")===data.renderedNodeId){el.setAttribute("data-composer-selected","");el.scrollIntoView({block:"nearest"});}}});document.addEventListener("click",event=>{if(!selecting){const link=event.target instanceof Element?event.target.closest("a[href]"):null;if(!link||event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey||link.hasAttribute("download")||link.target&&link.target!=="_self")return;const destination=new URL(link.href,location.href);if(navigation&&destination.origin===origin&&canonicalHostRoute(destination.pathname,navigation.pathnames)!==null){if(destination.pathname===location.pathname&&destination.search===location.search&&(destination.hash||link.href.includes("#")))return;event.preventDefault();event.stopImmediatePropagation();send("navigate",{url:destination.pathname+destination.search+destination.hash});}else send("leaving");return;}const el=event.target instanceof Element?event.target.closest("[data-composer-target]"):null;const target=targets.find(value=>value.renderedNodeId===el?.getAttribute("data-composer-target"));if(!target)return;event.preventDefault();event.stopImmediatePropagation();send("select",{target});},true);if(navigation){let previousUrl=url();const changed=()=>{const next=url(),previous=previousUrl;if(next===previous)return;previousUrl=next;if(canonicalHostRoute(location.pathname,navigation.pathnames)!==null)send("navigate",{url:next,visitorUrl:previous});else send("leaving",{visitorUrl:previous});};for(const name of ["pushState","replaceState"]){const original=history[name];history[name]=function(...args){const result=Reflect.apply(original,this,args);changed();return result;};}addEventListener("beforeunload",()=>send("leaving"));addEventListener("hashchange",changed);addEventListener("popstate",changed);}const ready=()=>send("ready");if(document.readyState==="complete")ready();else addEventListener("load",ready,{once:true});})();<\/script><style>[data-composer-selected]{outline:2px solid Highlight;outline-offset:2px}</style>`;
+	let output = html.replace(/<\/body\s*>/i, `${bridge}</body>`);
+	if (navigation) {
+		const bootstrap = `<meta name="zudo-host-document-frame" content="${frameId}"><script>history.replaceState(null,"",${scriptJson(navigation.url)});<\/script>`;
+		output = /<head(?:\s[^>]*)?>/i.test(output) ? output.replace(/<head(?:\s[^>]*)?>/i, (match) => `${match}${bootstrap}`) : output.replace(/<html(?:\s[^>]*)?>/i, (match) => `${match}<head>${bootstrap}</head>`);
+	}
 	return {
 		identity,
 		frameId,
 		targets,
-		html: html.replace(/<\/body\s*>/i, `${bridge}</body>`)
+		...navigation ? { navigation } : {},
+		html: output
 	};
 }
 //#endregion

@@ -130,6 +130,7 @@ export interface ComposerPreviewBridgeOptions {
 
   onReady?: () => void;
   onNativeSelect?: (message: import("./protocol").NativeSelectMessage) => void;
+  onNativePageRendered?: (message: import("./protocol").NativePageRenderedMessage) => void;
   onRendered?: (message: import("./protocol").RenderedMessage) => void;
   onReviewAnnotated?: (message: import("./protocol").ReviewAnnotatedMessage) => void;
   onSelect?: (nodeId: string | null, revision: number) => void;
@@ -262,6 +263,9 @@ export function createComposerPreviewBridge(
       case "review-annotated":
         if (message.revision === retained?.revision && retained.snapshot?.review?.key === message.key) options.onReviewAnnotated?.(message);
         break;
+      case "native-page-rendered":
+        if (message.revision === retained?.revision && retained.snapshot?.nativePage && JSON.stringify(message.nativePage) === JSON.stringify(retained.snapshot.nativePage)) options.onNativePageRendered?.(message);
+        return;
       case "rendered":
         if (message.revision === retained?.revision && retained.snapshot?.nativeReview && sameNativeReview(message.nativeReview, retained.snapshot.nativeReview)) options.onRendered?.(message);
         return;
