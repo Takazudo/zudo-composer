@@ -542,7 +542,7 @@ const categoryTemplate = site.template({
 
 // ---------------------------------------------------------------- list items
 
-const card = (field: string, prop: string, extra: Partial<BindingInput> = {}): BindingInput => ({ field, nodeId: "card", prop, ...extra });
+const card = (field: string, prop: string, extra: Partial<Omit<Extract<BindingInput, { field: string }>, "field" | "nodeId" | "prop">> = {}): BindingInput => ({ field, nodeId: "card", prop, ...extra });
 const assetUrlProjection = { kind: "asset-url" as const };
 const assetAltProjection = { kind: "asset-text" as const, field: "alt" as const };
 
