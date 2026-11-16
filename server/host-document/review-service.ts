@@ -241,12 +241,12 @@ export function createHostReviewService(deps: HostReviewDependencies): HostRevie
       const options = await deps.options(), state = await captureHost({ config: options.composerConfig, pack: options.pack });
       const roots = workspaceDomainRoots(options.composerConfig.paths, input.workspaceId);
       const barriers = [join(options.composerConfig.paths.data, "workspaces"), roots.mappings, roots.sitemaps, options.composerConfig.paths.assets];
-      const run = async (index: number): Promise<import("../../src/features/assistant/host-review-types").HostReviewOutcome> => index < barriers.length ? withMutationBarrier(barriers[index]!, () => run(index + 1)) : state.stores.compositions.withSnapshotBarrier(async compositions => {
+      const withNextDomainBarrier = async (index: number): Promise<import("../../src/features/assistant/host-review-types").HostReviewOutcome> => index < barriers.length ? withMutationBarrier(barriers[index]!, () => withNextDomainBarrier(index + 1)) : state.stores.compositions.withSnapshotBarrier(async compositions => {
         await checkLocked(review, state as HostCapture, compositions);
         const result = await (await deps.content(input.workspaceId)).service.apply({ proposalId: operation.proposalId, renderedCandidate: operation.contentCandidateDigest });
         return { domain: "content", reviewId: review.id, ...result };
       });
-      return run(0);
+      return withNextDomainBarrier(0);
     }); },
     async undo(input) { return leased(async () => {
       const review = await load(input), operation = review.card.operation;
