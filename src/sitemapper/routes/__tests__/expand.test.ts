@@ -91,12 +91,20 @@ describe("Sitemapper route expansion", () => {
     expect(node.children).toEqual([]);
   });
 
-  it("honors collection query filters, pins, stable sort, dedupe, and limit while surfacing nonblocking diagnostics", async () => {
-    const query: MappingCollectionQuery = { publication: "include-drafts", conditions: [{ fieldId: "title", operator: "not-equals", value: "Title 2" }], sort: [{ fieldId: "title", direction: "desc" }], pins: [{ providerId: "content", modelId: "articles", recordId: "entry-0" }, { providerId: "content", modelId: "articles", recordId: "missing" }], limit: 2 };
+  it("honors collection query filters, pins, stable sort, dedupe, and limit", async () => {
+    const query: MappingCollectionQuery = { publication: "include-drafts", conditions: [{ fieldId: "title", operator: "not-equals", value: "Title 2" }], sort: [{ fieldId: "title", direction: "desc" }], pins: [{ providerId: "content", modelId: "articles", recordId: "entry-0" }, { providerId: "content", modelId: "articles", recordId: "entry-0" }], limit: 2 };
     const result = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ values: ["zero", "one", "two"], query }) });
     expect(result.routes.map((route) => route.entryId)).toEqual(["entry-0", "entry-1"]);
-    expect(result.diagnostics).toEqual([expect.objectContaining({ code: "collection-query-pin-not-found", severity: "nonblocking", entryId: "missing" })]);
+    expect(result.diagnostics).toEqual([]);
     expect(result.nodes.get("articles")).toMatchObject({ status: "ready", mapping: { entryCount: 2 } });
+  });
+
+  it("blocks collection routes on deleted pins rather than publishing replacement routes", async () => {
+    const query: MappingCollectionQuery = { ...defaultQuery, pins: [{ providerId: "content", modelId: "articles", recordId: "missing" }], limit: 1 };
+    const result = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ values: ["replacement"], query }) });
+    expect(result.routes).toEqual([]);
+    expect(result.diagnostics).toEqual([expect.objectContaining({ code: "collection-query-pin-not-found", severity: "blocking", entryId: "missing" })]);
+    expect(result.nodes.get("articles")?.status).toBe("blocked");
   });
 
   it("blocks collection routes on stale query fields", async () => {

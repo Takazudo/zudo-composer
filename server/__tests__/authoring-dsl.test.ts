@@ -87,6 +87,55 @@ function authorSite(compositionOrder?: "id") {
 }
 
 describe("defineSite", () => {
+  it("compiles public identity bindings and qualified pins without replacing deleted selections", async () => {
+    const site = defineSite({ id: "identity-site", name: "Identity", componentPack });
+    const courses = site.model({ name: "Courses", kind: "collection", fields: [{ key: "label", kind: "text" }, { key: "order", kind: "number" }] });
+    const consultation = site.entry(courses, { id: "consultation", values: { label: "Consultation", order: 2 } });
+    site.entry(courses, { id: "tuition", values: { label: "Tuition", order: 1 } });
+    const card = site.page({ name: "Course card", root: [node("t.card", {}, {}, "card")] });
+    const mapping = site.mapping({ name: "Pinned course", model: courses, composition: card,
+      mode: { kind: "collection", pins: [entryRef(consultation)], sort: [{ field: "order", direction: "asc" }], limit: 1 },
+      bindings: [{ field: "label", nodeId: "card", prop: "title" }, { source: { kind: "entry-id" }, nodeId: "card", prop: "href" }] });
+    const home = site.page({ name: "Home", root: [node("t.grid", {}, {}, "grid")] });
+    site.attach(mapping, { nodeId: "grid", slotId: "items" });
+    site.sitemap({ name: "Site", root: { title: "Home", page: home } });
+    const project = site.toSiteProject();
+    expect(validateSiteProject(project, { componentPack: componentPack.manifest }).ok).toBe(true);
+    expect(mapping.record.document.mode).toMatchObject({ query: { pins: [entryRef(consultation)] } });
+    expect(mapping.record.document.bindings[1]).not.toHaveProperty("sourceFieldId");
+    expect(mapping.record.document.bindings[1]).not.toHaveProperty("projection");
+    const root = await mkdtemp(join(tmpdir(), "authoring-identity-"));
+    try {
+      const projectPath = join(root, "site-project.json");
+      const compile = async () => {
+        await writeFile(projectPath, canonicalStringifyJson(project as never));
+        return compileStaticSite({ projectPath, pack: componentPack, assetsStoreRoot: join(root, "assets") });
+      };
+      const first = await compile();
+      expect(first.build.routes[0]!.composition.document.root[0]!.slots.items?.map((item) => item.props)).toMatchObject([{ title: "Consultation", href: "consultation" }]);
+      const saved = project.providers.content[0]!.entries.find((item) => item.id === consultation.id)!;
+      saved.values[courses.fieldId("label")] = "Renamed consultation";
+      saved.values[courses.fieldId("order")] = 99;
+      project.providers.content[0]!.entries.reverse();
+      const reordered = await compile();
+      expect(reordered.build.routes[0]!.composition.document.root[0]!.slots.items?.map((item) => item.props)).toMatchObject([{ title: "Renamed consultation", href: "consultation" }]);
+      project.providers.content[0]!.entries = project.providers.content[0]!.entries.filter((item) => item.id !== consultation.id);
+      await expect(compile()).rejects.toThrow();
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it("rejects mixed and extra metadata DSL keys without installing a Mapping", () => {
+    const site = defineSite({ id: "strict-identity", name: "Strict", componentPack });
+    const model = site.model({ name: "Courses", kind: "collection", fields: [{ key: "label", kind: "text" }] });
+    const page = site.page({ name: "Card", root: [node("t.card", {}, {}, "card")] });
+    const binding = { source: { kind: "entry-id" }, nodeId: "card", prop: "href" };
+    for (const extra of [{ sourceFieldId: "label" }, { extra: true }, { field: "label" }, { projection: { kind: "value" } }, { source: { kind: "entry-id", value: "forged" } }, { source: Object.assign([], { kind: "entry-id" }) }]) {
+      expect(() => site.mapping({ id: "same-id", name: "Invalid", model, composition: page, bindings: [{ ...binding, ...extra } as never] })).toThrow("exclusive metadata");
+    }
+    // The same ID remains available: none of the rejected calls installed state.
+    expect(site.mapping({ id: "same-id", name: "Valid", model, composition: page, bindings: [{ source: { kind: "entry-id" }, nodeId: "card", prop: "href" }] }).id).toBe("same-id");
+  });
+
   it("derives safe ids from names and field keys", () => {
     expect(slugify("Product card")).toBe("product-card");
     expect(slugify("Crème brûlée  #2")).toBe("creme-brulee-2");

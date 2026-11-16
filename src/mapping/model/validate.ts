@@ -58,11 +58,13 @@ export function validateMappingRecord(value: unknown): MappingValidation {
   const ids = new Set<string>();
   for (let index = 0; index < document.bindings.length; index += 1) {
     const binding = document.bindings[index]; const path = `document.bindings[${index}]`;
-    if (!isPlainObject(binding) || !exact(binding, BINDING_KEYS) || !isSafeRecordId(binding.id) || !isSafeRecordId(binding.sourceFieldId)) return fail("invalid-binding", "Binding identity is malformed.", path);
+    if (!isPlainObject(binding) || !isSafeRecordId(binding.id)) return fail("invalid-binding", "Binding identity is malformed.", path);
+    const identity = Object.hasOwn(binding, "source");
+    if (identity ? (!exact(binding, ["id", "source", "target", "transform"]) || !isPlainObject(binding.source) || !exact(binding.source, ["kind"]) || binding.source.kind !== "entry-id") : (!exact(binding, BINDING_KEYS) || !isSafeRecordId(binding.sourceFieldId))) return fail("invalid-binding", "Binding must select exactly one field or entry identity source.", path);
     if (ids.has(binding.id)) return fail("duplicate-binding-id", `Duplicate binding id "${binding.id}".`, `${path}.id`); ids.add(binding.id);
     if (!isPlainObject(binding.target) || !exact(binding.target, ["nodeId", "prop"]) || typeof binding.target.nodeId !== "string" || !binding.target.nodeId || typeof binding.target.prop !== "string" || !binding.target.prop) return fail("invalid-binding", "Binding target is malformed.", `${path}.target`);
-    if (!validateMappingSourceProjection(binding.projection)) return fail("invalid-binding", "Binding source projection is malformed.", `${path}.projection`);
-    if (!validateMappingTransform(binding.transform)) return fail("malformed-transform", "Binding transform is malformed.", `${path}.transform`);
+    if (!identity && !validateMappingSourceProjection(binding.projection)) return fail("invalid-binding", "Binding source projection is malformed.", `${path}.projection`);
+    if (!validateMappingTransform(binding.transform) || (identity && binding.transform.kind !== "identity")) return fail("malformed-transform", "Binding transform is malformed.", `${path}.transform`);
   }
   return { ok: true, record: value as unknown as MappingRecord };
 }

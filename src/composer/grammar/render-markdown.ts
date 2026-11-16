@@ -46,6 +46,8 @@ function renderUnavailableTemplate(template: GrammarUnavailableTemplate): string
 /** Render the grammar as Markdown, one section per template plus the openRoot note. */
 export function renderGrammarMarkdown(grammar: Grammar): string {
   const sections = [...grammar.templates.map(renderTemplate), ...grammar.unavailableTemplates.map(renderUnavailableTemplate)];
+  const identity = grammar.mappingSources.entryIdentity;
+  sections.push(["# Mapping entry identity", `- source: { kind: "${identity.source.kind}" }; target: scalar ${identity.targetKind}; transform: ${identity.transform.kind}.`, "- Read-only selected Content record metadata, not a writable field. Do not shadow it in Composition props. Provider and model come from the Mapping; record ID comes from the selected Entry.", "- Field bindings retain sourceFieldId and projection. Entry identity bindings omit both. Mixed sources are rejected."].join("\n"));
   sections.push(["# Pages without a template", "- accepts: any component in the pack."].join("\n"));
   return sections.join("\n\n");
 }

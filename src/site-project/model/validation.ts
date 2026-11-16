@@ -353,7 +353,7 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
       const nodeIds = composition ? new Set(compositionNodePaths(composition.document.root, "").keys()) : undefined;
       mapping.document.bindings.forEach((binding, bindingIndex) => {
         const bindingPath = `${path}.bindings[${bindingIndex}]`;
-        if (model && !model.document.fields.some((field) => field.id === binding.sourceFieldId)) {
+        if (!binding.source && model && !model.document.fields.some((field) => field.id === binding.sourceFieldId)) {
           diagnostic(diagnostics, "dangling-mapping-field", `${bindingPath}.sourceFieldId`, `Mapping source field ${JSON.stringify(binding.sourceFieldId)} does not exist in Content model ${JSON.stringify(model.id)}.`);
         }
         if (nodeIds && !nodeIds.has(binding.target.nodeId)) {

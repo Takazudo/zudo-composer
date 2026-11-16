@@ -157,6 +157,7 @@ describe("buildGrammar", () => {
     const grammar = buildGrammar({ manifest, templates: [categoryPageTemplate()] });
     expect(grammar.pack).toEqual({ id: "@fixture/demo-pack", version: "1.2.3" });
     expect(grammar.openRoot).toEqual({ accepts: "any" });
+    expect(grammar.mappingSources.entryIdentity).toEqual({ source: { kind: "entry-id" }, targetKind: "text", transform: { kind: "identity" }, readOnly: true });
   });
 
   it("ignores Compositions that are not published Global templates", () => {
@@ -242,6 +243,13 @@ describe("buildGrammar", () => {
   });
 });
 
+const identityGrammarMarkdown = [
+  '# Mapping entry identity',
+  '- source: { kind: "entry-id" }; target: scalar text; transform: identity.',
+  '- Read-only selected Content record metadata, not a writable field. Do not shadow it in Composition props. Provider and model come from the Mapping; record ID comes from the selected Entry.',
+  '- Field bindings retain sourceFieldId and projection. Entry identity bindings omit both. Mixed sources are rejected.',
+].join("\n");
+
 describe("renderGrammarMarkdown", () => {
   it("renders the restricted region with bounds, nested children and the rejection line", () => {
     const grammar = buildGrammar({ manifest, templates: [categoryPageTemplate()] });
@@ -285,14 +293,14 @@ describe("renderGrammarMarkdown", () => {
   it("adds an unavailable note for each skipped template", () => {
     const grammar = buildGrammar({ manifest, templates: [staleTemplate()] });
     expect(renderGrammarMarkdown(grammar)).toBe(
-      '# Stale page (template stale-page)\n- unavailable: outlet target "missing" was not found.\n\n# Pages without a template\n- accepts: any component in the pack.',
+      '# Stale page (template stale-page)\n- unavailable: outlet target "missing" was not found.\n\n' + identityGrammarMarkdown + '\n\n# Pages without a template\n- accepts: any component in the pack.',
     );
   });
 
   it("always closes with the openRoot note for pages bound to no template", () => {
     const grammar = buildGrammar({ manifest, templates: [] });
     expect(renderGrammarMarkdown(grammar)).toBe(
-      "# Pages without a template\n- accepts: any component in the pack.",
+      identityGrammarMarkdown + "\n\n# Pages without a template\n- accepts: any component in the pack.",
     );
   });
 });

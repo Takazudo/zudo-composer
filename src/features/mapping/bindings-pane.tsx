@@ -48,7 +48,7 @@ export interface BindingsPaneProps {
   notice?: JSX.Element | null;
   onBind: (sourceFieldId: string, target: MappingTarget) => void;
   onRebind: (bindingId: string, sourceFieldId: string) => void;
-  onProjection: (bindingId: string, projection: MappingBinding["projection"]) => void;
+  onProjection: (bindingId: string, projection: NonNullable<MappingBinding["projection"]>) => void;
   onTransform: (bindingId: string, transform: MappingTransform) => void;
   onMove: (bindingId: string, direction: -1 | 1) => void;
   onRemove: (bindingId: string) => void;
@@ -62,19 +62,19 @@ const STATUS: Record<MappingBindingRow["status"], { label: string; tone: ChipTon
 
 /** A name for the row in menus and labels, even when neither end resolves. */
 function rowName(row: MappingBindingRow): string {
-  const source = row.source?.label ?? row.binding.sourceFieldId;
+  const source = row.source?.label ?? (row.binding.source ? "Entry identity" : row.binding.sourceFieldId);
   const target = row.target ? targetLabel(row.target) : `${row.binding.target.nodeId}.${row.binding.target.prop}`;
   return `${source} → ${target}`;
 }
 
 function SourceCell({ row }: { row: MappingBindingRow }): JSX.Element {
-  const Icon = row.source ? fieldIcon(row.source.kind) : ErrorIcon;
+  const Icon = row.source ? fieldIcon(row.source.kind) : row.binding.source ? fieldIcon("text") : ErrorIcon;
   return (
     <span class="cms-mapping-cell">
       <Icon size="sm" class="cms-mapping-cell__glyph" />
       <span class="cms-mapping-cell__text">
-        <strong>{row.source?.label ?? "Missing field"}</strong>
-        <span class="cms-mapping-cell__meta">{row.source?.key ?? row.binding.sourceFieldId}</span>
+        <strong>{row.source?.label ?? (row.binding.source ? "Entry identity" : "Missing field")}</strong>
+        <span class="cms-mapping-cell__meta">{row.source?.key ?? (row.binding.source ? "Read-only record metadata" : row.binding.sourceFieldId)}</span>
       </span>
     </span>
   );
@@ -113,7 +113,7 @@ export function BindingsPane({
 
   /** The bind menu for one target, shared by an unbound chip and a Fix action. */
   const sourceGroups = (target: NonNullable<MappingBindingRow["target"]>) =>
-    compatibleSourceGroups(target, fields).map((group) => ({
+    [...(target.kind === "text" ? [{ id: "entry-metadata", label: "Read-only metadata", items: [{ id: "entry:identity", label: "Entry identity", detail: "Selected record ID · text" }] }] : []), ...compatibleSourceGroups(target, fields).map((group) => ({
       id: group.id,
       label: group.label,
       items: group.items.map((field) => ({
@@ -122,7 +122,7 @@ export function BindingsPane({
         detail: `${field.key} · ${field.kind}`,
         icon: fieldIcon(field.kind),
       })),
-    }));
+    }))];
 
   const columns: readonly DataTableColumn<MappingBindingRow>[] = [
     { key: "source", header: "Source", variant: "name", cell: (row) => <SourceCell row={row} /> },
@@ -135,7 +135,7 @@ export function BindingsPane({
     {
       key: "transform",
       header: "Transform",
-      cell: (row) => (
+      cell: (row) => row.binding.source ? <span>Entry identity · unchanged</span> : (
         <span class="cms-mapping-transform">
           <Select
             size="sm"

@@ -47,13 +47,32 @@ export type MappingTransform =
   /** Add a configured label/decorator before string-producing Content. */
   | { kind: "prefix"; prefix: string };
 
-export interface MappingBinding {
+export interface MappingFieldBinding {
+  source?: never;
   id: RecordId;
   sourceFieldId: RecordId;
   projection: MappingSourceProjection;
   target: MappingTarget;
   transform: MappingTransform;
 }
+
+/** Shared evaluator/grammar contract: record metadata is never a writable Content field. */
+export const MAPPING_ENTRY_IDENTITY_CAPABILITY = {
+  source: { kind: "entry-id" },
+  targetKind: "text",
+  transform: { kind: "identity" },
+  readOnly: true,
+} as const;
+
+export interface MappingEntryIdentityBinding {
+  id: RecordId;
+  source: { kind: "entry-id" };
+  sourceFieldId?: never;
+  projection?: never;
+  target: MappingTarget;
+  transform: { kind: "identity" };
+}
+export type MappingBinding = MappingFieldBinding | MappingEntryIdentityBinding;
 
 export interface MappingDocument {
   schemaVersion: typeof MAPPING_SCHEMA_VERSION;
@@ -173,11 +192,9 @@ export interface MappingEntryDiagnostic {
   target?: MappingTarget;
 }
 
-export interface ResolvedMappingBinding {
-  binding: MappingBinding;
-  source: ContentFieldDefinition;
-  target: MappingTargetDescriptor;
-}
+export type ResolvedMappingBinding =
+  | { binding: MappingFieldBinding; source: ContentFieldDefinition; target: MappingTargetDescriptor }
+  | { binding: MappingEntryIdentityBinding; source: null; target: MappingTargetDescriptor };
 
 export interface MappingDefinitionResolution {
   status: "ready" | "blocked";
@@ -257,11 +274,14 @@ export interface MappingSeedOptions {
   name: string;
   contentModel: ContentModelRef;
   composition: CompositionRecordRef;
-  bindings?: readonly (Omit<MappingBinding, "projection"> & { projection?: MappingSourceProjection })[];
+  bindings?: readonly ((Omit<MappingFieldBinding, "projection"> & { projection?: MappingSourceProjection }) | MappingEntryIdentityBinding)[];
   mode?: MappingMode;
   createdAt: string;
   updatedAt?: string;
 }
 
 export interface AppliedMappingValue { target: MappingTarget; value: JsonValue }
-export interface AppliedMappingBinding extends AppliedMappingValue { bindingId: RecordId; sourceFieldId: RecordId }
+export type AppliedMappingBinding = AppliedMappingValue & { bindingId: RecordId } & (
+  { sourceFieldId: RecordId; source?: never } |
+  { sourceFieldId?: never; source: { kind: "entry-id"; providerId: string; modelId: RecordId; recordId: RecordId } }
+);

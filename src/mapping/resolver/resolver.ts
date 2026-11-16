@@ -1,11 +1,11 @@
 import type { ComponentCatalog, CompositionNode } from "../../composer/model/types";
-import { cloneJson } from "../../shared";
+import { cloneJson, isSafeRecordId } from "../../shared";
 import type { ContentCatalog } from "../../content/catalog";
 import type { ContentEntryRecord } from "../../content/model";
 import { isValueValidForField } from "../../content/model";
 import type { CompositionCatalog } from "../catalog";
 import type { AppliedMappingBinding, MappingDefinitionDiagnostic, MappingDefinitionResolution, MappingEntryDiagnostic, MappingEvaluationResult, MappingRecord, ResolvedMappingBinding } from "../model";
-import { validateMappingTransform } from "../model";
+import { MAPPING_ENTRY_IDENTITY_CAPABILITY, validateMappingTransform } from "../model";
 import { applyMappingTransform, isCanonicalDate, isMappingCompatible } from "./compatibility";
 import { projectContentValue, resolveMappingProjectionDefinition, type MappingRouteProjectionResolver } from "./projections";
 import { discoverMappingTargets } from "./targets";
@@ -22,13 +22,19 @@ export async function resolveMappingDefinition(mapping: MappingRecord, catalogs:
   for (const issue of discovery.diagnostics) diagnostics.push({ scope: "definition", severity: "blocking", code: issue.code, message: issue.message, target: { nodeId: issue.nodeId, prop: "" } });
   const sourceById = new Map(content.record.document.fields.map((field) => [field.id, field])); const targetByKey = new Map(discovery.targets.map((target) => [targetKey(target.target), target])); const structuredTargetByKey = new Map(discovery.unsupportedStructuredTargets.map((target) => [targetKey(target.target), target])); const seenTargets = new Set<string>(); const bindings: ResolvedMappingBinding[] = [];
   for (const binding of mapping.document.bindings) {
-    const source = sourceById.get(binding.sourceFieldId); const key = targetKey(binding.target); const target = targetByKey.get(key);
-    if (!source) diagnostics.push({ scope: "definition", severity: "blocking", code: "source-field-missing", bindingId: binding.id, sourceFieldId: binding.sourceFieldId, message: `Source field "${binding.sourceFieldId}" no longer exists.` });
+    const source = binding.source ? undefined : sourceById.get(binding.sourceFieldId); const key = targetKey(binding.target); const target = targetByKey.get(key);
+    if (!binding.source && !source) diagnostics.push({ scope: "definition", severity: "blocking", code: "source-field-missing", bindingId: binding.id, sourceFieldId: binding.sourceFieldId, message: `Source field "${binding.sourceFieldId}" no longer exists.` });
     if (seenTargets.has(key)) diagnostics.push({ scope: "definition", severity: "blocking", code: "duplicate-target", bindingId: binding.id, target: binding.target, message: `Target "${binding.target.nodeId}.${binding.target.prop}" is bound more than once.` }); else seenTargets.add(key);
     if (!target) {
       const nodeExists = findNode(composition.record.document.root, binding.target.nodeId);
       const structuredTarget = structuredTargetByKey.get(key);
       diagnostics.push({ scope: "definition", severity: "blocking", code: structuredTarget ? "structured-target-unsupported" : nodeExists ? "target-field-missing" : "target-node-missing", bindingId: binding.id, target: binding.target, message: structuredTarget?.message ?? (nodeExists ? `Target field "${binding.target.prop}" no longer exists on node "${binding.target.nodeId}".` : `Target node "${binding.target.nodeId}" no longer exists.`) });
+    }
+    if (binding.source) {
+      if (binding.transform.kind !== MAPPING_ENTRY_IDENTITY_CAPABILITY.transform.kind) diagnostics.push({ scope: "definition", severity: "blocking", code: "invalid-transform-config", bindingId: binding.id, message: "Entry identity supports only the identity transform." });
+      else if (target && target.kind !== MAPPING_ENTRY_IDENTITY_CAPABILITY.targetKind) diagnostics.push({ scope: "definition", severity: "blocking", code: "incompatible-binding", bindingId: binding.id, target: binding.target, message: "Entry identity supports only scalar text targets." });
+      else if (target && !seenTargets.has(`accepted:${key}`)) { bindings.push({ binding, source: null, target }); seenTargets.add(`accepted:${key}`); }
+      continue;
     }
     const projection = source ? resolveMappingProjectionDefinition(source, binding.projection) : undefined;
     if (projection?.status === "invalid") diagnostics.push({ scope: "definition", severity: "blocking", code: "source-projection-invalid", bindingId: binding.id, sourceFieldId: source?.id, message: projection.message });
@@ -60,6 +66,16 @@ export function evaluateResolvedMapping(definition: MappingDefinitionResolution,
   const entryDiagnostics: MappingEntryDiagnostic[] = []; const appliedBindings: AppliedMappingBinding[] = [];
   if (!definition.contentModel || entry.modelId !== definition.contentModel.id) return { status: "blocked", document, definitionDiagnostics: definition.diagnostics, entryDiagnostics: [{ scope: "entry", severity: "blocking", code: "entry-model-mismatch", entryId: entry.id, message: `Entry "${entry.id}" belongs to Content model "${entry.modelId}", not "${definition.contentModel?.id ?? "unresolved"}".` }], appliedBindings, appliedBindingCount: 0, unchangedStaticCount: mapping.document.bindings.length };
   for (const resolved of definition.bindings) {
+    if (!resolved.source) {
+      const { binding, target } = resolved;
+      if (!isSafeRecordId(entry.id)) { entryDiagnostics.push({ scope: "entry", severity: "blocking", code: "invalid-source-value", entryId: entry.id, bindingId: binding.id, target: binding.target, message: "Selected Entry identity must be a safe record ID." }); continue; }
+      const node = findNode(document.root, target.target.nodeId);
+      if (node) {
+        node.props[target.target.prop] = entry.id;
+        appliedBindings.push({ bindingId: binding.id, source: { kind: "entry-id", providerId: mapping.document.contentModel.providerId, modelId: entry.modelId, recordId: entry.id }, target: { ...target.target }, value: entry.id });
+      }
+      continue;
+    }
     const { binding, source, target } = resolved; const value = entry.values[source.id];
     if (value === undefined || (typeof value === "string" && value.trim().length === 0)) { const blocking = source.required; entryDiagnostics.push({ scope: "entry", severity: blocking ? "blocking" : "nonblocking", code: blocking ? "required-value-missing" : "optional-value-missing", entryId: entry.id, bindingId: binding.id, sourceFieldId: source.id, target: binding.target, message: `${blocking ? "Required" : "Optional"} source field "${source.label}" has no value; the static target value is unchanged.` }); continue; }
     if (source.kind === "date" && typeof value === "string" && !isCanonicalDate(value)) { entryDiagnostics.push({ scope: "entry", severity: "blocking", code: "invalid-canonical-date", entryId: entry.id, bindingId: binding.id, sourceFieldId: source.id, target: binding.target, message: `Source date for "${source.label}" is not canonical YYYY-MM-DD.` }); continue; }

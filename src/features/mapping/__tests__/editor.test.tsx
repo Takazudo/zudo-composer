@@ -38,6 +38,21 @@ function bindingRows(container: Element): HTMLElement[] {
 }
 
 describe("Mapping editor", () => {
+  it("creates entry metadata bindings through the UI and displays a read-only identity source", async () => {
+    const { container, workspace } = await editor([]);
+    fireEvent.click(screen.getByRole("button", { name: "Bind Entry identity" }));
+    const menu = await screen.findByRole("menu", { name: "Bind Entry identity to…" });
+    const first = within(menu).getAllByRole("menuitem")[0]!;
+    fireEvent.click(first);
+    await waitFor(() => expect(bindingRows(container)).toHaveLength(1));
+    const row = bindingRows(container)[0]!;
+    expect(within(row).getByText("Entry identity")).toBeInTheDocument();
+    expect(within(row).getByText("Read-only record metadata")).toBeInTheDocument();
+    expect(within(row).getByText("Ready")).toBeInTheDocument();
+    expect(within(row).queryByRole("combobox")).toBeNull();
+    expect(workspace.controller.state.mapping?.document.bindings[0]?.source).toEqual({ kind: "entry-id" });
+  });
+
   it("gives each binding one table row, not three stacked card regions", async () => {
     const { container } = await editor();
 

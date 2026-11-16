@@ -10,6 +10,8 @@ import {
   type CompositionCatalog,
   type CompositionCatalogEntry,
   type MappingBinding,
+  type MappingFieldBinding,
+  type MappingSourceProjection,
   type MappingCollectionCondition,
   type MappingCollectionEvaluation,
   type MappingCollectionPin,
@@ -332,14 +334,30 @@ export class MappingEditorController {
     await this.refreshResolution();
   }
 
-  async updateBinding(bindingId: string, patch: Partial<Pick<MappingBinding, "sourceFieldId" | "target" | "transform" | "projection">>): Promise<void> {
-    this.edit((record) => ({ ...record, document: { ...record.document, bindings: record.document.bindings.map((binding) => binding.id === bindingId ? { ...binding, ...patch, ...(patch.target ? { target: { ...patch.target } } : {}), ...(patch.transform ? { transform: { ...patch.transform } } : {}) } : binding) } }));
+  async bindEntryIdentity(target: MappingTarget, bindingId?: string): Promise<void> {
+    const descriptor = this.current.definition?.targets.find((item) => item.target.nodeId === target.nodeId && item.target.prop === target.prop);
+    if (!this.current.definition?.contentModel || descriptor?.kind !== "text") throw new Error("Entry identity supports only scalar text targets on a resolved Content model.");
+    const binding: MappingBinding = { id: bindingId ?? this.idFactory("binding"), source: { kind: "entry-id" }, target: { ...target }, transform: { kind: "identity" } };
+    if (bindingId && !this.requireMapping().document.bindings.some((item) => item.id === bindingId)) throw new Error("Binding no longer exists.");
+    this.edit((record) => ({ ...record, document: { ...record.document, bindings: bindingId ? record.document.bindings.map((item) => item.id === bindingId ? binding : item) : [...record.document.bindings, binding] } }));
     await this.refreshResolution();
   }
 
-  async updateBindingProjection(bindingId: string, projection: MappingBinding["projection"]): Promise<void> {
-    this.edit((record) => ({ ...record, document: { ...record.document, bindings: record.document.bindings.map((binding) => binding.id === bindingId ? { ...binding, projection: cloneJson(projection) } : binding) } }));
+  async updateBinding(bindingId: string, patch: Partial<Pick<MappingFieldBinding, "sourceFieldId" | "target" | "transform" | "projection">>): Promise<void> {
+    this.edit((record) => ({ ...record, document: { ...record.document, bindings: record.document.bindings.map((binding): MappingBinding => {
+      if (binding.id !== bindingId) return binding;
+      if (binding.source) {
+        if (patch.sourceFieldId) return { id: binding.id, sourceFieldId: patch.sourceFieldId, projection: patch.projection ?? { kind: "value" }, target: { ...(patch.target ?? binding.target) }, transform: patch.transform ?? { kind: "identity" } };
+        if (patch.projection || (patch.transform && patch.transform.kind !== "identity")) throw new Error("Entry identity does not support field projections or transforms.");
+        return { ...binding, target: { ...(patch.target ?? binding.target) } };
+      }
+      return { ...binding, ...patch, ...(patch.target ? { target: { ...patch.target } } : {}), ...(patch.transform ? { transform: { ...patch.transform } } : {}) };
+    }) } }));
     await this.refreshResolution();
+  }
+
+  async updateBindingProjection(bindingId: string, projection: MappingSourceProjection): Promise<void> {
+    await this.updateBinding(bindingId, { projection: cloneJson(projection) });
   }
 
   async moveBinding(bindingId: string, direction: -1 | 1): Promise<void> {
