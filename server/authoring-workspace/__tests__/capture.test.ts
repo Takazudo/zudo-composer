@@ -101,11 +101,12 @@ it("attests actual renderer source bytes and compiler/contract identity through 
   const options = await fixture(); const root = options.composerConfig.workspaceRoot;
   await mkdir(join(root, "styles"), { recursive: true });
   await writeFile(options.composerConfig.paths.styles, "body { color: red; }");
-  await writeFile(join(root, "package.json"), JSON.stringify({ name: "capture-proof", type: "module", exports: { "./components": "./components.mjs", "./renderer": "./renderer.mjs" } }));
+  await writeFile(join(root, "package.json"), JSON.stringify({ name: "capture-proof", type: "module", exports: { "./components": "./components.mjs", "./renderer": "./renderer.mjs", "./jsx-runtime": "./jsx-runtime.mjs", "./jsx-dev-runtime": "./jsx-runtime.mjs" } }));
   await writeFile(join(root, "components.mjs"), "export const Paragraph = props => props.text;\n");
   await writeFile(join(root, "renderer.mjs"), "export const renderDocument = () => '<body>First</body>';\n");
   await writeFile(options.composerConfig.configPath, "export default {};\n");
-  const composerConfig = { ...options.composerConfig, hostDocument: { module: "capture-proof/renderer", rendererId: "proof", rendererVersion: "1" } };
+  await writeFile(join(root, "jsx-runtime.mjs"), "export const jsx = () => null;\n");
+  const composerConfig = { ...options.composerConfig, hostDocument: { module: "capture-proof/renderer", jsxImportSource: "capture-proof", rendererId: "proof", rendererVersion: "1" } };
   const identity = await resolveAuthoringPackIdentity({ composerConfig, pack: options.pack, packIdentity: resolveComponentPack(root, "capture-proof/components") });
   expect(identity.compiler).toMatch(/^site-project-release\/2:[a-f0-9]{64}$/);
   expect(identity.contractDigest).toMatch(/^[a-f0-9]{64}$/);
@@ -115,4 +116,6 @@ it("attests actual renderer source bytes and compiler/contract identity through 
   expect(after.digest).not.toBe(before.digest);
   expect(after.id).toBe(before.id);
   expect(after.version).toBe(before.version);
+  await writeFile(join(root, "jsx-runtime.mjs"), "export const jsx = () => 'changed runtime';\n");
+  expect((await resolveAuthoringRendererIdentity({ composerConfig })).digest).not.toBe(after.digest);
 });

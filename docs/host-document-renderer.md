@@ -63,3 +63,7 @@ target; callers cannot supply arbitrary placement coordinates. The inspector
 names the placement owner separately from the shared source. Nested shared
 children have no such local placement, and shared Content, Mapping templates and
 shared Composition bytes retain their existing mutation guards.
+
+### Host JSX runtime
+
+Set `hostDocument.jsxImportSource` to the host framework’s public JSX runtime prefix when its renderer imports TSX (for example, `@takazudo/zfb/zudo-react`). The default is `preact`. Composer evaluates this trusted server renderer in a separate module graph with the declared runtime, so the editor’s Preact preset and previously loaded component pack cannot rewrite or cache its component output. The configured runtime is covered by the attested configuration file in renderer identity. This does not change Composer’s own UI or component-pack runtime.

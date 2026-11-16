@@ -16,7 +16,8 @@ export async function resolveAuthoringPackIdentity(options: { composerConfig: Re
 export async function resolveAuthoringRendererIdentity({ composerConfig: config }: { composerConfig: ResolvedComposerConfig }): Promise<AuthoringRendererIdentity> {
   if (!config.hostDocument) throw new Error("Renderer identity requires a configured hostDocument module.");
   const resolved = resolveComponentPack(config.workspaceRoot, config.hostDocument.module);
-  const graph = await collectPackSourceGraph({ hostRoot: config.workspaceRoot, entryPath: resolved.entryPath, sourceModules: [], extraRoots: [config.paths.styles, config.configPath], attestExternalFiles: true });
+  const jsxRuntimes = ["jsx-runtime", "jsx-dev-runtime"].map(runtime => resolveComponentPack(config.workspaceRoot, `${config.hostDocument!.jsxImportSource ?? "preact"}/${runtime}`).entryPath);
+  const graph = await collectPackSourceGraph({ hostRoot: config.workspaceRoot, entryPath: resolved.entryPath, sourceModules: [], extraRoots: [config.paths.styles, config.configPath, ...jsxRuntimes], attestExternalFiles: true });
   enforceComputedLoadBoundary(graph);
   const files = await Promise.all((graph.attestedFiles ?? []).map(async path => {
     const before = await lstat(path); const bytes = await readFile(path); const after = await lstat(path);

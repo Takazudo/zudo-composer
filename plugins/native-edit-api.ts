@@ -7,6 +7,8 @@ import { trustedReleaseRequest } from "./release-api-plugin";
 import { appModuleId } from "./roots.mjs";
 import { readBody, isSameOriginDevRequest } from "./file-provider-http.mjs";
 import { createBrowserCoordinator } from "../server/edit/browser-coordinator.mjs";
+import { createModuleEvaluator } from "../server/module-evaluator.mjs";
+import { resolveComponentPack } from "./component-pack.mjs";
 import { loadHostContext } from "../server/host-context.mjs";
 import { editDigest, createEditingService, type EditPlan, type EditReceipt } from "../server/edit/service";
 
@@ -43,7 +45,7 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
   const hostDocument = context.composerConfig.hostDocument;
   const hostCapture = hostDocument ? await server.ssrLoadModule(appModuleId("server/authoring-workspace/capture.ts")) : null;
   const hostRendererIdentity = hostCapture ? await hostCapture.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig }) : null;
-  const hostRenderer = hostDocument ? await server.ssrLoadModule(hostDocument.module) : null;
+  const hostRenderer = hostDocument ? await createModuleEvaluator(context.composerConfig.workspaceRoot, { jsxImportSource: hostDocument.jsxImportSource })(resolveComponentPack(context.composerConfig.workspaceRoot, hostDocument.module).entryPath) : null;
   const assertDocumentSourcesCurrent = async () => {
     await service.initializeSourceEpoch();
     if (!hostCapture || !hostRendererIdentity || editDigest(await hostCapture.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig })) !== editDigest(hostRendererIdentity)) throw Object.assign(new Error("Host renderer source changed. Restart authoring before preview or save."), { code: "stale-plan" });

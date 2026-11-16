@@ -1,3 +1,5 @@
+import { runInNewContext } from "node:vm";
+import { authoringProbeMessage } from "../../../src/features/composer/preview/protocol";
 import { describe, expect, it } from "vitest";
 import { hostDocumentTargets, renderHostDocument } from "../render";
 import type { SiteCompiledRoute } from "../../../src/site-project/compiler/types";
@@ -23,4 +25,25 @@ describe("host document renderer", () => {
     const result = await renderHostDocument({ renderDocument: () => "<html><body></body></html>" }, route, { ...identity, rendererId: "</script><script>bad" });
     expect(result.html).not.toContain("</script><script>bad");
   });
+});
+
+it("answers only exact coordination probes after load and refuses inline drafts", async () => {
+  const preview = await renderHostDocument({ renderDocument: () => "<html><body></body></html>" }, route, identity);
+  const script = preview.html.match(/<script>([\s\S]*?)<\/script>/)![1]!;
+  const posted: unknown[] = [];
+  const parent = { location: { origin: "http://localhost:4000" }, postMessage: (value: unknown) => posted.push(value) };
+  const listeners: Record<string, (event: unknown) => void> = {};
+  let dirty = false;
+  const document = { readyState: "loading", querySelector: () => dirty ? {} : null, addEventListener() {} };
+  runInNewContext(script, { parent, document, addEventListener: (name: string, callback: (event: unknown) => void) => { listeners[name] = callback; } });
+  const probe = authoringProbeMessage(identity, "a".repeat(64));
+  const send = (data: unknown, source: unknown = parent, origin = parent.location.origin) => listeners.message!({ source, origin, data });
+  send(probe); expect(posted.at(-1)).toMatchObject({ type: "authoring-settled", clean: false, nonce: "a".repeat(64) });
+  document.readyState = "complete";
+  send(probe); expect(posted.at(-1)).toMatchObject({ type: "authoring-settled", clean: true, packId: identity.packId });
+  dirty = true; send(probe); expect(posted.at(-1)).toMatchObject({ clean: false });
+  const count = posted.length;
+  send(probe, {}); send(probe, parent, "https://foreign.example");
+  send({ ...probe, packVersion: "other" }); send({ ...probe, extra: true }); send({ ...probe, nonce: "bad" });
+  expect(posted).toHaveLength(count);
 });

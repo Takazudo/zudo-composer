@@ -2,6 +2,7 @@
 import { E as ASSET_PROVIDERS, _ as createComponentCatalog, a as resolveAuthoringRendererIdentity, b as createFilesystemAssetStore, c as createFilesystemSitemapStore, d as createFilesystemCompositionStore, f as planLinkedJsxModules, g as validateSiteProject, h as acquireAuthoringLease, i as resolveAuthoringPackIdentity, l as createFilesystemMappingStore, m as workspaceDomainRoots, p as createFilesystemWorkspaceRegistry, r as isAuthoringWorkspaceSnapshotCurrent, t as captureAuthoringWorkspace, u as createFilesystemContentStore, v as canonicalStringifyJson, w as assetMimeTypeForExtension, x as assetAuthoringUrl } from "./generated/capture-BDf7cUv9.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { z } from "zod";
 //#region src/site-project/authoring.ts
 var COMPOSITION_PROVIDER_ID = "files";
 var CONTENT_PROVIDER_ID = "content-filesystem";
@@ -539,6 +540,19 @@ async function initialize(options) {
 	return registry.complete(workspaceId);
 }
 //#endregion
+//#region src/features/composer/preview/wire.ts
+/** Envelope discriminator — keeps Composer traffic off other message buses. */
+var COMPOSER_PREVIEW_CHANNEL = "composer-preview";
+z.literal(COMPOSER_PREVIEW_CHANNEL), z.literal(2), z.string().min(1), z.string().min(1);
+function previewEnvelopeValue(pack) {
+	return {
+		channel: COMPOSER_PREVIEW_CHANNEL,
+		v: 2,
+		packId: pack.packId,
+		packVersion: pack.packVersion
+	};
+}
+//#endregion
 //#region server/host-document/render.ts
 function hostRoute(route) {
 	const rendered = structuredClone(route);
@@ -609,12 +623,12 @@ async function renderHostDocument(renderer, route, identity, project) {
 	});
 	if (typeof html !== "string" || !/<\/body\s*>/i.test(html)) throw new Error("Host renderer must return a complete HTML document with a body.");
 	const frameId = randomUUID();
-	const bridge = `<script>(()=>{const identity=${scriptJson(identity)},frameId=${scriptJson(frameId)},targets=${scriptJson(targets.map(({ renderedNodeId, providerId, recordId, nodeId }) => ({
+	const bridge = `<script>(()=>{const coordination=${scriptJson(previewEnvelopeValue(identity))},identity=${scriptJson(identity)},frameId=${scriptJson(frameId)},targets=${scriptJson(targets.map(({ renderedNodeId, providerId, recordId, nodeId }) => ({
 		renderedNodeId,
 		providerId,
 		recordId,
 		nodeId
-	})))};const origin=parent.location.origin;let selecting=true;const send=(type,target)=>parent.postMessage({protocol:"zudo-host-document-v1",type,identity,frameId,...(target?{target}:{})},origin);addEventListener("message",event=>{if(event.source!==parent||event.origin!==origin)return;const data=event.data;if(data?.protocol!=="zudo-host-document-v1"||data.frameId!==frameId)return;if(data.type==="mode")selecting=data.selecting===true;if(data.type==="highlight"){document.querySelectorAll("[data-composer-selected]").forEach(el=>el.removeAttribute("data-composer-selected"));for(const el of document.querySelectorAll("[data-composer-target]"))if(el.getAttribute("data-composer-target")===data.renderedNodeId){el.setAttribute("data-composer-selected","");el.scrollIntoView({block:"nearest"});}}});document.addEventListener("click",event=>{if(!selecting)return;const el=event.target instanceof Element?event.target.closest("[data-composer-target]"):null;const target=targets.find(value=>value.renderedNodeId===el?.getAttribute("data-composer-target"));if(!target)return;event.preventDefault();event.stopImmediatePropagation();send("select",target);},true);const ready=()=>send("ready");if(document.readyState==="complete")ready();else addEventListener("load",ready,{once:true});})();<\/script><style>[data-composer-selected]{outline:2px solid Highlight;outline-offset:2px}</style>`;
+	})))};const origin=parent.location.origin;let selecting=true;const send=(type,target)=>parent.postMessage({protocol:"zudo-host-document-v1",type,identity,frameId,...(target?{target}:{})},origin);addEventListener("message",event=>{if(event.source!==parent||event.origin!==origin)return;const data=event.data;if(data?.type==="authoring-probe"){if(!data||Object.keys(data).length!==6||Object.keys(coordination).some(key=>data[key]!==coordination[key])||typeof data.nonce!=="string"||!/^[a-f0-9]{64}$/.test(data.nonce))return;const clean=document.readyState==="complete"&&!document.querySelector('[data-zc-inline-editing], [data-zc-prose-editing], [data-zc-prose-chrome], [contenteditable]:not([contenteditable="false"])');parent.postMessage({...coordination,type:"authoring-settled",nonce:data.nonce,clean},origin);return;}if(data?.protocol!=="zudo-host-document-v1"||data.frameId!==frameId)return;if(data.type==="mode")selecting=data.selecting===true;if(data.type==="highlight"){document.querySelectorAll("[data-composer-selected]").forEach(el=>el.removeAttribute("data-composer-selected"));for(const el of document.querySelectorAll("[data-composer-target]"))if(el.getAttribute("data-composer-target")===data.renderedNodeId){el.setAttribute("data-composer-selected","");el.scrollIntoView({block:"nearest"});}}});document.addEventListener("click",event=>{if(!selecting)return;const el=event.target instanceof Element?event.target.closest("[data-composer-target]"):null;const target=targets.find(value=>value.renderedNodeId===el?.getAttribute("data-composer-target"));if(!target)return;event.preventDefault();event.stopImmediatePropagation();send("select",target);},true);const ready=()=>send("ready");if(document.readyState==="complete")ready();else addEventListener("load",ready,{once:true});})();<\/script><style>[data-composer-selected]{outline:2px solid Highlight;outline-offset:2px}</style>`;
 	return {
 		identity,
 		frameId,
