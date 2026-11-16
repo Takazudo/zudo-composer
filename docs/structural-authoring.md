@@ -23,6 +23,9 @@ Identify selections by provider, composition record and canonical node ID, using
 materialization provenance for repeated rendered nodes. A node ID alone is not
 globally unique. Route and positional context belong to the trusted host renderer.
 
+See [Mapping entry identity and explicit pins](mapping-entry-identity.md) for
+read-only record identity bindings and strict pinned selection semantics.
+
 ## Native authority and capture
 
 A host explicitly selects native workspace authority. Generated build artifacts
@@ -40,6 +43,17 @@ reviewed immutable capture rather than recapturing current state. Snapshot A mus
 remain buildable after later draft B without changing B. Do not expose private
 storage paths or require hosts to assemble snapshots through unrelated reads.
 
+For a staged pack/schema migration, `isAuthoringWorkspaceSourceCurrent` from
+`zudo-composer/authoring` checks the original snapshot digest, full native source
+project and tokens, Assets and prepared public bytes without requiring the new
+runtime to match the old renderer identity. Its `pack` is the currently installed
+pack used to open inspection; this check does not compile or certify compatibility.
+Keep the original writer stopped, check before staging and again before selecting
+the staged authority. Refusal leaves the original authority intact. Normal capture,
+`isAuthoringWorkspaceSnapshotCurrent` and exact build still require matching pack
+and renderer identities. A source check alone is never an activation transaction
+or proof that a migrated project renders correctly.
+
 ## Host document preview
 
 A trusted host document adapter renders the entire compiled route with the host's
@@ -48,6 +62,47 @@ runtime and does not require a handwritten Preact duplicate. Keep preview CSS an
 assets in the isolated document. Bind render acknowledgements and selected owners
 to the exact workspace revision, route, component pack and renderer identity.
 Check the iframe sender and origin and reject stale or foreign messages.
+
+### Semantic tree and explicit local edits
+
+Trusted `hostDocument.componentPresentation` maps installed component IDs to
+`{ labelProp?: string, transparent?: boolean }`. For example, a host may declare
+`section: { labelProp: "title" }` and `group: { transparent: true }`. Unknown
+components, undeclared/nontextual label properties and arbitrary callbacks are
+rejected. Text and string-enum labels use captured rendered values, are escaped
+by the UI and bounded to 160 characters; blank values fall back to the component
+title. This display configuration is part of the attested host config graph.
+
+Transparency only projects the displayed tree. Canonical parents, named slots,
+owner coordinates and placement targets remain unchanged. Empty wrappers stay
+visible for insertion, selected wrappers reveal themselves, and **Show structural
+wrappers** exposes the complete tree. Keyboard parent navigation follows visible
+parents. Repeated placements and duplicate titles retain independent identities.
+
+The host Inspector uses the installed field schema and label order for typed
+controls. One top-level field is staged at a time; **Save field** submits the
+complete value through the validated owner operation. Keystrokes never write
+canonical state. **Discard local draft** is explicit. Pending drafts block page
+refresh, selection changes and workspace-session flush/navigation. Stale preview
+invalidation disables Save while retaining the draft for inspection/discard.
+Invalid numeric input cannot accidentally save its previous valid value. Optional
+top-level omission remains read-only here; it is never converted to JSON null.
+Local unsaved drafts are memory state with an unload warning, not a durable draft
+store. Once submitted, the exact operation is durably retained for receipt-based
+recovery across reload/restart; another operation's recovery cannot clear a local
+draft silently.
+
+Server-derived capabilities distinguish local Composition fields/arrangement,
+shared Mapping/global sources, and page-owned placement. The Inspector shows
+captured affected routes and real Content source links. Shared bound fields are
+never copied into local props. Local insertion offers declared named slots and
+components whose defaults yield a complete valid Composition; Mapping-populated
+slots are unavailable. The server revalidates the exact revision, owner, slot,
+component defaults and whole project before writing. A new UUID is retained with
+the request so lost-response retries cannot insert a second child. Insertion is
+at the start of the canonical slot. Page creation, root insertion and removal are
+not offered in this panel; unsupported operations are stated rather than inferred
+from a flattened display parent.
 
 ## AI uses the same ownership and validation
 

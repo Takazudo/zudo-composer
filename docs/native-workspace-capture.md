@@ -118,3 +118,25 @@ preservation, authority overrides, shipping-file bytes/path validation, and actu
 renderer source changes without changing its declared version. Consumer acceptance
 must additionally run these APIs from an independent immutable package install
 with the consumer's real renderer and static-output verification.
+
+
+## Staged migration source verification
+
+`isAuthoringWorkspaceSourceCurrent({ composerConfig, pack, publicFiles? }, snapshot)`
+from `zudo-composer/authoring` verifies a saved source after installing a different
+pack or renderer. It checks the snapshot digest, coherent native domain tokens and
+full project, Assets catalog and referenced immutable bytes, and prepared public
+files. The current `pack` opens inspection; its manifest does not reinterpret the
+old data. Missing or busy canonical source can throw; changed or incoherent data
+returns false. It never initializes missing stores.
+
+A true result means source-data equivalence. It does not prove compatibility with
+the new runtime, authenticate the physical original root (an identical copied
+root is equivalent), reserve a writer lock after return, or authorize activation.
+The migration caller must choose the authorized original source root, keep its
+writer fenced throughout staging and selection, and recheck before switching.
+Keep original stores/history and leave their authority intact on failure. Validate
+and render the staged project separately before an explicit switch. Actual owner
+data cutover still needs that owner's current data and authorized reachable host.
+The existing `isAuthoringWorkspaceSnapshotCurrent` and exact build retain their
+strict component-pack and renderer identity requirements.

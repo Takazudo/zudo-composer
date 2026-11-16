@@ -9,6 +9,7 @@
 
 import type { SlotCardinality } from "@zudo-composer/component-contract";
 import type { ComponentCatalog, CompositionDocument } from "../model/types";
+import { MAPPING_ENTRY_IDENTITY_CAPABILITY } from "../../mapping/model/types";
 import { findLocation } from "../model/index-model";
 
 /** One component kind a region accepts, with its own children rule (if any). */
@@ -50,6 +51,7 @@ export interface GrammarUnavailableTemplate {
 }
 
 export interface Grammar {
+  mappingSources: { entryIdentity: typeof MAPPING_ENTRY_IDENTITY_CAPABILITY };
   pack: { id: string; version: string };
   templates: GrammarTemplate[];
   /** Skipped templates, mirroring the resolver treating an unresolvable template as unavailable. */
@@ -164,6 +166,7 @@ export function buildGrammar(options: BuildGrammarOptions): Grammar {
     else unavailableTemplates.push({ id: document.id, name: document.name, reason: result.unavailable });
   }
   return {
+    mappingSources: { entryIdentity: MAPPING_ENTRY_IDENTITY_CAPABILITY },
     pack: { id: manifest.pack.packId, version: manifest.pack.packVersion },
     templates: entries,
     unavailableTemplates,

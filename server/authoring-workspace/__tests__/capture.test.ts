@@ -1,4 +1,6 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { canonicalStringifyJson } from "../../../src/site-project/model/canonical";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -9,8 +11,10 @@ import { initializeAuthoringWorkspace } from "../../edit/initialize-workspace";
 import { captureHost } from "../../edit/inspect";
 import { acquireAuthoringLease } from "../../edit/authoring-lease.mjs";
 import { defineSite, node, imageUse } from "../../../src/site-project/authoring";
+import { workspaceDomainRoots } from "../../../src/shared/workspace-scope";
+import { createFilesystemContentStore } from "../../../src/content/storage/filesystem/store";
 import { createFilesystemAssetStore } from "../../../src/assets/storage/filesystem/store";
-import { captureAuthoringWorkspace, compileAuthoringWorkspaceSnapshot, isAuthoringWorkspaceSnapshotCurrent, resolveAuthoringPackIdentity, resolveAuthoringRendererIdentity } from "../capture";
+import { captureAuthoringWorkspace, compileAuthoringWorkspaceSnapshot, isAuthoringWorkspaceSnapshotCurrent, isAuthoringWorkspaceSourceCurrent, resolveAuthoringPackIdentity, resolveAuthoringRendererIdentity } from "../capture";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -118,4 +122,94 @@ it("attests actual renderer source bytes and compiler/contract identity through 
   expect(after.version).toBe(before.version);
   await writeFile(join(root, "jsx-runtime.mjs"), "export const jsx = () => 'changed runtime';\n");
   expect((await resolveAuthoringRendererIdentity({ composerConfig })).digest).not.toBe(after.digest);
+});
+
+
+it("checks migration source independently of new runtime identity without weakening exact build checks", async () => {
+  const options = await fixture();
+  const snapshot = await captureAuthoringWorkspace(options);
+  const upgraded = { ...options, renderer: { ...options.renderer, version: "2" }, packIdentity: { ...options.packIdentity, digest: "b".repeat(64) } };
+  expect(await isAuthoringWorkspaceSourceCurrent(upgraded, snapshot)).toBe(true);
+  await expect(isAuthoringWorkspaceSnapshotCurrent(upgraded, snapshot)).rejects.toThrow("identity mismatch");
+  await expect(compileAuthoringWorkspaceSnapshot({ ...upgraded, snapshot })).rejects.toThrow("identity mismatch");
+  const host = await captureHost({ config: options.composerConfig, pack: options.pack });
+  const entry = (await host.stores.content.readAll()).entries[0]!;
+  const changed = structuredClone(entry); const field = Object.keys(entry.values)[0]!;
+  changed.values[field] = { ...changed.values[field] as object, alt: "Later saved edit" };
+  await host.stores.content.putEntry(changed);
+  expect(await isAuthoringWorkspaceSourceCurrent(upgraded, snapshot)).toBe(false);
+  await host.stores.content.putEntry(entry);
+  expect(await isAuthoringWorkspaceSourceCurrent(upgraded, snapshot)).toBe(false);
+});
+
+it("migration preflight refuses tampered capture, busy source and changed public bytes without reseeding", async () => {
+  const options = await fixture();
+  await mkdir(join(options.composerConfig.workspaceRoot, "public"));
+  await writeFile(join(options.composerConfig.workspaceRoot, "public/site.css"), "original");
+  const inputs = { ...options, publicFiles: [{ fileName: "site.css", sourcePath: "public/site.css" }] };
+  const snapshot = await captureAuthoringWorkspace(inputs);
+  const invalid = structuredClone(snapshot); invalid.workspaceId = "foreign";
+  await expect(isAuthoringWorkspaceSourceCurrent(inputs, invalid)).rejects.toThrow("digest mismatch");
+  const lease = await acquireAuthoringLease(options.composerConfig.workspaceRoot, "source-editor");
+  try { await expect(isAuthoringWorkspaceSourceCurrent(inputs, snapshot)).rejects.toMatchObject({ code: "authoring-busy" }); }
+  finally { await lease.release(); }
+  await writeFile(join(options.composerConfig.workspaceRoot, "public/site.css"), "changed");
+  expect(await isAuthoringWorkspaceSourceCurrent(inputs, snapshot)).toBe(false);
+  await rm(options.composerConfig.paths.data, { recursive: true });
+  await expect(isAuthoringWorkspaceSourceCurrent(inputs, snapshot)).rejects.toThrow("existing canonical storage");
+  await expect(readFile(join(options.composerConfig.paths.data, "workspaces/current.json"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+
+it("migration source comparison detects different source data even at matching initial tokens", async () => {
+  const first = await fixture();
+  const snapshot = await captureAuthoringWorkspace(first);
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "copied-source-")); roots.push(workspaceRoot);
+  await cp(first.composerConfig.workspaceRoot, workspaceRoot, { recursive: true });
+  const composerConfig = composer({ workspaceRoot, pack: "capture-proof/components", authoringAuthority: "workspace", nativeEditing: { source: "workspace" } }, { env: {} });
+  const contentRoot = workspaceDomainRoots(composerConfig.paths, snapshot.workspaceId).content;
+  // A distinct initialized source can have the same generation while holding
+  // different Content. Recreate only this disposable copy through its store API.
+  await rm(contentRoot, { recursive: true });
+  const content = await createFilesystemContentStore({ contentRoot });
+  const provider = structuredClone(snapshot.project.providers.content[0]!);
+  const entry = provider.entries[0]!; const field = Object.keys(entry.values)[0]!;
+  entry.values[field] = { ...entry.values[field] as object, alt: "Different original" };
+  await content.seed({ models: provider.models, entries: provider.entries });
+  const second = { ...first, composerConfig };
+  expect((await captureAuthoringWorkspace(second)).tokens).toEqual(snapshot.tokens);
+  expect(await isAuthoringWorkspaceSourceCurrent(second, snapshot)).toBe(false);
+});
+
+it("checks source with a genuinely incompatible new pack without rewriting the source", async () => {
+  const options = await fixture(); const snapshot = await captureAuthoringWorkspace(options);
+  const pack = defineComponentPack({ packId: "capture-proof", packVersion: "2.0.0", components: [defineComponent<{ text: string }>()((props: { text: string }) => props.text, {
+    id: "replacement", schemaVersion: 1, title: "Replacement", description: "New pack", category: "Proof",
+    source: { module: "capture-proof/components", exportKind: "named", exportName: "Replacement" },
+    defaults: { text: "" }, fields: [{ kind: "text", prop: "text", label: "Text" }],
+  })] });
+  expect(await isAuthoringWorkspaceSourceCurrent({ ...options, pack }, snapshot)).toBe(true);
+  await expect(captureAuthoringWorkspace({ ...options, pack })).rejects.toThrow("invalid");
+  await expect(compileAuthoringWorkspaceSnapshot({ ...options, pack, snapshot })).rejects.toThrow("identity mismatch");
+  expect((await captureAuthoringWorkspace(options)).digest).toBe(snapshot.digest);
+});
+
+it("migration source comparison detects changed immutable asset bytes even with unchanged catalog", async () => {
+  const options = await fixture(); const snapshot = await captureAuthoringWorkspace(options);
+  const file = snapshot.assets.files[0]!;
+  const bytes = Buffer.from(file.base64, "base64"); bytes[0] = bytes[0]! ^ 1;
+  await writeFile(join(options.composerConfig.paths.assets, "versions", file.fileName.split("/").at(-1)!), bytes);
+  expect(await isAuthoringWorkspaceSourceCurrent(options, snapshot)).toBe(false);
+});
+
+
+it("migration source refuses rehashed asset omissions and duplicate captured files", async () => {
+  const options = await fixture(); const snapshot = await captureAuthoringWorkspace(options);
+  for (const files of [[], [snapshot.assets.files[0]!, snapshot.assets.files[0]!]]) {
+    const altered = structuredClone(snapshot); altered.assets.files = files;
+    const { digest: originalDigest, ...body } = altered;
+    expect(originalDigest).toBe(snapshot.digest);
+    altered.digest = createHash("sha256").update(canonicalStringifyJson(body as never)).digest("hex");
+    await expect(isAuthoringWorkspaceSourceCurrent(options, altered)).rejects.toThrow("file set differs");
+  }
 });

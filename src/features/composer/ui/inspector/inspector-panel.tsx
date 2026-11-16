@@ -23,6 +23,7 @@
 //  - Preview keeps the same selection and values on screen with every control
 //    disabled, so switching back to Edit never loses what was selected.
 
+import { MAPPING_ENTRY_IDENTITY_CAPABILITY } from "../../../../mapping/model/types";
 import type { ComponentChildren, JSX } from "preact";
 import { useState } from "preact/hooks";
 import type {
@@ -286,6 +287,7 @@ function grammarForRestrictedRule(
     accepts,
   };
   return {
+    mappingSources: { entryIdentity: MAPPING_ENTRY_IDENTITY_CAPABILITY },
     pack: { id: manifest.pack.packId, version: manifest.pack.packVersion },
     templates: [{ id: `${identity.componentId}.${identity.slotId}`, name: `${identity.componentTitle} › ${identity.slotLabel}`, region, open: false }],
     unavailableTemplates: [],

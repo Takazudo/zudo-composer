@@ -186,7 +186,7 @@ export function ContentPreviewPane({ providerId, model, entry, entryName, compon
                   <ul class="sg-content-bindings">
                     {bindings.map((binding) => (
                       <li key={binding.bindingId}>
-                        <span>{fieldLabels.get(binding.sourceFieldId) ?? binding.sourceFieldId} → {binding.target.nodeId}.{binding.target.prop}</span>
+                        <span>{binding.source ? `Entry identity (${binding.source.providerId}/${binding.source.modelId}/${binding.source.recordId})` : fieldLabels.get(binding.sourceFieldId) ?? binding.sourceFieldId} → {binding.target.nodeId}.{binding.target.prop}</span>
                         <Chip tone="ok">bound</Chip>
                       </li>
                     ))}

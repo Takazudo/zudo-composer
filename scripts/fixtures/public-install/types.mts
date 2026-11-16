@@ -27,7 +27,7 @@ import type { InlineConfig, Plugin, ViteDevServer } from "vite";
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
-export type AuthoringExports = Assert<Equal<keyof typeof authoring, "ASSET_PROVIDER_ID" | "COMPOSITION_PROVIDER_ID" | "CONTENT_PROVIDER_ID" | "DEFAULT_TIMESTAMP" | "MAPPING_PROVIDER_ID" | "SITEMAP_PROVIDER_ID" | "assetAuthoringUrl" | "assetMimeTypeForExtension" | "createFilesystemAssetStore" | "canonicalStringifyJson" | "captureAuthoringWorkspace" | "defineSite" | "entryRef" | "hostDocumentTargets" | "imageUse" | "initializeAuthoringWorkspace" | "isAuthoringWorkspaceSnapshotCurrent" | "node" | "renderHostDocument" | "resolveAuthoringPackIdentity" | "resolveAuthoringRendererIdentity" | "slugify" | "validateSiteProject">>;
+export type AuthoringExports = Assert<Equal<keyof typeof authoring, "ASSET_PROVIDER_ID" | "COMPOSITION_PROVIDER_ID" | "CONTENT_PROVIDER_ID" | "DEFAULT_TIMESTAMP" | "MAPPING_PROVIDER_ID" | "SITEMAP_PROVIDER_ID" | "assetAuthoringUrl" | "assetMimeTypeForExtension" | "createFilesystemAssetStore" | "canonicalStringifyJson" | "captureAuthoringWorkspace" | "defineSite" | "entryRef" | "hostDocumentTargets" | "imageUse" | "initializeAuthoringWorkspace" | "isAuthoringWorkspaceSnapshotCurrent" | "isAuthoringWorkspaceSourceCurrent" | "node" | "renderHostDocument" | "resolveAuthoringPackIdentity" | "resolveAuthoringRendererIdentity" | "slugify" | "validateSiteProject">>;
 export type SiteBuildExports = Assert<Equal<keyof typeof siteBuild, "SITE_HEADERS" | "SITE_MANIFEST" | "compileAuthoringWorkspaceSnapshot" | "compileStaticSite" | "createSiteManifest" | "siteHeaders" | "verifySiteStaticArtifact">>;
 export type CaptureReturn = Assert<Equal<Awaited<ReturnType<typeof authoring.captureAuthoringWorkspace>>, AuthoringWorkspaceSnapshot>>;
 export type CaptureOptions = Assert<Equal<Parameters<typeof authoring.captureAuthoringWorkspace>[0], CaptureAuthoringWorkspaceOptions>>;
@@ -46,6 +46,7 @@ export async function captureConsumer(context: HostContext): Promise<StaticSiteC
   };
   const snapshot = await authoring.captureAuthoringWorkspace(options);
   await authoring.isAuthoringWorkspaceSnapshotCurrent(options, snapshot);
+  await authoring.isAuthoringWorkspaceSourceCurrent({ composerConfig: context.composerConfig, pack: context.pack }, snapshot);
   return siteBuild.compileAuthoringWorkspaceSnapshot({ ...options, snapshot });
 }
 // @ts-expect-error Exact compilation requires the reviewed snapshot and full identities.
@@ -159,3 +160,12 @@ declare const copiedRoot: typeof rootPublic;
 copiedRoot.OPTIMIZE_DEPS_EXCLUDE = [];
 // @ts-expect-error The excluded dependencies array is also readonly.
 copiedRoot.OPTIMIZE_DEPS_EXCLUDE.push("host-dependency");
+
+// Selected-record metadata remains a disjoint public binding input/record shape.
+export const identityInput = { source: { kind: "entry-id" }, nodeId: "card", prop: "headline" } satisfies import("zudo-composer/site-project").BindingInput;
+export const identityRecord = { id: "identity", source: { kind: "entry-id" }, target: { nodeId: "card", prop: "headline" }, transform: { kind: "identity" } } satisfies import("zudo-composer/site-project").MappingBinding;
+export const pinnedMode = { kind: "collection", pins: [{ providerId: "content-filesystem", modelId: "courses", recordId: "consultation" }] } satisfies import("zudo-composer/site-project").CollectionModeInput;
+// @ts-expect-error identity is metadata, never a field projection
+export const mixedIdentity = { source: { kind: "entry-id" }, field: "label", nodeId: "card", prop: "headline" } satisfies import("zudo-composer/site-project").BindingInput;
+// @ts-expect-error identity transforms cannot change canonical record identity
+export const transformedIdentity = { source: { kind: "entry-id" }, nodeId: "card", prop: "headline", transform: { kind: "prefix", prefix: "x" } } satisfies import("zudo-composer/site-project").BindingInput;

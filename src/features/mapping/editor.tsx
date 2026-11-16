@@ -96,10 +96,11 @@ export function MappingEditor({
   });
 
   const bind = (sourceFieldId: string, target: { nodeId: string; prop: string }) =>
-    run(() => controller.addBinding(sourceFieldId, target));
+    run(() => sourceFieldId === "entry:identity" ? controller.bindEntryIdentity(target) : controller.addBinding(sourceFieldId, target));
 
   const rebind = (bindingId: string, sourceFieldId: string) => run(() => {
     const row = rows.find((candidate) => candidate.binding.id === bindingId);
+    if (sourceFieldId === "entry:identity" && row) return controller.bindEntryIdentity(row.binding.target, bindingId);
     const field = state.definition?.contentModel?.document.fields.find((candidate) => candidate.id === sourceFieldId);
     // The menu only ever offers compatible sources, so a transform exists;
     // keeping the stored one would leave the row broken in a new way.

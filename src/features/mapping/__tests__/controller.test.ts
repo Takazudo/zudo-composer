@@ -17,6 +17,25 @@ import {
 } from "./harness";
 
 describe("MappingEditorController", () => {
+  it("saves metadata identity, rebinds to fields without mixed keys, and refuses unsupported edits without writes", async () => {
+    const source = mappingRecord([READY_BINDING]); const h = harness([source]);
+    await h.controller.initialize(); await h.controller.open(source.id);
+    await h.controller.bindEntryIdentity(HEADING_TARGET, READY_BINDING.id);
+    expect(h.controller.state.previewDocument?.root[0]?.props[HEADING_TARGET.prop]).toBe(entry.id);
+    expect(h.controller.state.mapping?.document.bindings[0]).toEqual({ id: READY_BINDING.id, source: { kind: "entry-id" }, target: HEADING_TARGET, transform: { kind: "identity" } });
+    await h.controller.flush();
+    const saved = structuredClone(h.records.get(source.id));
+    await expect(h.controller.updateBindingProjection(READY_BINDING.id, { kind: "value" })).rejects.toThrow("Entry identity");
+    await expect(h.controller.updateBinding(READY_BINDING.id, { transform: { kind: "prefix", prefix: "x" } })).rejects.toThrow("Entry identity");
+    await expect(h.controller.bindEntryIdentity({ nodeId: "missing", prop: "nope" })).rejects.toThrow("scalar text");
+    expect(h.records.get(source.id)).toEqual(saved);
+    await h.controller.close(); await h.controller.open(source.id);
+    expect(h.controller.state.mapping?.document.bindings[0]?.source).toEqual({ kind: "entry-id" });
+    await h.controller.updateBinding(READY_BINDING.id, { sourceFieldId: "field-title", projection: { kind: "value" }, transform: { kind: "identity" } });
+    expect(h.controller.state.mapping?.document.bindings[0]).not.toHaveProperty("source");
+    expect(h.controller.state.previewDocument?.root[0]?.props[HEADING_TARGET.prop]).toBe(entry.values["field-title"]);
+  });
+
   it("drains newer edits accepted during an in-flight shared flush", async () => {
     const source = mappingRecord([READY_BINDING]); const h = harness([source]);
     await h.controller.initialize(); await h.controller.open(source.id);

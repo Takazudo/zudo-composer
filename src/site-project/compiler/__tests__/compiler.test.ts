@@ -51,7 +51,7 @@ describe("SiteProject compiler", () => {
     const articles = model(); articles.document.fields.push({ id: "related", key: "related", label: "Related", required: true, kind: "reference", target: { providerId: "content-filesystem", recordId: "articles" } });
     const items = [entry("a"), entry("b")]; for (const item of items) item.values.related = { providerId: "content-filesystem", modelId: "articles", recordId: item.id };
     const itemMapping = mapping(); itemMapping.document.mode = { kind: "collection", query: { publication: "published-only", conditions: [], sort: [], pins: [], limit: 100 } };
-    itemMapping.document.bindings[0] = { ...itemMapping.document.bindings[0]!, sourceFieldId: "related", projection: { kind: "route-link" } };
+    itemMapping.document.bindings[0] = { id: itemMapping.document.bindings[0]!.id, target: itemMapping.document.bindings[0]!.target, transform: itemMapping.document.bindings[0]!.transform, sourceFieldId: "related", projection: { kind: "route-link" } };
     const groups = model(); groups.id = groups.document.id = "groups";
     const groupEntries = [entry("g1"), entry("g2")]; for (const item of groupEntries) item.modelId = "groups";
     const groupMapping = mapping("owner"); groupMapping.id = groupMapping.document.id = "group-page"; groupMapping.document.contentModel.recordId = "groups"; groupMapping.document.bindings = []; groupMapping.document.mode = structuredClone(itemMapping.document.mode);
@@ -95,7 +95,7 @@ describe("SiteProject compiler", () => {
     const second = entry("b", "Beta"); second.values.related = { providerId: "content-filesystem", modelId: "articles", recordId: "a" };
     const routeMapping = mapping();
     routeMapping.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 100 } };
-    routeMapping.document.bindings[0] = { ...routeMapping.document.bindings[0]!, sourceFieldId: "related", projection: { kind: "route-link" } };
+    routeMapping.document.bindings[0] = { id: routeMapping.document.bindings[0]!.id, target: routeMapping.document.bindings[0]!.target, transform: routeMapping.document.bindings[0]!.transform, sourceFieldId: "related", projection: { kind: "route-link" } };
     const result = await compile(project({ root: page("articles", "articles", mappingSource()), contentModel, entries: [first, second], mappings: [routeMapping] }));
     expect(result.status).toBe("ready");
     if (result.status !== "ready") return;

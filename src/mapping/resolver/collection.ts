@@ -76,17 +76,19 @@ export function evaluateCollectionQuery(options: {
   const pinned: ContentEntryRecord[] = [];
   const seen = new Set<string>();
   for (const pin of query.pins) {
-    if (pin.providerId !== providerId) { diagnostics.push({ code: "pin-provider-mismatch", severity: "nonblocking", entryId: pin.recordId, message: `Pinned Entry "${pin.recordId}" belongs to another provider.` }); continue; }
-    if (pin.modelId !== model.id) { diagnostics.push({ code: "pin-model-mismatch", severity: "nonblocking", entryId: pin.recordId, message: `Pinned Entry "${pin.recordId}" belongs to another model.` }); continue; }
+    if (pin.providerId !== providerId) { diagnostics.push({ code: "pin-provider-mismatch", severity: "blocking", entryId: pin.recordId, message: `Pinned Entry "${pin.recordId}" belongs to another provider.` }); continue; }
+    if (pin.modelId !== model.id) { diagnostics.push({ code: "pin-model-mismatch", severity: "blocking", entryId: pin.recordId, message: `Pinned Entry "${pin.recordId}" belongs to another model.` }); continue; }
     const entry = byId.get(pin.recordId);
     if (!entry) {
       const existing = allEntriesById.get(pin.recordId);
-      diagnostics.push({ code: existing ? "pin-model-mismatch" : "pin-not-found", severity: "nonblocking", entryId: pin.recordId, message: existing ? `Pinned Entry "${pin.recordId}" belongs to another model.` : `Pinned Entry "${pin.recordId}" was not found.` });
+      diagnostics.push({ code: existing ? "pin-model-mismatch" : "pin-not-found", severity: "blocking", entryId: pin.recordId, message: existing ? `Pinned Entry "${pin.recordId}" belongs to another model.` : `Pinned Entry "${pin.recordId}" was not found.` });
       continue;
     }
-    if (!eligible(entry, query)) { diagnostics.push({ code: "pin-ineligible", severity: "nonblocking", entryId: entry.id, message: `Pinned Entry "${entry.id}" is not eligible for the publication policy.` }); continue; }
+    if (!eligible(entry, query)) { diagnostics.push({ code: "pin-ineligible", severity: "blocking", entryId: entry.id, message: `Pinned Entry "${entry.id}" is not eligible for the publication policy.` }); continue; }
     if (!seen.has(entry.id)) { seen.add(entry.id); pinned.push(entry); }
   }
+
+  if (diagnostics.some((item) => item.severity === "blocking")) return { status: "blocked", entries: [], diagnostics };
 
   const matched = all
     .filter((entry) => eligible(entry, query) && !seen.has(entry.id) && query.conditions.every((condition) => conditionMatches(entry.values[condition.fieldId], condition)))

@@ -124,16 +124,16 @@ export function buildBindingRows(
   const diagnostics = definition?.diagnostics ?? [];
 
   return mapping.document.bindings.map((binding, index) => {
-    const source = fields.find((field) => field.id === binding.sourceFieldId) ?? null;
+    const source = binding.source ? null : fields.find((field) => field.id === binding.sourceFieldId) ?? null;
     const target = targets.find((item) => targetKey(item.target) === targetKey(binding.target)) ?? null;
     // The stored transform is always offered, even when nothing about the pair
     // is compatible: a select that cannot show its own value reads as empty.
-    const projections = source ? sourceProjectionOptions(source).filter((option) => target ? compatibleTransformsForProjection(option, target).length > 0 || projectionKey(option.projection) === projectionKey(binding.projection) : true) : [];
-    const selectedProjection = source ? resolveMappingProjectionDefinition(source, binding.projection) : null;
+    const projections = source && !binding.source ? sourceProjectionOptions(source).filter((option) => target ? compatibleTransformsForProjection(option, target).length > 0 || projectionKey(option.projection) === projectionKey(binding.projection) : true) : [];
+    const selectedProjection = source && !binding.source ? resolveMappingProjectionDefinition(source, binding.projection) : null;
     const compatible = source && target && selectedProjection?.status === "ready" ? compatibleTransforms(selectedProjection.kind, target) : [];
     const transforms = compatible.includes(binding.transform.kind) ? compatible : [...compatible, binding.transform.kind];
     const rowDiagnostics = diagnostics.filter((diagnostic) => diagnostic.bindingId === binding.id);
-    return { binding, index, source, target, transforms, projections, diagnostics: rowDiagnostics, status: statusOf({ source, target, diagnostics: rowDiagnostics }) };
+    return { binding, index, source, target, transforms, projections, diagnostics: rowDiagnostics, status: binding.source && target && rowDiagnostics.length === 0 ? "ready" : statusOf({ source, target, diagnostics: rowDiagnostics }) };
   });
 }
 

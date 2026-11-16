@@ -22,6 +22,7 @@ export { initializeAuthoringWorkspace } from "../edit/initialize-workspace.js";
 export {
   captureAuthoringWorkspace,
   isAuthoringWorkspaceSnapshotCurrent,
+  isAuthoringWorkspaceSourceCurrent,
   resolveAuthoringPackIdentity,
   resolveAuthoringRendererIdentity,
   type AuthoringRendererIdentity,

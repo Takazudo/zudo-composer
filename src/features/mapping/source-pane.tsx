@@ -68,6 +68,11 @@ export function SourcePane({ state, rows, onBind, onSelectEntry, onModeChange, o
     <Pane label="Source fields" class="cms-mapping-nav">
       <PaneHeader title="Source fields" count={fields.length} actions={<RailCollapseButton rail="nav" />} />
       <PaneBody>
+        {model ? <PaneSection title="Read-only metadata">
+          <strong>Entry identity</strong>
+          <p>The selected Content record ID; independent of order and field values. Supports scalar text targets only.</p>
+          <BindMenu menuLabel="Bind Entry identity to…" triggerLabel="Bind Entry identity" emptyLabel="No scalar text target is available" groups={[{ id: "text-targets", label: "Text targets", items: targets.filter((target) => target.kind === "text").map((target) => ({ id: targetKey(target.target), label: targetLabel(target), detail: target.kind })) }]} onSelect={(key) => onBind("entry:identity", parseTargetKey(key))} />
+        </PaneSection> : null}
         <PaneSection title="Fields">
           {state.entryFailure ? (
             <Banner tone="err" title="Entry provider unavailable.">{state.entryFailure}</Banner>

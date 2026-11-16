@@ -65,7 +65,12 @@ interface CliAssistantConfig extends AssistantCommonConfig {
 }
 type AssistantConfig = AnthropicAssistantConfig | FakeAssistantConfig | CliAssistantConfig;
 
+type HostComponentPresentation = Record<string, {
+    labelProp?: string;
+    transparent?: boolean;
+}>;
 interface HostDocumentConfig {
+    componentPresentation?: HostComponentPresentation;
     module: string;
     rendererId: string;
     rendererVersion: string;

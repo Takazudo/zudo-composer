@@ -24,3 +24,9 @@ describe("host document and authority configuration", () => {
     expect(() => composer({ pack: "host/pack", hostDocument: { module: "host/document", rendererId: "host", rendererVersion: "1", publicDir } })).toThrow();
   });
 });
+
+it("accepts explicit presentation hints and rejects executable or mistyped hints", () => {
+  const hostDocument = { module: "host/document", rendererId: "host", rendererVersion: "1", componentPresentation: { section: { labelProp: "title" }, group: { transparent: true } } };
+  expect(composer({ pack: "host/pack", hostDocument }).hostDocument).toEqual(hostDocument);
+  for (const componentPresentation of [[], { section: { labelProp: "" } }, { section: { transparent: "yes" } }, { section: { label: () => "Title" } }]) expect(() => composer({ pack: "host/pack", hostDocument: { ...hostDocument, componentPresentation } } as never)).toThrow();
+});

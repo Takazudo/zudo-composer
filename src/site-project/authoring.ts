@@ -27,6 +27,8 @@ import type {
   MappingSourceProjection,
   MappingTransform,
 } from "../mapping/model/types";
+import { isPlainObject } from "../shared";
+import { validateMappingRecord } from "../mapping/model/validate";
 import type { SitemapRecord } from "../sitemapper/library/types";
 import type { SitemapNavigationItem, SitemapNode } from "../sitemapper/model/types";
 import type { SiteProject, SiteProjectCollectionAttachment } from "./model/types";
@@ -136,7 +138,8 @@ export interface Entry {
   record: ContentEntryRecord;
 }
 
-export interface BindingInput {
+export interface FieldBindingInput {
+  source?: never;
   field: string;
   nodeId: string;
   prop: string;
@@ -145,7 +148,15 @@ export interface BindingInput {
   id?: string;
 }
 
+export type BindingInput = FieldBindingInput | {
+  source: { kind: "entry-id" };
+  field?: never; projection?: never;
+  nodeId: string; prop: string; id?: string;
+  transform?: { kind: "identity" };
+};
+
 export interface CollectionModeInput {
+  pins?: MappingCollectionQuery["pins"];
   kind: "collection";
   sort?: { field: string; direction: "asc" | "desc" }[];
   limit?: number;
@@ -364,7 +375,18 @@ export function defineSite(options: SiteOptions): Site {
     mapping(input) {
       const id = input.id ?? slugify(input.name);
       assertNew(mappings, id, "mapping");
-      const bindings: MappingBinding[] = input.bindings.map((binding) => ({
+      for (const binding of input.bindings) {
+        if (Object.hasOwn(binding, "source")) {
+          const source = binding.source;
+          if (!isPlainObject(source) || source.kind !== "entry-id" || Object.keys(source).length !== 1 || Object.keys(binding).some((key) => !["source", "nodeId", "prop", "id", "transform"].includes(key))) throw new TypeError("Entry identity must be an exclusive metadata source without field or projection.");
+        }
+      }
+      const bindings: MappingBinding[] = input.bindings.map((binding): MappingBinding => binding.source ? ({
+        id: binding.id ?? `${id}-entry-id-${slugify(binding.prop)}`,
+        source: { kind: "entry-id" },
+        target: { nodeId: binding.nodeId, prop: binding.prop },
+        transform: binding.transform ?? { kind: "identity" },
+      }) : ({
         id: binding.id ?? `${id}-${slugify(binding.field)}-${slugify(binding.prop)}`,
         sourceFieldId: input.model.fieldId(binding.field),
         projection: binding.projection ?? { kind: "value" },
@@ -387,13 +409,15 @@ export function defineSite(options: SiteOptions): Site {
               publication: mode.publication ?? "published-only",
               conditions: (mode.conditions ?? []).map((condition) => ({ fieldId: input.model.fieldId(condition.field), operator: condition.operator, ...(condition.value === undefined ? {} : { value: condition.value }) })),
               sort: (mode.sort ?? []).map((sort) => ({ fieldId: input.model.fieldId(sort.field), direction: sort.direction })),
-              pins: [],
+              pins: structuredClone(mode.pins ?? []),
               limit: mode.limit ?? 100,
             },
           },
           bindings,
         },
       };
+      const validation = validateMappingRecord(record);
+      if (!validation.ok) throw new TypeError(validation.issue.message);
       mappings.set(id, record);
       return { id, model: input.model, composition: input.composition, record };
     },

@@ -28,6 +28,48 @@ function mapping(bindings: NonNullable<MappingSeedOptions["bindings"]> = [{ id: 
 function catalogs(contentRecord = model, compositionRecord = composition) { return { content: createContentCatalog([{ descriptor: { id: "content", label: "Content" }, store: { listModels: async () => [], getModel: async () => ({ status: "loaded" as const, record: contentRecord }) } }]), compositions: createCompositionCatalog([{ descriptor: { id: "files", label: "Compositions" }, store: { list: async () => [], get: async () => ({ status: "loaded" as const, record: compositionRecord }) } }]) }; }
 function entry(values: ContentEntryRecord["values"]): ContentEntryRecord { return { lifecycle: "draft" as const, generation: 0, schemaVersion: CONTENT_ENTRY_SCHEMA_VERSION, id: "entry-one", modelId: "articles", createdAt: stamp, updatedAt: stamp, values }; }
 
+describe("selected entry identity", () => {
+  const identity = () => mapping([{ id: "entry-identity", source: { kind: "entry-id" }, target: { nodeId: "hero", prop: "subtitle" }, transform: { kind: "identity" } }]);
+
+  it("uses the selected record ID, never a field value or collection position, with qualified provenance", async () => {
+    const record = identity();
+    const definition = await resolveMappingDefinition(record, catalogs(), manifest);
+    expect(definition.status).toBe("ready");
+    for (const selected of [{ ...entry({ title: "Changed title", order: 99, id: "forged" }), id: "course-two" }, { ...entry({}), id: "consultation" }]) {
+      const result = evaluateResolvedMapping(definition, selected);
+      expect(result.status).toBe("ready");
+      expect(result.document?.root[0]?.props.subtitle).toBe(selected.id);
+      expect(result.appliedBindings).toEqual([{ bindingId: "entry-identity", target: { nodeId: "hero", prop: "subtitle" }, value: selected.id, source: { kind: "entry-id", providerId: "content", modelId: "articles", recordId: selected.id } }]);
+      expect(selected.values).not.toHaveProperty("subtitle");
+    }
+    expect(record.document.bindings[0]).not.toHaveProperty("sourceFieldId");
+    expect(evaluateResolvedMapping(definition, { ...entry({}), modelId: "other" }).status).toBe("blocked");
+    expect(composition.document.root[0]?.props.subtitle).toBe("Keep");
+  });
+
+  it("preserves field documents and rejects mixed, extra and transformed metadata sources", () => {
+    expect(validateMappingRecord(mapping()).ok).toBe(true);
+    expect(validateMappingRecord(identity()).ok).toBe(true);
+    const record = identity();
+    const binding = record.document.bindings[0]!;
+    const invalid = [
+      { ...binding, sourceFieldId: "title" }, { ...binding, projection: { kind: "value" } },
+      { ...binding, source: { kind: "entry-id", value: "forged" } }, { ...binding, source: { kind: "record-index" } },
+      { ...binding, transform: { kind: "prefix", prefix: "x" } },
+      { ...mapping().document.bindings[0]!, source: { kind: "entry-id" } },
+    ];
+    for (const candidate of invalid) expect(validateMappingRecord({ ...record, document: { ...record.document, bindings: [candidate] } }).ok).toBe(false);
+  });
+
+  it.each(["tone", "tags", "missing"])("blocks non-text or missing target %s with a definition diagnostic", async (prop) => {
+    const record = identity(); record.document.bindings[0]!.target.prop = prop;
+    const result = await evaluateMapping(record, entry({}), catalogs(), manifest);
+    expect(result.status).toBe("blocked");
+    expect(result.definitionDiagnostics.some((item) => ["incompatible-binding", "structured-target-unsupported", "target-field-missing"].includes(item.code))).toBe(true);
+    expect(result.appliedBindings).toEqual([]);
+  });
+});
+
 describe("normative compatibility matrix", () => {
   const sources: readonly ContentFieldKind[] = CONTENT_FIELD_KINDS;
   const scalarTargetFields = [
@@ -76,12 +118,23 @@ describe("Mapping model and resolver", () => {
       publication: "published-only",
       conditions: [{ fieldId: "tone", operator: "equals", value: "quiet" }],
       sort: [{ fieldId: "title", direction: "asc" }],
-      pins: [{ providerId: "content", modelId: "articles", recordId: "b" }, { providerId: "content", modelId: "articles", recordId: "b" }, { providerId: "content", modelId: "articles", recordId: "draft" }],
+      pins: [{ providerId: "content", modelId: "articles", recordId: "b" }, { providerId: "content", modelId: "articles", recordId: "b" }],
       limit: 3,
     } });
     expect(result.status).toBe("ready");
     expect(result.entries.map((item) => item.id)).toEqual(["b", "a", "a2"]);
-    expect(result.diagnostics.map((item) => item.code)).toEqual(["pin-ineligible"]);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it.each([
+    [{ providerId: "foreign", modelId: "articles", recordId: "wanted" }, "pin-provider-mismatch"],
+    [{ providerId: "content", modelId: "foreign", recordId: "wanted" }, "pin-model-mismatch"],
+    [{ providerId: "content", modelId: "articles", recordId: "deleted" }, "pin-not-found"],
+    [{ providerId: "content", modelId: "articles", recordId: "draft" }, "pin-ineligible"],
+  ] as const)("never substitutes a query match for an unavailable explicit pin: %s", (pin, code) => {
+    const entries = [{ ...entry({ title: "Replacement" }), id: "replacement", lifecycle: "published" as const }, { ...entry({ title: "Draft" }), id: "draft" }];
+    const result = evaluateCollectionQuery({ model, providerId: "content", entries, query: { publication: "published-only", conditions: [], sort: [], pins: [pin], limit: 1 } });
+    expect(result).toMatchObject({ status: "blocked", entries: [], diagnostics: [{ code, severity: "blocking" }] });
   });
 
   it("blocks stale or unsupported query fields and validates list membership values", () => {
