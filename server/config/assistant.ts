@@ -8,7 +8,15 @@
 export type AssistantProviderKind = "anthropic" | "fake" | "claude-cli" | "codex-cli";
 export type AssistantEffort = "low" | "medium" | "high";
 
+export interface AssistantContentFieldPolicy {
+  providerId: string;
+  modelId: string;
+  fieldIds: readonly string[];
+}
+
 interface AssistantCommonConfig {
+  /** Trusted Content field IDs; omitted retains the standalone Article defaults. */
+  contentFields?: readonly AssistantContentFieldPolicy[];
   /** Default display name; a site-scoped stored name may replace it. */
   name: string;
   /** `propose` permits conversation, drafts and review but never Apply. */
@@ -72,7 +80,7 @@ export function parseAssistant(value: unknown): AssistantConfig | undefined {
   const provider = input.provider ?? "anthropic";
   if (typeof provider !== "string" || !Object.hasOwn(keysByProvider, provider)) throw new Error('assistant.provider must be "anthropic", "fake", "claude-cli" or "codex-cli".');
   const kind = provider as AssistantProviderKind;
-  for (const key of Object.keys(input)) if (!keysByProvider[kind].includes(key)) throw new Error(`assistant.${key} is not supported for provider "${kind}".`);
+  for (const key of Object.keys(input)) if (key !== "contentFields" && !keysByProvider[kind].includes(key)) throw new Error(`assistant.${key} is not supported for provider "${kind}".`);
   const text = (key: string, fallback: string, pattern: RegExp) => {
     const raw = input[key] ?? fallback;
     if (typeof raw !== "string" || !pattern.test(raw)) throw new Error(`assistant.${key} is invalid.`);
@@ -80,7 +88,9 @@ export function parseAssistant(value: unknown): AssistantConfig | undefined {
   };
   const permission = input.permission ?? "apply";
   if (!["apply", "propose"].includes(permission as string)) throw new Error('assistant.permission must be "apply" or "propose".');
+  const contentFields = parseContentFields(input.contentFields);
   const common: AssistantCommonConfig = {
+    ...(contentFields === undefined ? {} : { contentFields }),
     name: text("name", "AI Assistant", /^[^\n\r\t]{1,40}$/).trim() || "AI Assistant",
     permission: permission as AssistantCommonConfig["permission"],
   };
@@ -132,4 +142,22 @@ function parseBaseUrl(value: unknown): string {
   const loopback = ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
   if (url.username || url.password || url.search || url.hash || !(url.protocol === "https:" || (url.protocol === "http:" && loopback))) throw new Error("assistant.baseUrl must be an https URL (or loopback http) without credentials, query or fragment.");
   return url.href.replace(/\/$/, "");
+}
+
+/** Bounded trusted policy, independent of inference provider. Never read from model output. */
+export function parseContentFields(value: unknown): readonly AssistantContentFieldPolicy[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > 100) throw new Error("assistant.contentFields must be an array of at most 100 model policies.");
+  const safe = (id: unknown): id is string => typeof id === "string" && /^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$/.test(id);
+  const seen = new Set<string>();
+  return value.map(item => {
+    if (!item || typeof item !== "object" || Array.isArray(item) || ![Object.prototype, null].includes(Object.getPrototypeOf(item))
+      || Object.keys(item).length !== 3 || !Object.keys(item).every(key => ["providerId", "modelId", "fieldIds"].includes(key))
+      || !safe(item.providerId) || !safe(item.modelId) || !Array.isArray(item.fieldIds) || item.fieldIds.length > 100
+      || !item.fieldIds.every(safe) || new Set(item.fieldIds).size !== item.fieldIds.length) throw new Error("assistant.contentFields contains an invalid or duplicate field policy.");
+    const key = `${item.providerId}/${item.modelId}`;
+    if (seen.has(key)) throw new Error("assistant.contentFields repeats a model policy.");
+    seen.add(key);
+    return { providerId: item.providerId, modelId: item.modelId, fieldIds: [...item.fieldIds] };
+  });
 }

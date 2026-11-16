@@ -1,5 +1,5 @@
-// Bounded Content-AI: a model may propose new Article title and body text,
-// and nothing else. Every proposal is validated by the owning backend against
+// Bounded Content-AI: a model may propose only trusted policy-approved text.
+// Omitted policy retains Article title/body compatibility. Every proposal is validated by the owning backend against
 // the precondition it was prepared from, without writing; Apply and Undo go
 // through the same keyed save/restore path as a human edit, with the trusted
 // `content-ai` source. Publication is never part of it.
@@ -67,6 +67,8 @@ export interface ContentAiProposalRecord {
   owner: string;
   actorId: string | null;
   proposal: ContentAiProposal;
+  /** Internal deterministic staging replay fingerprint; absent for ordinary proposals. */
+  preparation?: { keyDigest: string; payloadDigest: string };
 }
 export interface ContentAiProposalStore {
   /** Create-only: an existing id is never overwritten. */
@@ -82,7 +84,11 @@ export interface ContentAiOperation {
 }
 export interface ContentAiOutcome { receipt: EditorialReceipt; recovered: boolean }
 
+export interface ContentAiFieldPolicy { providerId: string; modelId: string; fieldIds: readonly string[] }
+
 export interface ContentAiServiceOptions {
+  /** Trusted policy; absent keeps title/body defaults, empty denies all fields. */
+  contentFields?: readonly ContentAiFieldPolicy[];
   /** The owning backend's boundary bound to the given provenance. */
   boundary(provenance: EditorialProvenance): ContentEditorialBoundary;
   actor: { id: string } | null;
@@ -124,15 +130,89 @@ export async function contentAiCandidateDigest(value: { entry: ContentEntryRef; 
   return [...new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+async function contentAiScope(options: ContentAiServiceOptions, ai: ContentEditorialBoundary, entry: ContentEntryRef): Promise<EditorialField[]> {
+  const policy = options.contentFields?.find(item => item.providerId === entry.providerId && item.modelId === entry.modelId);
+  const fields = (await ai.readFields({ entry })).filter(field => CONTENT_AI_KINDS.has(field.kind) && (options.contentFields === undefined
+    ? (CONTENT_AI_FIELD_KEYS as readonly string[]).includes(field.key) : policy?.fieldIds.includes(field.id)));
+  if (!fields.length) throw new EditorialError("forbidden", "No editable text fields are permitted by this host's Content-AI policy.");
+  return fields;
+}
+
+export interface ContentAiStageRequest {
+  entry: ContentEntryRef; expected: string; values: Record<string, string>; summary: string; preparationKey: string;
+}
+export interface ContentAiStageGuard { signal?: AbortSignal; beforePersist?(): Promise<void> }
+
+/** Internal trusted staging API. Never dispatched by the Content browser wire. No inference call. */
+export function createContentAiStager(options: ContentAiServiceOptions & { providerLabel: string }) {
+  return { stage: (request: ContentAiStageRequest, guard: ContentAiStageGuard = {}): Promise<ContentAiPrepareResult> =>
+    stageValidatedContentAi(options, request, options.providerLabel, guard) };
+}
+
+async function sha256(value: unknown): Promise<string> {
+  const bytes = new TextEncoder().encode(canonicalEditorialJson(value as never));
+  return [...new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes))].map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function stageValidatedContentAi(options: ContentAiServiceOptions, raw: Omit<ContentAiStageRequest, "preparationKey"> & { preparationKey?: string }, provider: string, guard: ContentAiStageGuard): Promise<ContentAiPrepareResult> {
+  const request = structuredClone(raw);
+  guard.signal?.throwIfAborted();
+  if (typeof request.summary !== "string" || request.summary.length > 1000 || !request.values || typeof request.values !== "object" || Array.isArray(request.values) || Object.keys(request.values).length > 100) throw new EditorialError("invalid-request", "Malformed bounded Content proposal.");
+  if (request.preparationKey !== undefined && (typeof request.preparationKey !== "string" || !request.preparationKey.trim() || request.preparationKey.length > 512)) throw new EditorialError("invalid-request", "Malformed proposal preparation key.");
+  const keyDigest = request.preparationKey === undefined ? undefined : await sha256({ owner: options.owner, actorId: options.actor?.id ?? null, key: request.preparationKey });
+  const payloadDigest = await sha256({ entry: request.entry, expected: request.expected, values: request.values, summary: request.summary, provider });
+  const id = keyDigest ? `stage-${keyDigest}` : options.createId();
+  const replay = async (): Promise<ContentAiPrepareResult | null> => {
+    if (!keyDigest) return null;
+    const record = await options.store.read(id);
+    if (!record) return null;
+    if (record.owner !== options.owner || record.actorId !== (options.actor?.id ?? null) || record.proposal.id !== id || record.preparation?.keyDigest !== keyDigest || record.preparation.payloadDigest !== payloadDigest) throw new EditorialError("operation-key-reuse", "This preparation key belongs to another proposal.");
+    guard.signal?.throwIfAborted();
+    await guard.beforePersist?.();
+    guard.signal?.throwIfAborted();
+    return { status: "proposed", proposal: structuredClone(record.proposal) };
+  };
+  const prior = await replay();
+  if (prior) return prior;
+  const ai = options.boundary({ actor: options.actor, source: "content-ai" });
+  const fields = await contentAiScope(options, ai, request.entry);
+  for (const [id, value] of Object.entries(request.values)) {
+    const field = fields.find(field => field.id === id);
+    if (!field) throw new EditorialError("forbidden", `Content-AI may not write "${id}".`);
+    if (typeof value !== "string" || value.length > MAX_VALUE) throw new EditorialError("invalid-value", `The proposed ${field.label} is not usable text.`);
+  }
+  if (!Object.keys(request.values).length) return { status: "refused", message: "The model proposed no change." };
+  const validation = await ai.validateFields({ entry: request.entry, expected: request.expected, values: request.values, clear: [] });
+  if (!validation.differences.length) return { status: "refused", message: "The proposal matches the saved values; there is nothing to apply." };
+  const createdAt = options.now?.() ?? new Date();
+  const proposal: ContentAiProposal = {
+    id, entry: request.entry, expected: request.expected, summary: request.summary, values: request.values,
+    differences: validation.differences, candidate: validation.values,
+    candidateDigest: await contentAiCandidateDigest({ entry: request.entry, expected: request.expected, candidate: validation.values }),
+    operationKey: `content-ai:${id}`, provider, createdAt: createdAt.toISOString(),
+    expiresAt: new Date(createdAt.getTime() + (options.ttlMs ?? DAY_MS)).toISOString(),
+  };
+  guard.signal?.throwIfAborted();
+  await guard.beforePersist?.();
+  guard.signal?.throwIfAborted();
+  try {
+    await options.store.create({ schemaVersion: 1, owner: options.owner, actorId: options.actor?.id ?? null, proposal, ...(keyDigest ? { preparation: { keyDigest, payloadDigest } } : {}) });
+  } catch (error) {
+    const recovered = await replay();
+    if (recovered) return recovered;
+    throw error;
+  }
+  // A late abort may leave a private recoverable proposal, never a canonical Content mutation.
+  guard.signal?.throwIfAborted();
+  return { status: "proposed", proposal: structuredClone(proposal) };
+}
+
 export function createContentAiService(options: ContentAiServiceOptions): ContentAiService {
   const ai = options.boundary({ actor: options.actor, source: "content-ai" });
   const now = () => options.now?.() ?? new Date();
-  const ttl = options.ttlMs ?? DAY_MS;
 
   async function scope(entry: ContentEntryRef): Promise<EditorialField[]> {
-    const fields = (await ai.readFields({ entry })).filter((field) => (CONTENT_AI_FIELD_KEYS as readonly string[]).includes(field.key) && CONTENT_AI_KINDS.has(field.kind));
-    if (!fields.length) throw new EditorialError("forbidden", "Content-AI edits only an Article's title and body; this Entry has neither.");
-    return fields;
+    return contentAiScope(options, ai, entry);
   }
   async function stored(proposalId: unknown): Promise<ContentAiProposal> {
     if (typeof proposalId !== "string" || !PROPOSAL_ID.test(proposalId)) throw new EditorialError("invalid-request", "Malformed proposal id.");
@@ -152,6 +232,7 @@ export function createContentAiService(options: ContentAiServiceOptions): Conten
       if (!instruction || instruction.length > MAX_INSTRUCTION) throw new EditorialError("invalid-request", `Describe the change in 1 to ${MAX_INSTRUCTION} characters.`);
       const proposer = options.proposer;
       if (!proposer) throw new EditorialError("unavailable", "No AI provider is available on this host. Saved Content, history and committed AI operations stay readable.");
+      request.signal?.throwIfAborted();
       const fields = await scope(request.entry);
       const pinned = await ai.readEntry({ entry: request.entry, perspective: "working" });
       const output = await proposer.propose({
@@ -159,6 +240,7 @@ export function createContentAiService(options: ContentAiServiceOptions): Conten
         fields: fields.map((field) => ({ key: field.key, label: field.label, kind: field.kind, value: typeof pinned.values[field.id] === "string" ? pinned.values[field.id] as string : "" })),
         signal: request.signal ?? new AbortController().signal,
       });
+      request.signal?.throwIfAborted();
       // A model refusal is reported as it is, and nothing is prepared.
       if (output.kind === "refusal") return { status: "refused", message: output.message || "The model declined this change." };
       const values: Record<string, string> = {};
@@ -168,22 +250,7 @@ export function createContentAiService(options: ContentAiServiceOptions): Conten
         if (typeof value !== "string" || value.length > MAX_VALUE) throw new EditorialError("invalid-value", `The proposed ${field.label} is not usable text.`);
         values[field.id] = value;
       }
-      if (!Object.keys(values).length) return { status: "refused", message: "The model proposed no change." };
-      // The owning backend validates against the pinned precondition and writes nothing.
-      const validation = await ai.validateFields({ entry: request.entry, expected: pinned.expected, values, clear: [] });
-      if (!validation.differences.length) return { status: "refused", message: "The proposal matches the saved values; there is nothing to apply." };
-      const id = options.createId();
-      const createdAt = now();
-      const proposal: ContentAiProposal = {
-        id, entry: structuredClone(request.entry), expected: pinned.expected, summary: output.summary, values,
-        differences: validation.differences, candidate: validation.values,
-        candidateDigest: await contentAiCandidateDigest({ entry: request.entry, expected: pinned.expected, candidate: validation.values }),
-        operationKey: `content-ai:${id}`, provider: proposer.label,
-        createdAt: createdAt.toISOString(), expiresAt: new Date(createdAt.getTime() + ttl).toISOString(),
-      };
-      // Durable before it is acknowledged, so its operation can always be recovered.
-      await options.store.create({ schemaVersion: 1, owner: options.owner, actorId: options.actor?.id ?? null, proposal });
-      return { status: "proposed", proposal: structuredClone(proposal) };
+      return stageValidatedContentAi(options, { entry: request.entry, expected: pinned.expected, values, summary: output.summary }, proposer.label, { signal: request.signal });
     },
     async read(request) {
       const proposal = await stored(request.proposalId);
@@ -199,6 +266,8 @@ export function createContentAiService(options: ContentAiServiceOptions): Conten
       if (options.canApply === false) throw new EditorialError("forbidden", "This host permits AI proposals but not Apply.");
       if (now().getTime() > Date.parse(proposal.expiresAt)) throw new EditorialError("invalid-request", "This proposal expired before it was applied; prepare it again.");
       if (request.renderedCandidate !== proposal.candidateDigest) throw new EditorialError("invalid-request", "Apply needs a successful render of this exact candidate first.");
+      const fields = await scope(proposal.entry);
+      for (const id of Object.keys(proposal.values)) if (!fields.some(field => field.id === id)) throw new EditorialError("forbidden", "This proposal includes a field no longer permitted by the host policy.");
       // The immutable payload and key on every attempt; a stale precondition refuses and writes nothing.
       const receipt = await ai.saveFields({ entry: proposal.entry, expected: proposal.expected, values: proposal.values, clear: [], operationKey: proposal.operationKey });
       return { receipt, recovered: false };
@@ -244,9 +313,10 @@ export function createFakeContentAiProposer(): ContentAiProposer {
       const values: Record<string, string> = {};
       for (const field of fields) {
         if (field.key === "title") values.title = `${field.value} — ${instruction}`.slice(0, 200);
-        if (field.key === "body") values.body = `${field.value}\n\n## Revision note\n\n${instruction}`;
+        else if (field.key === "body") values.body = `${field.value}\n\n## Revision note\n\n${instruction}`;
+        else values[field.key] = `${field.value} — ${instruction}`.slice(0, MAX_VALUE);
       }
-      return { kind: "proposal", values, summary: `Applied the instruction "${instruction}" to ${fields.map((field) => field.label).join(" and ")}.` };
+      return { kind: "proposal", values, summary: `Applied the instruction "${instruction}" to ${fields.map((field) => field.label).join(" and ")}.`.slice(0, 1000) };
     },
   };
 }
