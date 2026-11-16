@@ -102,7 +102,10 @@
     "!src/hosted-demo",
     "docs/hosted-content.md",
     "docs/native-editing.md",
-    "docs/assistant.md"
+    "docs/assistant.md",
+    "docs/structural-authoring.md",
+    "docs/host-document-renderer.md",
+    "docs/native-workspace-capture.md"
   ],
   "engines": {
     "node": ">=24 <25",
