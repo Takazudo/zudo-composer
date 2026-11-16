@@ -56,9 +56,10 @@ try {
   // through the host stylesheet) at the checkout's installed version.
   const { version: tailwindVersion } = JSON.parse(await readFile(join(root, "node_modules/tailwindcss/package.json"), "utf8"));
   await writeFile(join(host, "pnpm-workspace.yaml"), `packages: []\nstrictPeerDependencies: true\noverrides:\n  zudo-composer: '${tarballs["zudo-composer"]}'\n  '@zudo-composer/component-contract': '${tarballs["@zudo-composer/component-contract"]}'\n  tailwindcss: '${tailwindVersion}'\n`);
-  await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "public-entry-host/components" });\n');
+  await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "public-entry-host/components", authoringAuthority: "workspace", hostDocument: { module: "public-entry-host/components", rendererId: "public-proof", rendererVersion: "1" } });\n');
   await writeFile(join(host, "components/pack.mjs"), `import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
 export function Banner() { return null; }
+export function renderDocument() { return "<html><body>Installed proof</body></html>"; }
 export const componentPack = defineComponentPack({ packId: "public-entry-host", packVersion: "1.0.0", components: [defineComponent()(Banner, {
   id: "proof.banner", schemaVersion: 1, title: "Banner", category: "Proof", description: "Installed entry proof",
   source: { module: "public-entry-host/components", exportKind: "named", exportName: "Banner" },
