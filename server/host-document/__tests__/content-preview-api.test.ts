@@ -41,7 +41,7 @@ async function fixture(realStorage=false){
   // The actual API passes its exact captured snapshot into the public compiler.
   Object.assign(capture,{compileAuthoringWorkspaceSnapshot:vi.fn((input:Parameters<typeof realCapture.compileAuthoringWorkspaceSnapshot>[0])=>realCapture.compileAuthoringWorkspaceSnapshot(input)),isAuthoringWorkspaceSnapshotCurrent:vi.fn((input:Parameters<typeof realCapture.isAuthoringWorkspaceSnapshotCurrent>[0],snapshot:Parameters<typeof realCapture.isAuthoringWorkspaceSnapshotCurrent>[1])=>realCapture.isAuthoringWorkspaceSnapshotCurrent(input,snapshot))});
   capture.resolveAuthoringRendererIdentity.mockResolvedValue(renderer);capture.resolveAuthoringPackIdentity.mockResolvedValue(packIdentity);
-  contentStore=await createFilesystemContentStore({contentRoot:workspaceDomainRoots({data:composerConfig.paths.data,compositions:composerConfig.paths.compositions,content:composerConfig.paths.content,mappings:composerConfig.paths.mappings,sitemaps:composerConfig.paths.sitemaps},"proof").content});
+  contentStore=await createFilesystemContentStore({contentRoot:workspaceDomainRoots({compositions:composerConfig.paths.compositions,content:composerConfig.paths.content,mappings:composerConfig.paths.mappings,sitemaps:composerConfig.paths.sitemaps},"proof").content});
   actualLease=await acquireAuthoringLease(workspaceRoot,"saved-preview-test");cleanup.push(()=>actualLease!.release());readSnapshot=()=>actualLease!.execute(()=>realCapture.captureAuthoringWorkspace(options));
  }
  const handlers=new Map<string, (...args:unknown[])=>void>();let middleware: ((...args:unknown[])=>Promise<void>)|undefined;
