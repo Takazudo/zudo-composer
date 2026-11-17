@@ -361,7 +361,8 @@ Source/unit tests alone do not complete a consumer scenario.
 
 Opening a provider-qualified Mapping deep link resolves the selected definition
 after loading catalogs and Mapping summaries. It does not wait for every unrelated
-library definition or attachment diagnostic before opening the editor. The selected
+library definition before opening the editor. Attachment checks still precede
+the deep-link handoff. The selected
 editor still performs its normal Content and Composition resolution and validation.
 Returning to the library resolves its complete diagnostics; pending rows are shown
 as checking rather than incorrectly reporting missing sources.
