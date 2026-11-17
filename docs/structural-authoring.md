@@ -102,7 +102,7 @@ components whose defaults yield a complete valid Composition; Mapping-populated
 slots are unavailable. The server revalidates the exact revision, owner, slot,
 component defaults and whole project before writing. A new UUID is retained with
 the request so lost-response retries cannot insert a second child. Insertion is
-at the start of the canonical slot. Page creation, root insertion and removal are
+at the start of the canonical slot. Page creation, root insertion and root removal are
 not offered in this panel; unsupported operations are stated rather than inferred
 from a flattened display parent.
 
