@@ -19,12 +19,13 @@
 // SiteProject delivery routes (`/site*`) are deliberately absent: they render
 // outside the CMS chrome and are not authoring records.
 
+import type { PersistedSnapshot } from "../shared/persistence-generation";
 import { COMPOSITION_FILE_PROVIDER_CHANNEL } from "../composer/storage/file-provider";
 import { CONTENT_FILE_PROVIDER_DOMAIN } from "../content/storage/file-provider";
 import { MAPPING_FILE_PROVIDER_DOMAIN } from "../mapping/storage/file-provider";
 import { SITEMAP_FILE_PROVIDER_DOMAIN } from "../sitemapper/storage/file-provider";
 import { ASSET_PERSISTENCE_CHANNEL } from "./persistence-channels";
-import type { CompositionSummary } from "../composer/browser";
+import { summarizeComposition, validateCompositionRecord, type CompositionRecord, type CompositionSummary } from "../composer/browser";
 import type { ContentCatalog } from "../content/catalog";
 import type { ContentEntryRecord, ContentModelRecord } from "../content/model";
 import type { ContentStore } from "../content/library";
@@ -154,7 +155,11 @@ export interface WorkspaceSummaryIntegration {
   readonly componentProvider: { readonly catalog: ComponentCatalog };
   readonly compositionProviders: readonly {
     readonly descriptor: { readonly id: string; readonly label: string };
-    readonly store: { list(): Promise<readonly CompositionSummary[]> };
+    readonly store: {
+      list(): Promise<readonly CompositionSummary[]>;
+      /** Validated canonical inventory; does not generate or repair JSX. */
+      snapshot?(): Promise<PersistedSnapshot<CompositionRecord>>;
+    };
   }[];
   readonly contentProvider: { readonly descriptor: { id: string }; readonly store: Pick<ContentStore, "listModels" | "scanEntries"> };
   readonly contentCatalog: ContentCatalog;
@@ -301,6 +306,45 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     return initialization;
   };
 
+  // Summary metadata and Mapping diagnostics need canonical records, not JSX
+  // repair. Keep each real snapshot (including its token) only until the normal
+  // Composition invalidation/refresh boundary. An old promise cannot repopulate
+  // a cleared cache when it settles after a newer read.
+  let compositionInventory = new Map<string, Promise<PersistedSnapshot<CompositionRecord>>>();
+  const inventory = (provider: WorkspaceSummaryIntegration["compositionProviders"][number]) => {
+    let pending = compositionInventory.get(provider.descriptor.id);
+    if (!pending) {
+      pending = Promise.resolve().then(async () => {
+        const value = await provider.store.snapshot!();
+        if (!(typeof value.mutationToken === "string" ? value.mutationToken.length > 0 : Number.isSafeInteger(value.mutationToken) && value.mutationToken >= 0) || !Array.isArray(value.records)
+          || value.records.some(record => !validateCompositionRecord(record).ok)
+          || new Set(value.records.map(record => record.id)).size !== value.records.length) {
+          throw new Error(`Invalid canonical Composition inventory from ${provider.descriptor.id}.`);
+        }
+        return value;
+      });
+      compositionInventory.set(provider.descriptor.id, pending);
+    }
+    return pending;
+  };
+  const summaryCompositions: MappingCompositionCatalog = {
+    ...integration.mappingCompositionCatalog,
+    async resolve(ref) {
+      if (!ref || typeof ref !== "object" || Array.isArray(ref) || Object.keys(ref).sort().join(",") !== "providerId,recordId"
+        || typeof ref.providerId !== "string" || !ref.providerId || !isSafeRecordId(ref.recordId)) {
+        return { status: "invalid", reason: "Composition reference is malformed." };
+      }
+      const provider = integration.compositionProviders.find(candidate => candidate.descriptor.id === ref.providerId);
+      if (!provider?.store.snapshot) return integration.mappingCompositionCatalog.resolve(ref);
+      try {
+        const record = (await inventory(provider)).records.find(candidate => candidate.id === ref.recordId);
+        return record ? { status: "resolved", record } : { status: "not-found" };
+      } catch (cause) {
+        return { status: "provider-error", reason: reason(cause, "Canonical Composition inventory could not be read.") };
+      }
+    },
+  };
+
   const loadCompositions = async (): Promise<CompositionsData> => {
     await ensureInitialized();
     let compositions = 0;
@@ -310,7 +354,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     for (const provider of integration.compositionProviders) {
       let summaries: readonly CompositionSummary[];
       try {
-        summaries = await provider.store.list();
+        summaries = provider.store.snapshot ? (await inventory(provider)).records.map(summarizeComposition) : await provider.store.list();
       } catch (cause) {
         throw new Error(`Compositions in ${provider.descriptor.label} could not be listed: ${reason(cause, "the provider failed.")}`, { cause });
       }
@@ -357,7 +401,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
       }
       const definition = await resolveMappingDefinition(
         resolved.record,
-        { content: integration.contentCatalog, compositions: integration.mappingCompositionCatalog },
+        { content: integration.contentCatalog, compositions: summaryCompositions },
         integration.componentProvider.catalog,
       );
       const blocking = definition.diagnostics.filter(({ severity }) => severity === "blocking");
@@ -484,17 +528,17 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
   const listeners = new Set<() => void>();
   const stopChanges = integration.subscribeChanges?.((channel) => {
     if (channel === "sessions") return; // Pending edits are not persisted counts.
-    if (channel === COMPOSITION_FILE_PROVIDER_CHANNEL) { delete cached.compositions; delete cached.mappings; }
+    if (channel === COMPOSITION_FILE_PROVIDER_CHANNEL) { compositionInventory = new Map(); delete cached.compositions; delete cached.mappings; }
     else if (channel === CONTENT_FILE_PROVIDER_DOMAIN) { delete cached.content; delete cached.mappings; }
     else if (channel === MAPPING_FILE_PROVIDER_DOMAIN) delete cached.mappings;
     else if (channel === SITEMAP_FILE_PROVIDER_DOMAIN) delete cached.sitemaps;
     else if (channel === ASSET_PERSISTENCE_CHANNEL) delete cached.assets;
-    else cached = {}; // Workspace selection and legacy broad hints.
+    else { cached = {}; compositionInventory = new Map(); } // Workspace selection and legacy broad hints.
     for (const listener of listeners) listener();
   });
   return {
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    dispose() { stopChanges?.(); cached = {}; listeners.clear(); },
+    dispose() { stopChanges?.(); cached = {}; compositionInventory = new Map(); listeners.clear(); },
     async counts() {
       const data = await read();
       return {
@@ -530,6 +574,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     },
     refresh() {
       cached = {};
+      compositionInventory = new Map();
       for (const listener of listeners) listener();
       if (state !== "failed") return;
       state = "idle";

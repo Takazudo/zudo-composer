@@ -255,3 +255,16 @@ stage/activation; it is not an atomic transaction across stores. Already committ
 Apply/Undo receipts and already active release retries remain recovery-first.
 A fresh activation of an older release with a different policy identity refuses;
 retain that release as recovery evidence and review a new candidate explicitly.
+
+### Workspace summary inventory
+
+The dashboard and shell use an optional Composition store `snapshot()` capability
+for canonical metadata and their own Mapping source diagnostics. This snapshot
+must return validated records and the real mutation token; it does not generate,
+repair, or attest derived JSX. Qualified provider identity is preserved, and the
+inventory cache is discarded on Composition persistence changes, workspace changes,
+or an explicit summary refresh. Failed/invalid snapshots remain visible failures;
+they do not fall back to a derived write. Providers without this capability retain
+their existing catalog behavior. Composition editors and their derived-output
+validation still use the normal `list`/`get` APIs. This keeps read-only workspace
+chrome from initiating JSX repair while an exact host preview freezes admission.
