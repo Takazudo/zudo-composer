@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "bd056471996984dd39bba219b19add25eb092982",
-  "payloadSha256": "aa0deee4bb54c6f07fefd46dba58db80d50de3261dc4814bbb35d680280123b7",
-  "rawPackageJsonSha256": "0d6786bfe0051334867ccfceb72848bbc0203aec5b0f8c4f3c48425a9435b7e2",
+  "packageOutputSha": "d49b0a988cd61f34a778c613ef156b7aa95c5a23",
+  "payloadSha256": "8caa86fe8dc1607d18ada534df7215923c62f52c1c2f07610e51cc54230252b0",
+  "rawPackageJsonSha256": "70eea4eee6555d6eec7e86f4d6941fce4ee9d95c19d8cd747875280963ef8968",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -3138,9 +3138,9 @@
     },
     {
       "path": "src/features/content/content-preview-pane.tsx",
-      "bytes": 11737,
+      "bytes": 11820,
       "mode": 420,
-      "sha256": "eaae6f73d1ba3d3021db7f44bd889a579a1cff20b20114f6c315b5927b702356"
+      "sha256": "c9701fa79b49514e8e243bb0795ba0f501523e501ada22da1eff468d18cf9676"
     },
     {
       "path": "src/features/content/content-workspace.tsx",
@@ -3222,9 +3222,9 @@
     },
     {
       "path": "src/features/content/saved-host-preview.tsx",
-      "bytes": 8720,
+      "bytes": 9145,
       "mode": 420,
-      "sha256": "740e42a514f0ee0038e5a5edc791f7bd6a7e17839370a8c40b96ca5bf34a5d7f"
+      "sha256": "9a6ba4ee2647d4d8ac5e42e268ef3236315285d25f733096e88e25993e9a03c8"
     },
     {
       "path": "src/features/content/scalar-control.tsx",
@@ -3246,9 +3246,9 @@
     },
     {
       "path": "src/features/content/styles.css",
-      "bytes": 25779,
+      "bytes": 26629,
       "mode": 420,
-      "sha256": "37ecc8de8a0e59c661efdf8c78972fd304930ef90967d73a625cf252554a2f23"
+      "sha256": "582dab4aa32955b64fdc940812ecc34b6ad34f71ef87b64fe368f31c2f433716"
     },
     {
       "path": "src/features/delivery/activated-source.ts",
