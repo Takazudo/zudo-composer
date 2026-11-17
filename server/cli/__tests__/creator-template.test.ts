@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -26,6 +26,12 @@ it("produces a complete portable starter through canonical writers and reopens i
   const root = await mkdtemp(join(parent, "creator-template-"));
   const host = join(root, "host");
   try {
+    // Policy discovery loads the emitted config through normal public package
+    // resolution, independently of the source evaluator below. Provision that
+    // dependency outside the generated host so its portable inventory stays exact.
+    // This is source-test setup only; the packed lane installs immutable packages.
+    await mkdir(join(root, "node_modules"));
+    await symlink(APP_ROOT, join(root, "node_modules/zudo-composer"), "dir");
     const metadata = await readCreatorMetadata();
     await writeHostProject(host, "creator-contract", metadata);
     // Typecheck the actual emitted host configs and tests. Only public package
