@@ -20,6 +20,11 @@ void pathsAllRequired;
 void resolvedAllRequired;
 
 const resolved = composer({ pack: "my-site/components" });
+const absentPolicy: Pick<ResolvedComposerConfig, "contentValidation"> = { contentValidation: undefined };
+void absentPolicy;
+// @ts-expect-error Resolved policy keys remain present even when the host omits the policy.
+const missingPolicy: Pick<ResolvedComposerConfig, "contentValidation"> = {};
+void missingPolicy;
 
 // The resolved nested objects cannot be partially specified: assigning a subset
 // to the nested type is a compile error, which is what keeps a host override
