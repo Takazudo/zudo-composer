@@ -11459,10 +11459,22 @@ async function compileSiteProject(project, options) {
 }
 //#endregion
 //#region src/site-project/assets/capture.ts
-/** Inspect impact plus the compile diagnostics that made it incomplete, if any:
-* the raw root cause `captureSiteProjectAssetLock` carries as `causes`, kept out
-* of `inspectSiteProjectAsset`'s own return so `usage.ts` stays unaffected. */
-async function inspectSiteProjectAssetWithCauses(project, catalog, snapshot, providerId) {
+function unassignedPageHasNoMaterialization(project, diagnostic) {
+	if (diagnostic.code !== "unassigned-page" || !diagnostic.nodeId) return false;
+	const sitemap = project.providers.sitemaps.find((provider) => provider.id === project.activeSitemap.providerId)?.records.find((record) => record.id === project.activeSitemap.recordId);
+	if (!sitemap) return false;
+	const matches = [];
+	const visit = (nodes) => {
+		for (const node of nodes) {
+			if (node.id === diagnostic.nodeId) matches.push(node);
+			visit(node.children);
+		}
+	};
+	visit(sitemap.document.root);
+	return matches.length === 1 && matches[0].source.kind === "unassigned";
+}
+/** Keep materialization causes separate from Asset diagnostics for strict callers. */
+async function inspectSiteProjectAssetWithCauses(project, catalog, snapshot, providerId, authoringSnapshot = false) {
 	const compilation = await compileSiteProject(project, {
 		componentCatalog: catalog,
 		policy: "authoring-preview"
@@ -11472,9 +11484,11 @@ async function inspectSiteProjectAssetWithCauses(project, catalog, snapshot, pro
 		routes: compilation.status === "ready" ? compilation.build.routes : compilation.routes,
 		providerId
 	});
-	if (compilation.status === "blocked") {
+	const causes = compilation.status === "blocked" ? compilation.diagnostics : [];
+	const incomplete = authoringSnapshot ? causes.filter((diagnostic) => !unassignedPageHasNoMaterialization(project, diagnostic)) : causes;
+	if (compilation.status === "blocked" && (!causes.length || incomplete.length)) {
 		index.complete = false;
-		for (const diagnostic of compilation.diagnostics) index.advisory.push({
+		for (const diagnostic of incomplete) index.advisory.push({
 			location: {
 				domain: "materialization",
 				providerId: project.activeSitemap.providerId,
@@ -11487,13 +11501,20 @@ async function inspectSiteProjectAssetWithCauses(project, catalog, snapshot, pro
 	}
 	return {
 		index,
-		causes: compilation.status === "blocked" ? compilation.diagnostics : []
+		causes
 	};
 }
 async function captureSiteProjectAssetLock(project, catalog, store, suppliedSnapshot) {
+	return captureAssetLock(project, catalog, store, suppliedSnapshot, false);
+}
+/** Internal durable-capture entry point. Does not certify release readiness. */
+async function captureAuthoringProjectAssetLock(project, catalog, store, suppliedSnapshot) {
+	return captureAssetLock(project, catalog, store, suppliedSnapshot, true);
+}
+async function captureAssetLock(project, catalog, store, suppliedSnapshot, authoringSnapshot) {
 	try {
 		const snapshot = suppliedSnapshot ?? await store?.snapshot();
-		const { index, causes } = await inspectSiteProjectAssetWithCauses(project, catalog, snapshot, store?.provider.id);
+		const { index, causes } = await inspectSiteProjectAssetWithCauses(project, catalog, snapshot, store?.provider.id, authoringSnapshot);
 		if (!index.complete) return {
 			status: "blocked",
 			index,
@@ -11644,8 +11665,11 @@ async function captureAuthoringWorkspace(options) {
 		const validation = validateSiteProject(project, { componentPack: options.pack.manifest });
 		if (!validation.ok) throw new Error(`Captured project is invalid: ${validation.diagnostics.map(({ message }) => message).join(" ")}`);
 		const snapshot = capture.values.assets;
-		const locked = await captureSiteProjectAssetLock(project, host.manifest, host.stores.assets, snapshot);
-		if (locked.status !== "ready" || !locked.lock) throw new Error("Referenced Assets could not be captured exactly.");
+		const locked = await captureAuthoringProjectAssetLock(project, host.manifest, host.stores.assets, snapshot);
+		if (locked.status !== "ready" || !locked.lock) {
+			const diagnostics = locked.status === "blocked" ? [...locked.causes, ...locked.diagnostics] : [];
+			throw new Error(`Referenced Assets could not be captured exactly. ${diagnostics.map(({ message }) => message).join(" ")}`);
+		}
 		const files = [];
 		for (const pin of locked.lock.pins) {
 			if (files.some(({ fileName }) => fileName === pin.url.slice(1))) continue;
