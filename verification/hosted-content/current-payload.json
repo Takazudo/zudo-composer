@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "d5ac410b3c9e4b1781289ae47cc48be47efaa099",
-  "payloadSha256": "5452b4337d11c9e91b4f45f451b6a39c6c269b61a115cba2bc6330dd38bf02d6",
-  "rawPackageJsonSha256": "958627116695f8c03aebe5541b7561126c2e010fab622ec543f3f7f916297007",
+  "packageOutputSha": "5fe6d8d92f5013943053491794c0502b83228d53",
+  "payloadSha256": "5f433a53a0ffb17cf036f6ea7627bb05a61f9d39c59fa0684990692bf9ba0089",
+  "rawPackageJsonSha256": "8b6ffeef366485c3f2f3a4b215b697f8c7cd54bf646cca257b8f0d4f0bec41fc",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -84,9 +84,9 @@
     },
     {
       "path": "docs/structural-authoring.md",
-      "bytes": 17804,
+      "bytes": 18516,
       "mode": 420,
-      "sha256": "b792bffea81fe7aed4b99c35388c46a601779dfab93b4ff488071e9ea625c15b"
+      "sha256": "87a050bcd282630023fb1fc84ddee9768b740a4cf53eb60bb636e5489c0dbaa0"
     },
     {
       "path": "index.html",
@@ -1476,9 +1476,9 @@
     },
     {
       "path": "src/app/workspace-summary.ts",
-      "bytes": 27581,
+      "bytes": 31892,
       "mode": 420,
-      "sha256": "034f5b34908c4fa06989b48a388840fc0c3f0ac31499b239631b2edc04e9f373"
+      "sha256": "b0c8f00135151f3e2fdf4ce41d4af65aaf9ebee479a08c44113d44041402c20a"
     },
     {
       "path": "src/assets/README.md",
