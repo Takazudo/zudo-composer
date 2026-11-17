@@ -131,3 +131,14 @@ it("shows field-specific shared source uses separately from local capabilities a
   expect(view.queryByRole("link", { name: "Open Price source" })).toBeNull();
   expect(view.getByText("/")).toBeTruthy();
 });
+
+it("withholds shared source navigation while a different local field has an unsaved draft", () => {
+  const mixed: HostDocumentTarget = { ...target, fieldSources: [{ prop: "body", label: "Body", sources: [{ entry: { providerId: "content-filesystem", modelId: "course", recordId: "consultation" }, fieldId: "course-price", fieldLabel: "Price", affectedUses: [] }] }] };
+  const view = render(<HostInspector target={mixed} component={component} disabled={false} onDirty={() => {}} onSave={async () => {}} />);
+  expect(view.getByRole("link", { name: "Open Price source" })).toBeTruthy();
+  fireEvent.input(view.getByRole("textbox", { name: "Heading" }), { target: { value: "Pending local title" } });
+  expect(view.queryByRole("link", { name: "Open Price source" })).toBeNull();
+  expect((view.getByRole("textbox", { name: "Heading" }) as HTMLInputElement).value).toBe("Pending local title");
+  fireEvent.click(view.getByRole("button", { name: "Discard local draft" }));
+  expect(view.getByRole("link", { name: "Open Price source" })).toBeTruthy();
+});
