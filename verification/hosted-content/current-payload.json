@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "71126775a97feab004145dde63a768684e8e3cd9",
-  "payloadSha256": "57b1e88911c471d5c59a7cd105a630cb12d9afa4c3c0ed09eeb81de4aed74906",
-  "rawPackageJsonSha256": "3247ccc706e22ccd176f6b255b42f5e1345e0eab1e588702b28f8ffeee278098",
+  "packageOutputSha": "6522f2c78fd59744b56d1717bb93f68d2bddc255",
+  "payloadSha256": "882444ae528ff7530a90d93c13f15da919cdd12421bd60b9acc4ae108837cebb",
+  "rawPackageJsonSha256": "8b6ffeef366485c3f2f3a4b215b697f8c7cd54bf646cca257b8f0d4f0bec41fc",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -582,9 +582,9 @@
     },
     {
       "path": "server/authoring.d.mts",
-      "bytes": 54498,
+      "bytes": 54509,
       "mode": 420,
-      "sha256": "f209979ad35da4869d1309ea8e43fbd79141fe5b795fee388e65ec1fd4bbdc9d"
+      "sha256": "82541cd053556d4a0f382e844b1b38bbae17b95c8ee831937abcbf0cbd13ce0f"
     },
     {
       "path": "server/authoring.mjs",
@@ -708,9 +708,9 @@
     },
     {
       "path": "server/config-public.d.mts",
-      "bytes": 8932,
+      "bytes": 8943,
       "mode": 420,
-      "sha256": "316ace0798be221e8b82ee424ed4d431f7a0c119828bcc2fe841276a2deebc2f"
+      "sha256": "1df94d1d52dede5c16a4753f2d176c7767264129081e263e4cac32a82e3c9132"
     },
     {
       "path": "server/config/assistant.ts",
@@ -720,9 +720,9 @@
     },
     {
       "path": "server/config/config.ts",
-      "bytes": 11738,
+      "bytes": 11749,
       "mode": 420,
-      "sha256": "513580f99901f8d5ff30a133373a9b5dc324d789919acd413de6c8a836024cc8"
+      "sha256": "8b1d904aad25590fc1772efe72f8e93aa466086db2d69d4af9e8908f266d4ddb"
     },
     {
       "path": "server/config/content-validation.ts",
@@ -888,9 +888,9 @@
     },
     {
       "path": "server/editing.d.mts",
-      "bytes": 113515,
+      "bytes": 113526,
       "mode": 420,
-      "sha256": "7f05cf7568a295030cef4e983a200f0e2d4f1232592acbbd47295181eb4018fa"
+      "sha256": "5ef0af45e7acee3009d0af588fc8cc2d2da7eac4c5e2e2ff2404c2728a95bb27"
     },
     {
       "path": "server/editing.mjs",
@@ -1278,9 +1278,9 @@
     },
     {
       "path": "server/vite.d.mts",
-      "bytes": 29255,
+      "bytes": 29266,
       "mode": 420,
-      "sha256": "66af8e6d65f00b9a728da178cd9e1b1289caac03991ce8b35422bea8fe3b78a0"
+      "sha256": "10270252d62e9787ff7a471eac75955b7e3f77ca8b933c7d82b9c67b005e6d8a"
     },
     {
       "path": "src/App.tsx",
