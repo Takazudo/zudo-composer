@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "d49b0a988cd61f34a778c613ef156b7aa95c5a23",
-  "payloadSha256": "8caa86fe8dc1607d18ada534df7215923c62f52c1c2f07610e51cc54230252b0",
-  "rawPackageJsonSha256": "70eea4eee6555d6eec7e86f4d6941fce4ee9d95c19d8cd747875280963ef8968",
+  "packageOutputSha": "aa8d0df2feec56f6f3f887f9653db9bf7b30d6e0",
+  "payloadSha256": "6dc60a8942f1872df263b4c44224f2a7b68536b7f2c9de6d5a3d26080a07ffe7",
+  "rawPackageJsonSha256": "a2edbdd1b1a6698b39afca8d880be2a87a03eca2e64bdd4631f994ebadf0b890",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -84,9 +84,9 @@
     },
     {
       "path": "docs/structural-authoring.md",
-      "bytes": 23689,
+      "bytes": 24708,
       "mode": 420,
-      "sha256": "ea2ed8df31cdec6169f13e4a3cb831d26aed4cf214225a8ae2440949ba476b50"
+      "sha256": "112ac4e751ac16ddae43661407867c680e3d541c5e8bf11cfed3a5d846763a6e"
     },
     {
       "path": "index.html",
@@ -3414,9 +3414,9 @@
     },
     {
       "path": "src/features/mapping/controller.ts",
-      "bytes": 38569,
+      "bytes": 39789,
       "mode": 420,
-      "sha256": "a65acae7b037df4683415449e4b6d8266154d804459a932c8839fa7fa65f5fab"
+      "sha256": "3476cc53cb7e6bed30c07c8fcdf60c20a062d44065e17aa87313bfa7dcae76d0"
     },
     {
       "path": "src/features/mapping/deep-link.ts",
@@ -3449,10 +3449,16 @@
       "sha256": "2ecbcd1474099a4dc12927d79119c2d35960103d97d1c186ac6d60d4cc078eff"
     },
     {
-      "path": "src/features/mapping/library.tsx",
-      "bytes": 10855,
+      "path": "src/features/mapping/library-discovery.ts",
+      "bytes": 2618,
       "mode": 420,
-      "sha256": "8aed1f3501e6f0f7aa7713906cb2fdd01da227349326c37b5c907a6fe034ee98"
+      "sha256": "66769569cee188ef9d56810f7bf0d7d407ba512bded9dd2337286d67cc9a4b7b"
+    },
+    {
+      "path": "src/features/mapping/library.tsx",
+      "bytes": 10921,
+      "mode": 420,
+      "sha256": "346ea29678660c23e8d0417e498db1638c7265221ee1a0eb1bf8b38a3f32e8ad"
     },
     {
       "path": "src/features/mapping/mapping-app.tsx",
