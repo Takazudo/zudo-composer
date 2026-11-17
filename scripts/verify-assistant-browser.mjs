@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startHostServer } from "./packed-host-helpers.mjs";
+import { restartPageHost } from "./assistant/restart-page.mjs";
 import { prepareAssistantHost } from "./assistant/prepare-host.mjs";
 import { startFakeMessagesApi } from "./fixtures/assistant/fake-messages-api.mjs";
 import { count, frame, highlighted, idle, lastReply, send } from "./assistant/browser-helpers.mjs";
@@ -96,9 +97,7 @@ async function landingJourneys() {
   await expect(page.locator('.cms-assistant-message[data-role="assistant"]').filter({ hasText: "Your site writes for experts" }).getByText("Used Memory r2")).toBeVisible();
   log("journey 5: corrected Memory r3 used on the next call; old answer keeps r2");
 
-  await stop();
-  await start(host.dir);
-  await page.reload();
+  await restartPageHost(page, async () => { await stop(); await start(host.dir); });
   await expect(page.locator('.cms-assistant-message[data-role="assistant"]').filter({ hasText: "Your site writes for experts" }).getByText("Used Memory r2")).toBeVisible();
   await page.getByRole("button", { name: "New", exact: true }).click();
   await expect(page.locator(".cms-assistant-message")).toHaveCount(0);
@@ -684,9 +683,7 @@ async function exactInsertionJourneys() {
   assert.ok(applied[1]?.includes("正確な日本語の追記。"), "home JSX carries the exact Japanese text");
   assert.ok(JSON.parse(applied[0] ?? "{}").document.root.some(node => node.componentId === "native.table"), "home JSON");
   assert.match(applied[2] ?? "", /now clearer/);
-  await stop();
-  await start(host.dir);
-  await page.reload();
+  await restartPageHost(page, async () => { await stop(); await start(host.dir); });
   await expect(page.getByRole("heading", { name: "Applied to Composer" })).toBeVisible({ timeout: 60_000 });
   await shot(page, "native-applied-receipt");
   // A just-reloaded tab's previous socket may still be registered; coordination then refuses safely and a retry succeeds.
