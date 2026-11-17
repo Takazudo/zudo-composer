@@ -184,3 +184,57 @@ Direct `/site` and `/website-preview` bookmarks show this boundary before loadin
 the Preact visitor renderer. Use the host's independently verified exact-snapshot
 static build for release rendering evidence. Ordinary Preact hosts and static
 builds retain their existing visitor routes.
+
+## Host Content value policy
+
+A host can configure `contentValidation: { module: "my-site/content-policy",
+id: "my-site-content", version: "1" }` independently of Assistant availability.
+The public package module exports a synchronous `validateContentField` function.
+Import `ContentFieldValidationInput`, `ContentPolicyIssue`, or
+`ContentValidationModule` as types from `zudo-composer/authoring`.
+
+The callback receives a deeply frozen clone of `{ providerId, model, entry,
+field, value, previousValue, purpose }` and returns an array of `{ code, message }`
+diagnostics (empty means accepted). The owning store supplies the actual model,
+field and provider after built-in schema/reference validation; a value-write
+request cannot supply its own schema. Removing an optional value supplies
+`undefined`. Required-field completeness remains Composer's existing contract.
+Callbacks cannot transform data, perform inference or return promises; thrown,
+async or malformed results refuse without a canonical write. Treat the callback
+as trusted deterministic host code, not a sandbox for untrusted code.
+
+This is **field-local validation**, not a cross-field or cross-store transaction
+API. During writes, only changed values and entries affected by a model schema
+change are checked. Do not use unrelated values in the context to implement
+cross-field invariants. Model changes remain separately owned schema operations.
+Human entry writes, batch transactions, native editorial saves, AI staging and
+Apply, and new restore/Undo operations share this policy. AI allowlists continue
+to control which fields the model may propose; they do not grant permission to
+violate the host value policy. A new Undo restoring a forbidden historical value
+refuses and preserves history rather than silently changing the stored revision.
+
+Existing records, revisions, receipts, captures and immutable releases remain
+readable. Editorial published-value reads use verified immutable Content data
+without requiring the current visitor runtime to match an older release; visitor
+rendering retains its strict runtime compatibility check. Explicit initialization/import can preserve known historical inputs;
+startup never rewrites, rejects or reseeds a whole store because of the new
+policy. Unchanged historical values may remain while unrelated fields are edited.
+Before a new publication, all values of the selected published entries are
+checked, even if their draft values were imported unchanged. Correct an invalid
+selected value explicitly before publishing it. Retained unselected published
+entries are not rewritten. Exact rendering of an old capture remains separate
+from authorization to publish new content.
+
+Policy source identity includes transitive module dependencies and host config.
+It participates in renderer/capture and release toolchain identities, including
+caller-supplied release toolchains. A supplied `installedPackDigest` describes the
+base pack identity; the Content-policy marker is always derived from the current
+host configuration, never accepted from a caller. Native Content-AI proposals also persist that
+identity in their rendered-candidate digest; fresh Apply after a policy change
+requires another review. Loaded policy source changes require a process restart,
+including when another loader is created, because native ESM dependencies can
+remain cached. Validation repeats inside the Content writer and before release
+stage/activation; it is not an atomic transaction across stores. Already committed
+Apply/Undo receipts and already active release retries remain recovery-first.
+A fresh activation of an older release with a different policy identity refuses;
+retain that release as recovery evidence and review a new candidate explicitly.

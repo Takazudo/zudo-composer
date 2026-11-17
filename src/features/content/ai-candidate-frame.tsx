@@ -51,7 +51,7 @@ export function ContentAiCandidateFrame({ controller, proposal, integration }: {
     setPrepared({ status: "preparing" });
     void (async (): Promise<Prepared> => {
       // The candidate rendered here must be the one the proposal's digest names.
-      const digest = await contentAiCandidateDigest({ entry: proposal.entry, expected: proposal.expected, candidate: proposal.candidate });
+      const digest = await contentAiCandidateDigest({ entry: proposal.entry, expected: proposal.expected, candidate: proposal.candidate, validationPolicy: proposal.validationPolicy });
       if (digest !== proposal.candidateDigest) return { status: "failed", message: "The candidate does not match the proposal it came from." };
       const compiled = await loadWorkingPreviewSnapshot(integration, undefined, (project) => withCandidate(project, proposal));
       if (compiled.status !== "ready") return { status: "blocked", message: compiled.message };

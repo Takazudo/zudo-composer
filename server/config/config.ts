@@ -1,3 +1,5 @@
+import { parseContentValidation, type ContentValidationConfig } from "./content-validation";
+export type { ContentValidationConfig } from "./content-validation";
 // Resolution of a host's `zudo-composer.config.ts` into a complete, validated
 // configuration.
 //
@@ -54,6 +56,7 @@ export interface ComposerConfigOverrides {
   authoringAuthority?: "source" | "workspace";
   /** Trusted host-owned whole-document renderer, isolated from the editor framework. */
   hostDocument?: HostDocumentConfig;
+  contentValidation?: ContentValidationConfig;
   nativeEditing?: NativeEditingConfig;
   /** Explicit AI Assistant opt-in; requires `nativeEditing` for writable pages. */
   assistant?: Partial<AssistantConfig>;
@@ -94,6 +97,7 @@ export interface ComposerPaths {
 export interface ResolvedComposerConfig {
   authoringAuthority: "source" | "workspace" | undefined;
   hostDocument: HostDocumentConfig | undefined;
+  contentValidation?: ContentValidationConfig;
   nativeEditing: NativeEditingConfig | undefined;
   assistant: AssistantConfig | undefined;
   /** Absolute host project root. Every relative setting resolves against it. */
@@ -221,6 +225,7 @@ export function composer(user: ComposerConfigInput = {}, runtime: ComposerRuntim
   return {
     authoringAuthority: user.authoringAuthority,
     hostDocument: parseHostDocument(user.hostDocument),
+    contentValidation: parseContentValidation(user.contentValidation),
     workspaceRoot,
     configPath,
     nativeEditing: parseNativeEditing(user.nativeEditing),

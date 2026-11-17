@@ -27,6 +27,18 @@ export async function readActivatedSiteRelease(options: DeliveryReaderOptions): 
   return result.value;
 }
 
+/** Immutable Content data for editorial history, not a visitor-rendering capability.
+ * Policy/runtime upgrades must not prevent reading or correcting existing records. */
+export async function readActivatedContentRelease(options: Pick<LocalSiteProjectStoreOptions, "workspaceRoot" | "testRoot">): Promise<{ project: { providers: { content: SiteProject["providers"]["content"] } }; release: { identity: SiteProjectActiveSelection } } | null> {
+  const store = createLocalSiteProjectStore(options);
+  try { await lstat(store.root); }
+  catch (cause) { if ((cause as NodeJS.ErrnoException).code === "ENOENT") return null; throw cause; }
+  const result = await store.readActiveRelease();
+  if (result.status !== "ok") throw new Error(`Activated Content release is unavailable: ${result.status === "unavailable" ? result.message : result.status}`);
+  if (!result.value) return null;
+  return { project: { providers: { content: result.value.project.providers.content } }, release: { identity: result.value.release.identity } };
+}
+
 export interface ActivatedSiteAssetData { bytes: Uint8Array; mimeType: AssetType; identity: SiteProjectActiveSelection }
 export async function readActivatedSiteAssets(pathname: string, options: DeliveryReaderOptions): Promise<ActivatedSiteAssetData | null> {
   const result = await createLocalSiteProjectStore(options).readActiveAsset(pathname);

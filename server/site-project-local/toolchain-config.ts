@@ -1,3 +1,5 @@
+import type { ResolvedComposerConfig } from "../config/config";
+import { contentValidationIdentity, hostContentValidationConfig } from "../content-validation/loader";
 // The identity a release is stamped with.
 //
 // It answers one question: *exactly which code compiled this release?* Three
@@ -24,6 +26,7 @@ import { collectPackSourceGraph } from "./pack-source-graph";
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
 interface PackToolchainInputs {
+  composerConfig?: ResolvedComposerConfig;
   /** The loaded pack. Its manifest, not a literal, names the component pack. */
   pack?: TrustedComponentPack;
   packIdentity?: ResolvedComponentPack;
@@ -133,14 +136,27 @@ async function hostSelfPackDigest(workspaceRoot: string, pack: TrustedComponentP
  * component metadata and bytes; the client also checks the loaded pack identity.
  */
 export async function resolveLocalReleaseToolchain(options: LocalReleaseToolchainOptions): Promise<ReleaseToolchain> {
-  if (options.toolchain) return JSON.parse(JSON.stringify(options.toolchain)) as ReleaseToolchain;
+  const workspaceRoot = resolve(options.workspaceRoot ?? process.cwd());
+  const config = options.composerConfig ?? await hostContentValidationConfig(workspaceRoot);
+  const policyIdentity = config && await contentValidationIdentity(config);
+  if (options.toolchain) {
+    const supplied = JSON.parse(JSON.stringify(options.toolchain)) as ReleaseToolchain;
+    if (policyIdentity) {
+      supplied.contentValidation = policyIdentity.digest;
+      supplied.installedPackDigest = sha(releaseJson({ packDigest: supplied.installedPackDigest, contentValidation: policyIdentity }));
+    } else delete supplied.contentValidation;
+    return supplied;
+  }
   const { pack, packIdentity } = options;
   if (!pack || !packIdentity) throw new Error("Release toolchain requires the resolved component pack; zudo-composer never falls back to a bundled provider pack.");
   if (!options.stylesPath) throw new Error("Release toolchain requires the host's configured `styles` path (`composerConfig.paths.styles`); it is never guessed.");
-  const workspaceRoot = resolve(options.workspaceRoot ?? process.cwd());
   const { packId, packVersion, contractVersion } = pack.manifest;
   const isHostSelfPack = packIdentity.packageRoot === workspaceRoot;
+  const packDigest = isHostSelfPack
+    ? await hostSelfPackDigest(workspaceRoot, pack, packIdentity, resolve(workspaceRoot, options.stylesPath))
+    : await installedPackageDigest(await realpath(packIdentity.packageRoot));
   return {
+    ...(policyIdentity ? { contentValidation: policyIdentity.digest } : {}),
     compiler: await compilerIdentity(),
     componentPack: { packId, packVersion, contractVersion },
     packSpecifier: packIdentity.specifier,
@@ -151,9 +167,7 @@ export async function resolveLocalReleaseToolchain(options: LocalReleaseToolchai
     // (a themeset installed as a normal package) keeps hashing its installed
     // directory; realpath first, because a package manager reaches an
     // installed package through a symlink and the digest refuses to hash one.
-    installedPackDigest: isHostSelfPack
-      ? await hostSelfPackDigest(workspaceRoot, pack, packIdentity, resolve(workspaceRoot, options.stylesPath))
-      : await installedPackageDigest(await realpath(packIdentity.packageRoot)),
+    installedPackDigest: policyIdentity ? sha(releaseJson({ packDigest, contentValidation: policyIdentity })) : packDigest,
     contractDigest: await installedContractDigest(await realpath(contractPackageRoot(import.meta.dirname))),
   };
 }

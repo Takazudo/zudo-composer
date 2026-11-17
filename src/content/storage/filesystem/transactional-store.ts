@@ -1,3 +1,4 @@
+import { validateContentPolicy, type ContentValidationPolicy } from "../../validation";
 // Content persisted as project files.
 //
 // Every read is one transactional-record-store snapshot and every mutation is
@@ -198,12 +199,23 @@ export class TransactionalContentStore implements ContentStore {
     private readonly records: RecordTransactionStorage,
     private readonly now: () => string,
     private readonly revisionProvenance: ContentProvenance,
+    private readonly validationPolicy?: ContentValidationPolicy,
   ) {}
 
-  static async fromRecords(records: RecordTransactionStorage, now: () => string = () => new Date().toISOString(), revisionProvenance: ContentProvenance = { actor: null, source: "content-store" }): Promise<TransactionalContentStore> {
-    const store = new this(records, now, structuredClone(revisionProvenance));
+  static async fromRecords(records: RecordTransactionStorage, now: () => string = () => new Date().toISOString(), revisionProvenance: ContentProvenance = { actor: null, source: "content-store" }, validationPolicy?: ContentValidationPolicy): Promise<TransactionalContentStore> {
+    const store = new this(records, now, structuredClone(revisionProvenance), validationPolicy);
     await store.open();
     return store;
+  }
+
+  async contentValidationIdentity(): Promise<string | undefined> {
+    await this.validationPolicy?.assertCurrent?.();
+    return this.validationPolicy?.identity;
+  }
+
+  /** Read-only preflight shared by human and AI editors. Commit repeats it inside the writer. */
+  async validateEntryValues(entry: ContentEntryRecord, model: ContentModelRecord, previous?: ContentEntryRecord, purpose: "write" | "publish" = "write") {
+    return validateContentPolicy(this.validationPolicy, { providerId: this.provider.id, entry, model, previous, purpose });
   }
 
   get root(): string {
@@ -392,6 +404,22 @@ export class TransactionalContentStore implements ContentStore {
           entries: [...planned.entries].sort(compareById),
         };
         this.validateSnapshot(proposed, operation);
+        try {
+          await this.validationPolicy?.assertCurrent?.();
+          for (const entry of proposed.entries) {
+            const previous = before.entries.find(value => value.id === entry.id && value.modelId === entry.modelId);
+            const model = proposed.models.find(value => value.id === entry.modelId)!;
+            const publishing = previous?.lifecycle !== "published" && entry.lifecycle === "published";
+            const priorModel = before.models.find(value => value.id === model.id);
+            if (!publishing && previous && sameJson(previous.values, entry.values) && sameJson(priorModel, model)) continue;
+            const issues = await validateContentPolicy(this.validationPolicy, { providerId: this.provider.id, entry, model, previous: sameJson(priorModel, model) ? previous : undefined, purpose: publishing ? "publish" : "write" }, false);
+            if (issues.length) throw contentError(operation, "validation", issues.map(issue => `${this.provider.id}/${entry.modelId}/${entry.id}/${issue.fieldId}: ${issue.message}`).join("; "));
+          }
+          await this.validationPolicy?.assertCurrent?.();
+        } catch (error) {
+          if (error instanceof ContentPersistenceError) throw error;
+          throw contentError(operation, "validation", error instanceof Error ? error.message : "Host Content validation failed.");
+        }
         this.assertStoredKindsSurvive(before, proposed, operation);
         // Generations are stamped last: they are storage bookkeeping and must
         // not influence any of the checks above.

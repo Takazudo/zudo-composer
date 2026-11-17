@@ -38,6 +38,7 @@ export interface LocalSiteProjectStoreOptions {
   workspaceRoot?: string;
   testRoot?: string; lockTimeoutMs?: number; fault?(point: string): void | Promise<void>;
   componentPack?: ComponentPackManifest;
+  validatePublication?(project: SiteProject, stage: StagedRelease): Promise<void>;
   readAsset?(pin: AssetVersionPin): Promise<AsyncIterable<Uint8Array>>;
 }
 function validActive(value: unknown): value is SiteProjectActiveSelection {
@@ -340,6 +341,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       const heads = await this.heads(), active = await this.active(); const existing = await this.stage(input.project.id, input.stage.buildId);
       if (existing && heads.approvals[input.stage.planDigest] === existing.buildId) return { status: "ok" as const, value: { revision: existing.revision, buildId: existing.buildId, stageGeneration: heads.stageGenerations[existing.buildId]!, active } };
       if (heads.generation !== input.expectedGeneration || (heads.projects[input.project.id]?.revision ?? null) !== input.expectedRevision || !sameRelease(active, input.expectedActive)) return { status: "conflict" as const };
+      await this.options.validatePublication?.(input.project, input.stage);
       const directory = join(this.root, "projects", input.project.id); await this.directory(directory);
       await this.write(join(directory, `${input.stage.revision}.json`), serializeSiteProject(input.project), true);
       const stagePath = join(this.root, "stages", `${input.stage.buildId}.json`);
@@ -366,6 +368,9 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       const current = await this.active(), heads = await this.heads();
       if (!sameRelease(current, input.target)) {
         if (!sameRelease(current, input.expectedActive)) return { status: "conflict" as const };
+        const stored = await this.stored(input.target.projectId, input.target.revision);
+        if (!stored) throw new Error("Activation candidate unavailable.");
+        await this.options.validatePublication?.(stored.project, completed.stage);
         if (heads.activationGeneration >= Number.MAX_SAFE_INTEGER) throw new Error("Activation generation exhausted.");
         heads.activationGeneration++;
         // Reserve the durable fence before publishing its pointer. Crash gaps are safe.

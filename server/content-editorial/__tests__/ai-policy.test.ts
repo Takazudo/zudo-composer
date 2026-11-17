@@ -124,3 +124,37 @@ describe("bounded Content-AI policy and trusted staging", () => {
     expect((await service.scope(f.entry)).map(field => field.id)).toEqual([f.fieldId]);
   });
 });
+
+
+it("binds native Content AI proposals to policy across restart while committed receipts remain recoverable", async () => {
+  const f = await fixture("note", "body", "markdown");
+  const host = { provider: { label: "proof", proposer: f.proposer, inference: async () => ({ kind: "test" }) }, canApply: true, proposalRoot: join(f.root, "native-proposals"), contentFields: f.options.contentFields };
+  const open = async (identity: string) => createFilesystemContentStore({ contentRoot: f.store.root, validationPolicy: { identity, validateContentField: () => [] } });
+  const first = await open("policy-A");
+  const staged = await (await createNativeContentAiStager(first, async () => null, host as never)).stage(f.request);
+  expect(staged.status).toBe("proposed"); if (staged.status !== "proposed") return;
+  expect(staged.proposal.validationPolicy).toBe("policy-A");
+  const changed = await createNativeContentAiService(await open("policy-B"), async () => null, host as never);
+  const apply = { proposalId: staged.proposal.id, renderedCandidate: staged.proposal.candidateDigest };
+  await expect(changed.apply(apply)).rejects.toMatchObject({ code: "revision-conflict" });
+  expect((await first.readAll()).entries[0]!.values[f.fieldId]).toBe("Original");
+  const committed = await (await createNativeContentAiService(first, async () => null, host as never)).apply(apply);
+  expect(await changed.apply(apply)).toEqual({ receipt: committed.receipt, recovered: true });
+});
+
+it("native AI staging uses the writer policy and fresh Undo cannot restore a forbidden historical value", async () => {
+  const f = await fixture("note", "body", "markdown");
+  const before = await f.store.readAll();
+  const policyStore = await createFilesystemContentStore({ contentRoot: f.store.root, validationPolicy: { identity: "policy", validateContentField: ({ field, value }) => field.id === f.fieldId && value !== "Proposed" ? [{ code: "body-rule", message: "Body policy refusal" }] : [] } });
+  const host = { provider: { ...f.proposer, proposer: f.proposer, inference: async () => ({ state: "ready" as const, detail: "test" }) }, canApply: true, proposalRoot: join(f.root, "policy-proposals"), contentFields: f.options.contentFields };
+  const stager = await createNativeContentAiStager(policyStore, async () => null, host);
+  const bad = { ...f.request, values: { [f.fieldId]: "Forbidden" } };
+  await expect(stager.stage(bad)).rejects.toMatchObject({ code: "invalid-value" });
+  expect(await stager.recover(bad)).toBeNull(); expect(await policyStore.readAll()).toEqual(before);
+  const staged = await stager.stage(f.request); if (staged.status !== "proposed") throw Error("Expected proposal");
+  const service = await createNativeContentAiService(policyStore, async () => null, host);
+  await service.apply({ proposalId: staged.proposal.id, renderedCandidate: staged.proposal.candidateDigest });
+  const committed = await policyStore.readAll();
+  await expect(service.undo({ proposalId: staged.proposal.id })).rejects.toThrow("Body policy refusal");
+  expect(await policyStore.readAll()).toEqual(committed);
+});

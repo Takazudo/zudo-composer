@@ -1,3 +1,4 @@
+import type { ContentValidationPolicy } from "../../validation";
 // Loaded only by the active Vite development server. Keeping this Node-side
 // import behind `ssrLoadModule` prevents filesystem modules entering clients.
 //
@@ -19,8 +20,8 @@ const CONTENT_EDITOR_PROVENANCE = { actor: { id: "local-owner" }, source: "conte
  * `workspace-v1-` prefix is never spelled a second time in the Vite config
  * graph, which cannot import TypeScript.
  */
-export function createWorkspaceScopedContentStore(contentRoot: string, workspaceId: string) {
-  return createFilesystemContentStore({ contentRoot: workspaceScopedRoot(contentRoot, workspaceId), revisionProvenance: CONTENT_EDITOR_PROVENANCE });
+export function createWorkspaceScopedContentStore(contentRoot: string, workspaceId: string, validationPolicy?: ContentValidationPolicy) {
+  return createFilesystemContentStore({ contentRoot: workspaceScopedRoot(contentRoot, workspaceId), revisionProvenance: CONTENT_EDITOR_PROVENANCE, validationPolicy });
 }
 export { CONTENT_FILE_PROVIDER_OPERATIONS } from "./types";
 
@@ -119,6 +120,7 @@ async function nativeAiOptions(store: FilesystemContentStore, readActivated: Act
     actor: CONTENT_EDITOR_PROVENANCE.actor, owner: `native:${store.root}`, proposer: configured.provider.proposer,
     store: await proposals, createId: () => globalThis.crypto.randomUUID(), canApply: configured.canApply,
     contentFields: configured.contentFields,
+    validationIdentity: () => store.contentValidationIdentity(),
   };
 }
 

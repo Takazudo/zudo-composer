@@ -109,6 +109,8 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
       ]);
       const { workspaceDomainRoots } = await import("../src/shared/workspace-scope");
       const { lstat } = await import("node:fs/promises");
+      const policyModule = await server.ssrLoadModule(appModuleId("server/content-validation/loader.ts"));
+      const contentValidation = await policyModule.loadContentValidation(context.composerConfig);
       const configured = { provider: await contentFactory.createHostContentAiProvider(assistantConfig), canApply: assistantConfig.permission === "apply", proposalRoot: join(context.composerConfig.paths.data, "content-ai"), contentFields: assistantConfig.contentFields ?? [] };
       const create = reviewModule.createHostReviewService as typeof createHostReviewService;
       hostReview = create({
@@ -120,8 +122,8 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
           const root = workspaceDomainRoots(context.composerConfig.paths, workspaceId).content;
           const stat = await lstat(join(root, "current.json"));
           if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Original Content recovery store is unavailable.");
-          const content = await contentStoreModule.createFilesystemContentStore({ contentRoot: root });
-          const readActivated = () => releaseReader.readActivatedSiteRelease({ workspaceRoot, pack: context.pack, packIdentity: context.packIdentity, stylesPath: context.composerConfig.paths.styles });
+          const content = await contentStoreModule.createFilesystemContentStore({ contentRoot: root, validationPolicy: contentValidation });
+          const readActivated = () => releaseReader.readActivatedContentRelease({ workspaceRoot });
           return { service: await contentModule.createNativeContentAiService(content, readActivated, configured), ...await contentModule.createNativeContentAiStager(content, readActivated, configured) };
         },
       });

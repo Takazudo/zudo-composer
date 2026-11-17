@@ -47,6 +47,8 @@ export interface ContentAiProposal {
   candidate: Record<string, unknown>;
   /** SHA-256 of the entry, precondition and candidate: what a rendered preview must acknowledge. */
   candidateDigest: string;
+  /** Host policy graph under which this candidate was reviewed. */
+  validationPolicy?: string;
   operationKey: string;
   provider: string;
   createdAt: string;
@@ -87,6 +89,7 @@ export interface ContentAiOutcome { receipt: EditorialReceipt; recovered: boolea
 export interface ContentAiFieldPolicy { providerId: string; modelId: string; fieldIds: readonly string[] }
 
 export interface ContentAiServiceOptions {
+  validationIdentity?(): Promise<string | undefined>;
   /** Trusted policy; absent keeps title/body defaults, empty denies all fields. */
   contentFields?: readonly ContentAiFieldPolicy[];
   /** The owning backend's boundary bound to the given provenance. */
@@ -125,8 +128,8 @@ export interface ContentAiService {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PROPOSAL_ID = /^[A-Za-z0-9-]{8,80}$/;
 
-export async function contentAiCandidateDigest(value: { entry: ContentEntryRef; expected: string; candidate: Record<string, unknown> }): Promise<string> {
-  const bytes = new TextEncoder().encode(canonicalEditorialJson({ entry: value.entry, expected: value.expected, candidate: value.candidate as never }));
+export async function contentAiCandidateDigest(value: { entry: ContentEntryRef; expected: string; candidate: Record<string, unknown>; validationPolicy?: string }): Promise<string> {
+  const bytes = new TextEncoder().encode(canonicalEditorialJson({ entry: value.entry, expected: value.expected, candidate: value.candidate as never, ...(value.validationPolicy === undefined ? {} : { validationPolicy: value.validationPolicy }) }));
   return [...new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
@@ -203,18 +206,21 @@ async function stageValidatedContentAi(options: ContentAiServiceOptions, raw: Om
     if (typeof value !== "string" || value.length > MAX_VALUE) throw new EditorialError("invalid-value", `The proposed ${field.label} is not usable text.`);
   }
   if (!Object.keys(request.values).length) return { status: "refused", message: "The model proposed no change." };
+  const validationPolicy = await options.validationIdentity?.();
   const validation = await ai.validateFields({ entry: request.entry, expected: request.expected, values: request.values, clear: [] });
   if (!validation.differences.length) return { status: "refused", message: "The proposal matches the saved values; there is nothing to apply." };
   const createdAt = options.now?.() ?? new Date();
   const proposal: ContentAiProposal = {
     id, entry: request.entry, expected: request.expected, summary: request.summary, values: request.values,
     differences: validation.differences, candidate: validation.values,
-    candidateDigest: await contentAiCandidateDigest({ entry: request.entry, expected: request.expected, candidate: validation.values }),
+    ...(validationPolicy === undefined ? {} : { validationPolicy }),
+    candidateDigest: await contentAiCandidateDigest({ entry: request.entry, expected: request.expected, candidate: validation.values, validationPolicy }),
     operationKey: `content-ai:${id}`, provider, createdAt: createdAt.toISOString(),
     expiresAt: new Date(createdAt.getTime() + (options.ttlMs ?? DAY_MS)).toISOString(),
   };
   guard.signal?.throwIfAborted();
   await guard.beforePersist?.();
+  if (await options.validationIdentity?.() !== validationPolicy) throw new EditorialError("revision-conflict", "Content validation policy changed during proposal review.");
   guard.signal?.throwIfAborted();
   try {
     await options.store.create({ schemaVersion: 1, owner: options.owner, actorId: options.actor?.id ?? null, proposal, ...(keyDigest ? { preparation: { keyDigest, payloadDigest } } : {}) });
@@ -284,6 +290,7 @@ export function createContentAiService(options: ContentAiServiceOptions): Conten
       // Recovery first: an Apply that committed is found by its key, whatever came after it.
       const committed = await ai.readOperation({ entry: proposal.entry, operationKey: proposal.operationKey });
       if (committed) return { receipt: committed, recovered: true };
+      if (await options.validationIdentity?.() !== proposal.validationPolicy) throw new EditorialError("revision-conflict", "Content validation policy changed; prepare and review a new proposal.");
       if (options.canApply === false) throw new EditorialError("forbidden", "This host permits AI proposals but not Apply.");
       if (now().getTime() > Date.parse(proposal.expiresAt)) throw new EditorialError("invalid-request", "This proposal expired before it was applied; prepare it again.");
       if (request.renderedCandidate !== proposal.candidateDigest) throw new EditorialError("invalid-request", "Apply needs a successful render of this exact candidate first.");

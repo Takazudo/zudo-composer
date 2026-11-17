@@ -49,7 +49,7 @@ export function createSiteProjectApiService(dependencies: SiteProjectApiDependen
     let baseline: SiteProject | null = null;
     let baselineBuild: CompletedRelease | undefined;
     if (expectedActive?.projectId === working.id) { const result = await dependencies.projectStore.get(expectedActive); if (result.status !== "ok") return adapterFailure(result); baseline = result.value.project; const completed = await dependencies.buildStore.getCompleted(expectedActive); if (completed.status !== "ok") return adapterFailure(completed); baselineBuild = completed.value; }
-    try { const result = await createReleasePlan({ project: working, workingPrecondition, baseline, baselineBuild, selection, expectedRevision, expectedActive, storeGeneration: state.value.generation }, dependencies); if (dependencies.isWorkingCurrent && !await dependencies.isWorkingCurrent(working, workingPrecondition)) return fail("conflict", "Working capture changed during review."); return result; }
+    try { await dependencies.validatePublication?.(working, selection); const result = await createReleasePlan({ project: working, workingPrecondition, baseline, baselineBuild, selection, expectedRevision, expectedActive, storeGeneration: state.value.generation }, dependencies); if (dependencies.isWorkingCurrent && !await dependencies.isWorkingCurrent(working, workingPrecondition)) return fail("conflict", "Working capture changed during review."); return result; }
     catch (error) { return fail("validation", error instanceof Error ? error.message : "Invalid publication candidate."); }
   };
   const handleParsed = async (request: SiteProjectApiRequest): Promise<SiteProjectApiResponse> => {

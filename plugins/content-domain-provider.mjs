@@ -9,7 +9,6 @@
 
 import { join, resolve } from "node:path";
 import { appModuleId } from "./roots.mjs";
-import { COMPONENT_PACK_ID } from "./component-pack-plugin.mjs";
 
 export const CONTENT_DOMAIN = "content";
 
@@ -106,8 +105,7 @@ export default function contentDomainProvider(options = {}) {
       const readActivated = release && server
         ? async () => {
           const reader = await server.ssrLoadModule(appModuleId("server/site-project-local/dev-reader.ts"));
-          const pack = (await server.ssrLoadModule(COMPONENT_PACK_ID)).componentPack;
-          return reader.readActivatedSiteRelease({ ...release, pack });
+          return reader.readActivatedContentRelease(release);
         }
         : async () => null;
       /** @type {Promise<any> | undefined} */ let contentAi;
@@ -121,9 +119,15 @@ export default function contentDomainProvider(options = {}) {
         // Private to this host installation; never published or exported.
         return { provider: await factory.createHostContentAiProvider(config), canApply: config.permission === "apply", proposalRoot: join(hostConfig.paths.data, "content-ai"), contentFields: config.contentFields };
       })();
+      const policy = server && release ? (async () => {
+        const { loadHostConfig } = await import("../server/host-context.mjs");
+        const config = await loadHostConfig(release.workspaceRoot ?? process.cwd());
+        const loader = await server.ssrLoadModule(appModuleId("server/content-validation/loader.ts"));
+        return loader.loadContentValidation(config);
+      })() : Promise.resolve(undefined);
       return {
         isDomainError: module.isContentPersistenceError,
-        createStore: (workspaceId) => module.createWorkspaceScopedContentStore(root, workspaceId),
+        createStore: async (workspaceId) => module.createWorkspaceScopedContentStore(root, workspaceId, await policy),
         operations: {
           ...OPERATIONS,
           ...Object.fromEntries(CONTENT_EDITORIAL_OPERATIONS.map((operation) => [
