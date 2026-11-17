@@ -1,6 +1,8 @@
-import { mkdtemp, rm, lstat, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, lstat, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createServer, type RequestListener } from "node:http";
+import { installAssistantApi } from "../../../plugins/assistant-api";
 import { fork } from "node:child_process";
 import { once } from "node:events";
 import { afterEach, expect, it, vi } from "vitest";
@@ -14,7 +16,7 @@ import { createFilesystemContentStore } from "../../../src/content/storage/files
 import { captureHost } from "../../edit/inspect";
 import { createDraftOperations } from "../../edit/draft-service";
 import { editDigest } from "../../edit/service";
-import { executeAuthoringOperation } from "../../edit/authoring-lease.mjs";
+import { acquireAuthoringLease, executeAuthoringOperation } from "../../edit/authoring-lease.mjs";
 import { withMutationBarrier } from "../../../src/shared/node-fs";
 import { workspaceDomainRoots } from "../../../src/shared/workspace-scope";
 import { captureAuthoringWorkspace, compileAuthoringWorkspaceSnapshot } from "../../authoring-workspace/capture";
@@ -238,4 +240,33 @@ for (const changed of ["mapping", "sitemap", "assets", "publicFiles", "policy"] 
   expect(await state.stores.content.listRevisions("consultation", { limit: 100 })).toEqual(history);
   expect((await (await f.deps.content("proof")).service.read({ proposalId: card.operation.domain === "content" ? card.operation.proposalId : "" })).applied).toBeFalsy();
   await expect(lstat(join(workspaceDomainRoots(f.config.paths, "proof").compositions, ".mutation.lock"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+it("HTTP host review inspection inherits the live authoring lease without bypassing another owner", async () => {
+  const f = await fixture(), { card } = await f.stage();
+  const before = await captureAuthoringWorkspace(f.options);
+  const reviewPath = join(f.config.paths.data, "assistant-host-reviews", `${card.id}.json`);
+  const storedBefore = await readFile(reviewPath, "utf8");
+  const lease = await acquireAuthoringLease(f.root, "dev-server-test");
+  let handler!: RequestListener;
+  const server = createServer((request, response) => handler(request, response));
+  try {
+    installAssistantApi({ config: { server: {} }, middlewares: { use: (value: RequestListener) => { handler = value; } } } as never, {
+      hostReview: f.service, service: { drafts: f.drafts }, lease, coordinator: { run: (_id: string, action: () => Promise<unknown>) => action() }, config: f.config.assistant!, peers: new Map([["browser", {}]]), capability: "operator", approvalCapability: "approve",
+    } as unknown as Parameters<typeof installAssistantApi>[1]);
+    server.listen(0, "127.0.0.1"); await once(server, "listening");
+    const address = server.address(); if (!address || typeof address === "string") throw new Error("Missing listener");
+    const origin = `http://127.0.0.1:${address.port}`;
+    const response = await fetch(`${origin}/__zudo-assistant`, { method: "POST", headers: { origin, "content-type": "application/json", "x-zudo-native-capability": "operator", "x-zudo-native-client": "browser" }, body: JSON.stringify({ operation: "hostReview", workspaceId: "proof", input: { reviewId: card.id } }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, result: { id: card.id, status: "open" } });
+    // Transport preserves the owning Content boundary's guarded-Undo conflict.
+    f.service.undo = async () => { throw Object.assign(new Error("Content changed; reload and review before reapplying."), { code: "revision-conflict" }); };
+    const undo = await fetch(`${origin}/__zudo-assistant`, { method: "POST", headers: { origin, "content-type": "application/json", "x-zudo-native-capability": "operator", "x-zudo-native-client": "browser", "x-zudo-native-approval": "approve" }, body: JSON.stringify({ operation: "undoHostReview", workspaceId: "proof", input: { reviewId: card.id } }) });
+    expect(undo.status).toBe(409);
+    expect(await undo.json()).toMatchObject({ ok: false, error: { code: "revision-conflict" } });
+    await expect(acquireAuthoringLease(f.root, "foreign")).rejects.toMatchObject({ code: "authoring-busy" });
+    expect((await lease.execute(() => captureAuthoringWorkspace(f.options))).digest).toBe(before.digest);
+    expect(await readFile(reviewPath, "utf8")).toBe(storedBefore);
+    expect(JSON.parse(storedBefore).card.status).toBe("open");
+  } finally { server.closeAllConnections(); await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); await lease.release(); }
 });
