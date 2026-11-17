@@ -597,6 +597,7 @@ function hostRoute(route) {
 				seen.add(canonicalId);
 				const source = route.materializationSources?.find((value) => value.renderedNodeId === canonicalId);
 				node.id = `${prefix}${canonicalId}`;
+				const entries = source ? source.entries : route.source.kind === "mapping" && route.selectedEntry && owner.providerId === route.composition.local.providerId && owner.recordId === route.composition.local.recordId ? [route.selectedEntry] : [];
 				targets.push({
 					renderedNodeId: node.id,
 					providerId: source?.providerId ?? owner.providerId,
@@ -606,7 +607,7 @@ function hostRoute(route) {
 					parentRenderedNodeId: parentId,
 					slotId,
 					props: node.props,
-					entries: source?.entries ?? []
+					entries
 				});
 				for (const [childSlot, descendants] of Object.entries(node.slots)) walk(descendants, node.id, childSlot);
 			}
