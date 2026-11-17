@@ -1,7 +1,8 @@
 import { useFieldControl } from "../../components/ui/field-context";
 import { useDomId } from "../../components/use-dom-id";
 import type { JsonValue } from "@zudo-composer/component-contract";
-import { Button, Switch } from "../../components/ui";
+import { Button } from "../../components/ui/button";
+import { Switch } from "../../components/ui/form-controls";
 
 /** Absence stays absent until the author explicitly chooses Yes or No. */
 export function ContentBooleanControl({ value, label = "Boolean", id, required, disabled, describedBy, class: className, onChange }: {
