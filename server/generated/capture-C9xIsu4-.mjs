@@ -11473,19 +11473,43 @@ function unassignedPageHasNoMaterialization(project, diagnostic) {
 	visit(sitemap.document.root);
 	return matches.length === 1 && matches[0].source.kind === "unassigned";
 }
+/** A blank unassigned child inherits its parent's pathname. Expansion reports
+* collisions for both, but only the assigned destination can contain Assets.
+* Account for every participant; never collapse multiple expanded destinations
+* merely because they share a Sitemap node ID. */
+function authoringIncompleteCauses(project, causes, routes) {
+	const placeholders = causes.filter((diagnostic) => unassignedPageHasNoMaterialization(project, diagnostic));
+	const allowed = new Set(placeholders);
+	const groups = /* @__PURE__ */ new Map();
+	for (const diagnostic of causes) {
+		if (diagnostic.code !== "route-collision" || diagnostic.pathname === void 0) continue;
+		const group = groups.get(diagnostic.pathname) ?? [];
+		group.push(diagnostic);
+		groups.set(diagnostic.pathname, group);
+	}
+	for (const [pathname, group] of groups) {
+		const assigned = group.filter((diagnostic) => !placeholders.some((placeholder) => placeholder.nodeId === diagnostic.nodeId && placeholder.pathname === pathname));
+		const materialized = routes.filter((route) => route.pathname === pathname);
+		if (group.length < 2 || assigned.length === group.length || assigned.length > 1 || materialized.length !== assigned.length) continue;
+		if (assigned.some((diagnostic) => !materialized.some((route) => route.sitemapNode.id === diagnostic.nodeId && (diagnostic.entry ? route.selectedEntry?.providerId === diagnostic.entry.providerId && route.selectedEntry.recordId === diagnostic.entry.recordId : route.selectedEntry === void 0)))) continue;
+		for (const diagnostic of group) allowed.add(diagnostic);
+	}
+	return causes.filter((diagnostic) => !allowed.has(diagnostic));
+}
 /** Keep materialization causes separate from Asset diagnostics for strict callers. */
 async function inspectSiteProjectAssetWithCauses(project, catalog, snapshot, providerId, authoringSnapshot = false) {
 	const compilation = await compileSiteProject(project, {
 		componentCatalog: catalog,
 		policy: "authoring-preview"
 	});
+	const routes = compilation.status === "ready" ? compilation.build.routes : compilation.routes;
 	const { index } = resolveSiteProjectAsset(project, catalog, {
 		snapshot,
-		routes: compilation.status === "ready" ? compilation.build.routes : compilation.routes,
+		routes,
 		providerId
 	});
 	const causes = compilation.status === "blocked" ? compilation.diagnostics : [];
-	const incomplete = authoringSnapshot ? causes.filter((diagnostic) => !unassignedPageHasNoMaterialization(project, diagnostic)) : causes;
+	const incomplete = authoringSnapshot ? authoringIncompleteCauses(project, causes, routes) : causes;
 	if (compilation.status === "blocked" && (!causes.length || incomplete.length)) {
 		index.complete = false;
 		for (const diagnostic of incomplete) index.advisory.push({
