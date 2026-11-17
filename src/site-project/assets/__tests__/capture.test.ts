@@ -108,7 +108,7 @@ describe("coherent project assets inspection", () => {
 
 describe("authoring-only unassigned page capture", () => {
   const withDraft = (value = assetProject()) => {
-    value.providers.sitemaps[0]!.records[0]!.document.root[0]!.children.push(page("draft", "draft", { kind: "unassigned" }));
+    value.providers.sitemaps[0]!.records[0]!.document.root[0]!.children.push(page("draft", undefined, { kind: "unassigned" }));
     return value;
   };
 
@@ -136,7 +136,7 @@ describe("authoring-only unassigned page capture", () => {
       expect.objectContaining({ ref: expect.objectContaining({ assetId: "detached" }), location: expect.objectContaining({ domain: "compositions", recordId: "unused" }) }),
       expect.objectContaining({ ref: expect.objectContaining({ assetId: "default" }), location: expect.objectContaining({ domain: "compositions" }) }),
     ]));
-    expect(await captureSiteProjectAssetLock(value, catalog, store)).toMatchObject({ status: "blocked", causes: [expect.objectContaining({ code: "unassigned-page" })] });
+    expect(await captureSiteProjectAssetLock(value, catalog, store)).toMatchObject({ status: "blocked", causes: expect.arrayContaining([expect.objectContaining({ code: "unassigned-page" }), expect.objectContaining({ code: "route-collision" })]) });
     expect((await inspectSiteProjectAsset(value, catalog, await store.snapshot(), store.provider.id)).complete).toBe(false);
     expect(await compileSiteProject(value, { componentCatalog: catalog, assetLock: captured.lock })).toMatchObject({ status: "blocked", diagnostics: expect.arrayContaining([expect.objectContaining({ code: "unassigned-page" })]) });
   });
@@ -160,5 +160,57 @@ describe("authoring-only unassigned page capture", () => {
     const result = await captureAuthoringProjectAssetLock(value, assetCatalog, store);
     expect(result.status).toBe("blocked");
     if (kind === "changed") expect(result).toMatchObject({ diagnostics: [expect.objectContaining({ code: "changed" })] });
+  });
+});
+
+
+describe("authoring-only unassigned collision groups", () => {
+  it.each([undefined, ""])("captures a normal unassigned child with slug %s without changing compiler collisions", async slug => {
+    const value = project();
+    value.providers.sitemaps[0]!.records[0]!.document.root[0]!.children.push(page("pending", slug, { kind: "unassigned" }));
+    const original = structuredClone(value);
+    const compiled = await compileSiteProject(value, { componentCatalog, policy: "authoring-preview" });
+    expect(compiled).toMatchObject({ status: "blocked", diagnostics: expect.arrayContaining([expect.objectContaining({ code: "unassigned-page" })]) });
+    expect(compiled.diagnostics.filter(diagnostic => diagnostic.code === "route-collision")).toHaveLength(2);
+    expect(await captureAuthoringProjectAssetLock(value, componentCatalog, undefined)).toMatchObject({ status: "ready" });
+    expect(value).toEqual(original);
+    expect(await captureSiteProjectAssetLock(value, componentCatalog, undefined)).toMatchObject({ status: "blocked" });
+    expect((await inspectSiteProjectAsset(value, componentCatalog)).complete).toBe(false);
+  });
+
+  it.each([true, false])("captures multiple placeholders with assigned root %s", async assignedRoot => {
+    const value = project(); const root = value.providers.sitemaps[0]!.records[0]!.document.root[0]!;
+    if (!assignedRoot) root.source = { kind: "unassigned" };
+    root.children.push(page("pending-a", undefined, { kind: "unassigned" }), page("pending-b", "", { kind: "unassigned" }));
+    expect(await captureAuthoringProjectAssetLock(value, componentCatalog, undefined)).toMatchObject({ status: "ready" });
+  });
+
+  it.each(["same-path", "other-path", "nested"])("refuses assigned collisions %s even alongside unassigned placeholders", async kind => {
+    const value = project(); const root = value.providers.sitemaps[0]!.records[0]!.document.root[0]!;
+    const pending = page("pending", undefined, { kind: "unassigned" }); root.children.push(pending);
+    if (kind === "same-path") root.children.push(page("assigned", undefined, structuredClone(root.source)));
+    else if (kind === "nested") pending.children.push(page("assigned", undefined, structuredClone(root.source)));
+    else root.children.push(page("one", "same", structuredClone(root.source)), page("two", "same", structuredClone(root.source)));
+    expect(await captureAuthoringProjectAssetLock(value, componentCatalog, undefined)).toMatchObject({ status: "blocked", causes: expect.arrayContaining([expect.objectContaining({ code: "route-collision" })]) });
+  });
+
+  it("refuses assigned duplicate destinations without any unassigned placeholder", async () => {
+    const value = project(); const root = value.providers.sitemaps[0]!.records[0]!.document.root[0]!;
+    root.children.push(page("assigned", undefined, structuredClone(root.source)));
+    expect(await captureAuthoringProjectAssetLock(value, componentCatalog, undefined)).toMatchObject({ status: "blocked", causes: expect.arrayContaining([expect.objectContaining({ code: "route-collision" })]) });
+  });
+
+  it("counts both expanded Mapping destinations even when their node ID and pathname are identical", async () => {
+    const value = project({ entries: [entry("one", "One", "same"), entry("two", "Two", "same")] });
+    const mappingRecord = value.providers.mappings[0]!.records[0]!;
+    mappingRecord.document.mode = { kind: "collection", query: { publication: "published-only", conditions: [], sort: [], pins: [], limit: 100 } };
+    const root = value.providers.sitemaps[0]!.records[0]!.document.root[0]!;
+    root.children.push(page("family", "family", { kind: "mapping", ref: { providerId: "mapping-filesystem", recordId: mappingRecord.id }, route: { kind: "entry-field", fieldId: "slug" } }), page("pending", "family/same", { kind: "unassigned" }));
+    const compiled = await compileSiteProject(value, { componentCatalog, policy: "authoring-preview" });
+    expect(compiled.status).toBe("blocked"); if (compiled.status !== "blocked") return;
+    const destinations = compiled.routes.filter(route => route.pathname === "/family/same");
+    expect(destinations.map(route => route.sitemapNode.id)).toEqual(["family", "family"]);
+    expect(destinations.map(route => route.selectedEntry?.recordId)).toEqual(["one", "two"]);
+    expect(await captureAuthoringProjectAssetLock(value, componentCatalog, undefined)).toMatchObject({ status: "blocked" });
   });
 });

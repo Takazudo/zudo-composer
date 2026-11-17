@@ -214,12 +214,12 @@ it("migration source refuses rehashed asset omissions and duplicate captured fil
   }
 });
 
-it("captures and reopens an unassigned saved page with exact Assets, but builds only after source assignment", async () => {
+it("captures and reopens the normal blank-slug unassigned child with exact Assets, but builds only after route/source assignment", async () => {
   const options = await fixture();
   const before = await captureAuthoringWorkspace(options);
   const host = await captureHost({ config: options.composerConfig, pack: options.pack });
   const sitemap = structuredClone((await host.stores.sitemaps.snapshot()).records[0]!);
-  const pending = { id: "new-page", title: "Untitled page", slug: "new-page", source: { kind: "unassigned" as const }, children: [] };
+  const pending = { id: "new-page", title: "Untitled page", source: { kind: "unassigned" as const }, children: [] };
   sitemap.document.root[0]!.children.push(pending);
   await host.stores.sitemaps.put(sitemap);
   const snapshot = await captureAuthoringWorkspace(options);
@@ -237,6 +237,7 @@ it("captures and reopens an unassigned saved page with exact Assets, but builds 
   await expect(compileAuthoringWorkspaceSnapshot({ ...options, snapshot })).rejects.toThrow("The Sitemap page has no assigned source.");
   const reopened = await captureHost({ config: options.composerConfig, pack: options.pack });
   const assigned = structuredClone((await reopened.stores.sitemaps.snapshot()).records[0]!);
+  assigned.document.root[0]!.children[0]!.slug = "new-page";
   assigned.document.root[0]!.children[0]!.source = structuredClone(assigned.document.root[0]!.source);
   await reopened.stores.sitemaps.put(assigned);
   const complete = await captureAuthoringWorkspace(options);

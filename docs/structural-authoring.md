@@ -49,8 +49,14 @@ A saved unassigned Sitemap page can be captured and reopened before its source
 is chosen. Capture retains that exact unassigned node; it does not declare the
 workspace render-ready. Assets inspection still covers every saved Content entry,
 Composition and component default, plus all materialized routes. The only tolerated
-route diagnostic during authoring capture is an `unassigned-page` for an actual
+source exception during authoring capture is an `unassigned-page` for an actual
 unassigned node in the active Sitemap: that node has no source to materialize.
+A new blank-slug child inherits its parent's path. Capture can tolerate the
+resulting collision group only when every participant is such an unassigned
+placeholder or the one successfully materialized assigned destination at that
+exact path. Multiple assigned destinations remain blocked, including expanded
+Mapping entries sharing one Sitemap node ID. No route or node is removed from
+the captured project, and ordinary compiler collision diagnostics are unchanged.
 Unknown managed references, missing/corrupt Assets, other route errors and changed
 state still refuse capture. Release compilation, exact snapshot build and Assets
 trash inspection keep their strict completeness rules. Assign a source and capture
