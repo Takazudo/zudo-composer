@@ -444,3 +444,10 @@ describe("SiteProject provider integration", () => {
     expect(await current.contentProvider.initialization.retry()).toMatchObject({ status: "error", error: { retryable: false, message: expect.stringContaining("newer") } });
   });
 });
+
+it("wires native Mapping inventory and Content summary batching through real provider integration",async()=>{
+ const current=await integration();expect((await current.initialization.initialize()).status).toBe("ready");
+ const mappingSnapshot=vi.spyOn(current.mappingProvider.store,"snapshot"),mappingGet=vi.spyOn(current.mappingProvider.store,"get"),mappingList=vi.spyOn(current.mappingProvider.store,"list");
+ const inventory=await current.mappingCatalog.readInventory!();expect(inventory.failures).toEqual([]);expect(inventory.snapshots).toHaveLength(1);expect(inventory.entries).toHaveLength(2);expect(mappingSnapshot).toHaveBeenCalledTimes(1);expect(mappingGet).not.toHaveBeenCalled();expect(mappingList).not.toHaveBeenCalled();
+ const readAll=vi.spyOn(current.contentProvider.store,"readAll"),scanEntries=vi.spyOn(current.contentProvider.store,"scanEntries");const counts=await createWorkspaceSummary(current).counts();expect(counts.content).toMatchObject({status:"ok",value:{models:2,entries:4}});expect(readAll).toHaveBeenCalledTimes(1);expect(scanEntries).not.toHaveBeenCalled();
+});

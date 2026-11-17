@@ -27,8 +27,8 @@ import { SITEMAP_FILE_PROVIDER_DOMAIN } from "../sitemapper/storage/file-provide
 import { ASSET_PERSISTENCE_CHANNEL } from "./persistence-channels";
 import { summarizeComposition, validateCompositionRecord, type CompositionRecord, type CompositionSummary } from "../composer/browser";
 import type { ContentCatalog } from "../content/catalog";
-import type { ContentEntryRecord, ContentModelRecord } from "../content/model";
-import type { ContentStore } from "../content/library";
+import { validateContentModelRecord, validateContentEntryRecord, type ContentEntryRecord, type ContentModelRecord } from "../content/model";
+import { summarizeContentModel, compareContentModelsNewestFirst, compareContentEntriesForPaging, diagnoseContentEntryCompleteness, contentEntrySemanticIssue, type ContentSnapshot, type ContentStore } from "../content/library";
 import type { ComponentCatalog } from "../composer/model/types";
 import { mappingDeepLinkHref } from "../features/mapping/deep-link";
 import type { AssetStore } from "../assets";
@@ -161,7 +161,7 @@ export interface WorkspaceSummaryIntegration {
       snapshot?(): Promise<PersistedSnapshot<CompositionRecord>>;
     };
   }[];
-  readonly contentProvider: { readonly descriptor: { id: string }; readonly store: Pick<ContentStore, "listModels" | "scanEntries"> };
+  readonly contentProvider: { readonly descriptor: { id: string }; readonly store: Pick<ContentStore, "listModels" | "scanEntries"> & Partial<Pick<ContentStore, "readAll">> };
   readonly contentCatalog: ContentCatalog;
   /** Complete configured provider inventory when supplied; legacy catalogs remain supported. */
   readonly mappingProviders?: readonly {
@@ -498,7 +498,10 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
 
   const loadContent = async (): Promise<ContentData> => {
     await ensureInitialized();
-    const models = await integration.contentProvider.store.listModels();
+    // One domain snapshot per summary refresh; never reused as a write precondition.
+    const captured = integration.contentProvider.store.readAll ? structuredClone(await integration.contentProvider.store.readAll()) : null;
+    if (integration.contentProvider.store.readAll) validateSummaryContent(captured!, integration.contentProvider.descriptor.id);
+    const models = captured ? captured.models.map(summarizeContentModel).sort(compareContentModelsNewestFirst) : await integration.contentProvider.store.listModels();
     const records: WorkspaceRecord[] = [];
     const attention: WorkspaceAttentionItem[] = [];
     let entries = 0;
@@ -506,7 +509,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     for (const model of models) {
       const modelIntent: RouteIntent = { route: "content", providerId: integration.contentProvider.descriptor.id, modelId: model.id };
       records.push({ kind: "content-model", id: model.id, label: model.name, updatedAt: model.updatedAt, href: formatIntent(modelIntent), intent: modelIntent });
-      const snapshot = await integration.contentProvider.store.scanEntries(model.id);
+      const snapshot = captured ? summaryContentEntries(captured, model.id) : await integration.contentProvider.store.scanEntries(model.id);
       entries += snapshot.count;
       const labels = new Map<RecordId, string>();
       for (const entry of snapshot.entries) {
@@ -635,4 +638,28 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
       initialization = undefined;
     },
   };
+}
+
+/** Match scanEntries' semantics: invalid saved values are unavailable, not complete. */
+function validateSummaryContent(snapshot: ContentSnapshot, providerId: string): void {
+  if (!snapshot || typeof snapshot !== "object" || snapshot.providerId !== providerId || !Number.isSafeInteger(snapshot.mutationToken) || snapshot.mutationToken < 0
+    || !Array.isArray(snapshot.models) || !Array.isArray(snapshot.entries)
+    || snapshot.models.some(model => !validateContentModelRecord(model).ok)
+    || snapshot.entries.some(entry => !validateContentEntryRecord(entry).ok)
+    || new Set(snapshot.models.map(model => model.id)).size !== snapshot.models.length
+    || new Set(snapshot.entries.map(entry => entry.id)).size !== snapshot.entries.length) throw new Error("Invalid canonical Content inventory.");
+  const models = new Map(snapshot.models.map(model => [model.id, model]));
+  for (const entry of snapshot.entries) {
+    const model = models.get(entry.modelId);
+    // The existing summary enumerates listed models only, just like scanEntries.
+    // An orphan is not a member of any listed model; do not invent a count for it.
+    if (!model) continue;
+    const issue = contentEntrySemanticIssue(entry, model);
+    if (issue) throw new Error(issue);
+  }
+}
+function summaryContentEntries(snapshot: ContentSnapshot, modelId: string) {
+  const model = snapshot.models.find(model => model.id === modelId)!;
+  const entries = snapshot.entries.filter(entry => entry.modelId === modelId).sort(compareContentEntriesForPaging);
+  return { model, count: entries.length, entries, diagnostics: entries.flatMap(entry => diagnoseContentEntryCompleteness(model, entry)) };
 }

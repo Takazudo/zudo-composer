@@ -278,4 +278,40 @@ reads. Mapping snapshots refresh on Mapping or workspace changes. Each Mapping
 summary evaluation memoizes Content-model resolution by full provider/model
 identity, preserving missing/invalid/provider-error outcomes and dropping the memo
 after that evaluation. Content persistence changes recompute those diagnostics;
-the existing Content `scanEntries` completeness checks remain unchanged.
+Content completeness and semantic-error checks are preserved when deriving summaries
+from a single Content snapshot, as described below.
+
+
+The summary can also use its Content store's optional `readAll()` capability.
+Each summary refresh reads one provider-qualified snapshot with its durable token,
+validates the record envelopes and known-model values, and derives model ordering,
+entry ordering/labels, counts and completeness diagnostics using the same model
+helpers as `scanEntries`. Invalid snapshots and semantic-invalid model members
+remain unavailable; failures never trigger a per-model fallback. Like the existing
+listed-model summary, records referring to an absent model are not counted as a
+member of another model. This is not a complete graph-integrity audit. Stores
+without `readAll` retain their `listModels`/`scanEntries` path. Content persistence,
+workspace changes and explicit refresh discard the summary cache; an old pending
+read cannot repopulate a newer cache.
+
+### Content preview discovery
+
+Mapping catalogs may expose `readInventory()`. `createMappingCatalog` builds it
+from optional provider `snapshot()` capabilities, retaining each provider's real
+mutation token and validated canonical records. Snapshot-capable provider entries
+use the native updated-at descending / ID ascending ordering; provider order is
+preserved. Providers without snapshots retain their own list order and normal
+resolve behavior. Snapshot failure/invalid records remain visible provider failures,
+never a reason to silently fall back to individual reads.
+
+Content preview uses that per-load inventory to filter qualified Content-model
+owners before definition resolution. It memoizes each qualified Content-model
+resolution, including missing/error outcomes, only for that load. Compatible
+Composition targets still use their actual provider resolution and derived-output
+challenge path. Draft typing still evaluates the already-resolved definition
+without provider I/O. Each new entry/model load obtains a new inventory and model
+memo; late results cannot replace a newer selection. Custom Mapping catalogs with
+only list/resolve continue to work. These independent provider snapshots do not
+establish cross-domain atomicity and are never mutation preconditions or exact
+static-build captures. Pinsel must verify the same retained readonly Content
+scenario after an independently installed immutable package before acceptance.

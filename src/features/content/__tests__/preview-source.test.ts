@@ -3,7 +3,7 @@ import { createComponentCatalog } from "../../../composer/model/types";
 import type { CompositionRecord } from "../../../composer/library";
 import type { ContentCatalog, ContentModelRef } from "../../../content/catalog";
 import { CONTENT_ENTRY_SCHEMA_VERSION, CONTENT_MODEL_SCHEMA_VERSION, type ContentEntryRecord, type ContentModelRecord } from "../../../content/model";
-import { createMappingRecord, type CompositionCatalog, type MappingCatalog, type MappingCatalogEntry, type MappingRecord } from "../../../mapping";
+import { createMappingCatalog, createMappingRecord, type CompositionCatalog, type MappingCatalog, type MappingCatalogEntry, type MappingRecord } from "../../../mapping";
 import { createContentPreviewSource } from "../preview-source";
 
 const stamp = "2026-08-30T00:00:00.000Z";
@@ -16,10 +16,11 @@ const entry = (value: string): ContentEntryRecord => ({ lifecycle: "draft" as co
 const mapping = (id: string, ref: ContentModelRef = contentRef, sourceFieldId = "body"): MappingRecord => createMappingRecord({ id, name: id, contentModel: ref, composition: { providerId: "files", recordId: composition.id }, bindings: [{ id: `${id}-binding`, sourceFieldId, target: { nodeId: "copy", prop: "markdown" }, transform: { kind: "identity" } }], createdAt: stamp });
 const catalogEntry = (id: string, providerId = "mapping"): MappingCatalogEntry => ({ ref: { providerId, recordId: id }, providerLabel: providerId, summary: { id, name: id, createdAt: stamp, updatedAt: stamp, bindingCount: 1 } });
 
-function harness(options: { list?: MappingCatalog["list"]; resolve?: MappingCatalog["resolve"] } = {}) {
+function harness(options: { list?: MappingCatalog["list"]; resolve?: MappingCatalog["resolve"]; readInventory?: MappingCatalog["readInventory"] } = {}) {
   const records = new Map([["ready", mapping("ready")], ["blocked", mapping("blocked", contentRef, "missing")], ["wrong-provider", mapping("wrong-provider", otherRef)]]);
   const resolve = options.resolve ?? vi.fn(async (ref) => ref.recordId === "broken" ? { status: "invalid" as const, reason: "Malformed Mapping preserved." } : { status: "resolved" as const, record: records.get(ref.recordId)! });
   const mappings: MappingCatalog = {
+    ...(options.readInventory ? { readInventory: options.readInventory } : {}),
     list: options.list ?? vi.fn(async () => ({ status: "listed" as const, entries: [catalogEntry("ready"), catalogEntry("blocked"), catalogEntry("wrong-provider"), catalogEntry("broken")], failures: [{ providerId: "offline", providerLabel: "Offline", reason: "unavailable" }] })),
     resolve,
   };
@@ -104,4 +105,41 @@ describe("ContentPreviewSource", () => {
     expect(h.source.state.candidates).toEqual([]);
     expect(h.source.state.requestRevision).toBe(2);
   });
+});
+
+describe("Content preview batch discovery", () => {
+ it("filters many unrelated records without gets and resolves the qualified model once per load", async () => {
+  const records = [...Array.from({length:165},(_,i)=>mapping("unrelated-"+i,otherRef)),mapping("ready"),mapping("blocked",contentRef,"missing")];
+  const snapshot=vi.fn(async()=>({mutationToken:"token",records}));const list=vi.fn(async()=>[]),get=vi.fn();
+  const catalog=createMappingCatalog([{descriptor:{id:"mapping",label:"Mapping"},store:{list,get,snapshot}}]);const h=harness({readInventory:catalog.readInventory});
+  await h.source.load(contentRef,entry("draft"));expect(snapshot).toHaveBeenCalledTimes(1);expect(list).not.toHaveBeenCalled();expect(get).not.toHaveBeenCalled();expect(h.resolve).not.toHaveBeenCalled();expect(h.content.resolveModel).toHaveBeenCalledTimes(1);expect(h.compositions.resolve).toHaveBeenCalledTimes(2);expect(h.source.state.candidates.map(c=>c.ref.recordId)).toEqual(["blocked","ready"]);
+  await h.source.load(contentRef,entry("next"));expect(snapshot).toHaveBeenCalledTimes(2);expect(h.content.resolveModel).toHaveBeenCalledTimes(2);
+ });
+ it("memoizes missing model outcomes only for one load, preserving blocked candidates",async()=>{
+  const h=harness();vi.mocked(h.content.resolveModel).mockResolvedValue({status:"not-found"});await h.source.load(contentRef,entry("draft"));expect(h.content.resolveModel).toHaveBeenCalledTimes(1);expect(h.source.state.candidates.every(c=>c.status==="broken")).toBe(true);
+  vi.mocked(h.content.resolveModel).mockResolvedValue({status:"resolved",record:model});await h.source.load(contentRef,entry("next"));expect(h.content.resolveModel).toHaveBeenCalledTimes(2);expect(h.source.state.selectedRef?.recordId).toBe("ready");
+ });
+ it("does not publish or resolve a stale inventory after switching models",async()=>{
+  let release!: (value: Awaited<ReturnType<NonNullable<MappingCatalog["readInventory"]>>>)=>void;let calls=0;
+  const pending=new Promise<Awaited<ReturnType<NonNullable<MappingCatalog["readInventory"]>>>>(r=>{release=r;});
+  const h=harness({readInventory:()=>++calls===1?pending:Promise.resolve({entries:[],failures:[],snapshots:[]})});const old=h.source.load(contentRef,entry("old"));await Promise.resolve();await Promise.resolve();await h.source.load(otherRef,entry("new"));release({entries:[catalogEntry("ready")],failures:[],snapshots:[{providerId:"mapping",snapshot:{mutationToken:"old",records:[mapping("ready")]}}]});await old;expect(h.source.state.modelRef).toEqual(otherRef);expect(h.source.state.candidates).toEqual([]);expect(h.content.resolveModel).not.toHaveBeenCalled();
+ });
+});
+
+it("keeps equal Mapping IDs provider-qualified and retains dangling Composition diagnostics",async()=>{
+ const first=mapping("same"),foreign=mapping("same",otherRef);
+ const providers=[{descriptor:{id:"first",label:"First"},store:{list:vi.fn(),get:vi.fn(),snapshot:async()=>({mutationToken:"1",records:[first]})}},{descriptor:{id:"foreign",label:"Foreign"},store:{list:vi.fn(),get:vi.fn(),snapshot:async()=>({mutationToken:"1",records:[foreign]})}}];
+ const catalog=createMappingCatalog(providers),h=harness({readInventory:catalog.readInventory});vi.mocked(h.compositions.resolve).mockResolvedValue({status:"not-found"});await h.source.load(contentRef,entry("draft"));
+ expect(h.source.state.candidates).toHaveLength(1);expect(h.source.state.candidates[0]).toMatchObject({ref:{providerId:"first",recordId:"same"},status:"broken"});expect(h.source.state.candidates[0]!.diagnostics.map(d=>d.code)).toContain("composition-not-found");expect(h.source.state.selectedRef).toBeNull();expect(h.content.resolveModel).toHaveBeenCalledTimes(1);
+});
+
+
+it("does not let a malformed legacy reference reuse a valid model memo", async () => {
+ const valid = mapping("valid"), malformed = mapping("malformed");
+ Object.assign(malformed.document.contentModel, { unexpected: true });
+ const h = harness({ list: async () => ({ status: "listed", entries: [catalogEntry("valid"), catalogEntry("malformed")], failures: [] }), resolve: async ref => ({ status: "resolved", record: ref.recordId === "valid" ? valid : malformed }) });
+ vi.mocked(h.content.resolveModel).mockImplementation(async ref => Object.keys(ref).length === 2 ? { status: "resolved", record: model } : { status: "invalid", reason: "Malformed qualified reference." });
+ await h.source.load(contentRef, entry("draft"));
+ expect(h.content.resolveModel).toHaveBeenCalledTimes(2);
+ expect(h.source.state.candidates.map(candidate => [candidate.ref.recordId, candidate.status])).toEqual([["valid", "ready"], ["malformed", "broken"]]);
 });

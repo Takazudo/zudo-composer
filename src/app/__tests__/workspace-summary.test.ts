@@ -3,7 +3,7 @@ import type { CompositionRecord, CompositionSummary } from "../../composer/brows
 import { COMPOSITION_SCHEMA_VERSION } from "../../composer/browser";
 import type { ComponentCatalog } from "../../composer/model/types";
 import type { ContentEntryRecord, ContentModelRecord } from "../../content/model";
-import type { ContentModelSummary } from "../../content/library";
+import { diagnoseContentEntryCompleteness, type ContentModelSummary } from "../../content/library";
 import type { MappingCatalogEntry, MappingRecord } from "../../mapping";
 import { MAPPING_SCHEMA_VERSION } from "../../mapping";
 import type { AssetSummary } from "../../assets";
@@ -772,4 +772,36 @@ it("preserves native Mapping date/id order and configured mixed provider attenti
   const second = createWorkspaceSummary({ ...integration, mappingProviders: [fallback, canonical] });
   expect(value((await second.attention()).mappings).map(item => item.id)).toEqual(["legacy-z", "legacy-a", "a-tie", "z-tie", "old"]);
   expect(records.map(record => record.id)).toEqual(["old", "z-tie", "a-tie"]);
+});
+
+describe("Content summary coherent inventory", () => {
+ it("uses one readAll per refresh and keeps exact counts, labels and completeness diagnostics",async()=>{
+  const model=contentModel("journal",AT(1)),entries=[contentEntry("complete",AT(2),{heading:"Title",count:2}),contentEntry("incomplete",AT(3),{})];
+  const {integration,scanEntries}=createFakeIntegration({models:[model]});const readAll=vi.fn(async()=>({providerId:"content-filesystem",mutationToken:8,models:[model],entries}));Object.assign(integration.contentProvider.store,{readAll});const list=vi.spyOn(integration.contentProvider.store,"listModels");
+  const summary=createWorkspaceSummary(integration);expect(value((await summary.counts()).content)).toEqual({models:1,entries:2,incompleteEntries:1});const attention=value((await summary.attention()).content);expect(attention).toHaveLength(1);expect(attention[0]).toMatchObject({id:"incomplete",kind:"incomplete-entry"});expect((await summary.recent()).records.some(r=>r.id==="complete"&&r.label==="Title")).toBe(true);
+  expect(readAll).toHaveBeenCalledTimes(1);expect(list).not.toHaveBeenCalled();expect(scanEntries).not.toHaveBeenCalled();summary.refresh();await summary.counts();expect(readAll).toHaveBeenCalledTimes(2);
+ });
+ it.each(["provider","token","duplicate-model","duplicate-entry","future","semantic","failure","null","undefined"])("keeps %s inventory unavailable without per-model fallback",async(problem)=>{
+  const model=contentModel("journal",AT(1)),entry=contentEntry("entry",AT(2),{heading:"Title"});const captured={providerId:"content-filesystem",mutationToken:8,models:[model],entries:[entry]};
+  if(problem==="provider")captured.providerId="foreign";if(problem==="token")captured.mutationToken=-1;if(problem==="duplicate-model")captured.models.push(model);if(problem==="duplicate-entry")captured.entries.push(entry);if(problem==="future")model.document.schemaVersion=999 as never;if(problem==="semantic")entry.values.count="wrong";
+  const {integration,scanEntries}=createFakeIntegration({models:[model]});Object.assign(integration.contentProvider.store,{readAll:async()=>{if(problem==="failure")throw new Error("offline");if(problem==="null")return null;if(problem==="undefined")return undefined;return captured;}});const list=vi.spyOn(integration.contentProvider.store,"listModels");expect((await createWorkspaceSummary(integration).counts()).content.status).toBe("unavailable");expect(list).not.toHaveBeenCalled();expect(scanEntries).not.toHaveBeenCalled();
+ });
+ it("does not repopulate an invalidated cache when an earlier read settles late",async()=>{
+  const model=contentModel("journal",AT(1));const old={providerId:"content-filesystem",mutationToken:1,models:[model],entries:[]},fresh={...old,mutationToken:2,entries:[contentEntry("new",AT(2),{heading:"New"})]};let release!:(snapshot:typeof fresh)=>void;const pending=new Promise<typeof fresh>(r=>{release=r;});let changed!:(channel?:string)=>void;
+  const {integration}=createFakeIntegration();integration.subscribeChanges=listener=>{changed=listener;return()=>{};};const readAll=vi.fn().mockImplementationOnce(()=>pending).mockResolvedValue(fresh);Object.assign(integration.contentProvider.store,{readAll});const summary=createWorkspaceSummary(integration);const first=summary.counts();await vi.waitFor(()=>expect(readAll).toHaveBeenCalledTimes(1));changed("content");expect(value((await summary.counts()).content).entries).toBe(1);release(old);await first;expect(value((await summary.counts()).content).entries).toBe(1);expect(readAll).toHaveBeenCalledTimes(2);
+ });
+});
+
+it("snapshot summary retains listed-model scope and exact fallback diagnostics/order",async()=>{
+ const model=contentModel("journal",AT(1)),entries=[contentEntry("complete",AT(2),{heading:"Title"}),contentEntry("incomplete",AT(3),{})];
+ const diagnostics=entries.flatMap(entry=>diagnoseContentEntryCompleteness(model,entry));
+ const make=()=>createFakeIntegration({models:[model],entries:{journal:{count:2,entries:[entries[1]!,entries[0]!],diagnostics}}});
+ const legacy=make(),batched=make();const orphan={...contentEntry("orphan",AT(4),{}),modelId:"absent"};Object.assign(batched.integration.contentProvider.store,{readAll:async()=>({providerId:"content-filesystem",mutationToken:2,models:[model],entries:[...entries,orphan]})});
+ const expected=createWorkspaceSummary(legacy.integration),actual=createWorkspaceSummary(batched.integration);
+ expect((await actual.counts()).content).toEqual((await expected.counts()).content);expect((await actual.attention()).content).toEqual((await expected.attention()).content);expect((await actual.recent()).records).toEqual((await expected.recent()).records);
+});
+
+it("retries failed Content inventory only after refresh, with no scan fallback",async()=>{
+ const {integration,scanEntries}=createFakeIntegration();const readAll=vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue({providerId:"content-filesystem",mutationToken:1,models:[],entries:[]});Object.assign(integration.contentProvider.store,{readAll});const summary=createWorkspaceSummary(integration);
+ expect((await summary.counts()).content).toEqual({status:"unavailable",error:"offline"});expect((await summary.attention()).content).toEqual({status:"unavailable",error:"offline"});expect(readAll).toHaveBeenCalledTimes(1);expect(scanEntries).not.toHaveBeenCalled();summary.refresh();expect((await summary.counts()).content.status).toBe("ok");expect(readAll).toHaveBeenCalledTimes(2);
 });
