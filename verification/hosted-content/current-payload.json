@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "62f014f4ae5acfa10ca551c116be6e3a909310fe",
-  "payloadSha256": "b08a99a3a4bb8c40ef315480891a2748409b12dc9245b61bb47f86326dbcfee9",
-  "rawPackageJsonSha256": "a21a005fd92dbec5f97ae405a94cd425ae9dcf154d11011e324bf53a699c00f3",
+  "packageOutputSha": "bc20ea554d5d8de92934c9bf4ec989229d23047e",
+  "payloadSha256": "64715b845ac03cc22b11569168219527c273889b58d8d94762c0c42060482175",
+  "rawPackageJsonSha256": "8b6ffeef366485c3f2f3a4b215b697f8c7cd54bf646cca257b8f0d4f0bec41fc",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -1002,9 +1002,9 @@
     },
     {
       "path": "server/hosted-content/editor.mjs",
-      "bytes": 107038,
+      "bytes": 109011,
       "mode": 420,
-      "sha256": "23a1d4b83d94fd7bc5ee5bf869a56bccdd1045417d7a71205c21946be8a042c5"
+      "sha256": "1b45918b8a390a70f456259fff671e47dab56f126ac3e9ad5f91827e988ef891"
     },
     {
       "path": "server/hosted-content/index.d.mts",
@@ -2196,9 +2196,9 @@
     },
     {
       "path": "src/content/CONTRACTS.md",
-      "bytes": 9428,
+      "bytes": 9818,
       "mode": 420,
-      "sha256": "aca09a5118c02e224243e4ed219c313ab7624169ff39193028ef29d4545eae0a"
+      "sha256": "052f52ca0733522cde33bacdfe81d55ddcf7313f9ef7c989830c93a6133fb932"
     },
     {
       "path": "src/content/catalog/catalog.ts",
@@ -3071,6 +3071,12 @@
       "sha256": "73a77253eb8f3061120342b5dce284a2dd2e442820ca2010b88ee44f96373eef"
     },
     {
+      "path": "src/features/content/boolean-control.tsx",
+      "bytes": 1434,
+      "mode": 420,
+      "sha256": "d8548429aadcea2f0001de185d814d084df3e14700bb8d8240395d61350d2f1a"
+    },
+    {
       "path": "src/features/content/content-app.tsx",
       "bytes": 24590,
       "mode": 420,
@@ -3078,9 +3084,9 @@
     },
     {
       "path": "src/features/content/content-author.tsx",
-      "bytes": 24325,
+      "bytes": 24213,
       "mode": 420,
-      "sha256": "3482631bf433ac969852ff8957c958613365007434660c2a2a16a0801d9908e0"
+      "sha256": "8919e2504a874afc65003a1fea403d47af76d927acb84f8132b52437adc177b9"
     },
     {
       "path": "src/features/content/content-directory.tsx",
@@ -3186,9 +3192,9 @@
     },
     {
       "path": "src/features/content/scalar-control.tsx",
-      "bytes": 4541,
+      "bytes": 4603,
       "mode": 420,
-      "sha256": "c3326a9eebf2968d1ee904f9bac178b4475ec87e3f3f9742068ea85e5b220c81"
+      "sha256": "9a0b91de8c44ffdcb09458607c87b35943302ba740395551f6b01b2c62fc4331"
     },
     {
       "path": "src/features/content/slug.ts",
