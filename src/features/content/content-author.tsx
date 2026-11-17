@@ -1,3 +1,4 @@
+import { ContentBooleanControl } from "./boolean-control";
 import type { JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, ErrorIcon, InfoIcon, PlusIcon, TrashIcon } from "../../components/icons";
@@ -361,14 +362,8 @@ export function ContentEntryAuthor({ state, controller, run, renderAssetPicker, 
 
         if (field.kind === "boolean") {
           return (
-            <Switch
-              key={field.id}
-              id={controlId}
-              class="sg-content-toggle"
-              label={<>{field.label}{field.required ? <span class="sg-content-req" aria-hidden="true"> *</span> : null}</>}
-              checked={value === true}
-              onCheckedChange={(checked) => commit(checked)}
-            />
+            <ContentBooleanControl key={field.id} id={controlId} class="sg-content-toggle"
+              label={field.label} required={field.required} value={value} onChange={commit} />
           );
         }
 
