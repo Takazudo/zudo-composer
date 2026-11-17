@@ -356,3 +356,19 @@ Installed acceptance must use a real host renderer and an actual bound Content u
 check the qualified context and original frame acknowledgement, preserve the entire
 workspace across reload/restart, and verify the rendered production semantics.
 Source/unit tests alone do not complete a consumer scenario.
+
+### Qualified Mapping navigation
+
+Opening a provider-qualified Mapping deep link resolves the selected definition
+after loading catalogs and Mapping summaries. It does not wait for every unrelated
+library definition or attachment diagnostic before opening the editor. The selected
+editor still performs its normal Content and Composition resolution and validation.
+Returning to the library resolves its complete diagnostics; pending rows are shown
+as checking rather than incorrectly reporting missing sources.
+
+Within one library refresh, qualified Content-model and Composition reads are
+shared across definitions and scheduled with bounded concurrency. Failed reads
+retain their diagnostic outcomes, admitted work settles before an error returns,
+and caches are discarded after that refresh. Selected-editor reads never reuse
+this library cache. Creation and duplication retain their existing durable-write
+and navigation order. These reads do not establish a coherent build snapshot.
