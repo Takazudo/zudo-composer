@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "bc20ea554d5d8de92934c9bf4ec989229d23047e",
-  "payloadSha256": "64715b845ac03cc22b11569168219527c273889b58d8d94762c0c42060482175",
-  "rawPackageJsonSha256": "8b6ffeef366485c3f2f3a4b215b697f8c7cd54bf646cca257b8f0d4f0bec41fc",
+  "packageOutputSha": "4f1191d682995438380fccdb5bb692a299415402",
+  "payloadSha256": "1e560f9a452504010483e8b5fa79d332e6b2b1ab9678d9020ca28d1e70e36e44",
+  "rawPackageJsonSha256": "70eea4eee6555d6eec7e86f4d6941fce4ee9d95c19d8cd747875280963ef8968",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -84,9 +84,9 @@
     },
     {
       "path": "docs/structural-authoring.md",
-      "bytes": 11123,
+      "bytes": 11919,
       "mode": 420,
-      "sha256": "ef24dc2c5946f520c29699845586a0ccce3d25e57e7b2ff91292dbdd3e382b2a"
+      "sha256": "ea4bcadc98148cc0756c00c3c2ad5d68c02d36c87527e10f0cfc73d378d2b944"
     },
     {
       "path": "index.html",
@@ -414,9 +414,9 @@
     },
     {
       "path": "plugins/native-edit-api.ts",
-      "bytes": 23809,
+      "bytes": 24392,
       "mode": 420,
-      "sha256": "e67fad5ffba0f2c46267364adfa49faa75759557a7c1beacecbfb0ae527353fa"
+      "sha256": "06456162894cd9fb002eb802bdb24d5e4a142b067da3a98bc664ad1ac5f525de"
     },
     {
       "path": "plugins/release-api-plugin.ts",
@@ -582,9 +582,9 @@
     },
     {
       "path": "server/authoring.d.mts",
-      "bytes": 52984,
+      "bytes": 53559,
       "mode": 420,
-      "sha256": "4f25d45131a2470303f5d0fe36f5a0168eecca9d841f92cb340d2750ba6f9066"
+      "sha256": "3812c0aee38043156eed489e9c854ebc0fd8c132a59e74e889686e33a35b0367"
     },
     {
       "path": "server/authoring.mjs",
@@ -923,10 +923,16 @@
       "sha256": "4ceb4c612370004fae05c98b7e193c1d11ccec58102282925c8514d666e05350"
     },
     {
-      "path": "server/host-document/ownership.ts",
-      "bytes": 7816,
+      "path": "server/host-document/field-sources.ts",
+      "bytes": 4928,
       "mode": 420,
-      "sha256": "72f3f767e939575ecb6231882ae4610f4b9ad63f9b3e9afff4c52f40db79208f"
+      "sha256": "bb82babbdad7c8197d5fd4c8dc714b416572e07d8c57960bfff2d6b371480768"
+    },
+    {
+      "path": "server/host-document/ownership.ts",
+      "bytes": 6136,
+      "mode": 420,
+      "sha256": "447e92a29cee3d9000616d915cdc0a27789a0853d2b9e27a44ca196d33aa1f92"
     },
     {
       "path": "server/host-document/render.ts",
@@ -954,9 +960,9 @@
     },
     {
       "path": "server/host-document/types.ts",
-      "bytes": 2009,
+      "bytes": 2469,
       "mode": 420,
-      "sha256": "73c4f645ae6a752dc82e50ca55292ce1c88976f473d29dfb0df30c35fcb03cfc"
+      "sha256": "dcb142beecd017559caa8412e42d776e29a8bb6d7fd9764be335a9314bb7ba18"
     },
     {
       "path": "server/hosted-content/chunks/ai-CzMW4DtT.mjs",
@@ -3312,9 +3318,9 @@
     },
     {
       "path": "src/features/host-document/inspector.tsx",
-      "bytes": 7809,
+      "bytes": 8867,
       "mode": 420,
-      "sha256": "823dc09919bc0c6ce876f13bcf43641ece84ddfc8fda8992c8b5fd805b0eb98f"
+      "sha256": "c1f0b12f9b1e9dfce15831f80d42d220b7b91e186be7ba9b0e1452583465c7eb"
     },
     {
       "path": "src/features/host-document/page.css",
@@ -3324,9 +3330,9 @@
     },
     {
       "path": "src/features/host-document/page.tsx",
-      "bytes": 16369,
+      "bytes": 16385,
       "mode": 420,
-      "sha256": "d7486454c431dd150d7c2795818c74c64bd978b552516a203e438afbdf37f850"
+      "sha256": "e8af6b54548039bdfa2c7550eaec17d3c3a2d6b43194f51132d23e13274ffc1c"
     },
     {
       "path": "src/features/host-document/protocol.ts",
