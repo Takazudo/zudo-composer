@@ -366,6 +366,17 @@ on replacement. Retry opens existing data. Reset swaps the integration only afte
 old workspace. Active Sitemap selection uses metadata CAS and registers its
 pending write with shared sessions.
 
+After successful Content initialization, the library reads one provider-qualified
+`ContentStore.readAll()` snapshot for model summaries, descriptions, entry counts
+and completeness counts. Counts include both draft and published authored records;
+they do not describe the activated release. Semantic-invalid entries leave their
+model's completeness count unknown. A superseded initialization cannot overwrite a
+newer model selection or retry. The snapshot is used only for this library view;
+entry opening and mutations retain their existing fresh reads and conflict guards.
+There is no persistent snapshot cache or token-only reuse, and failed reads do not
+trigger seeding or a fallback to piecemeal records. The separate hosted Content
+editor is unchanged.
+
 Content keeps the selected declarative `viewId` in presentation state. The Entry
 form follows its ordered field IDs without changing model data or completeness
 checks. Missing views remain explicit errors with the original query available

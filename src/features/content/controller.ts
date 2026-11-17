@@ -9,6 +9,8 @@ import {
   getContentDeletionBlockers,
   readContentGraph,
   summarizeContentModel,
+  compareContentModelsNewestFirst,
+  contentEntrySemanticIssue,
   type ContentEntryRecord,
   type ContentFieldDefinition,
   type ContentFieldKind,
@@ -126,8 +128,8 @@ export class ContentAuthoringController {
   private entryRequestId = 0;
   private listRequestId = 0;
   private conflictDraft: { baseModel: ContentModelRecord | null; baseEntry: ContentEntryRecord | null; localModel: ContentModelRecord | null; localEntry: ContentEntryRecord | null; authoritativeModel: ContentModelRecord | null; authoritativeEntry: ContentEntryRecord | null; unreconcilablePaths: readonly string[] } | null = null;
-  /** Invalidates an in-flight completeness sweep when the library reloads under it. */
-  private scanGeneration = 0;
+  /** Invalidates an in-flight library initialization when it is superseded. */
+  private initializationGeneration = 0;
   /** Identifies the candidate render whose acknowledgement may still approve Apply. */
   private aiRenderToken = 0;
 
@@ -778,21 +780,25 @@ export class ContentAuthoringController {
   }
 
   private async runInitialization(load: () => Promise<ContentInitializationOutcome>): Promise<void> {
-    this.modelRequestId++; this.entryRequestId++; this.listRequestId++;
+    const modelRequestId = ++this.modelRequestId, listRequestId = ++this.listRequestId;
+    this.entryRequestId++;
     this.conflictDraft = null;
-    this.scanGeneration += 1;
+    const generation = ++this.initializationGeneration;
+    const current = () => generation === this.initializationGeneration && modelRequestId === this.modelRequestId && listRequestId === this.listRequestId;
     this.set({ ...this.current, phase: "loading", message: "Loading Content library…" });
     try {
       const outcome = await load();
+      if (!current()) return;
       if (outcome.status === "ready") {
-        const counts = await Promise.all(outcome.models.map(async (model) => [model.id, await this.provider.store.countEntries(model.id)] as const));
-        const descriptions = await this.loadModelDescriptions(outcome.models);
-        this.set({ ...initialState, entryCreationPending: this.entryCreation !== null, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "ready", models: outcome.models, modelDescriptions: descriptions, entryCounts: Object.fromEntries(counts), message: "Content library ready." });
-        void this.sweepIncompleteCounts(outcome.models);
+        const snapshot = await this.provider.store.readAll();
+        if (!current()) return;
+        if (snapshot.providerId !== this.provider.descriptor.id || snapshot.providerId !== this.provider.store.provider.id) throw new Error("Content snapshot belongs to another provider.");
+        this.set({ ...initialState, entryCreationPending: this.entryCreation !== null, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "ready", ...summarizeLibrarySnapshot(snapshot), message: "Content library ready." });
       }
       else if (outcome.status === "recovery-required") this.set({ ...initialState, entryCreationPending: this.entryCreation !== null, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "recovery", models: outcome.models, recoveryMessage: outcome.recovery.message, message: "Recovery required. Source data was preserved." });
       else this.set({ ...initialState, entryCreationPending: this.entryCreation !== null, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "error", message: outcome.error.message });
     } catch (reason) {
+      if (!current()) return;
       this.set({ ...initialState, entryCreationPending: this.entryCreation !== null, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "error", message: reason instanceof Error ? reason.message : "Content library initialization failed." });
     }
   }
@@ -852,33 +858,6 @@ export class ContentAuthoringController {
     if (states.some((state) => state.status === "saving")) return "saving";
     if (states.some((state) => state.status === "dirty")) return "dirty";
     return "saved";
-  }
-  /**
-   * Fill in the navigator's warn dots after the library is already usable.
-   *
-   * Counting Entries is an index count; deciding whether any of them is
-   * incomplete means reading them all, so this runs model by model *after*
-   * `phase: "ready"` rather than holding the route behind a full scan. It is
-   * best effort in both directions: a stale sweep stops as soon as the library
-   * reloads under it, and a model that cannot be scanned simply keeps no dot
-   * instead of failing the route the way a blocking scan would.
-   */
-  private async sweepIncompleteCounts(models: readonly ContentModelSummary[]): Promise<void> {
-    const generation = this.scanGeneration;
-    for (const summary of models) {
-      // Opening a model and editing an Entry both keep an exact tally, so a
-      // model that already has one is skipped — checked again after the scan,
-      // because an author can open a model while this loop is awaiting.
-      if (this.current.incompleteCounts[summary.id] !== undefined) continue;
-      let count: number;
-      try {
-        const snapshot = await this.provider.store.scanEntries(summary.id);
-        count = incompleteEntryCount(snapshot.model, snapshot.entries);
-      } catch { continue; }
-      if (generation !== this.scanGeneration) return;
-      if (this.current.incompleteCounts[summary.id] !== undefined) continue;
-      this.set({ ...this.current, incompleteCounts: { ...this.current.incompleteCounts, [summary.id]: count } });
-    }
   }
 
   /** Records a freshly stored Entry in the open model's list and its counts. */
@@ -950,7 +929,7 @@ export class ContentAuthoringController {
   private async markCommittedStale(action: string, cause: unknown): Promise<void> {
     await this.closeQueues().catch(() => undefined);
     this.conflictDraft = null;
-    this.modelRequestId++; this.entryRequestId++; this.listRequestId++; this.scanGeneration++;
+    this.modelRequestId++; this.entryRequestId++; this.listRequestId++; this.initializationGeneration++;
     this.set({ ...this.current, phase: "error", conflictRecovery: null, saveStatus: "error", message: `${action} committed, but the authoritative Content view could not be reloaded: ${errorMessage(cause)} Retry to reload it. No stale edit session was restored.` });
   }
   private set(state: ContentAuthoringState): void { this.current = state; for (const listener of [...this.listeners]) listener(state); }
@@ -1063,6 +1042,28 @@ function isPlainObject(value: unknown): value is Record<string, unknown> { retur
 
 function usedFields(entries: readonly ContentEntryRecord[]): string[] {
   return [...new Set(entries.flatMap((entry) => Object.keys(entry.values)))].sort();
+}
+
+/** One coherent read for library metadata; never reused as a write precondition. */
+function summarizeLibrarySnapshot(snapshot: ContentSnapshot): Pick<ContentAuthoringState, "models" | "modelDescriptions" | "entryCounts" | "incompleteCounts"> {
+  const entries = new Map<string, ContentEntryRecord[]>();
+  for (const entry of snapshot.entries) {
+    const group = entries.get(entry.modelId) ?? [];
+    group.push(entry); entries.set(entry.modelId, group);
+  }
+  const incompleteCounts: Record<string, number> = {};
+  for (const model of snapshot.models) {
+    const group = entries.get(model.id) ?? [];
+    // scanEntries refuses semantic-invalid records. Preserve its unknown warn
+    // count rather than presenting invalid Content as complete.
+    if (!group.some(entry => contentEntrySemanticIssue(entry, model))) incompleteCounts[model.id] = incompleteEntryCount(model, group);
+  }
+  return {
+    models: snapshot.models.map(summarizeContentModel).sort(compareContentModelsNewestFirst),
+    modelDescriptions: Object.fromEntries(snapshot.models.map(model => [model.id, model.document.description])),
+    entryCounts: Object.fromEntries(snapshot.models.map(model => [model.id, entries.get(model.id)?.length ?? 0])),
+    incompleteCounts,
+  };
 }
 
 function incompleteEntryCount(model: ContentModelRecord, entries: readonly ContentEntryRecord[]): number {
