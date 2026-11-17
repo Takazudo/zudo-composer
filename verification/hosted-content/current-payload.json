@@ -1,6 +1,6 @@
 {
-  "packageOutputSha": "1af202393e9d1510aee87f17dbc09ea49d59ea44",
-  "payloadSha256": "beb3378905528d1746d4aab7cf6a87659dccabfc89d5e83c60cc018519c32f3c",
+  "packageOutputSha": "3c30d18a13455b6adb51378c3cf957ecff186b1d",
+  "payloadSha256": "b8bfcd5c6966f7796088112977e591587c6f4587b3d7288705efd0c6192483d4",
   "rawPackageJsonSha256": "8b6ffeef366485c3f2f3a4b215b697f8c7cd54bf646cca257b8f0d4f0bec41fc",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
@@ -42,9 +42,9 @@
     },
     {
       "path": "docs/host-assistant-ownership.md",
-      "bytes": 3963,
+      "bytes": 4465,
       "mode": 420,
-      "sha256": "57efdfa8ecc705a47be6b7fbb0797eb3c00d00eadc8939919544d7b17d7edfbe"
+      "sha256": "6f76d2fbcda91429148c62d7cc5e34e04d706c673299e462b32452599a3b9f56"
     },
     {
       "path": "docs/host-document-renderer.md",
@@ -588,9 +588,9 @@
     },
     {
       "path": "server/authoring.mjs",
-      "bytes": 28988,
+      "bytes": 29210,
       "mode": 420,
-      "sha256": "1a71eec487923d7550bb147cd3b9767a07810a14f475c676980a22b81058cc31"
+      "sha256": "c447c86e6aa68235375cb217aaa12fe25492df5af71b23fb36f81a12eb90d4db"
     },
     {
       "path": "server/cli/assets-import-entry.mjs",
@@ -924,15 +924,15 @@
     },
     {
       "path": "server/host-document/ownership.ts",
-      "bytes": 7929,
+      "bytes": 7816,
       "mode": 420,
-      "sha256": "39fc4b7b3f8de998f336241aeaf2a84951dace59c0cc4dccec67c77b6dcdf275"
+      "sha256": "72f3f767e939575ecb6231882ae4610f4b9ad63f9b3e9afff4c52f40db79208f"
     },
     {
       "path": "server/host-document/render.ts",
-      "bytes": 8935,
+      "bytes": 9404,
       "mode": 420,
-      "sha256": "8e00767b3a1b6919b3f79531e0f3584c5903efe3dd5149e36c661f4cf31aff3e"
+      "sha256": "e7527404226560856fc5d25ca7ceadb8766d37868c01855949e68a046bfd6b28"
     },
     {
       "path": "server/host-document/review-service.ts",
