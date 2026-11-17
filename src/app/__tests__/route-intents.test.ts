@@ -70,3 +70,8 @@ describe("native visitor URLs across reload", () => {
     expect(() => formatIntent({ route: "composer", mode: "assistant", visitorUrl: "/lessons/" } as unknown as RouteIntent)).toThrow();
   });
 });
+it("round trips native page Sitemap provider qualification without expanding other modes", () => {
+  const intent = { route: "composer", mode: "page", sitemapProviderId: "sitemaps-filesystem", sitemapId: "main", pageId: "lessons", visitorUrl: "/lessons" } as const;
+  expect(parseIntent(new URL(formatIntent(intent), "https://example.test"))).toEqual({ status: "matched", intent });
+  for (const search of ["?native=1&sitemapProvider=files", "?assistant=1&sitemapProvider=files&sitemap=main&page=home", "?provider=files&composition=x&sitemapProvider=files"]) expect(parseIntent({ pathname: "/composer", search }).status).toBe("invalid");
+});

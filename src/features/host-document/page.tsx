@@ -55,13 +55,17 @@ export function HostDocumentPage() {
   };
   const refresh = async (visitorUrl?: string) => {
     if (dirty.current) { setError("Save or discard the local field draft before changing or refreshing the page."); return; }
+    const initialHandoff = visitorUrl === undefined;
+    if (!initialHandoff) { const url = new URL(window.location.href); for (const key of ["sitemapProvider", "sitemap", "page"]) url.searchParams.delete(key); window.history.replaceState(window.history.state, "", url); }
+    const params = new URLSearchParams(window.location.search);
+    const handoff = initialHandoff ? { ...(params.get("sitemapProvider") ? { sitemapProviderId: params.get("sitemapProvider") } : {}), ...(params.get("sitemap") ? { sitemapId: params.get("sitemap") } : {}), ...(params.get("page") ? { pageId: params.get("page") } : {}) } : {};
     visitorUrl ??= new URLSearchParams(window.location.search).get("visitor") ?? undefined;
     const pathname = visitorUrl ? new URL(visitorUrl, window.location.origin).pathname : undefined;
     const request = ++sequence.current;
     invalidated.current = false; readyDocument.current = null;
     setLoading(true); setCurrent(false); setError(null); setPreview(null); setSelected(null);
     try {
-      const value = await nativeEditRequest<Preview>("document-preview", { workspaceId: integration.workspace.id, ...(pathname ? { pathname, visitorUrl } : new URLSearchParams(window.location.search).get("page") ? { pageId: new URLSearchParams(window.location.search).get("page") } : {}) });
+      const value = await nativeEditRequest<Preview>("document-preview", { workspaceId: integration.workspace.id, ...handoff, ...(pathname ? { pathname, visitorUrl } : {}) });
       if (request === sequence.current) { setPreview(value); readPending(value.identity); if (value.navigation) rememberVisitorUrl(value.navigation.url); }
     } catch (cause) { if (request === sequence.current) setError(cause instanceof Error ? cause.message : "Page preview unavailable."); }
     finally { if (request === sequence.current) setLoading(false); }

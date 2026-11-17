@@ -1,6 +1,6 @@
 import { describeHostDocumentTargets } from "../server/host-document/capabilities";
 import { validateHostComponentPresentation } from "../server/config/host-document";
-import { canonicalHostRoute } from "../src/shared/host-route";
+import { selectHostDocumentRoute } from "../server/host-document/route-selection";
 import { watch } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -168,7 +168,7 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
             await assertDocumentSourcesCurrent();
             const host = context.composerConfig.hostDocument;
             if (!host) throw Object.assign(new Error("Host document renderer is not configured."), { code: "unsupported-capability" });
-            const input = z.object({ workspaceId: z.string().min(1), pathname: z.string().startsWith("/").optional(), visitorUrl: z.string().startsWith("/").max(8192).optional(), pageId: z.string().min(1).optional() }).strict().parse(request.input);
+            const input = z.object({ workspaceId: z.string().min(1), pathname: z.string().startsWith("/").optional(), visitorUrl: z.string().startsWith("/").max(8192).optional(), pageId: z.string().min(1).optional(), sitemapId: z.string().min(1).optional(), sitemapProviderId: z.string().min(1).optional() }).strict().parse(request.input);
             const captureModule = await server.ssrLoadModule(appModuleId("server/authoring-workspace/capture.ts"));
             const renderModule = await server.ssrLoadModule(appModuleId("server/host-document/render.ts"));
             const renderer = hostRenderer;
@@ -178,9 +178,7 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
             if (snapshot.workspaceId !== input.workspaceId) throw Object.assign(new Error("Workspace changed."), { code: "wrong-workspace" });
             const compiled = await captureModule.compileAuthoringWorkspaceSnapshot({ ...options, snapshot });
             const routes = compiled.build.routes.map((route: { pathname: string; displayTitle: string; sitemapNode: { id: string } }) => ({ pathname: route.pathname, title: route.displayTitle, pageId: route.sitemapNode.id }));
-            const requestedPath = input.pathname ? canonicalHostRoute(input.pathname, routes.map((value: { pathname: string }) => value.pathname)) : null;
-            const route = compiled.build.routes.find((value: { pathname: string; sitemapNode: { id: string } }) => input.pathname ? value.pathname === requestedPath : input.pageId ? value.sitemapNode.id === input.pageId : false) ?? (!input.pathname && !input.pageId ? compiled.build.routes[0] : undefined);
-            if (!route) throw Object.assign(new Error("Route unavailable."), { code: "not-found" });
+            const route = selectHostDocumentRoute(compiled.build.routes, compiled.build.activeSitemap, input);
             const preview = await renderModule.renderHostDocument(renderer, route, { workspaceId: snapshot.workspaceId, revision: snapshot.digest, pathname: route.pathname, packId: context.pack.manifest.packId, packVersion: context.pack.manifest.packVersion, rendererId: host.rendererId, rendererVersion: host.rendererVersion, rendererDigest: snapshot.renderer.digest }, snapshot.project, { url: input.visitorUrl ?? route.pathname, pathnames: routes.map((value: { pathname: string }) => value.pathname) });
             const uses = new Map<string, string[]>();
             for (const compiledRoute of compiled.build.routes) for (const target of renderModule.hostDocumentTargets(compiledRoute)) {

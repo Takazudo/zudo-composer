@@ -150,3 +150,27 @@ Record unavailable live-provider acceptance as NOT_RUN with the exact missing
 configuration; preserve the owner's model, effort and service tier. Current work
 authorizes no deployment, package publication, remote D1 changes, domain changes
 or real inquiry delivery. Production delivery remains stopped.
+
+## Host preview destinations
+
+When a trusted host document renderer is configured, **Saved host page preview**
+opens the existing native page authoring view. Its iframe renders a captured saved
+workspace through the host renderer; it does not promise unsaved live output.
+Existing session flush and dirty-input refusal still precede capture.
+
+The active Sitemap Inspector offers **Open page authoring** when the selected page
+has exactly one resolved concrete route. The link qualifies Sitemap provider,
+Sitemap record, page ID and visitor path; the server checks that tuple against the
+captured active Sitemap. Inactive, unresolved and multi-route families explain why
+this shortcut is unavailable rather than guessing a route or Content entry. The
+source Composition link remains a separate provider-qualified source action.
+Deliberately choosing a different page in native authoring clears the original
+handoff constraint while retaining normal exact-snapshot capture validation.
+
+Local release compilation/activation remains available, but **activated-release
+preview is unavailable** for host document rendering until an exact-release adapter
+exists. It must never show newer working state under the immutable release label.
+Direct `/site` and `/website-preview` bookmarks show this boundary before loading
+the Preact visitor renderer. Use the host's independently verified exact-snapshot
+static build for release rendering evidence. Ordinary Preact hosts and static
+builds retain their existing visitor routes.
