@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "aa8d0df2feec56f6f3f887f9653db9bf7b30d6e0",
-  "payloadSha256": "6dc60a8942f1872df263b4c44224f2a7b68536b7f2c9de6d5a3d26080a07ffe7",
-  "rawPackageJsonSha256": "a2edbdd1b1a6698b39afca8d880be2a87a03eca2e64bdd4631f994ebadf0b890",
+  "packageOutputSha": "c5ffd410f74ba4b3aa003da068efeeae6e663c37",
+  "payloadSha256": "bc44f1c4e0778929fb69494a523d8148ee68530f3f320064412a18d1ef44bd47",
+  "rawPackageJsonSha256": "70eea4eee6555d6eec7e86f4d6941fce4ee9d95c19d8cd747875280963ef8968",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -84,9 +84,9 @@
     },
     {
       "path": "docs/structural-authoring.md",
-      "bytes": 24708,
+      "bytes": 25864,
       "mode": 420,
-      "sha256": "112ac4e751ac16ddae43661407867c680e3d541c5e8bf11cfed3a5d846763a6e"
+      "sha256": "1ce8b9ebb066260d6cfa4946c7dc4ae399dbc8dc09442c2b539617dbbfa75e90"
     },
     {
       "path": "index.html",
@@ -3414,9 +3414,9 @@
     },
     {
       "path": "src/features/mapping/controller.ts",
-      "bytes": 39789,
+      "bytes": 41312,
       "mode": 420,
-      "sha256": "3476cc53cb7e6bed30c07c8fcdf60c20a062d44065e17aa87313bfa7dcae76d0"
+      "sha256": "0ec800b7d815fc9f57d496974b3e043a3e700af8a2eed7f09338f9817638e2f1"
     },
     {
       "path": "src/features/mapping/deep-link.ts",
