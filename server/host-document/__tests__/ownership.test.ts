@@ -6,6 +6,7 @@ import { compileSiteProject } from "../../../src/site-project/compiler";
 import type { AuthoringWorkspaceSnapshot, compileAuthoringWorkspaceSnapshot } from "../../authoring-workspace/capture";
 import { hostDocumentTargets } from "../render";
 import { resolveHostOwnership } from "../ownership";
+import type { AssistantContentFieldPolicy } from "../../config/assistant";
 
 async function fixture() {
   const pack = defineComponentPack({ packId: "proof", packVersion: "1", components: [
@@ -173,7 +174,7 @@ it("returns editing constraints only for the exact selected allowed Content sour
   const selection = input.select("copy", "text");
   const before = resolveHostOwnership({ ...input, selection });
   const instructions = "Preserve the currency suffix; do not edit unrelated fields.";
-  const contentFields = [
+  const contentFields: AssistantContentFieldPolicy[] = [
     { ...input.contentFields[0]!, fieldInstructions: { "course-price": instructions, "course-private": "Private field guidance" } },
     { providerId: "foreign", modelId: "course", fieldIds: ["course-price"], fieldInstructions: { "course-price": "Foreign provider guidance" } },
     { providerId: "content-filesystem", modelId: "note", fieldIds: ["course-price"], fieldInstructions: { "course-price": "Foreign model guidance" } },
