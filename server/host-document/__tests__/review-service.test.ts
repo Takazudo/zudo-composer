@@ -29,7 +29,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const fence = (): RunFence => ({ conversationId: "conversation", runId: "run", turnId: "turn", toolCallId: "tool", signal: new AbortController().signal, assertActive: async () => {} });
 const ack = (value: HostReviewPreview) => ({ reviewId: value.reviewId, candidateDigest: value.candidateDigest, baseDigest: value.baseDigest, identity: value.preview.identity, frameId: value.preview.frameId });
-async function fixture() {
+async function fixture(dynamicDetail = false) {
   const root = await mkdtemp(join(tmpdir(), "host-review-")); roots.push(root);
   const pack = defineComponentPack({ packId: "proof", packVersion: "1", components: [
     { component: () => null, id: "group", schemaVersion: 1, title: "Group", description: "Group", category: "Test", source: { module: "proof/pack", exportName: "Group", exportKind: "named" }, defaults: {}, fields: [], slots: [{ id: "children", prop: "children", label: "Children", cardinality: "many", accepts: ["text"] }] },
@@ -38,12 +38,12 @@ async function fixture() {
   const config = composer({ workspaceRoot: root, pack: "proof/pack", authoringAuthority: "workspace", nativeEditing: { source: "workspace" }, assistant: { provider: "fake", name: "Proof", permission: "apply", contentFields: [{ providerId: "content-filesystem", modelId: "course", fieldIds: ["course-price"] }] } }, { env: {} });
   await createFilesystemAssetStore({ assetsStoreRoot: config.paths.assets });
   const site = defineSite({ id: "proof", name: "Proof", componentPack: pack });
-  const model = site.model({ id: "course", name: "Course", kind: "collection", fields: [{ key: "price", label: "Price", kind: "text" }] });
-  site.entry(model, { id: "consultation", values: { price: "100" } });
+  const model = site.model({ id: "course", name: "Course", kind: "collection", fields: [{ key: "price", label: "Price", kind: dynamicDetail ? "markdown" : "text" }, { key: "slug", label: "Slug", kind: "slug" }] });
+  site.entry(model, { id: "consultation", values: { price: "100", slug: "consultation" } });
   const presentation = site.page({ id: "price", name: "Price", root: [node("text", { text: "" }, {}, "price")] });
   const mapping = site.mapping({ id: "price", name: "Price", model, composition: presentation, mode: { kind: "collection" }, bindings: [{ field: "price", nodeId: "price", prop: "text" }] });
   const pages = ["home", "lessons"].map(id => { const page = site.page({ id, name: id, root: [node("text", { text: "local" }, {}, "local"), node("group", {}, { children: [] }, "group")] }); site.attach(mapping, { composition: page, nodeId: "group", slotId: "children" }, `${id}-price`); return page; });
-  site.sitemap({ id: "main", name: "Main", root: { id: "home", title: "Home", page: pages[0]!, children: [{ id: "lessons", title: "Lessons", slug: "lessons", page: pages[1]! }] } });
+  site.sitemap({ id: "main", name: "Main", root: { id: "home", title: "Home", page: pages[0]!, children: [{ id: "lessons", title: "Lessons", slug: "lessons", page: pages[1]! }, ...(dynamicDetail ? [{ id: "detail", title: "Detail", mapping, route: "entry-field" as const, field: "slug" }] : [])] } });
   await initializeAuthoringWorkspace({ composerConfig: config, pack, project: site.toSiteProject(), workspaceId: "proof" });
   const packIdentity = { specifier: "proof/pack", source: "self", digest: "a".repeat(64), compiler: "compiler", contractDigest: "b".repeat(64) };
   const options = { composerConfig: config, pack, packIdentity, renderer: { id: "proof", version: "1", module: "proof/renderer", digest: "c".repeat(64) } };
@@ -269,4 +269,23 @@ it("HTTP host review inspection inherits the live authoring lease without bypass
     expect(await readFile(reviewPath, "utf8")).toBe(storedBefore);
     expect(JSON.parse(storedBefore).card.status).toBe("open");
   } finally { server.closeAllConnections(); await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); await lease.release(); }
+});
+it("stages and applies a markdown Content field selected on a dynamic Sitemap Mapping route", async () => {
+  const f = await fixture(true), before = await captureAuthoringWorkspace(f.options);
+  const compiled = await compileAuthoringWorkspaceSnapshot({ ...f.options, snapshot: before });
+  const route = compiled.build.routes.find(route => route.pathname === "/consultation")!;
+  const target = hostDocumentTargets(route).find(target => target.nodeId === "price")!;
+  expect(target.entries).toEqual([{ providerId: "content-filesystem", modelId: "course", recordId: "consultation" }]);
+  const inspected = await f.service.inspect({ workspaceId: "proof", selection: { revision: before.digest, pathname: route.pathname, target: { renderedNodeId: target.renderedNodeId, providerId: target.providerId, recordId: target.recordId, nodeId: target.nodeId }, prop: "text" } }, fence());
+  expect(inspected.owner).toMatchObject({ domain: "content", entry: target.entries[0], fieldIds: ["course-price"] });
+  const card = await f.service.stageContent({ workspaceId: "proof", capabilityId: inspected.capabilityId, values: { "course-price": "# Revised markdown\n\nSaved body." }, summary: "Revise shared markdown" }, fence());
+  expect(card.affectedUses.map(use => use.pathname).sort()).toEqual(["/", "/consultation", "/lessons"]);
+  expect((await captureAuthoringWorkspace(f.options)).digest).toBe(before.digest);
+  const preview = await f.service.preview({ workspaceId: "proof", reviewId: card.id, pathname: route.pathname });
+  await f.service.apply({ workspaceId: "proof", reviewId: card.id, rendered: ack(preview) });
+  const saved = await captureAuthoringWorkspace(f.options);
+  expect(saved.project.providers.compositions).toEqual(before.project.providers.compositions);
+  expect(saved.project.providers.content[0]!.entries[0]!.values["course-price"]).toBe("# Revised markdown\n\nSaved body.");
+  await f.service.undo({ workspaceId: "proof", reviewId: card.id });
+  expect((await captureAuthoringWorkspace(f.options)).project.providers.content[0]!.entries[0]!.values["course-price"]).toBe("100");
 });

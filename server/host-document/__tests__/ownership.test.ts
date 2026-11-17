@@ -69,3 +69,66 @@ it("qualifies removal from the canonical parent slot and refuses roots/shared or
   record.document.root = [{ ...original, id: "outer", slots: { children: [original] } }];
   expect(removalReason(project, targets.find(target => target.nodeId === "root")!, input.manifest)).toContain("subtree owns a Mapping placement");
 });
+async function dynamicFixture() {
+  const input = await fixture(), project = input.snapshot.project;
+  const content = project.providers.content[0]!;
+  content.models[0]!.document.fields.push({ id: "course-slug", key: "slug", label: "Slug", kind: "slug", required: false });
+  content.entries[0]!.values["course-slug"] = "untouched";
+  const second = structuredClone(content.entries[0]!); second.id = "second";
+  second.values["course-slug"] = "second";
+  second.values["course-price"] = "200"; second.values["course-private"] = "second";
+  content.entries.push(second);
+  project.providers.sitemaps[0]!.records[0]!.document.root[0]!.children = [{ id: "detail", title: "Detail", source: { kind: "mapping", ref: { providerId: "mapping-filesystem", recordId: "used" }, route: { kind: "entry-field", fieldId: "course-slug" } }, children: [] }];
+  const result = await compileSiteProject(project, { componentCatalog: createComponentCatalog(input.manifest), policy: "release" });
+  if (result.status !== "ready") throw new Error(JSON.stringify(result.diagnostics));
+  input.compiled.build = result.build;
+  return input;
+}
+it("carries qualified root Sitemap Mapping entries into targets and resolves each dynamic route's actual field owner", async () => {
+  const input = await dynamicFixture();
+  for (const [pathname, recordId, value] of [["/untouched", "consultation", "100"], ["/second", "second", "200"]]) {
+    const route = input.compiled.build.routes.find(route => route.pathname === pathname)!;
+    const target = hostDocumentTargets(route).find(target => target.nodeId === "copy")!;
+    expect(target.entries).toEqual([{ providerId: "content-filesystem", modelId: "course", recordId }]);
+    expect(target.props.text).toBe(value);
+    const selection = { revision: input.snapshot.digest, pathname: route.pathname, target: { renderedNodeId: target.renderedNodeId, providerId: target.providerId, recordId: target.recordId, nodeId: target.nodeId }, prop: "text" };
+    const result = resolveHostOwnership({ ...input, selection });
+    expect(result.owner).toEqual({ domain: "content", entry: target.entries[0], fieldIds: ["course-price"] });
+    expect(result.affectedUses.map(use => use.pathname).sort()).toEqual(["/", pathname].sort());
+    expect(resolveHostOwnership({ ...input, selection: { ...selection, prop: "other" } }).owner.domain).toBe("unsupported");
+  }
+});
+it("keeps nested attachment provenance distinct from the root route and never assigns a linked Global template the selected entry", async () => {
+  const input = await dynamicFixture(), project = input.snapshot.project;
+  const records = project.providers.compositions[0]!.records;
+  const presentation = records.find(record => record.id === "presentation")!;
+  const nested = structuredClone(presentation); nested.id = nested.document.id = "nested"; records.push(nested);
+  const parent = structuredClone(records.find(record => record.id === "home")!.document.root[0]!);
+  parent.id = "nested-slot"; presentation.document.root.push(parent);
+  project.providers.mappings[0]!.records.find(record => record.id === "unused")!.document.composition.recordId = "nested";
+  project.collectionAttachments = [];
+  project.collectionAttachments.push({ id: "nested-use", order: 20, composition: { providerId: "files", recordId: "presentation" }, target: { nodeId: "nested-slot", slotId: "children" }, mapping: { providerId: "mapping-filesystem", recordId: "unused" } });
+  const result = await compileSiteProject(project, { componentCatalog: createComponentCatalog(input.manifest), policy: "release" });
+  if (result.status !== "ready") throw new Error(JSON.stringify(result.diagnostics));
+  input.compiled.build = result.build;
+  const route = result.build.routes.find(route => route.pathname === "/second")!;
+  const targets = hostDocumentTargets(route);
+  const target = targets.find(target => target.recordId === "nested" && target.entries[0]?.recordId === "consultation")!;
+  expect(target.entries).toEqual([{ providerId: "content-filesystem", modelId: "course", recordId: "consultation" }]);
+  const selection = { revision: input.snapshot.digest, pathname: route.pathname, target: { renderedNodeId: target.renderedNodeId, providerId: target.providerId, recordId: target.recordId, nodeId: target.nodeId }, prop: "text" };
+  expect(resolveHostOwnership({ ...input, selection }).owner).toMatchObject({ domain: "content", entry: target.entries[0], fieldIds: ["course-private"] });
+  // A linked source is a different canonical owner even on a Mapping-backed route.
+  const linked = structuredClone(route);
+  linked.composition.linkedSource = { ref: { providerId: "files", recordId: "global" }, document: structuredClone(nested.document), outlet: { id: "main", label: "Main", target: { parentId: "copy", slotId: "children" } } };
+  expect(hostDocumentTargets(linked).filter(target => target.recordId === "global").every(target => target.entries.length === 0)).toBe(true);
+});
+it("does not turn transformed dynamic route values into writable local props", async () => {
+  const input = await dynamicFixture(), project = input.snapshot.project;
+  project.providers.mappings[0]!.records.find(record => record.id === "used")!.document.bindings[0]!.transform = { kind: "prefix", prefix: "Price: " };
+  const compiled = await compileSiteProject(project, { componentCatalog: createComponentCatalog(input.manifest), policy: "release" });
+  if (compiled.status !== "ready") throw new Error(JSON.stringify(compiled.diagnostics));
+  input.compiled.build = compiled.build;
+  const route = compiled.build.routes.find(route => route.pathname === "/untouched")!, target = hostDocumentTargets(route)[0]!;
+  expect(target.props.text).toBe("Price: 100");
+  expect(resolveHostOwnership({ ...input, selection: { revision: input.snapshot.digest, pathname: route.pathname, target: { renderedNodeId: target.renderedNodeId, providerId: target.providerId, recordId: target.recordId, nodeId: target.nodeId }, prop: "text" } }).owner).toMatchObject({ domain: "unsupported", reason: expect.stringContaining("Transformed") });
+});

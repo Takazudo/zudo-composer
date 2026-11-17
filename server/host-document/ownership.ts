@@ -28,9 +28,9 @@ export function resolveHostOwnership({ snapshot, compiled, selection, manifest, 
     const renderedId = currentRoute.composition.linkedSource ? node.renderedNodeId.replace(/^host-(?:local|source)-/, "") : node.renderedNodeId;
     const materialized = currentRoute.materializationSources?.find(source => source.renderedNodeId === renderedId && source.providerId === node.providerId && source.recordId === node.recordId && source.nodeId === node.nodeId);
     const attachments = materialized ? snapshot.project.collectionAttachments.filter(attachment => attachment.id === materialized.attachmentId) : [];
-    const mappingRef = materialized ? attachments.length === 1 ? attachments[0]!.mapping : undefined : currentRoute.source.kind === "mapping" ? currentRoute.source.ref : undefined;
+    const mappingRef = materialized ? attachments.length === 1 ? attachments[0]!.mapping : undefined : currentRoute.source.kind === "mapping" && node.providerId === currentRoute.composition.local.providerId && node.recordId === currentRoute.composition.local.recordId ? currentRoute.source.ref : undefined;
     if (!mappingRef || mappingRef.providerId !== record.providerId || mappingRef.recordId !== record.id) return [];
-    const entries = node.entries.length ? node.entries : currentRoute.source.kind === "mapping" && currentRoute.source.ref.providerId === record.providerId && currentRoute.source.ref.recordId === record.id && currentRoute.selectedEntry ? [currentRoute.selectedEntry] : [];
+    const entries = node.entries;
     return record.document.bindings.filter(binding => binding.target.nodeId === node.nodeId && binding.target.prop === prop).flatMap(binding => entries.filter(entry => entry.providerId === record.document.contentModel.providerId && entry.modelId === record.document.contentModel.recordId).map(entry => ({ binding, entry })));
   });
   const bindings = selection.prop ? sourceBindings(target, route, selection.prop) : [];

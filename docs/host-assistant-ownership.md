@@ -15,6 +15,13 @@ from the existing model turn; it does not call a second model. Explicit host
 `assistant.contentFields` policy is required. Identity bindings, ambiguous sources,
 transformed/structured values and unsupported Content kinds explain their refusal.
 
+For a Sitemap Mapping route, preview targets in the Mapping's local Composition
+carry the compiler's provider-qualified selected Entry. Each dynamic route therefore
+resolves its own Content record, including markdown fields. Nested Mapping attachments
+retain their own entry provenance, and linked Global template nodes do not inherit
+the route Entry. A Content badge alone never authorizes writeback: the exact Mapping
+binding, projection, transform and host field policy must still permit the edit.
+
 Local Composition tools support validated field updates and insertion into the
 selected parent's advertised slots. Bound values cannot be shadowed in local props.
 Composition and Content receive separate review cards and separate human Apply
