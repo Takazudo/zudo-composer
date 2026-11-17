@@ -11676,7 +11676,9 @@ function nativeProject(host, values) {
 	return project;
 }
 /** Offline capture requires Save and a stopped editor. A live server must hold its
-* authoring lease and flush browser sessions before invoking this operation. */
+* authoring lease. Operations claiming current editor/build state must flush browser
+* sessions first. Explicit saved-only read capabilities may omit browser flushing:
+* this capture includes persisted state only and still checks all durable tokens. */
 async function captureAuthoringWorkspace(options) {
 	validateIdentities(options);
 	return executeAuthoringOperation(options.composerConfig.workspaceRoot, async () => {

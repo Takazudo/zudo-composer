@@ -1506,7 +1506,9 @@ declare function resolveAuthoringRendererIdentity(options: {
     composerConfig: ResolvedComposerConfig;
 }): Promise<AuthoringRendererIdentity>;
 /** Offline capture requires Save and a stopped editor. A live server must hold its
- * authoring lease and flush browser sessions before invoking this operation. */
+ * authoring lease. Operations claiming current editor/build state must flush browser
+ * sessions first. Explicit saved-only read capabilities may omit browser flushing:
+ * this capture includes persisted state only and still checks all durable tokens. */
 declare function captureAuthoringWorkspace(options: CaptureAuthoringWorkspaceOptions): Promise<AuthoringWorkspaceSnapshot>;
 /** Reopen durable stores and compare their tokens; Content generation also rejects edit/revert. */
 declare function isAuthoringWorkspaceSnapshotCurrent(options: CaptureAuthoringWorkspaceOptions, snapshot: AuthoringWorkspaceSnapshot): Promise<boolean>;
