@@ -17,7 +17,8 @@ describe("Mapping library discovery",()=>{
   const records=Array.from({length:25},(_,i)=>mappingRecord([READY_BINDING],`existing-${i}`));const h=harness(records);const content=vi.spyOn(h.content,'resolveModel'),compositions=vi.spyOn(h.compositions,'resolve');
   await h.controller.initialize();expect(content).toHaveBeenCalledTimes(1);expect(compositions).toHaveBeenCalledTimes(1);expect(Object.keys(h.controller.state.libraryDetails)).toEqual(records.map(r=>r.id));
   await h.controller.open(records[0]!.id);expect(content).toHaveBeenCalledTimes(3);expect(compositions).toHaveBeenCalledTimes(3);
-  await h.controller.create('New record',CONTENT_REF,COMPOSITION_REF);expect(content).toHaveBeenCalledTimes(4);expect(compositions).toHaveBeenCalledTimes(4);
+  await h.controller.create('New record',CONTENT_REF,COMPOSITION_REF);expect(content).toHaveBeenCalledTimes(3);expect(compositions).toHaveBeenCalledTimes(3);expect(h.controller.state.libraryDetails).toEqual({});
+  await h.controller.close();expect(content).toHaveBeenCalledTimes(4);expect(compositions).toHaveBeenCalledTimes(4);expect(Object.keys(h.controller.state.libraryDetails)).toHaveLength(26);
  });
  it("does not conflate provider-qualified references or retain provider failure in the next pass",async()=>{
   const h=harness();const resolve=vi.spyOn(h.content,'resolveModel').mockImplementation(async ref=>ref.providerId==='other'?{status:'provider-error',reason:'offline'}:{status:'resolved',record:model});const first=libraryResolutionCatalogs(h);

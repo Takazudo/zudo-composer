@@ -4,6 +4,7 @@ import type { ComponentCatalog, CompositionDocument } from "../../composer/model
 import type { ContentCatalog, ContentCatalogEntry, ContentEntryRecord, ContentEntrySnapshot, ContentModelRecord } from "../../content";
 import {
   createMappingRecord,
+  summarizeMapping,
   evaluateCollectionQuery,
   evaluateResolvedMapping,
   evaluateMapping,
@@ -150,7 +151,7 @@ export class MappingEditorController {
     const record = createMappingRecord({ id: this.idFactory("mapping"), name: trimmed, contentModel, composition, createdAt: timestamp });
     await this.requireFreshRecordId(record.id);
     await this.provider.store.put(record);
-    await this.refreshLibrary();
+    this.deferLibraryAfterSave(record);
     return record.id;
   }
 
@@ -165,7 +166,7 @@ export class MappingEditorController {
     const record = createMappingRecord({ id: duplicateId, name: `${source.name} copy`, contentModel: source.contentModel, composition: source.composition, mode: cloneJson(source.mode), bindings: cloneJson(source.bindings), createdAt: timestamp });
     await this.requireFreshRecordId(duplicateId);
     await this.provider.store.put(record);
-    await this.refreshLibrary();
+    this.deferLibraryAfterSave(record);
     return duplicateId;
   }
 
@@ -177,7 +178,7 @@ export class MappingEditorController {
     await this.openLoadedRecord(outcome.record);
   }
 
-  async close(): Promise<void> { await this.flush(); this.refreshRevision += 1; this.set({ ...this.current, mapping: null, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, collectionEvaluation: null, collectionEvaluations: [], previewDocument: null, previewStatus: "empty", message: this.libraryDetailsDeferred ? "Checking Mapping library…" : "Mapping library ready.", deepLink: { status: "none" } }); if (this.libraryDetailsDeferred) { await this.refreshLibrary(); this.set({ ...this.current, message: "Mapping library ready." }); } }
+  async close(): Promise<void> { await this.flush(); this.refreshRevision += 1; this.set({ ...this.current, mapping: null, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, collectionEvaluation: null, collectionEvaluations: [], previewDocument: null, previewStatus: "empty", message: this.libraryDetailsDeferred ? "Checking Mapping library…" : "Mapping library ready.", deepLink: { status: "none" } }); if (this.libraryDetailsDeferred) { await this.refreshLibrary(); if (!this.current.mapping && !this.libraryDetailsDeferred) this.set({ ...this.current, message: "Mapping library ready." }); } }
 
   /**
    * Resolve a route request against the named provider only. A provider
@@ -412,8 +413,13 @@ export class MappingEditorController {
         const record = this.current.mapping;
         this.set({ ...this.current, saveStatus: "saving", message: "Saving Mapping…" });
         try {
+          // A selected edit may still be resolving. Join it, but never make a
+          // durable Save depend on every unrelated library row.
+          while (this.resolutionPending) await this.resolving;
+          if (this.resolutionError) throw this.resolutionError;
+          if (this.current.mapping !== record) continue;
           await this.provider.store.put(record);
-          await this.refreshLibrary();
+          this.deferLibraryAfterSave(record);
           if (this.current.mapping === record) this.set({ ...this.current, saveStatus: "saved", message: "All changes saved." });
         } catch (reason) { this.set({ ...this.current, saveStatus: "error", message: reason instanceof Error ? reason.message : "Mapping save failed." }); throw reason; }
       }
@@ -554,10 +560,18 @@ export class MappingEditorController {
    * resolution checks before committing.
    */
   private resolving: Promise<void> = Promise.resolve();
+  private resolutionPending = false;
+  private resolutionError: unknown = null;
 
   private refreshResolution(): Promise<void> {
     const run = this.resolveAndEvaluate();
-    this.resolving = run.then(() => undefined, () => undefined);
+    this.resolutionPending = true;
+    this.resolutionError = null;
+    const settled = run.then(
+      () => { if (this.resolving === settled) this.resolutionPending = false; },
+      reason => { if (this.resolving === settled) { this.resolutionPending = false; this.resolutionError = reason; } },
+    );
+    this.resolving = settled;
     return run;
   }
 
@@ -612,7 +626,24 @@ export class MappingEditorController {
     if (outcome.status === "resolved") return outcome.entry;
     throw new Error(outcome.status === "not-found" ? "Sample Entry could not be found in the selected Content provider." : outcome.reason);
   }
-  private async refreshLibrary(): Promise<void> { const mappings = await this.provider.store.list(); this.set({ ...this.current, mappings }); await this.refreshLibraryDetails(); }
+  /** Only the acknowledged record is known current. The next library visit
+   * must reload all rows before reporting complete readiness. No detached reads. */
+  private deferLibraryAfterSave(record: MappingRecord): void {
+    this.libraryDetailsRevision += 1;
+    this.libraryDetailsDeferred = true;
+    const summary = summarizeMapping(record);
+    const mappings = this.current.mappings.some(item => item.id === record.id)
+      ? this.current.mappings.map(item => item.id === record.id ? summary : item)
+      : [...this.current.mappings, summary];
+    this.set({ ...this.current, mappings, libraryDetails: {} });
+  }
+
+  private async refreshLibrary(): Promise<void> {
+    const revision = ++this.libraryDetailsRevision;
+    const mappings = await this.provider.store.list();
+    if (revision !== this.libraryDetailsRevision) return;
+    this.set({ ...this.current, mappings }); await this.refreshLibraryDetails();
+  }
   private async refreshLibraryDetails(): Promise<void> {
     const revision = ++this.libraryDetailsRevision;
     const catalogs = libraryResolutionCatalogs(this.catalogs);

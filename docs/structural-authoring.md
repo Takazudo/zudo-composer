@@ -373,3 +373,21 @@ retain their diagnostic outcomes, admitted work settles before an error returns,
 and caches are discarded after that refresh. Selected-editor reads never reuse
 this library cache. Creation and duplication retain their existing durable-write
 and navigation order. These reads do not establish a coherent build snapshot.
+
+### Mapping save and editor destinations
+
+A selected Mapping Save joins that edit's in-flight definition resolution and
+awaits its actual store write. It does not await unrelated library-row diagnostics.
+After acknowledgement, only that record's summary is updated; library readiness
+is invalidated and marked for a complete refresh on the next library visit. No
+background library reads are detached from the caller. New edits arriving during
+a write remain dirty and drain through the shared save operation; selected-source
+or write errors remain visible rather than reporting Saved early.
+
+Create and Duplicate similarly return their editor destination only after the
+new record has been durably written. Opening it still resolves its own qualified
+sources and validation afresh. Returning to the library, deleting a Mapping and
+clearing the library retain complete inventory/diagnostic reads. A stale earlier
+library pass cannot restore obsolete readiness after a newer save. Deferred rows
+remain Checking, never implicitly Ready. This affects authoring responsiveness,
+not storage validation, attachment guards or cross-domain transaction semantics.
