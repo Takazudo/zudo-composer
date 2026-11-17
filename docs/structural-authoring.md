@@ -45,6 +45,17 @@ reviewed immutable capture rather than recapturing current state. Snapshot A mus
 remain buildable after later draft B without changing B. Do not expose private
 storage paths or require hosts to assemble snapshots through unrelated reads.
 
+A saved unassigned Sitemap page can be captured and reopened before its source
+is chosen. Capture retains that exact unassigned node; it does not declare the
+workspace render-ready. Assets inspection still covers every saved Content entry,
+Composition and component default, plus all materialized routes. The only tolerated
+route diagnostic during authoring capture is an `unassigned-page` for an actual
+unassigned node in the active Sitemap: that node has no source to materialize.
+Unknown managed references, missing/corrupt Assets, other route errors and changed
+state still refuse capture. Release compilation, exact snapshot build and Assets
+trash inspection keep their strict completeness rules. Assign a source and capture
+again before building; never rewrite an earlier incomplete snapshot to make it pass.
+
 For a staged pack/schema migration, `isAuthoringWorkspaceSourceCurrent` from
 `zudo-composer/authoring` checks the original snapshot digest, full native source
 project and tokens, Assets and prepared public bytes without requiring the new

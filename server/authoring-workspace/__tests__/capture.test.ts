@@ -213,3 +213,52 @@ it("migration source refuses rehashed asset omissions and duplicate captured fil
     await expect(isAuthoringWorkspaceSourceCurrent(options, altered)).rejects.toThrow("file set differs");
   }
 });
+
+it("captures and reopens an unassigned saved page with exact Assets, but builds only after source assignment", async () => {
+  const options = await fixture();
+  const before = await captureAuthoringWorkspace(options);
+  const host = await captureHost({ config: options.composerConfig, pack: options.pack });
+  const sitemap = structuredClone((await host.stores.sitemaps.snapshot()).records[0]!);
+  const pending = { id: "new-page", title: "Untitled page", slug: "new-page", source: { kind: "unassigned" as const }, children: [] };
+  sitemap.document.root[0]!.children.push(pending);
+  await host.stores.sitemaps.put(sitemap);
+  const snapshot = await captureAuthoringWorkspace(options);
+  expect(snapshot.project.providers.sitemaps[0]!.records[0]!.document.root[0]!.children).toEqual([pending]);
+  expect(snapshot.assets).toEqual(before.assets);
+  expect(snapshot.publicFiles).toEqual(before.publicFiles);
+  expect(snapshot.project.providers.content).toEqual(before.project.providers.content);
+  expect(snapshot.project.providers.compositions).toEqual(before.project.providers.compositions);
+  expect(snapshot.project.providers.mappings).toEqual(before.project.providers.mappings);
+  expect(snapshot.tokens.sitemaps).not.toEqual(before.tokens.sitemaps);
+  expect(snapshot.tokens).toEqual({ ...before.tokens, sitemaps: await host.stores.sitemaps.mutationToken() });
+  expect(await isAuthoringWorkspaceSnapshotCurrent(options, snapshot)).toBe(true);
+  // Each capture reopens durable stores, as a stopped editor/restarted host does.
+  expect(await captureAuthoringWorkspace(options)).toEqual(snapshot);
+  await expect(compileAuthoringWorkspaceSnapshot({ ...options, snapshot })).rejects.toThrow("The Sitemap page has no assigned source.");
+  const reopened = await captureHost({ config: options.composerConfig, pack: options.pack });
+  const assigned = structuredClone((await reopened.stores.sitemaps.snapshot()).records[0]!);
+  assigned.document.root[0]!.children[0]!.source = structuredClone(assigned.document.root[0]!.source);
+  await reopened.stores.sitemaps.put(assigned);
+  const complete = await captureAuthoringWorkspace(options);
+  expect(await isAuthoringWorkspaceSnapshotCurrent(options, snapshot)).toBe(false);
+  const built = await compileAuthoringWorkspaceSnapshot({ ...options, snapshot: complete });
+  expect(built.build.routes.map(route => route.pathname)).toEqual(["/", "/new-page"]);
+  expect(complete.assets).toEqual(snapshot.assets);
+  // The retained incomplete snapshot remains incomplete, never silently repaired.
+  await expect(compileAuthoringWorkspaceSnapshot({ ...options, snapshot })).rejects.toThrow("The Sitemap page has no assigned source.");
+});
+
+it.each(["missing", "corrupt"])("still refuses %s immutable asset bytes for an unassigned saved page without changing canonical state", async kind => {
+  const options = await fixture();
+  const before = await captureAuthoringWorkspace(options);
+  const host = await captureHost({ config: options.composerConfig, pack: options.pack });
+  const sitemap = structuredClone((await host.stores.sitemaps.snapshot()).records[0]!);
+  sitemap.document.root[0]!.children.push({ id: "pending", title: "Pending", slug: "pending", source: { kind: "unassigned" }, children: [] });
+  await host.stores.sitemaps.put(sitemap);
+  const saved = await host.stores.sitemaps.snapshot();
+  const file = join(options.composerConfig.paths.assets, "versions", before.assets.files[0]!.fileName.split("/").at(-1)!);
+  if (kind === "missing") await rm(file); else await writeFile(file, "corrupt immutable bytes");
+  await expect(captureAuthoringWorkspace(options)).rejects.toThrow("Referenced Assets could not be captured exactly.");
+  expect(await host.stores.sitemaps.snapshot()).toEqual(saved);
+  expect((await host.stores.content.readAll()).mutationToken).toEqual(before.tokens.content);
+});
