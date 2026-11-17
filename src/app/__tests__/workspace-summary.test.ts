@@ -673,3 +673,103 @@ it.each([0, 42, "opaque-provider-token"])("accepts the existing snapshot token c
   integration.compositionProviders[0]!.store.snapshot = async () => ({ mutationToken, records: [compositionRecord("hero")] });
   expect(value((await createWorkspaceSummary(integration).counts()).compositions).compositions).toBe(1);
 });
+
+
+describe("canonical Mapping summary batching", () => {
+  const token = "mappings-token";
+  it("summarizes163 Mappings from one snapshot and resolves each of25 qualified models once", async () => {
+    const models = Array.from({ length: 25 }, (_, i) => contentModel(`model-${i}`, AT(1)));
+    const records = Array.from({ length: 163 }, (_, i) => {
+      const record = mappingRecord(`mapping-${i}`); record.document.contentModel.recordId = `model-${i % 25}`; return record;
+    });
+    const { integration } = createFakeIntegration({ models });
+    const list = vi.spyOn(integration.mappingCatalog, "list");
+    const resolve = vi.spyOn(integration.mappingCatalog, "resolve");
+    const resolveModel = vi.spyOn(integration.contentCatalog, "resolveModel");
+    const snapshot = vi.fn(async () => ({ mutationToken: token, records }));
+    const summary = createWorkspaceSummary({ ...integration, mappingProviders: [{ descriptor: { id: "mapping-filesystem", label: "Mappings" }, store: { snapshot } }] });
+    expect(value((await summary.counts()).mappings)).toEqual({ mappings: 163, blockedMappings: 0 });
+    expect((await summary.recent(200)).records.filter(record => record.kind === "mapping")).toHaveLength(163);
+    expect(snapshot).toHaveBeenCalledTimes(1); expect(list).not.toHaveBeenCalled(); expect(resolve).not.toHaveBeenCalled();
+    expect(resolveModel).toHaveBeenCalledTimes(25);
+    summary.refresh(); await summary.counts();
+    expect(snapshot).toHaveBeenCalledTimes(2); expect(resolveModel).toHaveBeenCalledTimes(50);
+  });
+
+  it("preserves missing source diagnostics and falls back only for providers without snapshots", async () => {
+    const good = mappingRecord("same"), missing = mappingRecord("same", "missing");
+    const { integration } = createFakeIntegration({ models: [contentModel("journal", AT(1))] });
+    integration.mappingCatalog.list = vi.fn(async () => ({ status: "listed" as const, entries: [{ ...mappingEntry("same", AT(1)), ref: { providerId: "legacy", recordId: "same" } }], failures: [] }));
+    integration.mappingCatalog.resolve = vi.fn(async (ref: { providerId: string; recordId: string }) => ref.providerId === "legacy" ? { status: "resolved" as const, record: missing } : { status: "not-found" as const });
+    const summary = createWorkspaceSummary({ ...integration, mappingProviders: [
+      { descriptor: { id: "mapping-filesystem", label: "Canonical" }, store: { snapshot: async () => ({ mutationToken: token, records: [good] }) } },
+      { descriptor: { id: "legacy", label: "Legacy" }, store: {} },
+    ] });
+    expect(value((await summary.counts()).mappings)).toEqual({ mappings: 2, blockedMappings: 1 });
+    expect(integration.mappingCatalog.resolve).toHaveBeenCalledExactlyOnceWith({ providerId: "legacy", recordId: "same" });
+    expect(value((await summary.attention()).mappings)).toHaveLength(1);
+  });
+
+  it("does not silently fall back after snapshot failure, corruption or duplicate providers", async () => {
+    const { integration } = createFakeIntegration(); const list = vi.spyOn(integration.mappingCatalog, "list");
+    const snapshot = vi.fn(async () => { throw new Error("Mapping snapshot unavailable"); });
+    const provider = { descriptor: { id: "mapping-filesystem", label: "Mappings" }, store: { snapshot } };
+    const failed = createWorkspaceSummary({ ...integration, mappingProviders: [provider] });
+    expect((await failed.counts()).mappings.status).toBe("unavailable"); expect(list).not.toHaveBeenCalled();
+    const duplicate = createWorkspaceSummary({ ...integration, mappingProviders: [provider, provider] });
+    expect((await duplicate.counts()).mappings.status).toBe("unavailable"); expect(snapshot).toHaveBeenCalledTimes(1);
+    const bad = createWorkspaceSummary({ ...integration, mappingProviders: [{ ...provider, store: { snapshot: async () => ({ mutationToken: token, records: [mappingRecord("duplicate"), mappingRecord("duplicate")] }) } }] });
+    expect((await bad.counts()).mappings.status).toBe("unavailable"); expect(list).not.toHaveBeenCalled();
+  });
+
+  it("retains snapshot on Content changes while recomputing model diagnostics; Mapping change refreshes inventory", async () => {
+    const { integration } = createFakeIntegration({ models: [contentModel("journal", AT(1))] });
+    let changed!: (channel: string) => void; integration.subscribeChanges = listener => { changed = listener; return () => {}; };
+    const snapshot = vi.fn(async () => ({ mutationToken: token, records: [mappingRecord("hero-map")] }));
+    const model = vi.spyOn(integration.contentCatalog, "resolveModel");
+    const summary = createWorkspaceSummary({ ...integration, mappingProviders: [{ descriptor: { id: "mapping-filesystem", label: "Mappings" }, store: { snapshot } }] });
+    await summary.counts(); changed("content"); await summary.counts();
+    expect(snapshot).toHaveBeenCalledTimes(1); expect(model).toHaveBeenCalledTimes(2);
+    changed("mapping"); await summary.counts(); expect(snapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it("cannot repopulate refreshed Mapping cache from an old in-flight snapshot", async () => {
+    const { integration } = createFakeIntegration(); let finish!: (snapshot: { mutationToken: string; records: MappingRecord[] }) => void;
+    const pending = new Promise<{ mutationToken: string; records: MappingRecord[] }>(resolve => { finish = resolve; });
+    const snapshot = vi.fn().mockReturnValueOnce(pending).mockResolvedValue({ mutationToken: "fresh", records: [] });
+    const summary = createWorkspaceSummary({ ...integration, mappingProviders: [{ descriptor: { id: "mapping-filesystem", label: "Mappings" }, store: { snapshot } }] });
+    const old = summary.counts(); await vi.waitFor(() => expect(snapshot).toHaveBeenCalledTimes(1));
+    summary.refresh(); expect(value((await summary.counts()).mappings).mappings).toBe(0);
+    finish({ mutationToken: token, records: [mappingRecord("old")] }); await old;
+    expect(value((await summary.counts()).mappings).mappings).toBe(0); expect(snapshot).toHaveBeenCalledTimes(2);
+  });
+});
+
+
+it("Mapping model memo does not merge identical record IDs from different Content providers", async () => {
+  const first = mappingRecord("first"), second = mappingRecord("second");
+  Object.assign(second.document.contentModel, { providerId: "foreign-content" });
+  const { integration } = createFakeIntegration({ mappings: [mappingEntry("first", AT(1)), mappingEntry("second", AT(1))], mappingRecords: { first, second } });
+  integration.contentCatalog.resolveModel = vi.fn(async (ref: { providerId: string; recordId: string }) => ref.providerId === "content-filesystem" ? { status: "resolved" as const, record: contentModel("journal", AT(1)) } : { status: "not-found" as const });
+  const summary = createWorkspaceSummary(integration);
+  expect(value((await summary.counts()).mappings)).toEqual({ mappings: 2, blockedMappings: 1 });
+  expect(integration.contentCatalog.resolveModel).toHaveBeenCalledTimes(2);
+  expect(integration.contentCatalog.resolveModel).toHaveBeenCalledWith({ providerId: "foreign-content", recordId: "journal" });
+});
+
+
+it("preserves native Mapping date/id order and configured mixed provider attention order", async () => {
+  const { integration } = createFakeIntegration({ models: [contentModel("journal", AT(1))] });
+  const records = [mappingRecord("old", "missing"), mappingRecord("z-tie", "missing"), mappingRecord("a-tie", "missing")];
+  records[1]!.updatedAt = AT(3); records[2]!.updatedAt = AT(3);
+  const legacy = ["legacy-z", "legacy-a"].map(id => ({ ...mappingEntry(id, AT(5)), ref: { providerId: "legacy", recordId: id } }));
+  integration.mappingCatalog.list = vi.fn(async () => ({ status: "listed" as const, entries: legacy, failures: [] }));
+  integration.mappingCatalog.resolve = vi.fn(async () => ({ status: "not-found" as const }));
+  const canonical = { descriptor: { id: "mapping-filesystem", label: "Canonical" }, store: { snapshot: async () => ({ mutationToken: "token", records }) } };
+  const fallback = { descriptor: { id: "legacy", label: "Legacy" }, store: {} };
+  const first = createWorkspaceSummary({ ...integration, mappingProviders: [canonical, fallback] });
+  expect(value((await first.attention()).mappings).map(item => item.id)).toEqual(["a-tie", "z-tie", "old", "legacy-z", "legacy-a"]);
+  const second = createWorkspaceSummary({ ...integration, mappingProviders: [fallback, canonical] });
+  expect(value((await second.attention()).mappings).map(item => item.id)).toEqual(["legacy-z", "legacy-a", "a-tie", "z-tie", "old"]);
+  expect(records.map(record => record.id)).toEqual(["old", "z-tie", "a-tie"]);
+});

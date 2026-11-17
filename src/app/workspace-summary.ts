@@ -32,7 +32,7 @@ import type { ContentStore } from "../content/library";
 import type { ComponentCatalog } from "../composer/model/types";
 import { mappingDeepLinkHref } from "../features/mapping/deep-link";
 import type { AssetStore } from "../assets";
-import { resolveMappingDefinition, type CompositionCatalog as MappingCompositionCatalog, type MappingCatalog } from "../mapping";
+import { resolveMappingDefinition, summarizeMapping, validateMappingRecord, type MappingRecord, type MappingCatalogEntry, type CompositionCatalog as MappingCompositionCatalog, type MappingCatalog } from "../mapping";
 import { isSafeRecordId, type RecordId } from "../shared";
 import type { SitemapRecord, SitemapStore } from "../sitemapper/library";
 import type { SitemapNode } from "../sitemapper/model";
@@ -163,6 +163,11 @@ export interface WorkspaceSummaryIntegration {
   }[];
   readonly contentProvider: { readonly descriptor: { id: string }; readonly store: Pick<ContentStore, "listModels" | "scanEntries"> };
   readonly contentCatalog: ContentCatalog;
+  /** Complete configured provider inventory when supplied; legacy catalogs remain supported. */
+  readonly mappingProviders?: readonly {
+    readonly descriptor: { readonly id: string; readonly label: string };
+    readonly store: { snapshot?(): Promise<PersistedSnapshot<MappingRecord>> };
+  }[];
   readonly mappingCatalog: MappingCatalog;
   readonly mappingCompositionCatalog: MappingCompositionCatalog;
   readonly sitemapProvider: { readonly descriptor?: { id: string }; readonly store: WorkspaceSitemapStore };
@@ -375,19 +380,67 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     return { counts: { compositions, patterns, globalTemplates }, records };
   };
 
+  let mappingInventory = new Map<string, Promise<PersistedSnapshot<MappingRecord>>>();
+  const readMappings = (provider: NonNullable<WorkspaceSummaryIntegration["mappingProviders"]>[number]) => {
+    let pending = mappingInventory.get(provider.descriptor.id);
+    if (!pending) {
+      pending = Promise.resolve().then(async () => {
+        const snapshot = await provider.store.snapshot!();
+        if (!(typeof snapshot.mutationToken === "string" ? snapshot.mutationToken.length > 0 : Number.isSafeInteger(snapshot.mutationToken) && snapshot.mutationToken >= 0)
+          || !Array.isArray(snapshot.records) || snapshot.records.some(record => !validateMappingRecord(record).ok)
+          || new Set(snapshot.records.map(record => record.id)).size !== snapshot.records.length) {
+          throw new Error(`Invalid canonical Mapping inventory from ${provider.descriptor.id}.`);
+        }
+        return snapshot;
+      });
+      mappingInventory.set(provider.descriptor.id, pending);
+    }
+    return pending;
+  };
+
   const loadMappings = async (): Promise<MappingsData> => {
     await ensureInitialized();
-    const listing = await integration.mappingCatalog.list();
+    const providers = integration.mappingProviders;
+    if (providers && (providers.some(provider => !provider.descriptor.id || !provider.descriptor.label) || new Set(providers.map(provider => provider.descriptor.id)).size !== providers.length)) throw new Error("Duplicate Mapping provider identity.");
+    const canonical = (providers ?? []).filter(provider => typeof provider.store.snapshot === "function");
+    const canonicalIds = new Set(canonical.map(provider => provider.descriptor.id));
+    const fallback = !providers || canonical.length !== providers.length ? await integration.mappingCatalog.list() : { entries: [], failures: [] };
+    const listing = { entries: fallback.entries.filter(entry => !canonicalIds.has(entry.ref.providerId)) as MappingCatalogEntry[], failures: fallback.failures.filter(failure => !canonicalIds.has(failure.providerId)) };
+    const recordsByProvider = new Map<string, readonly MappingRecord[]>();
+    for (const provider of canonical) {
+      const snapshot = await readMappings(provider);
+      recordsByProvider.set(provider.descriptor.id, snapshot.records);
+      listing.entries.push(...snapshot.records.map(record => ({ ref: { providerId: provider.descriptor.id, recordId: record.id }, providerLabel: provider.descriptor.label, summary: summarizeMapping(record) }))
+        .sort((a, b) => b.summary.updatedAt.localeCompare(a.summary.updatedAt) || a.summary.id.localeCompare(b.summary.id)));
+    }
+    if (providers) {
+      // Catalog lists are grouped in configured provider order. Stable sorting
+      // preserves each legacy provider's own ordering within its group.
+      const order = new Map(providers.map((provider, index) => [provider.descriptor.id, index]));
+      listing.entries.sort((a, b) => (order.get(a.ref.providerId) ?? providers.length) - (order.get(b.ref.providerId) ?? providers.length));
+    }
     if (listing.failures.length > 0) {
       throw new Error(listing.failures.map(({ providerLabel, reason: message }) => `${providerLabel}: ${message}`).join("; "));
     }
     const records: WorkspaceRecord[] = [];
     const attention: WorkspaceAttentionItem[] = [];
     let blockedMappings = 0;
+    // One evaluation may reference the same model hundreds of times. Preserve
+    // the original outcome per qualified owner; do not cache across refreshes.
+    const models = new Map<string, ReturnType<ContentCatalog["resolveModel"]>>();
+    const content: ContentCatalog = { ...integration.contentCatalog, resolveModel: ref => {
+      if (!ref || typeof ref !== "object" || Array.isArray(ref) || Object.keys(ref).sort().join(",") !== "providerId,recordId") return integration.contentCatalog.resolveModel(ref);
+      const key = JSON.stringify([ref.providerId, ref.recordId]);
+      let pending = models.get(key);
+      if (!pending) { pending = integration.contentCatalog.resolveModel(ref); models.set(key, pending); }
+      return pending;
+    } };
     for (const entry of listing.entries) {
       const href = mappingDeepLinkHref({ providerId: entry.ref.providerId, mappingId: entry.ref.recordId });
       records.push({ kind: "mapping", id: entry.summary.id, label: entry.summary.name, updatedAt: entry.summary.updatedAt, href });
-      const resolved = await integration.mappingCatalog.resolve(entry.ref);
+      const captured = recordsByProvider.get(entry.ref.providerId);
+      const record = captured?.find(candidate => candidate.id === entry.ref.recordId);
+      const resolved = captured ? record ? { status: "resolved" as const, record } : { status: "not-found" as const } : await integration.mappingCatalog.resolve(entry.ref);
       if (resolved.status !== "resolved") {
         blockedMappings += 1;
         attention.push({
@@ -401,7 +454,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
       }
       const definition = await resolveMappingDefinition(
         resolved.record,
-        { content: integration.contentCatalog, compositions: summaryCompositions },
+        { content, compositions: summaryCompositions },
         integration.componentProvider.catalog,
       );
       const blocking = definition.diagnostics.filter(({ severity }) => severity === "blocking");
@@ -530,15 +583,15 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     if (channel === "sessions") return; // Pending edits are not persisted counts.
     if (channel === COMPOSITION_FILE_PROVIDER_CHANNEL) { compositionInventory = new Map(); delete cached.compositions; delete cached.mappings; }
     else if (channel === CONTENT_FILE_PROVIDER_DOMAIN) { delete cached.content; delete cached.mappings; }
-    else if (channel === MAPPING_FILE_PROVIDER_DOMAIN) delete cached.mappings;
+    else if (channel === MAPPING_FILE_PROVIDER_DOMAIN) { mappingInventory = new Map(); delete cached.mappings; }
     else if (channel === SITEMAP_FILE_PROVIDER_DOMAIN) delete cached.sitemaps;
     else if (channel === ASSET_PERSISTENCE_CHANNEL) delete cached.assets;
-    else { cached = {}; compositionInventory = new Map(); } // Workspace selection and legacy broad hints.
+    else { cached = {}; compositionInventory = new Map(); mappingInventory = new Map(); } // Workspace selection and legacy broad hints.
     for (const listener of listeners) listener();
   });
   return {
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    dispose() { stopChanges?.(); cached = {}; compositionInventory = new Map(); listeners.clear(); },
+    dispose() { stopChanges?.(); cached = {}; compositionInventory = new Map(); mappingInventory = new Map(); listeners.clear(); },
     async counts() {
       const data = await read();
       return {
@@ -575,6 +628,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     refresh() {
       cached = {};
       compositionInventory = new Map();
+      mappingInventory = new Map();
       for (const listener of listeners) listener();
       if (state !== "failed") return;
       state = "idle";

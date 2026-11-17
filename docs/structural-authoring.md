@@ -268,3 +268,14 @@ they do not fall back to a derived write. Providers without this capability reta
 their existing catalog behavior. Composition editors and their derived-output
 validation still use the normal `list`/`get` APIs. This keeps read-only workspace
 chrome from initiating JSX repair while an exact host preview freezes admission.
+
+
+The summary also accepts the complete configured Mapping provider inventory.
+Snapshot-capable providers supply both metadata and diagnostic records from the
+same validated canonical snapshot; unsupported providers retain catalog behavior.
+A failed snapshot is a visible error, never a reason to fall back to per-record
+reads. Mapping snapshots refresh on Mapping or workspace changes. Each Mapping
+summary evaluation memoizes Content-model resolution by full provider/model
+identity, preserving missing/invalid/provider-error outcomes and dropping the memo
+after that evaluation. Content persistence changes recompute those diagnostics;
+the existing Content `scanEntries` completeness checks remain unchanged.
