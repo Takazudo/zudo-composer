@@ -96,7 +96,17 @@ draft silently.
 
 Server-derived capabilities distinguish local Composition fields/arrangement,
 shared Mapping/global sources, and page-owned placement. The Inspector shows
-captured affected routes and real Content source links. Shared bound fields are
+captured affected routes and real Content source links. **Arrangement owner uses**
+refers to the selected Composition owner. **Bound field sources** separately lists
+each declared bound property's qualified Content record and field, plus its uses
+across the captured active Sitemap. For example, a shared course price can affect
+Home and Lessons even when the selected presentation occurs only on Lessons.
+Discovery follows the actual Mapping/attachment provenance; an unused Mapping
+cannot add a source or affected use. These informational details are independent
+of Assistant allowlists and do not grant editing capabilities. Transformed values,
+entry identity and unavailable sources have explicit explanations. Source links
+are withheld when the preview is stale or editing is otherwise blocked; retained
+source details describe the saved capture. Shared bound fields are
 never copied into local props. Local insertion offers declared named slots and
 components whose defaults yield a complete valid Composition; Mapping-populated
 slots are unavailable. The server revalidates the exact revision, owner, slot,

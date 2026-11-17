@@ -11,7 +11,21 @@ export interface HostDocumentIdentity {
   rendererVersion: string;
   rendererDigest: string;
 }
+/** Informational captured provenance, never an editing capability. */
+export interface HostFieldSource {
+  prop: string;
+  label: string;
+  sources: readonly {
+    entry: { providerId: string; modelId: string; recordId: string };
+    fieldId?: string;
+    fieldLabel: string;
+    reason?: string;
+    affectedUses: readonly { pathname: string; renderedNodeId: string; prop: string }[];
+  }[];
+  reason?: string;
+}
 export interface HostDocumentTarget {
+  fieldSources?: readonly HostFieldSource[];
   presentation?: { label: string; kindTitle: string; transparent: boolean };
   capabilities?: {
     remove?: { allowed: boolean; reason?: string }; fields: { allowed: boolean; reason?: string }; structure: { allowed: boolean; reason?: string }; placement: { allowed: boolean; reason?: string };

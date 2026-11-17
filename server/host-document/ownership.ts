@@ -2,7 +2,7 @@ import type { ComponentPackManifest } from "@zudo-composer/component-contract";
 import type { AuthoringWorkspaceSnapshot, compileAuthoringWorkspaceSnapshot } from "../authoring-workspace/capture";
 import type { AssistantContentFieldPolicy } from "../config/assistant";
 import type { HostSelection, InspectedOwner, AffectedUse } from "../../src/shared/host-review-types";
-import type { SiteCompiledRoute } from "../../src/site-project/compiler/types";
+import { createHostSourceBindings } from "./field-sources";
 import type { HostDocumentTarget } from "./types";
 import { hostDocumentTargets } from "./render";
 import { describeHostDocumentTargets } from "./capabilities";
@@ -22,17 +22,7 @@ export function resolveHostOwnership({ snapshot, compiled, selection, manifest, 
   const base = { baseDigest: snapshot.digest, pathname: route.pathname, target: qualified(target), ...(field ? { field: { prop: field.prop, label: field.label, current: target.props[field.prop] } } : {}) };
   const unsupported = (reason: string): Omit<InspectedOwner, "capabilityId"> => ({ ...base, owner: { domain: "unsupported", reason }, capabilities: { fields: [], insertSlots: [] }, affectedUses: [] });
   if (selection.prop && !field) return unsupported("The selected property is not a declared editable component field.");
-  const mappings = snapshot.project.providers.mappings.flatMap(provider => provider.records.map(record => ({ providerId: provider.id, ...record })));
-  const sourceBindings = (node: HostDocumentTarget, currentRoute: SiteCompiledRoute, prop: string) => mappings.flatMap(record => {
-    if (record.document.composition.providerId !== node.providerId || record.document.composition.recordId !== node.recordId) return [];
-    const renderedId = currentRoute.composition.linkedSource ? node.renderedNodeId.replace(/^host-(?:local|source)-/, "") : node.renderedNodeId;
-    const materialized = currentRoute.materializationSources?.find(source => source.renderedNodeId === renderedId && source.providerId === node.providerId && source.recordId === node.recordId && source.nodeId === node.nodeId);
-    const attachments = materialized ? snapshot.project.collectionAttachments.filter(attachment => attachment.id === materialized.attachmentId) : [];
-    const mappingRef = materialized ? attachments.length === 1 ? attachments[0]!.mapping : undefined : currentRoute.source.kind === "mapping" && node.providerId === currentRoute.composition.local.providerId && node.recordId === currentRoute.composition.local.recordId ? currentRoute.source.ref : undefined;
-    if (!mappingRef || mappingRef.providerId !== record.providerId || mappingRef.recordId !== record.id) return [];
-    const entries = node.entries;
-    return record.document.bindings.filter(binding => binding.target.nodeId === node.nodeId && binding.target.prop === prop).flatMap(binding => entries.filter(entry => entry.providerId === record.document.contentModel.providerId && entry.modelId === record.document.contentModel.recordId).map(entry => ({ binding, entry })));
-  });
+  const sourceBindings = createHostSourceBindings(snapshot.project);
   const bindings = selection.prop ? sourceBindings(target, route, selection.prop) : [];
   if (bindings.length) {
     if (bindings.length !== 1) return unsupported("This rendered property has multiple owning sources. Select a single supported Content field.");

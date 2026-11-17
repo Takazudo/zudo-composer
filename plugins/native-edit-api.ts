@@ -1,3 +1,4 @@
+import { describeHostFieldSources } from "../server/host-document/field-sources";
 import { describeHostDocumentTargets } from "../server/host-document/capabilities";
 import { validateHostComponentPresentation } from "../server/config/host-document";
 import { selectHostDocumentRoute } from "../server/host-document/route-selection";
@@ -176,17 +177,19 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
             const options = { composerConfig: context.composerConfig, pack: context.pack, renderer: await captureModule.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig }), packIdentity: await captureModule.resolveAuthoringPackIdentity({ composerConfig: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity }) };
             const snapshot = await captureModule.captureAuthoringWorkspace(options);
             if (snapshot.workspaceId !== input.workspaceId) throw Object.assign(new Error("Workspace changed."), { code: "wrong-workspace" });
-            const compiled = await captureModule.compileAuthoringWorkspaceSnapshot({ ...options, snapshot });
+            const compiled: Awaited<ReturnType<typeof import("../server/authoring-workspace/capture").compileAuthoringWorkspaceSnapshot>> = await captureModule.compileAuthoringWorkspaceSnapshot({ ...options, snapshot });
             const routes = compiled.build.routes.map((route: { pathname: string; displayTitle: string; sitemapNode: { id: string } }) => ({ pathname: route.pathname, title: route.displayTitle, pageId: route.sitemapNode.id }));
             const route = selectHostDocumentRoute(compiled.build.routes, compiled.build.activeSitemap, input);
             const preview = await renderModule.renderHostDocument(renderer, route, { workspaceId: snapshot.workspaceId, revision: snapshot.digest, pathname: route.pathname, packId: context.pack.manifest.packId, packVersion: context.pack.manifest.packVersion, rendererId: host.rendererId, rendererVersion: host.rendererVersion, rendererDigest: snapshot.renderer.digest }, snapshot.project, { url: input.visitorUrl ?? route.pathname, pathnames: routes.map((value: { pathname: string }) => value.pathname) });
+            const capturedRoutes = compiled.build.routes.map((route: import("../src/site-project/compiler/types").SiteCompiledRoute) => ({ route, targets: renderModule.hostDocumentTargets(route) }));
+            const fieldSources = describeHostFieldSources(snapshot.project, context.pack.manifest, capturedRoutes);
             const uses = new Map<string, string[]>();
             for (const compiledRoute of compiled.build.routes) for (const target of renderModule.hostDocumentTargets(compiledRoute)) {
               const key = `${target.providerId}/${target.recordId}`, paths = uses.get(key) ?? [];
               if (!paths.includes(compiledRoute.pathname)) paths.push(compiledRoute.pathname);
               uses.set(key, paths);
             }
-            return { ...preview, targets: describeHostDocumentTargets(preview.targets, snapshot.project, context.pack.manifest, host.componentPresentation, uses), documentUrl: documentCache.put(preview.html, preview.navigation.url), routes };
+            return { ...preview, targets: describeHostDocumentTargets(preview.targets, snapshot.project, context.pack.manifest, host.componentPresentation, uses).map(target => ({ ...target, fieldSources: fieldSources(route, target) })), documentUrl: documentCache.put(preview.html, preview.navigation.url), routes };
           }
           case "plan": {
             const plan = await service.plan(request.input);

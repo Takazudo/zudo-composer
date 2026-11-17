@@ -1,3 +1,4 @@
+import { formatIntent } from "../../app/route-intents";
 import { useRef, useState } from "preact/hooks";
 import type { ComponentManifest, JsonValue } from "@zudo-composer/component-contract";
 import { validateFieldValue } from "@zudo-composer/component-contract";
@@ -33,6 +34,7 @@ export function HostInspector({ target, component, disabled, saving = false, onD
   return <div class="cms-host-inspector">
     {!component && <p role="status">The installed component definition is unavailable; field editing is disabled.</p>}
     {reason && <p role="status">{reason}</p>}
+    {!!target.fieldSources?.length && <section aria-label="Bound field sources"><h3>Bound field sources</h3><p>Sources and affected uses in this saved capture. Arrangement uses are listed separately.</p>{target.fieldSources.map(field => <section key={field.prop} aria-label={`${field.label} source`}><h4>{field.label}</h4>{field.reason && <p>{field.reason}</p>}{field.sources.map((source, index) => <div key={index}><p>{source.fieldLabel} — <code>{source.entry.providerId}/{source.entry.modelId}/{source.entry.recordId}{source.fieldId ? `/${source.fieldId}` : ""}</code></p>{source.reason && <p>{source.reason}</p>}{!disabled && <a href={formatIntent({ route: "content", providerId: source.entry.providerId, modelId: source.entry.modelId, entryId: source.entry.recordId })}>Open {source.fieldLabel} source</a>}<p>Affected saved pages</p><ul>{[...new Set(source.affectedUses.map(use => use.pathname))].map(pathname => <li key={pathname}>{pathname}</li>)}</ul></div>)}</section>)}</section>}
     {draft && <section aria-label="Unsaved component field"><p role="status">Unsaved {component?.fields.find(field => field.prop === draft.prop)?.label ?? draft.prop}. The preview still shows saved content.</p>{validation && <p role="alert">{validation}</p>}{invalidInputs.size > 0 && <p role="alert">Correct the invalid numeric input or discard this draft before saving.</p>}<Button disabled={disabled || !capabilities?.fields.allowed || !!validation || invalidInputs.size > 0} onClick={() => void onSave({ kind: "field", prop: draft.prop, value: draft.value })}>Save field</Button><Button disabled={saving} onClick={discard}>Discard local draft</Button></section>}
     <fieldset disabled={disabled || !capabilities?.fields.allowed}><legend>Component fields</legend>{component?.fields.map(field => {
       const value = draft?.prop === field.prop ? draft.value : target.props[field.prop];

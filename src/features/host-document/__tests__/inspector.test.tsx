@@ -118,3 +118,16 @@ it("removes only a server-qualified local child and keeps dirty drafts protected
   expect((view.getByRole("button", { name: "Remove component" }) as HTMLButtonElement).disabled).toBe(true);
   expect(view.getByText("Root components cannot be removed here.")).toBeTruthy();
 });
+
+it("shows field-specific shared source uses separately from local capabilities and hides stale source actions", () => {
+  const shared: HostDocumentTarget = { ...target, fieldSources: [{ prop: "title", label: "Heading", sources: [{ entry: { providerId: "content-filesystem", modelId: "course", recordId: "consultation" }, fieldId: "course-price", fieldLabel: "Price", affectedUses: [{ pathname: "/", renderedNodeId: "home-price", prop: "price" }, { pathname: "/lessons", renderedNodeId: "price", prop: "title" }] }] }], capabilities: { ...target.capabilities!, fields: { allowed: false, reason: "Shared Mapping source." }, uses: ["/lessons"] } };
+  const onSave = vi.fn(async () => {});
+  const view = render(<HostInspector target={shared} component={component} disabled={false} onDirty={() => {}} onSave={onSave} />);
+  expect(view.getByRole("region", { name: "Heading source" }).textContent).toContain("content-filesystem/course/consultation/course-price");
+  expect(view.getByText("/")).toBeTruthy(); expect(view.getByText("/lessons")).toBeTruthy();
+  expect(view.getByRole("link", { name: "Open Price source" }).getAttribute("href")).toBe("/content?provider=content-filesystem&model=course&entry=consultation");
+  expect(onSave).not.toHaveBeenCalled();
+  view.rerender(<HostInspector target={shared} component={component} disabled={true} onDirty={() => {}} onSave={onSave} />);
+  expect(view.queryByRole("link", { name: "Open Price source" })).toBeNull();
+  expect(view.getByText("/")).toBeTruthy();
+});

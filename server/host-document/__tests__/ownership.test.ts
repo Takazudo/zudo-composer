@@ -132,3 +132,38 @@ it("does not turn transformed dynamic route values into writable local props", a
   expect(target.props.text).toBe("Price: 100");
   expect(resolveHostOwnership({ ...input, selection: { revision: input.snapshot.digest, pathname: route.pathname, target: { renderedNodeId: target.renderedNodeId, providerId: target.providerId, recordId: target.recordId, nodeId: target.nodeId }, prop: "text" } }).owner).toMatchObject({ domain: "unsupported", reason: expect.stringContaining("Transformed") });
 });
+
+it("human bound fields show cross-page uses without Assistant policy and ignore unused Mappings", async () => {
+  const { describeHostFieldSources } = await import("../field-sources");
+  const input = await dynamicFixture();
+  const routes = input.compiled.build.routes.map(route => ({ route, targets: hostDocumentTargets(route) }));
+  const describe = describeHostFieldSources(input.snapshot.project, input.manifest, routes);
+  const home = routes.find(value => value.route.pathname === "/")!;
+  const target = home.targets.find(target => target.nodeId === "copy" && target.entries.some(entry => entry.recordId === "consultation"))!;
+  const fields = describe(home.route, target);
+  expect(fields.map(field => field.prop)).toEqual(["text"]);
+  expect(fields[0]!.sources[0]).toMatchObject({ entry: { providerId: "content-filesystem", modelId: "course", recordId: "consultation" }, fieldId: "course-price", fieldLabel: "Price" });
+  expect(fields[0]!.sources[0]!.affectedUses.map(use => use.pathname).sort()).toEqual(["/", "/untouched"]);
+  expect(resolveHostOwnership({ ...input, contentFields: undefined, selection: input.select("copy", "text") }).owner.domain).toBe("unsupported");
+  expect(describe(home.route, home.targets.find(target => target.nodeId === "local")!)).toEqual([]);
+  // Discovery includes nontext sources without silently granting AI or local edit capability.
+  input.snapshot.project.providers.content[0]!.models[0]!.document.fields.find(field => field.id === "course-price")!.kind = "number";
+  expect(describe(home.route, target)[0]!.sources[0]!.fieldId).toBe("course-price");
+});
+it("human source descriptions distinguish entry identity and transformed values", async () => {
+  const { describeHostFieldSources } = await import("../field-sources");
+  const input = await fixture();
+  const routes = input.compiled.build.routes.map(route => ({ route, targets: hostDocumentTargets(route) }));
+  const mapping = input.snapshot.project.providers.mappings[0]!.records.find(record => record.id === "used")!;
+  const original = structuredClone(mapping.document.bindings[0]!);
+  if (original.source) throw new Error("Expected field binding");
+  original.transform = { kind: "prefix", prefix: "Price: " };
+  mapping.document.bindings = [original];
+  const bound = routes[0]!.targets.find(target => target.nodeId === "copy")!;
+  expect(describeHostFieldSources(input.snapshot.project, input.manifest, routes)(routes[0]!.route, bound)[0]!.sources[0]).toMatchObject({ fieldId: "course-price", reason: expect.stringContaining("transformed") });
+  input.snapshot.project.providers.content[0]!.entries = [];
+  expect(describeHostFieldSources(input.snapshot.project, input.manifest, routes)(routes[0]!.route, bound)[0]!.sources[0]!.reason).toContain("unavailable");
+  mapping.document.bindings = [{ id: "identity", source: { kind: "entry-id" }, target: { nodeId: "copy", prop: "text" }, transform: { kind: "identity" } }];
+  const target = routes[0]!.targets.find(target => target.nodeId === "copy")!;
+  expect(describeHostFieldSources(input.snapshot.project, input.manifest, routes)(routes[0]!.route, target)[0]!.sources[0]).toMatchObject({ fieldLabel: "Entry identity", reason: expect.stringContaining("read-only") });
+});
