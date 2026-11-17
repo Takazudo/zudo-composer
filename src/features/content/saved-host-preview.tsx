@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import type { ContentEntryRecord } from "../../content/model";
 import type { ContentSaveStatus } from "./controller";
 import type { HostContentContext, HostContentDocument } from "../../shared/host-content-preview";
-import { Button } from "../../components/ui";
+import { Button, Field, Select } from "../../components/ui";
 import { useWorkspace } from "../../app/workspace-context";
 import { nativeContentRead } from "../native-editing/session";
 import { acceptHostDocumentMessage, matchesHostDocumentFrame } from "../host-document/protocol";
@@ -67,21 +67,21 @@ export function SavedHostContentPreview({ providerId, entry, saveStatus }: { pro
   }, [document]);
   const differs = !context || recordJson(context.record) !== recordJson(entry);
   const pending = ["dirty", "saving", "error"].includes(saveStatus);
-  return <section aria-label="Saved affected-page preview" class="sg-content-inspector__pad">
-    <h3>Saved page preview</h3>
-    <p>Saved authoring workspace only. This is not the activated release or a preview of unsaved input.</p>
-    {(pending || differs) && <p role="note">Unsaved or newer Content changes are not included. Refresh after saving to inspect the saved state.</p>}
-    <p>Unsaved Content drafts and standalone Mapping fragments are unsupported by this host renderer.</p>
+  return <section aria-label="Saved affected-page preview" class="sg-content-inspector__pad sg-content-host-preview">
+    <h3 class="sg-content-host-preview__heading">Saved page preview</h3>
+    <p class="sg-content-note">Saved authoring workspace only. This is not the activated release or a preview of unsaved input.</p>
+    {(pending || differs) && <p class="sg-content-note" role="note">Unsaved or newer Content changes are not included. Refresh after saving to inspect the saved state.</p>}
+    <p class="sg-content-note">Unsaved Content drafts and standalone Mapping fragments are unsupported by this host renderer.</p>
     <Button disabled={busy} onClick={() => void refresh()}>Refresh affected pages</Button>
-    {error && <p role="alert">{error}</p>}
-    <p role="status">{busy ? "Reading saved Content…" : current ? "Saved snapshot rendered" : document ? "Waiting for the exact saved document…" : "Choose a captured affected page."}</p>
+    {error && <p class="sg-content-note" role="alert">{error}</p>}
+    <p class="sg-content-note" role="status">{busy ? "Reading saved Content…" : current ? "Saved snapshot rendered" : document ? "Waiting for the exact saved document…" : "Choose a captured affected page."}</p>
     {context && <>
-      <p>{context.entry.providerId} / {context.entry.modelId} / {context.entry.recordId}</p>
-      <p>Compiled bound uses only. Host-only metadata dependencies are not inferred.</p>
-      {!context.uses.length ? <p>No saved page has a proven compiled binding to this entry.</p> : <label>Saved affected page<select aria-label="Saved affected page" disabled={busy} value={document ? String(context.uses.findIndex(use => use.pathname === document.identity.pathname)) : ""} onChange={event => void choose(event.currentTarget.value)}>
+      <p class="sg-content-note">{context.entry.providerId} / {context.entry.modelId} / {context.entry.recordId}</p>
+      <p class="sg-content-note">Compiled bound uses only. Host-only metadata dependencies are not inferred.</p>
+      {!context.uses.length ? <p class="sg-content-note">No saved page has a proven compiled binding to this entry.</p> : <Field label="Saved affected page" class="sg-content-host-preview__field"><Select size="sm" class="sg-content-host-preview__select" aria-label="Saved affected page" disabled={busy} value={document ? String(context.uses.findIndex(use => use.pathname === document.identity.pathname)) : ""} onChange={event => void choose(event.currentTarget.value)}>
         <option value="">Choose a saved affected page</option>{context.uses.map((use, index) => <option value={String(index)} key={`${use.sitemapProviderId}/${use.sitemapId}/${use.pageId}/${use.pathname}`}>{use.title} · {use.pathname} · {use.sitemapProviderId}/{use.sitemapId}/{use.pageId}</option>)}
-      </select></label>}
-      {document && <><ul aria-label="Saved Content affected targets">{context.uses.find(use => use.pathname === document.identity.pathname)?.targets.map(use => <li key={JSON.stringify(use)}>{use.fieldLabel} → {use.target.providerId}/{use.target.recordId}/{use.target.nodeId}.{use.prop}</li>)}</ul><p>Captured revision: <code>{document.identity.revision}</code></p><iframe class="sg-content-host-preview-frame" ref={frame} title="Saved Content affected page" sandbox="allow-scripts allow-same-origin" src={document.documentUrl} onLoad={() => {
+      </Select></Field>}
+      {document && <><ul class="sg-content-diagnostics" aria-label="Saved Content affected targets">{context.uses.find(use => use.pathname === document.identity.pathname)?.targets.map(use => <li key={JSON.stringify(use)}>{use.fieldLabel} → {use.target.providerId}/{use.target.recordId}/{use.target.nodeId}.{use.prop}</li>)}</ul><p class="sg-content-note">Captured revision: <code>{document.identity.revision}</code></p><iframe class="sg-content-host-preview-frame" ref={frame} title="Saved Content affected page" sandbox="allow-scripts allow-same-origin" src={document.documentUrl} onLoad={() => {
         if (acknowledged.current !== frame.current?.contentDocument || !matchesHostDocumentFrame(frame.current, document, window.location.origin)) { acknowledged.current = null; setCurrent(false); }
       }} /></>}
     </>}

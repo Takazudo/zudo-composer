@@ -129,7 +129,7 @@ export function ContentPreviewPane({ providerId, model, entry, entryName, compon
         {tab === "preview" ? (
           <div id="sg-content-inspector-preview" role="tabpanel" aria-label="Preview" class="sg-content-inspector">
             <div class="sg-content-inspector__pad">
-              <Field label={hostDocumentPreviewConfigured ? "Mapping definition" : "Render through"} help={`${entryName} · ${providerId} / ${entry.id}`}>
+              <Field class="sg-content-preview-field" label={hostDocumentPreviewConfigured ? "Mapping definition" : "Render through"} help={`${entryName} · ${providerId} / ${entry.id}`}>
                 <Select
                   size="sm"
                   value={selectedIndex === -1 ? "" : String(selectedIndex)}
@@ -147,6 +147,7 @@ export function ContentPreviewPane({ providerId, model, entry, entryName, compon
                 </Select>
               </Field>
               <StatusChip
+                class="sg-content-preview-status"
                 state="custom"
                 tone={statusTone(preview)}
                 label={hostDocumentPreviewConfigured && selected?.status === "ready" ? "Mapping definition ready (not host rendered)" : preview.message}
