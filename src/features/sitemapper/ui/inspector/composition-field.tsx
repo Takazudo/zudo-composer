@@ -1,6 +1,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 
+import { formatIntent } from "../../../../app/route-intents";
 import type { JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ComposerIcon, EditIcon, ExternalLinkIcon } from "../../../../components/icons";
@@ -102,11 +103,10 @@ export function CompositionField({ value, catalog, onChange }: CompositionFieldP
           <Button size="xs" variant="ghost" iconOnly aria-label="Change composition" onClick={() => setPickerOpen(true)}>
             <EditIcon size="xs" />
           </Button>
-          {/* `route-intents` has no Composer record intent yet, so this opens
-              the workspace rather than pretending to open the record. */}
+          {/* Source ownership is distinct from route-backed page authoring. */}
           <a
             class="cms-btn cms-btn--ghost cms-btn--xs cms-btn--icon"
-            href="/composer"
+            href={value ? formatIntent({ route: "composer", providerId: value.providerId, compositionId: value.recordId }) : "/composer"}
             aria-label="Open in Composer"
           >
             <ExternalLinkIcon size="xs" />

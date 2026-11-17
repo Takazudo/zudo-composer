@@ -1,3 +1,4 @@
+import { hostDocumentPreviewConfigured, savedHostPreviewHref } from "../features/delivery/host-preview-policy";
 import type { ComponentChildren, JSX } from "preact";
 import { useRef, useState } from "preact/hooks";
 import {
@@ -71,11 +72,11 @@ export const RAIL_GROUPS: readonly RailGroup[] = [
       { id: "review", label: "Review & release", href: "/review", icon: PageIcon },
       {
         id: "site",
-        label: "Website preview",
-        href: "/website-preview",
+        label: hostDocumentPreviewConfigured ? "Saved host page preview" : "Website preview",
+        href: hostDocumentPreviewConfigured ? savedHostPreviewHref : "/website-preview",
         icon: PageIcon,
         newTab: true,
-        accessibleName: "Website preview — choose preview source",
+        accessibleName: hostDocumentPreviewConfigured ? "Saved host page preview" : "Website preview — choose preview source",
       },
     ],
   },

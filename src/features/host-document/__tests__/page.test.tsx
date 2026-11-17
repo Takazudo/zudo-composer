@@ -122,3 +122,20 @@ it("retains the exact qualified Remove request across response loss and reload",
   await waitFor(() => expect(requests).toHaveLength(2));
   expect(requests[1]).toEqual(requests[0]);
 });
+it("sends the qualified Sitemap page on handoff and clears it for deliberate page navigation", async () => {
+  const { fireEvent } = await import("@testing-library/preact");
+  const previous = window.location.href;
+  window.history.replaceState(null, "", "/composer?native=1&sitemapProvider=sitemaps-filesystem&sitemap=main&page=lessons&visitor=%2Flessons");
+  Object.assign(mocks.integration, { sessions: createWorkspaceSaveRegistry(), subscribeChanges: () => () => {} });
+  mocks.request.mockImplementation(async (_operation, request) => ({ identity: { workspaceId: "proof", pathname: request.pathname, revision: "a".repeat(64), packId: "proof", packVersion: "1", rendererId: "proof", rendererVersion: "1", rendererDigest: "b".repeat(64) }, frameId: "frame", documentUrl: "about:blank", targets: [], routes: [{ pathname: "/lessons", title: "Lessons", pageId: "lessons" }, { pathname: "/about", title: "About", pageId: "about" }] }));
+  try {
+    const view = render(<HostDocumentPage />);
+    await waitFor(() => expect((view.getByRole("combobox", { name: "Page" }) as HTMLSelectElement).disabled).toBe(false));
+    expect(mocks.request.mock.calls[0]).toEqual(["document-preview", { workspaceId: "proof", sitemapProviderId: "sitemaps-filesystem", sitemapId: "main", pageId: "lessons", pathname: "/lessons", visitorUrl: "/lessons" }]);
+    fireEvent.change(view.getByRole("combobox", { name: "Page" }), { target: { value: "/about" } });
+    await waitFor(() => expect(mocks.request.mock.calls).toHaveLength(2));
+    expect(mocks.request.mock.calls[1]).toEqual(["document-preview", { workspaceId: "proof", pathname: "/about", visitorUrl: "/about" }]);
+    expect(new URL(window.location.href).searchParams.has("sitemapProvider")).toBe(false);
+    expect(new URL(window.location.href).searchParams.has("page")).toBe(false);
+  } finally { window.history.replaceState(null, "", previous); }
+});

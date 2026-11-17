@@ -22,6 +22,7 @@ import type { SitemapDocument, SitemapNode, SitemapPageSource } from "../../../.
 import { indexDocument } from "../../../../sitemapper/model";
 import type { MappingAssignmentCatalog, SitemapNodeRouteInfo } from "../../../../sitemapper/routes";
 import { countDescendants } from "../tree/tree-helpers";
+import { HostPageAuthoringLink } from "./host-page-authoring-link";
 import { CompositionField } from "./composition-field";
 import { MappingField } from "./mapping-field";
 import { PageTextField, type PageTextProperty } from "./page-field";
@@ -36,6 +37,7 @@ const SOURCE_OPTIONS = [
 ];
 
 export interface InspectorPanelProps {
+  sitemap?: { providerId: string; recordId: string; active: boolean };
   document: SitemapDocument;
   node: SitemapNode | null;
   /** Authored route per page id; the Slug field shows the selected page's. */
@@ -62,6 +64,7 @@ function assignmentChip(node: SitemapNode, routeInfo?: SitemapNodeRouteInfo): JS
 }
 
 export function InspectorPanel({
+  sitemap,
   document,
   node,
   routes,
@@ -152,6 +155,7 @@ export function InspectorPanel({
       >
         {assignmentChip(node, routeInfo)}
       </PaneHeader>
+      <HostPageAuthoringLink sitemap={sitemap} pageId={node.id} routeInfo={routeInfo} flush={onFlushPropUpdates} />
       <PaneTabs
         label="Inspector"
         tabs={[{ id: "page", label: "Page" }, { id: "source", label: "Source" }]}

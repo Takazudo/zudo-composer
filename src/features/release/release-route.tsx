@@ -1,3 +1,4 @@
+import { hostDocumentPreviewConfigured, savedHostPreviewHref } from "../delivery/host-preview-policy";
 import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { Banner, Button, Checkbox, Chip } from "../../components/ui";
@@ -37,7 +38,7 @@ export function ReleaseRoute({ controller, href, hostedDemo = false, onBeforeNew
         <div><dt>Activated local build:</dt><dd><Identity value={state.active?.buildId ?? "None inspected"} /></dd></div>
         <div><dt>Exact staged build:</dt><dd><Identity value={state.staged?.buildId ?? "None"} /></dd></div>
       </dl>
-      <nav class="cms-release__links" aria-label="Release destinations"><a href="/website-preview" target="_blank" rel="noopener" onPointerDown={() => onBeforeNewTab?.()} onKeyDown={(event) => { if (event.key === "Enter") onBeforeNewTab?.(); }}>Live working preview</a><a href="/site" target="_blank" rel="noopener">{hostedDemo ? "Demo website preview" : "Activated local website (not deployed)"}</a></nav>
+      <nav class="cms-release__links" aria-label="Release destinations"><a href={hostDocumentPreviewConfigured ? savedHostPreviewHref : "/website-preview"} target="_blank" rel="noopener" onPointerDown={() => onBeforeNewTab?.()} onKeyDown={(event) => { if (event.key === "Enter") onBeforeNewTab?.(); }}>{hostDocumentPreviewConfigured ? "Saved host page preview" : "Live working preview"}</a>{hostDocumentPreviewConfigured ? <span>Activated release preview unavailable: this host requires an exact-release document renderer. Current saved workspace preview is not the activated release.</span> : <a href="/site" target="_blank" rel="noopener">{hostedDemo ? "Demo website preview" : "Activated local website (not deployed)"}</a>}</nav>
       <div class="cms-release__tools">
       <Button disabled={blocked} onClick={() => void controller.inspect()}>Inspect current state</Button>
       <Button disabled={!state.working || blocked} onClick={exportWorking}>Export working JSON</Button>
