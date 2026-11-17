@@ -236,6 +236,17 @@ export function createAssistantRunner(options: RunnerOptions) {
             const page = inspected.owner.page;
             if (!run.allowedPages.some(value => value.sitemapId === page.sitemapId && value.pageId === page.pageId)) run.allowedPages.push(page);
           }
+          // Keep trusted editing constraints and the exact capability usable even
+          // when the existing tool-result limit clips a large current field value.
+          if (inspected.capabilities.fields.some(field => field.editingConstraints)) {
+            const { capabilityId, owner, capabilities, ...rest } = inspected;
+            const fields = capabilities.fields.map(field => {
+              if (!field.editingConstraints) return field;
+              const { id, kind, editingConstraints, ...presentation } = field;
+              return { id, kind, editingConstraints, ...presentation };
+            });
+            return { content: JSON.stringify({ capabilityId, owner, capabilities: { ...capabilities, fields }, ...rest }) };
+          }
           return { content: JSON.stringify(inspected) };
         }
         case "propose_content": {

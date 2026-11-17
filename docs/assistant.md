@@ -299,3 +299,51 @@ document, not only the Assistant: on every authoring route, Chromium-based
 browsers shrink the layout viewport while an on-screen keyboard is open.
 Browsers that ignore it, such as iOS Safari, keep their default overlay
 behavior.
+
+## Trusted Content field editing constraints
+
+Hosts can attach bounded instructions to fields already declared in
+`assistant.contentFields`. This optional guidance applies to host-rendered
+`inspect_owner` results; it does not add fields, change permissions, replace
+validation or configure a model provider.
+
+```ts
+contentFields: [{
+  providerId: "content-filesystem",
+  modelId: "note",
+  fieldIds: ["note-title", "note-body"],
+  fieldInstructions: {
+    "note-body": "Use nonempty ## headings, paragraphs and flat '- ' lists. Do not use raw HTML or images. Preserve unrelated fields.",
+  },
+}]
+```
+
+Each instruction key must belong to that policy's `fieldIds`. The parser accepts
+only a plain map of nonblank strings, each at most 4,096 UTF-16 code units, with
+no NUL characters. All instructions across the policy are limited to 32,768 code
+units. Unknown fields, inherited maps and malformed or oversized values refuse.
+Omitting `fieldInstructions` preserves the previous configuration and ownership
+result shape. Existing provider, model, effort and service-tier settings are not
+changed.
+
+Ownership is still resolved from the captured route's actual Mapping provenance.
+Only the exact selected, allowed Content field receives
+`capabilities.fields[].editingConstraints = { instructions, authority: "guidance-only" }`.
+Another field, model, provider or local Composition does not inherit it. These are
+editing constraints supplied by trusted host configuration, not new tool permissions;
+the owning domain's validators remain authoritative.
+
+The real Assistant runner includes this property in its `inspect_owner` tool result
+sent to the next provider call. For results containing guidance, it serializes the
+capability ID, qualified owner and capabilities before potentially large current
+field values, and each guided field's ID, kind and constraints before its label. The existing 40,000-character tool-result truncation still applies;
+this prioritization preserves constraints and the capability, not a claim that an
+arbitrarily large body is completely available for editing. A fake-provider test
+proves the actual context path and unchanged canonical bytes, not authenticated
+inference.
+
+Host reviews already bind the complete `contentFields` policy in their policy digest.
+Changing guidance therefore invalidates an existing review rather than silently
+applying it under different constraints. Hosts should derive the instruction text
+from the same retained editing rules enforced by their validator where practical.
+Documentation alone is not model context, and guidance alone is not enforcement.

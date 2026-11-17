@@ -226,7 +226,7 @@ it("rejects every mismatched acknowledgement identity without Content writes", a
   for (const rendered of invalid) await expect(f.service.apply({ workspaceId: "proof", reviewId: card.id, rendered })).rejects.toMatchObject({ code: "approval-mismatch" });
   expect(await (await f.capture()).stores.content.readAll()).toEqual(before);
 });
-for (const changed of ["mapping", "sitemap", "assets", "publicFiles", "policy"] as const) it(`changed ${changed} refuses Content Apply before history or receipt writes`, async () => {
+for (const changed of ["mapping", "sitemap", "assets", "publicFiles", "policy", "guidance"] as const) it(`changed ${changed} refuses Content Apply before history or receipt writes`, async () => {
   const f = await fixture(), { card } = await f.stage(), preview = await f.service.preview({ workspaceId: "proof", reviewId: card.id, pathname: "/" });
   const state = await f.capture(), before = await state.stores.content.readAll();
   const history = await state.stores.content.listRevisions("consultation", { limit: 100 });
@@ -235,6 +235,7 @@ for (const changed of ["mapping", "sitemap", "assets", "publicFiles", "policy"] 
   if (changed === "assets") await state.stores.assets.upload({ fileName: "pixel.png", declaredMimeType: "image/png", bytes: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL1sAAAAASUVORK5CYII=", "base64") });
   if (changed === "publicFiles") { await writeFile(join(f.root, "new.txt"), "changed"); f.deps.options = async () => ({ ...f.options, publicFiles: [{ sourcePath: "new.txt", fileName: "new.txt" }] }); }
   if (changed === "policy") f.deps.options = async () => ({ ...f.options, composerConfig: { ...f.config, assistant: { ...f.config.assistant!, contentFields: [] } } });
+  if (changed === "guidance") f.deps.options = async () => ({ ...f.options, composerConfig: { ...f.config, assistant: { ...f.config.assistant!, contentFields: f.config.assistant!.contentFields!.map(policy => ({ ...policy, fieldInstructions: { "course-price": "Preserve the currency suffix." } })) } } });
   await expect(f.service.apply({ workspaceId: "proof", reviewId: card.id, rendered: ack(preview) })).rejects.toMatchObject({ code: "stale-plan" });
   expect(await state.stores.content.readAll()).toEqual(before);
   expect(await state.stores.content.listRevisions("consultation", { limit: 100 })).toEqual(history);

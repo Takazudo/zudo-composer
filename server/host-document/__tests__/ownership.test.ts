@@ -167,3 +167,20 @@ it("human source descriptions distinguish entry identity and transformed values"
   const target = routes[0]!.targets.find(target => target.nodeId === "copy")!;
   expect(describeHostFieldSources(input.snapshot.project, input.manifest, routes)(routes[0]!.route, target)[0]!.sources[0]).toMatchObject({ fieldLabel: "Entry identity", reason: expect.stringContaining("read-only") });
 });
+
+it("returns editing constraints only for the exact selected allowed Content source, without changing authority", async () => {
+  const input = await fixture();
+  const selection = input.select("copy", "text");
+  const before = resolveHostOwnership({ ...input, selection });
+  const instructions = "Preserve the currency suffix; do not edit unrelated fields.";
+  const contentFields = [
+    { ...input.contentFields[0]!, fieldInstructions: { "course-price": instructions, "course-private": "Private field guidance" } },
+    { providerId: "foreign", modelId: "course", fieldIds: ["course-price"], fieldInstructions: { "course-price": "Foreign provider guidance" } },
+    { providerId: "content-filesystem", modelId: "note", fieldIds: ["course-price"], fieldInstructions: { "course-price": "Foreign model guidance" } },
+  ];
+  const result = resolveHostOwnership({ ...input, contentFields, selection });
+  expect(result).toEqual({ ...before, capabilities: { ...before.capabilities, fields: [{ id: "course-price", label: "Price", kind: "text", editingConstraints: { instructions, authority: "guidance-only" } }] } });
+  expect(JSON.stringify(result)).not.toMatch(/Private field guidance|Foreign provider guidance|Foreign model guidance/);
+  expect(resolveHostOwnership({ ...input, contentFields, selection: input.select("local", "text") })).toEqual(resolveHostOwnership({ ...input, selection: input.select("local", "text") }));
+  expect(resolveHostOwnership({ ...input, contentFields: [{ ...contentFields[0]!, fieldIds: [] }], selection }).owner.domain).toBe("unsupported");
+});

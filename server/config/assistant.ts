@@ -1,8 +1,9 @@
 /**
  * Host opt-in for the AI Assistant. The host selects exactly one provider; a
  * provider that is unavailable is reported as such and never replaced by
- * another. The config never holds a secret and is never serialized to the
- * browser. CLI executables, models and timeouts come only from this trusted
+ * another. The provider config never holds a secret and is not serialized to
+ * the browser; selected trusted field guidance can appear in ownership results.
+ * CLI executables, models and timeouts come only from this trusted
  * host config, never from prompts or model output.
  */
 export type AssistantProviderKind = "anthropic" | "fake" | "claude-cli" | "codex-cli";
@@ -12,6 +13,8 @@ export interface AssistantContentFieldPolicy {
   providerId: string;
   modelId: string;
   fieldIds: readonly string[];
+  /** Trusted editing constraints for declared fields; guidance never grants permission. */
+  fieldInstructions?: Readonly<Record<string, string>>;
 }
 
 interface AssistantCommonConfig {
@@ -150,14 +153,29 @@ export function parseContentFields(value: unknown): readonly AssistantContentFie
   if (!Array.isArray(value) || value.length > 100) throw new Error("assistant.contentFields must be an array of at most 100 model policies.");
   const safe = (id: unknown): id is string => typeof id === "string" && /^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$/.test(id);
   const seen = new Set<string>();
+  let instructionCharacters = 0;
   return value.map(item => {
     if (!item || typeof item !== "object" || Array.isArray(item) || ![Object.prototype, null].includes(Object.getPrototypeOf(item))
-      || Object.keys(item).length !== 3 || !Object.keys(item).every(key => ["providerId", "modelId", "fieldIds"].includes(key))
+      || ![3, 4].includes(Object.keys(item).length) || !Object.keys(item).every(key => ["providerId", "modelId", "fieldIds", "fieldInstructions"].includes(key))
       || !safe(item.providerId) || !safe(item.modelId) || !Array.isArray(item.fieldIds) || item.fieldIds.length > 100
       || !item.fieldIds.every(safe) || new Set(item.fieldIds).size !== item.fieldIds.length) throw new Error("assistant.contentFields contains an invalid or duplicate field policy.");
     const key = `${item.providerId}/${item.modelId}`;
     if (seen.has(key)) throw new Error("assistant.contentFields repeats a model policy.");
     seen.add(key);
-    return { providerId: item.providerId, modelId: item.modelId, fieldIds: [...item.fieldIds] };
+    let fieldInstructions: Readonly<Record<string, string>> | undefined;
+    if (Object.hasOwn(item, "fieldInstructions")) {
+      const instructions: unknown = item.fieldInstructions;
+      if (!instructions || typeof instructions !== "object" || Array.isArray(instructions)
+        || ![Object.prototype, null].includes(Object.getPrototypeOf(instructions))) throw new Error("assistant.contentFields fieldInstructions must be a plain field map.");
+      const entries = Object.entries(instructions);
+      for (const [fieldId, instruction] of entries) {
+        if (!item.fieldIds.includes(fieldId) || typeof instruction !== "string" || !instruction.trim()
+          || instruction.length > 4096 || instruction.includes("\0")) throw new Error("assistant.contentFields fieldInstructions must contain only declared field IDs and nonblank instructions of at most 4096 characters.");
+        instructionCharacters += instruction.length;
+        if (instructionCharacters > 32768) throw new Error("assistant.contentFields fieldInstructions exceed the total 32768-character limit.");
+      }
+      fieldInstructions = Object.fromEntries(entries) as Record<string, string>;
+    }
+    return { providerId: item.providerId, modelId: item.modelId, fieldIds: [...item.fieldIds], ...(fieldInstructions === undefined ? {} : { fieldInstructions }) };
   });
 }

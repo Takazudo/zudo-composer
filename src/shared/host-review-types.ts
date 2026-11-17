@@ -4,7 +4,7 @@ import type { PageRef } from "../../server/edit/draft-model";
 
 export type QualifiedNode = Pick<HostDocumentTarget, "renderedNodeId" | "providerId" | "recordId" | "nodeId">;
 export interface HostSelection { revision: string; pathname: string; target: QualifiedNode; prop?: string }
-export interface ContentFieldPolicy { providerId: string; modelId: string; fieldIds: readonly string[] }
+export interface ContentFieldPolicy { providerId: string; modelId: string; fieldIds: readonly string[]; fieldInstructions?: Readonly<Record<string, string>> }
 export interface AffectedUse { pathname: string; target: QualifiedNode; prop: string }
 export interface InspectedOwner {
   capabilityId: string; baseDigest: string; pathname: string; target: QualifiedNode;
@@ -12,7 +12,7 @@ export interface InspectedOwner {
   owner: { domain: "composition"; page: PageRef; recordId: string; nodeId: string }
     | { domain: "content"; entry: ContentEntryRef; fieldIds: readonly string[] }
     | { domain: "unsupported"; reason: string };
-  capabilities: { fields: readonly { id: string; label: string; kind: string }[]; insertSlots: readonly { slotId: string; components: readonly string[] }[] };
+  capabilities: { fields: readonly { id: string; label: string; kind: string; editingConstraints?: { instructions: string; authority: "guidance-only" } }[]; insertSlots: readonly { slotId: string; components: readonly string[] }[] };
   affectedUses: readonly AffectedUse[];
 }
 export type ReviewOperation = { domain: "composition"; draftId: string; revision: number; draftCandidateDigest: string }
