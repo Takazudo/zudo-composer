@@ -1,3 +1,6 @@
+import { join } from "node:path";
+import { createTransactionalRecordStore } from "../../shared/node-fs";
+import { workspaceScopedRoot } from "../../shared/workspace-scope";
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ContentPersistenceError } from "../../content/library";
@@ -450,4 +453,39 @@ it("wires native Mapping inventory and Content summary batching through real pro
  const mappingSnapshot=vi.spyOn(current.mappingProvider.store,"snapshot"),mappingGet=vi.spyOn(current.mappingProvider.store,"get"),mappingList=vi.spyOn(current.mappingProvider.store,"list");
  const inventory=await current.mappingCatalog.readInventory!();expect(inventory.failures).toEqual([]);expect(inventory.snapshots).toHaveLength(1);expect(inventory.entries).toHaveLength(2);expect(mappingSnapshot).toHaveBeenCalledTimes(1);expect(mappingGet).not.toHaveBeenCalled();expect(mappingList).not.toHaveBeenCalled();
  const readAll=vi.spyOn(current.contentProvider.store,"readAll"),scanEntries=vi.spyOn(current.contentProvider.store,"scanEntries");const counts=await createWorkspaceSummary(current).counts();expect(counts.content).toMatchObject({status:"ok",value:{models:2,entries:4}});expect(readAll).toHaveBeenCalledTimes(1);expect(scanEntries).not.toHaveBeenCalled();
+});
+
+
+it.each(["orphan", "dangling-reference", "single-cardinality"])("retains native listModels failure after ready initialization and refreshed %s corruption", async problem => {
+ const project = await host(), current = await integration(sample(), project);
+ expect((await current.initialization.initialize()).status).toBe("ready");
+ const summary = createWorkspaceSummary(current);
+ expect((await summary.counts()).content.status).toBe("ok");
+ const snapshot = await current.contentProvider.store.readAll();
+ const model = structuredClone(snapshot.models[0]!);
+ const entry = structuredClone(snapshot.entries.find(entry => entry.modelId === model.id)!);
+ const additions: {id: string; json: string}[] = [];
+ if (problem === "orphan") {
+  entry.id = "orphan-proof"; entry.modelId = "absent-model";
+ } else if (problem === "dangling-reference") {
+  model.document.fields.push({ id: "proof-reference", key: "proofReference", label: "Proof reference", kind: "reference", required: false, target: { providerId: snapshot.providerId, recordId: model.id } });
+  entry.values["proof-reference"] = { providerId: snapshot.providerId, modelId: model.id, recordId: "absent-entry" };
+ } else {
+  model.document.kind = "single";
+  additions.push({id: "entry-cardinality-proof", json: JSON.stringify({...entry, id: "cardinality-proof"})});
+ }
+ additions.push({id: `model-${model.id}`, json: JSON.stringify(model)}, {id: `entry-${entry.id}`, json: JSON.stringify(entry)});
+ // Deliberately import malformed canonical state through the underlying record
+ // store, exactly as the native persistence corruption tests do. No UI mutation.
+ const records = await createTransactionalRecordStore({root: workspaceScopedRoot(join(project.root, "cms/content"), current.workspace.id!), schemaVersion: 1,
+  errors: {isError: value => value instanceof Error, create: (_operation, code, message) => Object.assign(new Error(message), {code}), rethrow: (_operation, code, message, cause): never => {throw Object.assign(new Error(message), {code, cause});}},
+  rootLabel: "Test Content root", ownerLabel: "Content", recordLabel: "record", phases: {initialize: "initialize", snapshot: "read-all", commit: "transact"}});
+ await records.commit(before => ({records: [...before.records.filter(record => !additions.some(added => added.id === record.id)), ...additions], result: null}));
+ await expect(current.contentProvider.store.listModels()).rejects.toMatchObject({code: "validation"});
+ // readAll still accepts envelopes; the summary must not trust cached readiness.
+ await expect(current.contentProvider.store.readAll()).resolves.toBeDefined();
+ const scan = vi.spyOn(current.contentProvider.store, "scanEntries"), read = vi.spyOn(current.contentProvider.store, "readAll");
+ summary.refresh();
+ expect((await summary.counts()).content).toMatchObject({status: "unavailable", error: "Content storage contains records that cannot be listed safely."});
+ expect(read).toHaveBeenCalledTimes(1); expect(scan).not.toHaveBeenCalled();
 });

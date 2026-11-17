@@ -792,11 +792,11 @@ describe("Content summary coherent inventory", () => {
  });
 });
 
-it("snapshot summary retains listed-model scope and exact fallback diagnostics/order",async()=>{
+it("snapshot summary retains exact valid-inventory fallback diagnostics/order",async()=>{
  const model=contentModel("journal",AT(1)),entries=[contentEntry("complete",AT(2),{heading:"Title"}),contentEntry("incomplete",AT(3),{})];
  const diagnostics=entries.flatMap(entry=>diagnoseContentEntryCompleteness(model,entry));
  const make=()=>createFakeIntegration({models:[model],entries:{journal:{count:2,entries:[entries[1]!,entries[0]!],diagnostics}}});
- const legacy=make(),batched=make();const orphan={...contentEntry("orphan",AT(4),{}),modelId:"absent"};Object.assign(batched.integration.contentProvider.store,{readAll:async()=>({providerId:"content-filesystem",mutationToken:2,models:[model],entries:[...entries,orphan]})});
+ const legacy=make(),batched=make();Object.assign(batched.integration.contentProvider.store,{readAll:async()=>({providerId:"content-filesystem",mutationToken:2,models:[model],entries})});
  const expected=createWorkspaceSummary(legacy.integration),actual=createWorkspaceSummary(batched.integration);
  expect((await actual.counts()).content).toEqual((await expected.counts()).content);expect((await actual.attention()).content).toEqual((await expected.attention()).content);expect((await actual.recent()).records).toEqual((await expected.recent()).records);
 });
@@ -804,4 +804,15 @@ it("snapshot summary retains listed-model scope and exact fallback diagnostics/o
 it("retries failed Content inventory only after refresh, with no scan fallback",async()=>{
  const {integration,scanEntries}=createFakeIntegration();const readAll=vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue({providerId:"content-filesystem",mutationToken:1,models:[],entries:[]});Object.assign(integration.contentProvider.store,{readAll});const summary=createWorkspaceSummary(integration);
  expect((await summary.counts()).content).toEqual({status:"unavailable",error:"offline"});expect((await summary.attention()).content).toEqual({status:"unavailable",error:"offline"});expect(readAll).toHaveBeenCalledTimes(1);expect(scanEntries).not.toHaveBeenCalled();summary.refresh();expect((await summary.counts()).content.status).toBe("ok");expect(readAll).toHaveBeenCalledTimes(2);
+});
+
+it("keeps native incomplete and missing-provider graph diagnostics non-fatal", async () => {
+ const model = contentModel("journal", AT(1));
+ model.document.fields.push({id: "related", key: "related", label: "Related", kind: "reference", required: false, target: {providerId: "external", recordId: "journal"}});
+ const entry = contentEntry("incomplete", AT(2), {related: {providerId: "external", modelId: "journal", recordId: "external-entry"}});
+ const {integration} = createFakeIntegration({models: [model]});
+ Object.assign(integration.contentProvider.store, {readAll: async () => ({providerId: "content-filesystem", mutationToken: 1, models: [model], entries: [entry]})});
+ const summary = createWorkspaceSummary(integration);
+ expect((await summary.counts()).content).toMatchObject({status: "ok", value: {models: 1, entries: 1}});
+ expect(value((await summary.attention()).content).length).toBeGreaterThan(0);
 });

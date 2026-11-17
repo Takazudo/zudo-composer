@@ -287,9 +287,11 @@ Each summary refresh reads one provider-qualified snapshot with its durable toke
 validates the record envelopes and known-model values, and derives model ordering,
 entry ordering/labels, counts and completeness diagnostics using the same model
 helpers as `scanEntries`. Invalid snapshots and semantic-invalid model members
-remain unavailable; failures never trigger a per-model fallback. Like the existing
-listed-model summary, records referring to an absent model are not counted as a
-member of another model. This is not a complete graph-integrity audit. Stores
+remain unavailable; failures never trigger a per-model fallback. The snapshot is
+also checked with the same graph diagnostics as native `listModels`: orphan entries,
+dangling local references, invalid inverses and cardinality errors are unavailable;
+`incomplete` and `missing-provider` diagnostics remain non-fatal, as before. This
+validation runs on each refreshed snapshot even if initialization is already ready. Stores
 without `readAll` retain their `listModels`/`scanEntries` path. Content persistence,
 workspace changes and explicit refresh discard the summary cache; an old pending
 read cannot repopulate a newer cache.

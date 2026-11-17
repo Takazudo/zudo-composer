@@ -28,7 +28,7 @@ import { ASSET_PERSISTENCE_CHANNEL } from "./persistence-channels";
 import { summarizeComposition, validateCompositionRecord, type CompositionRecord, type CompositionSummary } from "../composer/browser";
 import type { ContentCatalog } from "../content/catalog";
 import { validateContentModelRecord, validateContentEntryRecord, type ContentEntryRecord, type ContentModelRecord } from "../content/model";
-import { summarizeContentModel, compareContentModelsNewestFirst, compareContentEntriesForPaging, diagnoseContentEntryCompleteness, contentEntrySemanticIssue, type ContentSnapshot, type ContentStore } from "../content/library";
+import { buildContentGraphIndex, summarizeContentModel, compareContentModelsNewestFirst, compareContentEntriesForPaging, diagnoseContentEntryCompleteness, contentEntrySemanticIssue, type ContentSnapshot, type ContentStore } from "../content/library";
 import type { ComponentCatalog } from "../composer/model/types";
 import { mappingDeepLinkHref } from "../features/mapping/deep-link";
 import type { AssetStore } from "../assets";
@@ -651,11 +651,14 @@ function validateSummaryContent(snapshot: ContentSnapshot, providerId: string): 
   const models = new Map(snapshot.models.map(model => [model.id, model]));
   for (const entry of snapshot.entries) {
     const model = models.get(entry.modelId);
-    // The existing summary enumerates listed models only, just like scanEntries.
-    // An orphan is not a member of any listed model; do not invent a count for it.
-    if (!model) continue;
+    if (!model) throw new Error("Content storage contains records that cannot be listed safely.");
     const issue = contentEntrySemanticIssue(entry, model);
-    if (issue) throw new Error(issue);
+    if (issue) throw new Error("Content storage contains records that cannot be listed safely.");
+  }
+  // Match native listModels/scanForInitialization even after initialization was
+  // cached ready: readAll alone validates envelopes, not graph integrity.
+  if (buildContentGraphIndex([snapshot]).diagnostics.some(issue => issue.code !== "incomplete" && issue.code !== "missing-provider")) {
+    throw new Error("Content storage contains records that cannot be listed safely.");
   }
 }
 function summaryContentEntries(snapshot: ContentSnapshot, modelId: string) {
