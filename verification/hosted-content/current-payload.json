@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "6522f2c78fd59744b56d1717bb93f68d2bddc255",
-  "payloadSha256": "882444ae528ff7530a90d93c13f15da919cdd12421bd60b9acc4ae108837cebb",
-  "rawPackageJsonSha256": "8b6ffeef366485c3f2f3a4b215b697f8c7cd54bf646cca257b8f0d4f0bec41fc",
+  "packageOutputSha": "26862ff8aa26bcede896a4d5c12ae62c8ca1b86d",
+  "payloadSha256": "ef01f944a234f73721ab9b8b30472bb3e3e75cd113083c5b3c3c8ef9e49b8c30",
+  "rawPackageJsonSha256": "3247ccc706e22ccd176f6b255b42f5e1345e0eab1e588702b28f8ffeee278098",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -84,9 +84,9 @@
     },
     {
       "path": "docs/structural-authoring.md",
-      "bytes": 15674,
+      "bytes": 16490,
       "mode": 420,
-      "sha256": "1fe84fd7213a60bf28a0caf4664ccbb3a1ccfc6454a7db10bea9be5dcff1ed55"
+      "sha256": "ec484db50d77c1795717055bfdb15cb08cb276356f1ecc75f1e8c6205d506d77"
     },
     {
       "path": "index.html",
@@ -564,9 +564,9 @@
     },
     {
       "path": "server/authoring-workspace/capture.ts",
-      "bytes": 20637,
+      "bytes": 20820,
       "mode": 420,
-      "sha256": "0f2eaffdc324f2530f6997e736187a890f657b68b3405cbc2d84987c988c56f0"
+      "sha256": "1c1c1cfdbcfcacb7f116b0c50d6c251e0d5da7836d093d811b62d8f613ecfd4b"
     },
     {
       "path": "server/authoring-workspace/identity-runtime.mjs",
@@ -590,7 +590,7 @@
       "path": "server/authoring.mjs",
       "bytes": 29210,
       "mode": 420,
-      "sha256": "cdcb3e2c739b165ecce56ef63423b5b275672f0a0194768ab610820f0484c3d7"
+      "sha256": "0fbc17cc57bc04474ef2a4f0a01e5323a63dc87e6a2b3ffb345a12f10a616a04"
     },
     {
       "path": "server/cli/assets-import-entry.mjs",
@@ -899,10 +899,10 @@
       "sha256": "1ef6cd64e795617aeb0784582e3004ccb13635401774c56c56eb0b17a675c6d0"
     },
     {
-      "path": "server/generated/capture-tCfav93C.mjs",
-      "bytes": 494743,
+      "path": "server/generated/capture-D5Ng07ED.mjs",
+      "bytes": 496050,
       "mode": 420,
-      "sha256": "b33eb73d1a68aa1edaaf8b25bf3f34b329adc15338c1578198aa44f88394b436"
+      "sha256": "690ca20d7bbc4d675e4f1a97dc434a98054b486744c5fec3c05b347cd8755547"
     },
     {
       "path": "server/host-context.d.mts",
@@ -1130,7 +1130,7 @@
       "path": "server/site-build.mjs",
       "bytes": 11813,
       "mode": 420,
-      "sha256": "aef7f9765aa9e4b8cffa40a8d61bbff52c0b554d43f1b3d665f3408f1fbc7c19"
+      "sha256": "b58d7a706ad4091c1838546b6e847128fed64d38022879c21647a4800ca64d45"
     },
     {
       "path": "server/site-build/artifact.mjs",
@@ -4254,9 +4254,9 @@
     },
     {
       "path": "src/site-project/assets/capture.ts",
-      "bytes": 3244,
+      "bytes": 4765,
       "mode": 420,
-      "sha256": "bc270c59213d604cb5fba9412c2e04453bd91cc0e460c05bc328c2ff567aef7f"
+      "sha256": "5ac6f815d1b4aeb39c9712223af8690c2618fc17f39e89b19e57d4cf7c3dedd6"
     },
     {
       "path": "src/site-project/assets/compile.ts",
