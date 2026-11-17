@@ -121,8 +121,8 @@ describe("authoring-only unassigned page capture", () => {
     value.providers.content[0]!.models.push(detachedModel); value.providers.content[0]!.entries.push(detachedEntry);
     const unused = composition("unused"); unused.document.root[0]!.props.src = "/uploaded-assets/asset-detached";
     value.providers.compositions[0]!.records.push(unused);
-    const declaration = structuredClone(assetCatalog.get("leaf")!);
-    declaration.defaults.src = "/uploaded-assets/asset-default";
+    const baseDeclaration = structuredClone(assetCatalog.get("leaf")!);
+    const declaration = { ...baseDeclaration, defaults: { ...baseDeclaration.defaults, src: "/uploaded-assets/asset-default" } };
     const catalog = createComponentCatalog({ kind: "zudo-composer/component-pack", contractVersion: 2, packId: "compiler-fixture", packVersion: "1.0.0", components: [declaration] });
     const store = assetStore(["hero", "detached", "default", "content-only"]);
     const captured = await captureAuthoringProjectAssetLock(value, catalog, store);
