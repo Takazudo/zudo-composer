@@ -317,3 +317,42 @@ only list/resolve continue to work. These independent provider snapshots do not
 establish cross-domain atomicity and are never mutation preconditions or exact
 static-build captures. Pinsel must verify the same retained readonly Content
 scenario after an independently installed immutable package before acceptance.
+
+### Saved affected-page previews for host-rendered Content
+
+When `hostDocument` is configured, the Content inspector does not send the host's
+components to the Preact fragment renderer. It offers **Saved page preview** through
+the same trusted `renderDocument` module as native pages. Mapping definitions and
+model Usage remain visible; they are not proof that a fragment is placed on a page.
+The ordinary Preact-compatible Content preview continues to evaluate local drafts.
+
+The readonly native operations `content-preview-context` and
+`content-document-preview` require the connected client/capability/epoch. They use
+provider admission and the server's live authoring lease, without a browser
+prepare challenge or queue flush. Each reads one coherent persisted workspace and
+compiles it once. Durable tokens/assets/public files are rechecked before returning;
+this is a saved-state read, not permission to omit flush guards for edits or builds.
+No draft is saved to obtain a preview. A stale context revision or foreign owner,
+Sitemap, page or route refuses before publishing a document.
+
+Context discovery resolves the complete provider/model/entry identity and follows
+actual compiled Mapping materialization and field-source provenance. It does not
+infer routes from record names or from unused Mapping definitions. The selector
+requires an explicit captured affected page, even when only one is available.
+Multiple uses retain qualified Sitemap/page and rendered owner identities. The
+inventory covers compiled bindings, not arbitrary dependencies read privately by
+the host renderer (such as metadata-only lookups); no-use entries report that limit.
+
+The frame's ready state requires its original window, origin, revision, route,
+pack/renderer identity and document marker. Workspace/session invalidation or
+navigation away clears that state. Pending or different Content input is labelled
+as excluded from the saved snapshot; refresh never substitutes an unsaved candidate.
+Standalone host fragment and unsaved host Content preview are explicitly unsupported
+by this capability. Saved authoring state is also distinct from an activated release
+or deployed site. The Assistant's proposal/apply/undo validation and permissions do
+not change, and these reads grant no Content or Composition mutation authority.
+
+Installed acceptance must use a real host renderer and an actual bound Content use,
+check the qualified context and original frame acknowledgement, preserve the entire
+workspace across reload/restart, and verify the rendered production semantics.
+Source/unit tests alone do not complete a consumer scenario.

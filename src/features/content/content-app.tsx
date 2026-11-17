@@ -418,6 +418,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
         }
         inspector={
           <ContentPreviewPane
+            saveStatus={state.saveStatus}
             providerId={provider.descriptor.id}
             model={state.model}
             entry={state.entry}

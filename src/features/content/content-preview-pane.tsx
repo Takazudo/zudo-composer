@@ -1,3 +1,6 @@
+import { hostDocumentPreviewConfigured } from "../delivery/host-preview-policy";
+import { SavedHostContentPreview } from "./saved-host-preview";
+import type { ContentSaveStatus } from "./controller";
 import type { JSX } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { RailCollapseButton } from "../../components/editor-chrome";
@@ -14,6 +17,7 @@ export interface ContentPreviewPaneProps {
   model: ContentModelRecord | null;
   entry: ContentEntryRecord | null;
   entryName: string;
+  saveStatus?: ContentSaveStatus;
   componentProvider?: ComposerComponentProvider;
   createPreviewSource?: () => ContentPreviewSource;
 }
@@ -53,7 +57,7 @@ function statusTone(preview: ContentPreviewState): StatusChipTone {
  * which is why the Render-through choice is a session selection and writes no
  * Mapping record.
  */
-export function ContentPreviewPane({ providerId, model, entry, entryName, componentProvider, createPreviewSource }: ContentPreviewPaneProps): JSX.Element {
+export function ContentPreviewPane({ providerId, model, entry, entryName, componentProvider, createPreviewSource, saveStatus = "pristine" }: ContentPreviewPaneProps): JSX.Element {
   const source = useMemo(() => createPreviewSource?.() ?? null, [createPreviewSource]);
   const [preview, setPreview] = useState<ContentPreviewState | null>(() => source?.state ?? null);
   const [tab, setTab] = useState<InspectorTab>("preview");
@@ -125,7 +129,7 @@ export function ContentPreviewPane({ providerId, model, entry, entryName, compon
         {tab === "preview" ? (
           <div id="sg-content-inspector-preview" role="tabpanel" aria-label="Preview" class="sg-content-inspector">
             <div class="sg-content-inspector__pad">
-              <Field label="Render through" help={`${entryName} · ${providerId} / ${entry.id}`}>
+              <Field label={hostDocumentPreviewConfigured ? "Mapping definition" : "Render through"} help={`${entryName} · ${providerId} / ${entry.id}`}>
                 <Select
                   size="sm"
                   value={selectedIndex === -1 ? "" : String(selectedIndex)}
@@ -145,11 +149,11 @@ export function ContentPreviewPane({ providerId, model, entry, entryName, compon
               <StatusChip
                 state="custom"
                 tone={statusTone(preview)}
-                label={preview.message}
+                label={hostDocumentPreviewConfigured && selected?.status === "ready" ? "Mapping definition ready (not host rendered)" : preview.message}
                 {...(preview.context ? { detail: `${preview.context.appliedBindingCount} binding${preview.context.appliedBindingCount === 1 ? "" : "s"} applied` } : {})}
               />
             </div>
-            <CompositionPreviewHost
+            {hostDocumentPreviewConfigured ? <SavedHostContentPreview key={JSON.stringify([providerId, entry.modelId, entry.id])} providerId={providerId} entry={entry} saveStatus={saveStatus} /> : <CompositionPreviewHost
               componentProvider={componentProvider}
               document={preview.document}
               title={`${entryName} preview`}
@@ -157,7 +161,7 @@ export function ContentPreviewPane({ providerId, model, entry, entryName, compon
               emptyTitle={preview.phase === "loading" ? "Loading preview" : "Preview unavailable"}
               emptyMessage={preview.message}
               enlargeable
-            />
+            />}
             {diagnostics.length > 0 || blockedDiagnostics.length > 0 || preview.failures.length > 0 ? (
               <PaneSection title="Preview diagnostics">
                 <ul class="sg-content-diagnostics">

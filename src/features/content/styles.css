@@ -288,3 +288,6 @@
 .sg-content-ai__render { display: grid; gap: 0.25rem; min-width: 0; }
 .sg-content-ai__render iframe { inline-size: 100%; block-size: 28rem; border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface); }
 .sg-content-ai__raw > summary { cursor: pointer; }
+
+/* Host documents retain their own styles and never share the editor CSS tree. */
+.sg-content-host-preview-frame { display: block; width: 100%; min-height: 28rem; border: 0; margin-top: 1rem; }

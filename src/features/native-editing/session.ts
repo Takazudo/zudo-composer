@@ -77,7 +77,7 @@ if (coordinated) {
       else { freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-stale")); }
     } else { freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-resumed")); }
   });
-  hot!.on("vite:ws:disconnect", () => { connected = false; settle(false); freeze(false); });
+  hot!.on("vite:ws:disconnect", () => { connected = false; settle(false); freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-disconnected")); });
   hot!.on("native:invalidated", () => window.dispatchEvent(new CustomEvent("native-authoring-invalidated")));
   hot!.on("vite:ws:connect", bind);
 }
@@ -117,7 +117,7 @@ const authoringFetch: typeof fetch = async (input, init) => {
 };
 if (coordinated) {
   const reset = installAuthoringFetch(authoringFetch);
-  hot!.dispose(() => { hot!.send("native:unbind", { clientId, capability: config!.capability }); connected = false; settle(false); reset(); freeze(false); frameInput?.dispose(); });
+  hot!.dispose(() => { hot!.send("native:unbind", { clientId, capability: config!.capability }); connected = false; settle(false); reset(); freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-disconnected")); frameInput?.dispose(); });
 }
 export async function nativeEditRequest<T>(operation: string, input: unknown, approved = false, expected?: unknown): Promise<T> {
   if (!nativeEditingAvailable) throw new Error("Native editing is unavailable in static or hosted editors.");
@@ -162,3 +162,20 @@ export async function assistantEvents(workspaceId: string, runId: string, afterS
 }
 
 export const hostDocumentAvailable = nativeEditingAvailable && config?.hostDocument === true;
+
+/** Saved-only host Content reads never challenge/flush browser drafts. */
+export async function nativeContentRead<T>(operation: "content-preview-context" | "content-document-preview", input: unknown): Promise<T> {
+  if (!hostDocumentAvailable) throw new Error("Saved host Content preview is unavailable.");
+  await ready();
+  const requestEpoch = epoch;
+  const init = { method: "POST", credentials: "same-origin" as const, redirect: "error" as const, headers: { "content-type": "application/json", "x-zudo-native-client": clientId, "x-zudo-native-capability": config!.capability, "x-zudo-native-epoch": String(requestEpoch), [AUTHORING_READ_HEADER]: "1" }, body: JSON.stringify({ operation, input }) };
+  const response = await retryAuthoringRead(config!.endpoint, init, async signal => {
+    await ready(signal);
+    if (!connected || epoch !== requestEpoch) throw Object.assign(new Error("Authoring session changed. Refresh saved Content context."), { code: "stale-browser" });
+    return globalThis.fetch(config!.endpoint, { ...init, signal });
+  });
+  const body = await response.json();
+  if (!response.ok || body?.ok !== true) throw Object.assign(new Error(body?.error?.message ?? "Saved Content preview could not be read."), { code: body?.error?.code ?? "read-failed" });
+  if (!connected || epoch !== requestEpoch) throw Object.assign(new Error("Authoring session changed. Refresh saved Content context."), { code: "stale-browser" });
+  return body.result as T;
+}
