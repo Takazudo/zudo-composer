@@ -213,7 +213,7 @@ interface ComposerPaths {
 interface ResolvedComposerConfig {
     authoringAuthority: "source" | "workspace" | undefined;
     hostDocument: HostDocumentConfig | undefined;
-    contentValidation?: ContentValidationConfig;
+    contentValidation: ContentValidationConfig | undefined;
     nativeEditing: NativeEditingConfig | undefined;
     assistant: AssistantConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */
