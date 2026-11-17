@@ -1,8 +1,9 @@
 /**
  * Host opt-in for the AI Assistant. The host selects exactly one provider; a
  * provider that is unavailable is reported as such and never replaced by
- * another. The config never holds a secret and is never serialized to the
- * browser. CLI executables, models and timeouts come only from this trusted
+ * another. The provider config never holds a secret and is not serialized to
+ * the browser; selected trusted field guidance can appear in ownership results.
+ * CLI executables, models and timeouts come only from this trusted
  * host config, never from prompts or model output.
  */
 type AssistantProviderKind = "anthropic" | "fake" | "claude-cli" | "codex-cli";

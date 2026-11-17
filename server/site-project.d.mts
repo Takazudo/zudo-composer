@@ -802,6 +802,8 @@ interface ReleaseToolchain {
     /** The host's dependency spec for the pack's package, or `"self"`. */
     packSource: string;
     installedPackDigest: string;
+    /** Present only when this release is bound to a trusted host Content policy. */
+    contentValidation?: string;
     contractDigest: string;
 }
 interface ReleaseChange {

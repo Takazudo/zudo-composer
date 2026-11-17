@@ -1149,6 +1149,12 @@ interface WorkspaceRecord {
     requiresBeforeComplete?: true;
 }
 
+interface ContentValidationConfig {
+    module: string;
+    id: string;
+    version: string;
+}
+
 /**
  * Every setting a host may declare. Path settings are relative to the host
  * project root; `pack` is a module specifier.
@@ -1249,6 +1255,8 @@ interface AssistantContentFieldPolicy {
     providerId: string;
     modelId: string;
     fieldIds: readonly string[];
+    /** Trusted editing constraints for declared fields; guidance never grants permission. */
+    fieldInstructions?: Readonly<Record<string, string>>;
 }
 interface AssistantCommonConfig {
     /** Trusted Content field IDs; omitted retains the standalone Article defaults. */
@@ -1324,6 +1332,7 @@ interface ComposerPaths {
 interface ResolvedComposerConfig {
     authoringAuthority: "source" | "workspace" | undefined;
     hostDocument: HostDocumentConfig | undefined;
+    contentValidation?: ContentValidationConfig;
     nativeEditing: NativeEditingConfig | undefined;
     assistant: AssistantConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */
@@ -1622,5 +1631,23 @@ declare function renderHostDocument(renderer: HostDocumentRenderer, route: SiteC
     pathnames: readonly string[];
 }): Promise<HostDocumentPreview>;
 
+/** Trusted host code. Field-local validation only; never mutates or normalizes values. */
+interface ContentFieldValidationInput {
+    providerId: string;
+    model: ContentModelRecord;
+    entry: ContentEntryRecord;
+    field: ContentFieldDefinition;
+    value: JsonValue | undefined;
+    previousValue: JsonValue | undefined;
+    purpose: "write" | "publish";
+}
+interface ContentPolicyIssue {
+    code: string;
+    message: string;
+}
+interface ContentValidationModule {
+    validateContentField(input: ContentFieldValidationInput): readonly ContentPolicyIssue[];
+}
+
 export { ASSET_PROVIDER_ID, COMPOSITION_PROVIDER_ID, CONTENT_PROVIDER_ID, DEFAULT_TIMESTAMP, MAPPING_PROVIDER_ID, SITEMAP_PROVIDER_ID, assetAuthoringUrl, assetMimeTypeForExtension, canonicalStringifyJson, captureAuthoringWorkspace, createFilesystemAssetStore, defineSite, entryRef, hostDocumentTargets, imageUse, initializeAuthoringWorkspace, isAuthoringWorkspaceSnapshotCurrent, isAuthoringWorkspaceSourceCurrent, node, renderHostDocument, resolveAuthoringPackIdentity, resolveAuthoringRendererIdentity, slugify, validateSiteProject };
-export type { AuthoringPackIdentity, AuthoringPublicFile, AuthoringRendererIdentity, AuthoringWorkspaceSnapshot, CaptureAuthoringWorkspaceOptions, CapturedPublicFile, HostDocumentIdentity, HostDocumentPreview, HostDocumentRenderInput, HostDocumentRenderer, HostDocumentTarget };
+export type { AuthoringPackIdentity, AuthoringPublicFile, AuthoringRendererIdentity, AuthoringWorkspaceSnapshot, CaptureAuthoringWorkspaceOptions, CapturedPublicFile, ContentFieldValidationInput, ContentPolicyIssue, ContentValidationModule, HostDocumentIdentity, HostDocumentPreview, HostDocumentRenderInput, HostDocumentRenderer, HostDocumentTarget };

@@ -1,5 +1,5 @@
 import { t as EditorialError } from "./chunks/types-nfgY3xip.mjs";
-import { i as createFakeContentAiProposer } from "./chunks/ai-CzMW4DtT.mjs";
+import { i as createFakeContentAiProposer } from "./chunks/ai-fVpyFh6B.mjs";
 import { z } from "zod";
 import { spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -135,19 +135,34 @@ function parseContentFields(value) {
 	if (!Array.isArray(value) || value.length > 100) throw new Error("assistant.contentFields must be an array of at most 100 model policies.");
 	const safe = (id) => typeof id === "string" && /^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$/.test(id);
 	const seen = /* @__PURE__ */ new Set();
+	let instructionCharacters = 0;
 	return value.map((item) => {
-		if (!item || typeof item !== "object" || Array.isArray(item) || ![Object.prototype, null].includes(Object.getPrototypeOf(item)) || Object.keys(item).length !== 3 || !Object.keys(item).every((key) => [
+		if (!item || typeof item !== "object" || Array.isArray(item) || ![Object.prototype, null].includes(Object.getPrototypeOf(item)) || ![3, 4].includes(Object.keys(item).length) || !Object.keys(item).every((key) => [
 			"providerId",
 			"modelId",
-			"fieldIds"
+			"fieldIds",
+			"fieldInstructions"
 		].includes(key)) || !safe(item.providerId) || !safe(item.modelId) || !Array.isArray(item.fieldIds) || item.fieldIds.length > 100 || !item.fieldIds.every(safe) || new Set(item.fieldIds).size !== item.fieldIds.length) throw new Error("assistant.contentFields contains an invalid or duplicate field policy.");
 		const key = `${item.providerId}/${item.modelId}`;
 		if (seen.has(key)) throw new Error("assistant.contentFields repeats a model policy.");
 		seen.add(key);
+		let fieldInstructions;
+		if (Object.hasOwn(item, "fieldInstructions")) {
+			const instructions = item.fieldInstructions;
+			if (!instructions || typeof instructions !== "object" || Array.isArray(instructions) || ![Object.prototype, null].includes(Object.getPrototypeOf(instructions))) throw new Error("assistant.contentFields fieldInstructions must be a plain field map.");
+			const entries = Object.entries(instructions);
+			for (const [fieldId, instruction] of entries) {
+				if (!item.fieldIds.includes(fieldId) || typeof instruction !== "string" || !instruction.trim() || instruction.length > 4096 || instruction.includes("\0")) throw new Error("assistant.contentFields fieldInstructions must contain only declared field IDs and nonblank instructions of at most 4096 characters.");
+				instructionCharacters += instruction.length;
+				if (instructionCharacters > 32768) throw new Error("assistant.contentFields fieldInstructions exceed the total 32768-character limit.");
+			}
+			fieldInstructions = Object.fromEntries(entries);
+		}
 		return {
 			providerId: item.providerId,
 			modelId: item.modelId,
-			fieldIds: [...item.fieldIds]
+			fieldIds: [...item.fieldIds],
+			...fieldInstructions === void 0 ? {} : { fieldInstructions }
 		};
 	});
 }

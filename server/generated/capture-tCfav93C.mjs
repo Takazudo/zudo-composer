@@ -6657,6 +6657,46 @@ var CONTENT_FILESYSTEM_LAYOUT = Object.freeze({
 	entryOrder: "modelId-createdAt-id"
 });
 //#endregion
+//#region src/content/validation.ts
+function freeze(value) {
+	if (value && typeof value === "object") {
+		Object.freeze(value);
+		for (const child of Object.values(value)) freeze(child);
+	}
+	return value;
+}
+async function validateContentPolicy(policy, input, checkEpoch = true) {
+	if (!policy) return [];
+	const fields = input.model.document.fields.filter((field) => input.purpose === "publish" || !input.previous || JSON.stringify(input.entry.values[field.id]) !== JSON.stringify(input.previous.values[field.id]));
+	if (!fields.length) return [];
+	if (checkEpoch) await policy.assertCurrent?.();
+	const issues = [];
+	for (const field of fields) {
+		const value = input.entry.values[field.id], previousValue = input.previous?.values[field.id];
+		const result = policy.validateContentField(freeze(structuredClone({
+			providerId: input.providerId,
+			model: input.model,
+			entry: input.entry,
+			field,
+			value,
+			previousValue,
+			purpose: input.purpose
+		})));
+		if (result && typeof result.then === "function") {
+			Promise.resolve(result).catch(() => void 0);
+			throw new Error("Content validation module returned invalid diagnostics: async validators are unsupported.");
+		}
+		if (!Array.isArray(result) || result.some((issue) => !issue || typeof issue !== "object" || Object.keys(issue).some((key) => !["code", "message"].includes(key)) || typeof issue.code !== "string" || !issue.code.trim() || issue.code.length > 120 || typeof issue.message !== "string" || !issue.message.trim() || issue.message.length > 4e3)) throw new Error("Content validation module returned invalid diagnostics.");
+		issues.push(...result.map((issue) => ({
+			fieldId: field.id,
+			code: issue.code,
+			message: issue.message
+		})));
+	}
+	if (checkEpoch) await policy.assertCurrent?.();
+	return issues;
+}
+//#endregion
 //#region src/content/storage/filesystem/transactional-store.ts
 var DEFAULT_PAGE_SIZE = 50;
 var MAX_PAGE_SIZE = 200;
@@ -6738,20 +6778,36 @@ var TransactionalContentStore = class {
 	records;
 	now;
 	revisionProvenance;
+	validationPolicy;
 	provider = CONTENT_PROVIDERS.filesystem;
 	transactionScope = "provider";
-	constructor(records, now, revisionProvenance) {
+	constructor(records, now, revisionProvenance, validationPolicy) {
 		this.records = records;
 		this.now = now;
 		this.revisionProvenance = revisionProvenance;
+		this.validationPolicy = validationPolicy;
 	}
 	static async fromRecords(records, now = () => (/* @__PURE__ */ new Date()).toISOString(), revisionProvenance = {
 		actor: null,
 		source: "content-store"
-	}) {
-		const store = new this(records, now, structuredClone(revisionProvenance));
+	}, validationPolicy) {
+		const store = new this(records, now, structuredClone(revisionProvenance), validationPolicy);
 		await store.open();
 		return store;
+	}
+	async contentValidationIdentity() {
+		await this.validationPolicy?.assertCurrent?.();
+		return this.validationPolicy?.identity;
+	}
+	/** Read-only preflight shared by human and AI editors. Commit repeats it inside the writer. */
+	async validateEntryValues(entry, model, previous, purpose = "write") {
+		return validateContentPolicy(this.validationPolicy, {
+			providerId: this.provider.id,
+			entry,
+			model,
+			previous,
+			purpose
+		});
 	}
 	get root() {
 		return this.records.root;
@@ -6902,6 +6958,28 @@ var TransactionalContentStore = class {
 					entries: [...planned.entries].sort(compareById$2)
 				};
 				this.validateSnapshot(proposed, operation);
+				try {
+					await this.validationPolicy?.assertCurrent?.();
+					for (const entry of proposed.entries) {
+						const previous = before.entries.find((value) => value.id === entry.id && value.modelId === entry.modelId);
+						const model = proposed.models.find((value) => value.id === entry.modelId);
+						const publishing = previous?.lifecycle !== "published" && entry.lifecycle === "published";
+						const priorModel = before.models.find((value) => value.id === model.id);
+						if (!publishing && previous && sameJson(previous.values, entry.values) && sameJson(priorModel, model)) continue;
+						const issues = await validateContentPolicy(this.validationPolicy, {
+							providerId: this.provider.id,
+							entry,
+							model,
+							previous: sameJson(priorModel, model) ? previous : void 0,
+							purpose: publishing ? "publish" : "write"
+						}, false);
+						if (issues.length) throw contentError(operation, "validation", issues.map((issue) => `${this.provider.id}/${entry.modelId}/${entry.id}/${issue.fieldId}: ${issue.message}`).join("; "));
+					}
+					await this.validationPolicy?.assertCurrent?.();
+				} catch (error) {
+					if (error instanceof ContentPersistenceError) throw error;
+					throw contentError(operation, "validation", error instanceof Error ? error.message : "Host Content validation failed.");
+				}
 				this.assertStoredKindsSurvive(before, proposed, operation);
 				const next = {
 					...proposed,
@@ -7671,7 +7749,7 @@ var FilesystemContentStore = class extends TransactionalContentStore {
 			...options.randomToken === void 0 ? {} : { randomToken: options.randomToken },
 			...options.newMutationToken === void 0 ? {} : { newMutationToken: options.newMutationToken }
 		});
-		return this.fromRecords(records, options.now, options.revisionProvenance);
+		return this.fromRecords(records, options.now, options.revisionProvenance, options.validationPolicy);
 	}
 };
 function createFilesystemContentStore(options) {

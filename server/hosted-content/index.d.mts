@@ -1658,6 +1658,8 @@ interface ContentAiProposal {
     candidate: Record<string, unknown>;
     /** SHA-256 of the entry, precondition and candidate: what a rendered preview must acknowledge. */
     candidateDigest: string;
+    /** Host policy graph under which this candidate was reviewed. */
+    validationPolicy?: string;
     operationKey: string;
     provider: string;
     createdAt: string;
@@ -1710,6 +1712,7 @@ interface ContentAiFieldPolicy {
     fieldIds: readonly string[];
 }
 interface ContentAiServiceOptions {
+    validationIdentity?(): Promise<string | undefined>;
     /** Trusted policy; absent keeps title/body defaults, empty denies all fields. */
     contentFields?: readonly ContentAiFieldPolicy[];
     /** The owning backend's boundary bound to the given provenance. */
@@ -1760,6 +1763,7 @@ declare function contentAiCandidateDigest(value: {
     entry: ContentEntryRef;
     expected: string;
     candidate: Record<string, unknown>;
+    validationPolicy?: string;
 }): Promise<string>;
 declare function createContentAiService(options: ContentAiServiceOptions): ContentAiService;
 /** A process-local proposal store for tests and hosts that opt out of durability. */

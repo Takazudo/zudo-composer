@@ -22,7 +22,8 @@ async function contentAiCandidateDigest(value) {
 	const bytes = new TextEncoder().encode(canonicalEditorialJson({
 		entry: value.entry,
 		expected: value.expected,
-		candidate: value.candidate
+		candidate: value.candidate,
+		...value.validationPolicy === void 0 ? {} : { validationPolicy: value.validationPolicy }
 	}));
 	return [...new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -93,6 +94,7 @@ async function stageValidatedContentAi(options, raw, provider, guard) {
 		status: "refused",
 		message: "The model proposed no change."
 	};
+	const validationPolicy = await options.validationIdentity?.();
 	const validation = await ai.validateFields({
 		entry: request.entry,
 		expected: request.expected,
@@ -112,10 +114,12 @@ async function stageValidatedContentAi(options, raw, provider, guard) {
 		values: request.values,
 		differences: validation.differences,
 		candidate: validation.values,
+		...validationPolicy === void 0 ? {} : { validationPolicy },
 		candidateDigest: await contentAiCandidateDigest({
 			entry: request.entry,
 			expected: request.expected,
-			candidate: validation.values
+			candidate: validation.values,
+			validationPolicy
 		}),
 		operationKey: `content-ai:${id}`,
 		provider,
@@ -124,6 +128,7 @@ async function stageValidatedContentAi(options, raw, provider, guard) {
 	};
 	guard.signal?.throwIfAborted();
 	await guard.beforePersist?.();
+	if (await options.validationIdentity?.() !== validationPolicy) throw new EditorialError("revision-conflict", "Content validation policy changed during proposal review.");
 	guard.signal?.throwIfAborted();
 	try {
 		await options.store.create({
@@ -231,6 +236,7 @@ function createContentAiService(options) {
 				receipt: committed,
 				recovered: true
 			};
+			if (await options.validationIdentity?.() !== proposal.validationPolicy) throw new EditorialError("revision-conflict", "Content validation policy changed; prepare and review a new proposal.");
 			if (options.canApply === false) throw new EditorialError("forbidden", "This host permits AI proposals but not Apply.");
 			if (now().getTime() > Date.parse(proposal.expiresAt)) throw new EditorialError("invalid-request", "This proposal expired before it was applied; prepare it again.");
 			if (request.renderedCandidate !== proposal.candidateDigest) throw new EditorialError("invalid-request", "Apply needs a successful render of this exact candidate first.");

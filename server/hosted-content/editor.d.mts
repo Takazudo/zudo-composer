@@ -937,6 +937,8 @@ interface ContentAiProposal {
     candidate: Record<string, unknown>;
     /** SHA-256 of the entry, precondition and candidate: what a rendered preview must acknowledge. */
     candidateDigest: string;
+    /** Host policy graph under which this candidate was reviewed. */
+    validationPolicy?: string;
     operationKey: string;
     provider: string;
     createdAt: string;
