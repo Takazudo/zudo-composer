@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "87b399f0d35e016ad4193238fd2d9f606d7dd59a",
-  "payloadSha256": "1e06b7c8213104b5c2aaa853a0af8f3f773185a3be6d7c0f5c853eb34e7d18fb",
-  "rawPackageJsonSha256": "8f291f1e809010ece116fd21da41650767ce37621e70629cce6e114eb1f2d639",
+  "packageOutputSha": "5a89ca2b71064443e00e18e3b2fa3f36992f5fd9",
+  "payloadSha256": "0b338508792f5105ed72cbc8564cd27562becc5a32f93af2213166637944c63c",
+  "rawPackageJsonSha256": "a8b1d46b6beab1a74a1bfaf6b8f6f7696af81cb1047533f5791686c816e726be",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -1758,15 +1758,15 @@
     },
     {
       "path": "src/components/outline-tree/outline-rows.tsx",
-      "bytes": 9435,
+      "bytes": 9471,
       "mode": 420,
-      "sha256": "17d907b2483d5048e43198188bc2c077904c39daee2f93e0ee6080a809a97d22"
+      "sha256": "0b4576dd2c16d21c3678cb1ca297b1bc96958829e9dbdd9b006abaf3a336110f"
     },
     {
       "path": "src/components/outline-tree/outline-tree.css",
-      "bytes": 18772,
+      "bytes": 19220,
       "mode": 420,
-      "sha256": "1c09a953e0501530462d0db264211cbd4b9af3f5b3c0be1b3ae75815410a935d"
+      "sha256": "ac5a675f9155fbcd64a9f9044ce14d22845a3827fdf4c7e2808262fdd9bb558f"
     },
     {
       "path": "src/components/outline-tree/outline-tree.tsx",
