@@ -109,6 +109,14 @@ describe("outline-tree.css", () => {
     expect(coarse).toContain("pointer-events: auto");
   });
 
+  it("clips metadata inside the row button so it cannot cover the actions", () => {
+    const clip = css.slice(css.indexOf(".cms-tree-cat__link,\n.cms-tree-group__row,\n.cms-tree-leaf {"));
+    expect(clip.startsWith(".cms-tree-cat__link,\n.cms-tree-group__row,\n.cms-tree-leaf {"), "row clip rule").toBe(true);
+    expect(clip.slice(0, clip.indexOf("}"))).toContain("overflow: hidden");
+    expect(block(".cms-tree-hint")).toContain("text-overflow: ellipsis");
+    expect(block(".cms-tree-slug")).toContain("text-overflow: ellipsis");
+  });
+
   it("reserves no width for the hover-only actions", () => {
     const acts = block(".cms-tree-acts");
     expect(acts).toContain("width: 0");
