@@ -80,6 +80,8 @@ describe("structure", () => {
     const { container } = render(<OutlineTree nodes={nodes} />);
     expect(container.querySelector(".cms-tree-group__row--slot")?.textContent).toContain("content");
     expect(container.querySelector(".cms-tree-hint")?.textContent).toBe("Build a clear…");
+    expect(container.querySelector(".cms-tree-hint")).toHaveAttribute("title", "Build a clear…");
+    expect(container.querySelector(".cms-tree-group__row--slot .cms-tree-slug")).toHaveAttribute("title", "slot");
 
     const withStatus = render(<OutlineTree nodes={NODES} />);
     expect(withStatus.container.querySelector(".cms-tree-dot--warn")).toHaveAttribute("title", "Unassigned");
