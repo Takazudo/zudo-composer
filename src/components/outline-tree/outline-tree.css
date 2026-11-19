@@ -247,6 +247,16 @@
   cursor: pointer;
 }
 
+/* The row button is the flex item that sits beside the action buttons. Its
+ * slug, hint and rule tag have to be clipped here: a flex item that cannot
+ * shrink otherwise paints past this box and takes the clicks meant for
+ * "Add component" and Collapse (#989). */
+.cms-tree-cat__link,
+.cms-tree-group__row,
+.cms-tree-leaf {
+  overflow: hidden;
+}
+
 .cms-tree-title {
   flex: 0 1 auto;
   min-width: min(100%, 10ch);
@@ -280,7 +290,16 @@
 
 .cms-tree-group.is-last > .cms-tree-group__header > .cms-tree-vline { inset-block-end: calc(100% - var(--tree-row) / 2); }
 
-.cms-tree-hint { flex: none; color: var(--color-faint); font-size: .75rem; font-style: italic; }
+.cms-tree-hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-faint);
+  font-size: .75rem;
+  font-style: italic;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .cms-tree-leaf:focus-visible,
 .cms-tree-group__row:focus-visible,
