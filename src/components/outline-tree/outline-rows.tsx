@@ -52,7 +52,7 @@ function useTreeItemProps(node: OutlineNode, placement: RowPlacement, expandable
 function RowMeta({ node }: { node: OutlineNode }) {
   return (
     <Fragment>
-      {node.slug === undefined ? null : <span class="cms-tree-slug">{node.slug}</span>}
+      {node.slug === undefined ? null : <span class="cms-tree-slug" title={node.slug}>{node.slug}</span>}
       {node.count === undefined ? null : <span class="cms-tree-count">({node.count})</span>}
       {node.tag === undefined ? null : (
         <span class={cx("cms-tree-tag", node.tagVariant === "rule" && "cms-tree-tag--rule")} title={node.tagDetail}>
@@ -113,7 +113,7 @@ function showChildrenList(
 
 function RowHint({ node }: { node: OutlineNode }) {
   if (node.hint === undefined) return null;
-  return <span class="cms-tree-hint">{node.hint}</span>;
+  return <span class="cms-tree-hint" title={node.hint}>{node.hint}</span>;
 }
 
 function CategoryRow({ node, placement, expanded }: { node: OutlineNode; placement: RowPlacement; expanded: boolean }) {
