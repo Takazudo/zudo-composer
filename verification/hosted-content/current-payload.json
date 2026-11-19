@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "c5ffd410f74ba4b3aa003da068efeeae6e663c37",
-  "payloadSha256": "bc44f1c4e0778929fb69494a523d8148ee68530f3f320064412a18d1ef44bd47",
-  "rawPackageJsonSha256": "70eea4eee6555d6eec7e86f4d6941fce4ee9d95c19d8cd747875280963ef8968",
+  "packageOutputSha": "e802741aaf51bae69b4db67ddc3d80494be61043",
+  "payloadSha256": "187a1622eabde887bfe386b8ce623862fb1dbd01654862b02d9282f953961119",
+  "rawPackageJsonSha256": "57e135880e185e946430a21032ad83c38f0d753cb0318de933ee99923ad7aeea",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -1824,15 +1824,15 @@
     },
     {
       "path": "src/components/outline-tree/outline-rows.tsx",
-      "bytes": 9435,
+      "bytes": 9471,
       "mode": 420,
-      "sha256": "17d907b2483d5048e43198188bc2c077904c39daee2f93e0ee6080a809a97d22"
+      "sha256": "0b4576dd2c16d21c3678cb1ca297b1bc96958829e9dbdd9b006abaf3a336110f"
     },
     {
       "path": "src/components/outline-tree/outline-tree.css",
-      "bytes": 18772,
+      "bytes": 19220,
       "mode": 420,
-      "sha256": "1c09a953e0501530462d0db264211cbd4b9af3f5b3c0be1b3ae75815410a935d"
+      "sha256": "ac5a675f9155fbcd64a9f9044ce14d22845a3827fdf4c7e2808262fdd9bb558f"
     },
     {
       "path": "src/components/outline-tree/outline-tree.tsx",
