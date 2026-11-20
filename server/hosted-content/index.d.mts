@@ -1658,6 +1658,8 @@ interface ContentAiProposal {
     candidate: Record<string, unknown>;
     /** SHA-256 of the entry, precondition and candidate: what a rendered preview must acknowledge. */
     candidateDigest: string;
+    /** Host policy graph under which this candidate was reviewed. */
+    validationPolicy?: string;
     operationKey: string;
     provider: string;
     createdAt: string;
@@ -1683,6 +1685,11 @@ interface ContentAiProposalRecord {
     owner: string;
     actorId: string | null;
     proposal: ContentAiProposal;
+    /** Internal deterministic staging replay fingerprint; absent for ordinary proposals. */
+    preparation?: {
+        keyDigest: string;
+        payloadDigest: string;
+    };
 }
 interface ContentAiProposalStore {
     /** Create-only: an existing id is never overwritten. */
@@ -1699,7 +1706,15 @@ interface ContentAiOutcome {
     receipt: EditorialReceipt;
     recovered: boolean;
 }
+interface ContentAiFieldPolicy {
+    providerId: string;
+    modelId: string;
+    fieldIds: readonly string[];
+}
 interface ContentAiServiceOptions {
+    validationIdentity?(): Promise<string | undefined>;
+    /** Trusted policy; absent keeps title/body defaults, empty denies all fields. */
+    contentFields?: readonly ContentAiFieldPolicy[];
     /** The owning backend's boundary bound to the given provenance. */
     boundary(provenance: EditorialProvenance): ContentEditorialBoundary;
     actor: {
@@ -1748,6 +1763,7 @@ declare function contentAiCandidateDigest(value: {
     entry: ContentEntryRef;
     expected: string;
     candidate: Record<string, unknown>;
+    validationPolicy?: string;
 }): Promise<string>;
 declare function createContentAiService(options: ContentAiServiceOptions): ContentAiService;
 /** A process-local proposal store for tests and hosts that opt out of durability. */

@@ -1,3 +1,4 @@
+import type { ContentValidationPolicy } from "../../validation";
 import type { RecordMutationTokenSource, SafeRootFilesystemOperations } from "../../../shared/node-fs";
 import { CONTENT_ENTRY_SCHEMA_VERSION, CONTENT_MODEL_SCHEMA_VERSION } from "../../model";
 import type { ContentProvenance } from "../../library";
@@ -45,6 +46,7 @@ export const CONTENT_FILESYSTEM_LAYOUT = Object.freeze({
 export type ContentFilesystemLayout = typeof CONTENT_FILESYSTEM_LAYOUT;
 
 export interface FilesystemContentStoreOptions {
+  validationPolicy?: ContentValidationPolicy;
   /** The fixed directory below which every Content record file lives. */
   contentRoot: string;
   /** Test/fault-injection seam. Omitted methods use Node's real filesystem. */

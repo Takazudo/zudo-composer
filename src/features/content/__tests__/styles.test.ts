@@ -48,6 +48,13 @@ describe("Content styling contract", () => {
     expect(css).toContain("overscroll-behavior: contain"); expect(css).toContain("box-shadow: none");
   });
 
+  it("lets the Mapping definition status and field shrink without clipping", () => {
+    const declaration = (selector: string) => rules.slice(rules.indexOf(selector)).split("}")[0];
+    expect(declaration(".sg-content-preview-field")).toContain("grid-template-columns: minmax(0, 1fr)");
+    expect(declaration(".sg-content-preview-status")).toContain("white-space: normal");
+    expect(declaration(".sg-content-preview-status")).toContain("overflow-wrap: anywhere");
+  });
+
   it("guards neutral hover, focus, radius, and reduced motion", () => {
     expect(css).toContain("@media (hover: hover)"); expect(css).toContain("background: var(--color-surface-2)");
     expect(css).toContain("outline: 2px solid var(--color-focus)"); expect(css).toContain("var(--radius-DEFAULT)");

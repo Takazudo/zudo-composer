@@ -1,3 +1,4 @@
+import type { HostSelection } from "../../src/shared/host-review-types";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { SafeRootFilesystem, commitDocument, type DurableExtraErrorCode } from "../../src/shared/node-fs";
@@ -18,6 +19,7 @@ export type MemoryChange = { kind: "append"; text: string } | { kind: "replace";
 export interface MemoryState { revision: number; body: string; mode: MemoryMode; modeRevision: number; clearGeneration: number; updatedAt: string | null }
 export interface UsedMemory { status: "used" | "empty" | "off" | "unavailable"; revision: number | null; mode: MemoryMode; characters: number }
 export interface MessageContext {
+  hostSelection?: HostSelection;
   page: { sitemapId: string; pageId: string; title?: string } | null;
   selection: { nodeId: string; componentId?: string; label?: string } | null;
   payloadIds: string[];
@@ -26,6 +28,7 @@ export interface MessageContext {
 export interface ChatMessage {
   id: string; role: "user" | "assistant"; text: string; createdAt: string; turnId: string; runId?: string;
   context?: MessageContext; memory?: UsedMemory;
+  hostReviews?: { reviewId: string; domain: "composition" | "content" }[];
   draft?: { draftId: string; operationIds: string[] } | null;
   memoryProposals?: MemoryProposal[]; remembered?: { revision: number }[]; suggestions?: Suggestion[];
   outcome?: "completed" | "stopped" | "failed" | "interrupted";

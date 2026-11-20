@@ -3,7 +3,7 @@ import type { CompositionRecord, CompositionSummary } from "../../composer/brows
 import { COMPOSITION_SCHEMA_VERSION } from "../../composer/browser";
 import type { ComponentCatalog } from "../../composer/model/types";
 import type { ContentEntryRecord, ContentModelRecord } from "../../content/model";
-import type { ContentModelSummary } from "../../content/library";
+import { diagnoseContentEntryCompleteness, type ContentModelSummary } from "../../content/library";
 import type { MappingCatalogEntry, MappingRecord } from "../../mapping";
 import { MAPPING_SCHEMA_VERSION } from "../../mapping";
 import type { AssetSummary } from "../../assets";
@@ -568,4 +568,251 @@ describe("createWorkspaceSummary — resilience and lifecycle", () => {
     expect(initialize).toHaveBeenCalledTimes(1);
     expect(retry).toHaveBeenCalledTimes(1);
   });
+});
+
+
+describe("canonical Composition summary inventory", () => {
+  const token = "a".repeat(64);
+  it("reads metadata and Mapping diagnostics without derived list/get while a preview owns admission", async () => {
+    const { integration } = createFakeIntegration({ models: [contentModel("journal", AT(1))], mappings: [mappingEntry("hero-map", AT(1))], mappingRecords: { "hero-map": mappingRecord("hero-map") } });
+    // The derived continuation is not safe to retry during exact preview capture.
+    const busy = Object.assign(new Error("Native editing is reconciling browser state. Input is retained; retry after it settles."), { code: "authoring-busy" });
+    integration.compositionProviders[0]!.store.list = vi.fn(async () => { throw busy; });
+    integration.mappingCompositionCatalog.resolve = vi.fn(async () => { throw busy; });
+    const snapshot = vi.fn(async () => ({ mutationToken: token, records: [compositionRecord("hero")] }));
+    integration.compositionProviders[0]!.store.snapshot = snapshot;
+    const summary = createWorkspaceSummary(integration);
+    const counts = await summary.counts();
+    expect(value(counts.compositions)).toEqual({ compositions: 1, patterns: 0, globalTemplates: 0 });
+    expect(value(counts.mappings)).toEqual({ mappings: 1, blockedMappings: 0 });
+    expect((await summary.recent()).records.some(r => r.id === "hero")).toBe(true);
+    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(integration.compositionProviders[0]!.store.list).not.toHaveBeenCalled();
+    expect(integration.mappingCompositionCatalog.resolve).not.toHaveBeenCalled();
+    // Same stores still retain their original editor behavior; no fake JSX success.
+    await expect(integration.compositionProviders[0]!.store.list()).rejects.toBe(busy);
+  });
+
+  it("uses exact provider identity for duplicate IDs and preserves missing source diagnostics", async () => {
+    const mapping = mappingRecord("hero-map");
+    Object.assign(mapping.document.composition, { providerId: "browser" });
+    const { integration } = createFakeIntegration({ models: [contentModel("journal", AT(1))], mappings: [mappingEntry("hero-map", AT(1))], mappingRecords: { "hero-map": mapping } });
+    integration.compositionProviders[0]!.store.snapshot = async () => ({ mutationToken: token, records: [compositionRecord("hero")] });
+    const other = { descriptor: { id: "browser", label: "Other" }, store: { list: vi.fn(async () => []), snapshot: vi.fn(async () => ({ mutationToken: token, records: [] as CompositionRecord[] })) } };
+    const scoped = { ...integration, compositionProviders: [...integration.compositionProviders, other] };
+    const summary = createWorkspaceSummary(scoped);
+    expect(value((await summary.counts()).mappings).blockedMappings).toBe(1);
+    other.store.snapshot.mockResolvedValue({ mutationToken: "b".repeat(64), records: [compositionRecord("hero")] });
+    summary.refresh();
+    expect(value((await summary.counts()).mappings).blockedMappings).toBe(0);
+  });
+
+  it("surfaces invalid/failed inventory without falling back to derived work", async () => {
+    const { integration } = createFakeIntegration({ models: [contentModel("journal", AT(1))], mappings: [mappingEntry("hero-map", AT(1))], mappingRecords: { "hero-map": mappingRecord("hero-map") } });
+    const list = vi.spyOn(integration.compositionProviders[0]!.store, "list");
+    integration.compositionProviders[0]!.store.snapshot = async () => ({ mutationToken: "", records: [] });
+    const summary = createWorkspaceSummary(integration);
+    expect((await summary.counts()).compositions.status).toBe("unavailable");
+    expect(value((await summary.counts()).mappings).blockedMappings).toBe(1);
+    expect(list).not.toHaveBeenCalled();
+    integration.compositionProviders[0]!.store.snapshot = async () => { throw new Error("snapshot offline"); };
+    summary.refresh();
+    expect((await summary.counts()).compositions.status).toBe("unavailable");
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("does not let an old pending snapshot repopulate the refreshed cache", async () => {
+    const { integration } = createFakeIntegration();
+    let finish!: (value: { mutationToken: string; records: CompositionRecord[] }) => void;
+    const old = new Promise<{ mutationToken: string; records: CompositionRecord[] }>(resolve => { finish = resolve; });
+    const snapshot = vi.fn().mockReturnValueOnce(old).mockResolvedValue({ mutationToken: "b".repeat(64), records: [compositionRecord("fresh")] });
+    integration.compositionProviders[0]!.store.snapshot = snapshot;
+    const summary = createWorkspaceSummary(integration);
+    const first = summary.counts();
+    await vi.waitFor(() => expect(snapshot).toHaveBeenCalledTimes(1));
+    summary.refresh();
+    expect(value((await summary.counts()).compositions).compositions).toBe(1);
+    finish({ mutationToken: token, records: [] }); await first;
+    expect(value((await summary.counts()).compositions).compositions).toBe(1);
+    expect(snapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates canonical inventory after a real Composition persistence notification", async () => {
+    const { integration } = createFakeIntegration(); let changed!: (channel: string) => void;
+    integration.subscribeChanges = listener => { changed = listener; return () => {}; };
+    const snapshot = vi.fn().mockResolvedValueOnce({ mutationToken: token, records: [] }).mockResolvedValue({ mutationToken: "b".repeat(64), records: [compositionRecord("new")] });
+    integration.compositionProviders[0]!.store.snapshot = snapshot;
+    const summary = createWorkspaceSummary(integration);
+    expect(value((await summary.counts()).compositions).compositions).toBe(0);
+    changed("compositions:files");
+    expect(value((await summary.counts()).compositions).compositions).toBe(1);
+    expect(snapshot).toHaveBeenCalledTimes(2);
+  });
+});
+
+
+
+it("canonical inventory preserves pattern/global metadata and malformed-record failures", async () => {
+  const { integration } = createFakeIntegration();
+  const pattern = compositionRecord("pattern"), global = compositionRecord("global");
+  pattern.document.publication = { kind: "pattern" };
+  global.document.root = [{ id: "stack", componentId: "demo.stack", componentVersion: 1, props: {}, slots: { children: [] } }];
+  global.document.publication = { kind: "global-template", outlet: { id: "main", label: "Main", target: { parentId: "stack", slotId: "children" } } };
+  const snapshot = vi.fn(async () => ({ mutationToken: "a".repeat(64), records: [pattern, global] }));
+  integration.compositionProviders[0]!.store.snapshot = snapshot;
+  const summary = createWorkspaceSummary(integration);
+  expect(value((await summary.counts()).compositions)).toEqual({ compositions: 2, patterns: 1, globalTemplates: 1 });
+  expect((await summary.recent()).records.map(record => record.kind).sort()).toEqual(["global-template", "pattern"]);
+  snapshot.mockResolvedValue({ mutationToken: "b".repeat(64), records: [{ ...pattern, document: { ...pattern.document, schemaVersion: -1 } } as unknown as CompositionRecord] });
+  summary.refresh(); expect((await summary.counts()).compositions.status).toBe("unavailable");
+});
+
+
+it.each([0, 42, "opaque-provider-token"])("accepts the existing snapshot token contract %s", async mutationToken => {
+  const { integration } = createFakeIntegration();
+  integration.compositionProviders[0]!.store.snapshot = async () => ({ mutationToken, records: [compositionRecord("hero")] });
+  expect(value((await createWorkspaceSummary(integration).counts()).compositions).compositions).toBe(1);
+});
+
+
+describe("canonical Mapping summary batching", () => {
+  const token = "mappings-token";
+  it("summarizes163 Mappings from one snapshot and resolves each of25 qualified models once", async () => {
+    const models = Array.from({ length: 25 }, (_, i) => contentModel(`model-${i}`, AT(1)));
+    const records = Array.from({ length: 163 }, (_, i) => {
+      const record = mappingRecord(`mapping-${i}`); record.document.contentModel.recordId = `model-${i % 25}`; return record;
+    });
+    const { integration } = createFakeIntegration({ models });
+    const list = vi.spyOn(integration.mappingCatalog, "list");
+    const resolve = vi.spyOn(integration.mappingCatalog, "resolve");
+    const resolveModel = vi.spyOn(integration.contentCatalog, "resolveModel");
+    const snapshot = vi.fn(async () => ({ mutationToken: token, records }));
+    const summary = createWorkspaceSummary({ ...integration, mappingProviders: [{ descriptor: { id: "mapping-filesystem", label: "Mappings" }, store: { snapshot } }] });
+    expect(value((await summary.counts()).mappings)).toEqual({ mappings: 163, blockedMappings: 0 });
+    expect((await summary.recent(200)).records.filter(record => record.kind === "mapping")).toHaveLength(163);
+    expect(snapshot).toHaveBeenCalledTimes(1); expect(list).not.toHaveBeenCalled(); expect(resolve).not.toHaveBeenCalled();
+    expect(resolveModel).toHaveBeenCalledTimes(25);
+    summary.refresh(); await summary.counts();
+    expect(snapshot).toHaveBeenCalledTimes(2); expect(resolveModel).toHaveBeenCalledTimes(50);
+  });
+
+  it("preserves missing source diagnostics and falls back only for providers without snapshots", async () => {
+    const good = mappingRecord("same"), missing = mappingRecord("same", "missing");
+    const { integration } = createFakeIntegration({ models: [contentModel("journal", AT(1))] });
+    integration.mappingCatalog.list = vi.fn(async () => ({ status: "listed" as const, entries: [{ ...mappingEntry("same", AT(1)), ref: { providerId: "legacy", recordId: "same" } }], failures: [] }));
+    integration.mappingCatalog.resolve = vi.fn(async (ref: { providerId: string; recordId: string }) => ref.providerId === "legacy" ? { status: "resolved" as const, record: missing } : { status: "not-found" as const });
+    const summary = createWorkspaceSummary({ ...integration, mappingProviders: [
+      { descriptor: { id: "mapping-filesystem", label: "Canonical" }, store: { snapshot: async () => ({ mutationToken: token, records: [good] }) } },
+      { descriptor: { id: "legacy", label: "Legacy" }, store: {} },
+    ] });
+    expect(value((await summary.counts()).mappings)).toEqual({ mappings: 2, blockedMappings: 1 });
+    expect(integration.mappingCatalog.resolve).toHaveBeenCalledExactlyOnceWith({ providerId: "legacy", recordId: "same" });
+    expect(value((await summary.attention()).mappings)).toHaveLength(1);
+  });
+
+  it("does not silently fall back after snapshot failure, corruption or duplicate providers", async () => {
+    const { integration } = createFakeIntegration(); const list = vi.spyOn(integration.mappingCatalog, "list");
+    const snapshot = vi.fn(async () => { throw new Error("Mapping snapshot unavailable"); });
+    const provider = { descriptor: { id: "mapping-filesystem", label: "Mappings" }, store: { snapshot } };
+    const failed = createWorkspaceSummary({ ...integration, mappingProviders: [provider] });
+    expect((await failed.counts()).mappings.status).toBe("unavailable"); expect(list).not.toHaveBeenCalled();
+    const duplicate = createWorkspaceSummary({ ...integration, mappingProviders: [provider, provider] });
+    expect((await duplicate.counts()).mappings.status).toBe("unavailable"); expect(snapshot).toHaveBeenCalledTimes(1);
+    const bad = createWorkspaceSummary({ ...integration, mappingProviders: [{ ...provider, store: { snapshot: async () => ({ mutationToken: token, records: [mappingRecord("duplicate"), mappingRecord("duplicate")] }) } }] });
+    expect((await bad.counts()).mappings.status).toBe("unavailable"); expect(list).not.toHaveBeenCalled();
+  });
+
+  it("retains snapshot on Content changes while recomputing model diagnostics; Mapping change refreshes inventory", async () => {
+    const { integration } = createFakeIntegration({ models: [contentModel("journal", AT(1))] });
+    let changed!: (channel: string) => void; integration.subscribeChanges = listener => { changed = listener; return () => {}; };
+    const snapshot = vi.fn(async () => ({ mutationToken: token, records: [mappingRecord("hero-map")] }));
+    const model = vi.spyOn(integration.contentCatalog, "resolveModel");
+    const summary = createWorkspaceSummary({ ...integration, mappingProviders: [{ descriptor: { id: "mapping-filesystem", label: "Mappings" }, store: { snapshot } }] });
+    await summary.counts(); changed("content"); await summary.counts();
+    expect(snapshot).toHaveBeenCalledTimes(1); expect(model).toHaveBeenCalledTimes(2);
+    changed("mapping"); await summary.counts(); expect(snapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it("cannot repopulate refreshed Mapping cache from an old in-flight snapshot", async () => {
+    const { integration } = createFakeIntegration(); let finish!: (snapshot: { mutationToken: string; records: MappingRecord[] }) => void;
+    const pending = new Promise<{ mutationToken: string; records: MappingRecord[] }>(resolve => { finish = resolve; });
+    const snapshot = vi.fn().mockReturnValueOnce(pending).mockResolvedValue({ mutationToken: "fresh", records: [] });
+    const summary = createWorkspaceSummary({ ...integration, mappingProviders: [{ descriptor: { id: "mapping-filesystem", label: "Mappings" }, store: { snapshot } }] });
+    const old = summary.counts(); await vi.waitFor(() => expect(snapshot).toHaveBeenCalledTimes(1));
+    summary.refresh(); expect(value((await summary.counts()).mappings).mappings).toBe(0);
+    finish({ mutationToken: token, records: [mappingRecord("old")] }); await old;
+    expect(value((await summary.counts()).mappings).mappings).toBe(0); expect(snapshot).toHaveBeenCalledTimes(2);
+  });
+});
+
+
+it("Mapping model memo does not merge identical record IDs from different Content providers", async () => {
+  const first = mappingRecord("first"), second = mappingRecord("second");
+  Object.assign(second.document.contentModel, { providerId: "foreign-content" });
+  const { integration } = createFakeIntegration({ mappings: [mappingEntry("first", AT(1)), mappingEntry("second", AT(1))], mappingRecords: { first, second } });
+  integration.contentCatalog.resolveModel = vi.fn(async (ref: { providerId: string; recordId: string }) => ref.providerId === "content-filesystem" ? { status: "resolved" as const, record: contentModel("journal", AT(1)) } : { status: "not-found" as const });
+  const summary = createWorkspaceSummary(integration);
+  expect(value((await summary.counts()).mappings)).toEqual({ mappings: 2, blockedMappings: 1 });
+  expect(integration.contentCatalog.resolveModel).toHaveBeenCalledTimes(2);
+  expect(integration.contentCatalog.resolveModel).toHaveBeenCalledWith({ providerId: "foreign-content", recordId: "journal" });
+});
+
+
+it("preserves native Mapping date/id order and configured mixed provider attention order", async () => {
+  const { integration } = createFakeIntegration({ models: [contentModel("journal", AT(1))] });
+  const records = [mappingRecord("old", "missing"), mappingRecord("z-tie", "missing"), mappingRecord("a-tie", "missing")];
+  records[1]!.updatedAt = AT(3); records[2]!.updatedAt = AT(3);
+  const legacy = ["legacy-z", "legacy-a"].map(id => ({ ...mappingEntry(id, AT(5)), ref: { providerId: "legacy", recordId: id } }));
+  integration.mappingCatalog.list = vi.fn(async () => ({ status: "listed" as const, entries: legacy, failures: [] }));
+  integration.mappingCatalog.resolve = vi.fn(async () => ({ status: "not-found" as const }));
+  const canonical = { descriptor: { id: "mapping-filesystem", label: "Canonical" }, store: { snapshot: async () => ({ mutationToken: "token", records }) } };
+  const fallback = { descriptor: { id: "legacy", label: "Legacy" }, store: {} };
+  const first = createWorkspaceSummary({ ...integration, mappingProviders: [canonical, fallback] });
+  expect(value((await first.attention()).mappings).map(item => item.id)).toEqual(["a-tie", "z-tie", "old", "legacy-z", "legacy-a"]);
+  const second = createWorkspaceSummary({ ...integration, mappingProviders: [fallback, canonical] });
+  expect(value((await second.attention()).mappings).map(item => item.id)).toEqual(["legacy-z", "legacy-a", "a-tie", "z-tie", "old"]);
+  expect(records.map(record => record.id)).toEqual(["old", "z-tie", "a-tie"]);
+});
+
+describe("Content summary coherent inventory", () => {
+ it("uses one readAll per refresh and keeps exact counts, labels and completeness diagnostics",async()=>{
+  const model=contentModel("journal",AT(1)),entries=[contentEntry("complete",AT(2),{heading:"Title",count:2}),contentEntry("incomplete",AT(3),{})];
+  const {integration,scanEntries}=createFakeIntegration({models:[model]});const readAll=vi.fn(async()=>({providerId:"content-filesystem",mutationToken:8,models:[model],entries}));Object.assign(integration.contentProvider.store,{readAll});const list=vi.spyOn(integration.contentProvider.store,"listModels");
+  const summary=createWorkspaceSummary(integration);expect(value((await summary.counts()).content)).toEqual({models:1,entries:2,incompleteEntries:1});const attention=value((await summary.attention()).content);expect(attention).toHaveLength(1);expect(attention[0]).toMatchObject({id:"incomplete",kind:"incomplete-entry"});expect((await summary.recent()).records.some(r=>r.id==="complete"&&r.label==="Title")).toBe(true);
+  expect(readAll).toHaveBeenCalledTimes(1);expect(list).not.toHaveBeenCalled();expect(scanEntries).not.toHaveBeenCalled();summary.refresh();await summary.counts();expect(readAll).toHaveBeenCalledTimes(2);
+ });
+ it.each(["provider","token","duplicate-model","duplicate-entry","future","semantic","failure","null","undefined"])("keeps %s inventory unavailable without per-model fallback",async(problem)=>{
+  const model=contentModel("journal",AT(1)),entry=contentEntry("entry",AT(2),{heading:"Title"});const captured={providerId:"content-filesystem",mutationToken:8,models:[model],entries:[entry]};
+  if(problem==="provider")captured.providerId="foreign";if(problem==="token")captured.mutationToken=-1;if(problem==="duplicate-model")captured.models.push(model);if(problem==="duplicate-entry")captured.entries.push(entry);if(problem==="future")model.document.schemaVersion=999 as never;if(problem==="semantic")entry.values.count="wrong";
+  const {integration,scanEntries}=createFakeIntegration({models:[model]});Object.assign(integration.contentProvider.store,{readAll:async()=>{if(problem==="failure")throw new Error("offline");if(problem==="null")return null;if(problem==="undefined")return undefined;return captured;}});const list=vi.spyOn(integration.contentProvider.store,"listModels");expect((await createWorkspaceSummary(integration).counts()).content.status).toBe("unavailable");expect(list).not.toHaveBeenCalled();expect(scanEntries).not.toHaveBeenCalled();
+ });
+ it("does not repopulate an invalidated cache when an earlier read settles late",async()=>{
+  const model=contentModel("journal",AT(1));const old={providerId:"content-filesystem",mutationToken:1,models:[model],entries:[]},fresh={...old,mutationToken:2,entries:[contentEntry("new",AT(2),{heading:"New"})]};let release!:(snapshot:typeof fresh)=>void;const pending=new Promise<typeof fresh>(r=>{release=r;});let changed!:(channel?:string)=>void;
+  const {integration}=createFakeIntegration();integration.subscribeChanges=listener=>{changed=listener;return()=>{};};const readAll=vi.fn().mockImplementationOnce(()=>pending).mockResolvedValue(fresh);Object.assign(integration.contentProvider.store,{readAll});const summary=createWorkspaceSummary(integration);const first=summary.counts();await vi.waitFor(()=>expect(readAll).toHaveBeenCalledTimes(1));changed("content");expect(value((await summary.counts()).content).entries).toBe(1);release(old);await first;expect(value((await summary.counts()).content).entries).toBe(1);expect(readAll).toHaveBeenCalledTimes(2);
+ });
+});
+
+it("snapshot summary retains exact valid-inventory fallback diagnostics/order",async()=>{
+ const model=contentModel("journal",AT(1)),entries=[contentEntry("complete",AT(2),{heading:"Title"}),contentEntry("incomplete",AT(3),{})];
+ const diagnostics=entries.flatMap(entry=>diagnoseContentEntryCompleteness(model,entry));
+ const make=()=>createFakeIntegration({models:[model],entries:{journal:{count:2,entries:[entries[1]!,entries[0]!],diagnostics}}});
+ const legacy=make(),batched=make();Object.assign(batched.integration.contentProvider.store,{readAll:async()=>({providerId:"content-filesystem",mutationToken:2,models:[model],entries})});
+ const expected=createWorkspaceSummary(legacy.integration),actual=createWorkspaceSummary(batched.integration);
+ expect((await actual.counts()).content).toEqual((await expected.counts()).content);expect((await actual.attention()).content).toEqual((await expected.attention()).content);expect((await actual.recent()).records).toEqual((await expected.recent()).records);
+});
+
+it("retries failed Content inventory only after refresh, with no scan fallback",async()=>{
+ const {integration,scanEntries}=createFakeIntegration();const readAll=vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue({providerId:"content-filesystem",mutationToken:1,models:[],entries:[]});Object.assign(integration.contentProvider.store,{readAll});const summary=createWorkspaceSummary(integration);
+ expect((await summary.counts()).content).toEqual({status:"unavailable",error:"offline"});expect((await summary.attention()).content).toEqual({status:"unavailable",error:"offline"});expect(readAll).toHaveBeenCalledTimes(1);expect(scanEntries).not.toHaveBeenCalled();summary.refresh();expect((await summary.counts()).content.status).toBe("ok");expect(readAll).toHaveBeenCalledTimes(2);
+});
+
+it("keeps native incomplete and missing-provider graph diagnostics non-fatal", async () => {
+ const model = contentModel("journal", AT(1));
+ model.document.fields.push({id: "related", key: "related", label: "Related", kind: "reference", required: false, target: {providerId: "external", recordId: "journal"}});
+ const entry = contentEntry("incomplete", AT(2), {related: {providerId: "external", modelId: "journal", recordId: "external-entry"}});
+ const {integration} = createFakeIntegration({models: [model]});
+ Object.assign(integration.contentProvider.store, {readAll: async () => ({providerId: "content-filesystem", mutationToken: 1, models: [model], entries: [entry]})});
+ const summary = createWorkspaceSummary(integration);
+ expect((await summary.counts()).content).toMatchObject({status: "ok", value: {models: 1, entries: 1}});
+ expect(value((await summary.attention()).content).length).toBeGreaterThan(0);
 });

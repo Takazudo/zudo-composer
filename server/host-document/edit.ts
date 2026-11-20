@@ -12,7 +12,7 @@ import { withMutationBarrier } from "../../src/shared/node-fs";
 import { workspaceDomainRoots } from "../../src/shared/workspace-scope";
 import { compileSiteProject } from "../../src/site-project/compiler";
 import { validateSiteProject } from "../../src/site-project/model/validation";
-import { localOwnerReason, mappedSlot } from "./capabilities";
+import { localOwnerReason, mappedSlot, removalReason } from "./capabilities";
 import type { JsonObject } from "../../src/composer/model/types";
 
 const name = z.string().min(1).max(256);
@@ -45,6 +45,7 @@ async function editHostDocumentLeased(options: CaptureAuthoringWorkspaceOptions,
     if (!owner) throw new EditError("unsupported-scope", "This shared child has no direct local page placement. Select its placed section.");
     const ownershipReason = localOwnerReason(snapshot.project, owner);
     if (ownershipReason) throw new EditError("unsupported-scope", ownershipReason);
+    if (request.change.kind === "remove") { const reason = removalReason(snapshot.project, resolved, options.pack.manifest); if (reason) throw new EditError("unsupported-scope", reason); }
     const state = await captureHost({ config: options.composerConfig, pack: options.pack });
     const record = state.records.compositions.find(value => value.id === owner.recordId);
     if (!record || record.document.binding || record.document.publication?.kind === "global-template") throw new EditError("unsupported-scope", "Edit linked/global arrangement through its explicit source editor.");

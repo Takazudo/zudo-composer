@@ -474,6 +474,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   const guardedMappingProviders = mappingProviders.map((provider) => ({ descriptor: provider.descriptor, store: {
     list: async () => { await ensureReady(); return provider.store.list(); },
     get: async (id: string) => { await ensureReady(); return provider.store.get(id); },
+    ...(provider.store.snapshot ? { snapshot: async () => { await ensureReady(); return provider.store.snapshot!(); } } : {}),
   } }));
   const contentCatalog = createContentCatalog(guardedContentProviders);
   const rawMappingCompositionCatalog = () => createMappingCompositionCatalog(guardedCompositionProviders());

@@ -28,7 +28,7 @@ export interface NativePublishedContent {
   entries: readonly ContentEntryRecord[];
 }
 export interface NativeEditorialOptions {
-  store: Pick<TransactionalContentStore, "provider" | "readAll" | "editEntry" | "listRevisions" | "readRevision" | "readReceipt">;
+  store: Pick<TransactionalContentStore, "provider" | "readAll" | "editEntry" | "listRevisions" | "readRevision" | "readReceipt"> & Partial<Pick<TransactionalContentStore, "validateEntryValues">>;
   readPublished(): Promise<NativePublishedContent | null>;
   /** A submission still on its way to activation, when the host tracks one. */
   readSubmission?(): Promise<EditorialPublicationStatus["submission"]>;
@@ -173,6 +173,8 @@ export function createNativeContentEditorial(options: NativeEditorialOptions): C
       const found = locate(snapshot, request.entry);
       if (!found) throw new EditorialError("not-found", "Entry is unavailable.");
       const values = candidate(found.entry, found.model, request);
+      const issues = await store.validateEntryValues?.({ ...found.entry, values }, found.model, found.entry);
+      if (issues?.length) throw new EditorialError("invalid-value", "The host Content policy refused this change.", issues.map(issue => ({ fieldId: issue.fieldId, code: "invalid-value", message: issue.message })));
       return structuredClone({ entry: request.entry, expected: request.expected, values, differences: editorialDifferences(found.model.document.fields, found.entry.values, values) });
     },
     async saveFields(request) {

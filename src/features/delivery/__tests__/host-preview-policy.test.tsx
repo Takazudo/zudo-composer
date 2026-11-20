@@ -1,0 +1,62 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
+import { afterEach, expect, it, vi } from "vitest";
+vi.mock("virtual:composer-file-provider-config", () => ({ fileProviderConfig: { nativeEditing: { hostDocument: true } } }));
+import { hostDocumentPreviewConfigured, hostPreviewBoundary } from "../host-preview-policy";
+import { HostPreviewBoundary } from "../host-preview-unavailable";
+import { Rail } from "../../../app/rail";
+import { ReleaseRoute } from "../../release/release-route";
+import { createReleaseController } from "../../release/controller";
+import type { ProductionProviderIntegration } from "../../../app/provider-integration";
+import { project } from "../../../site-project/compiler/__tests__/fixtures";
+afterEach(cleanup);
+it("detects trusted host configuration on legacy visitor paths without an authoring-route whitelist", () => {
+  expect(hostDocumentPreviewConfigured).toBe(true);
+  for (const path of ["/site", "/site/", "/site/notes/example"]) expect(hostPreviewBoundary(path, true)).toBe("activated");
+  for (const path of ["/website-preview", "/website-preview/", "/website-preview/lessons"]) expect(hostPreviewBoundary(path, true)).toBe("working");
+  for (const path of ["/composer", "/sitemap", "/site-other", "/website-previewing"]) expect(hostPreviewBoundary(path, true)).toBeNull();
+  for (const path of ["/site", "/website-preview", "/site/about"]) expect(hostPreviewBoundary(path, false)).toBeNull();
+});
+it("uses the saved host page destination while preserving the rail's flush head start", () => {
+  const flush = vi.fn();
+  render(<Rail path="/" collapsed={false} onToggleCollapsed={vi.fn()} onBeforeNewTab={flush} />);
+  const link = screen.getByRole("link", { name: "Saved host page preview" });
+  expect(link.getAttribute("href")).toBe("/composer?native=1");
+  expect(link.getAttribute("target")).toBe("_blank");
+  fireEvent.pointerDown(link); fireEvent.keyDown(link, { key: "Enter" });
+  expect(flush).toHaveBeenCalledTimes(2);
+  expect(flush).toHaveBeenLastCalledWith(expect.objectContaining({ id: "site", href: "/composer?native=1" }));
+});
+it("keeps immutable release preview explicitly unavailable instead of relabeling working state", () => {
+  const base = createReleaseController({ workspace: { id: "proof" }, subscribeChanges: () => () => {} } as unknown as ProductionProviderIntegration, { available: false, request: vi.fn(), subscribe: () => () => {}, dispose: () => {} });
+  const state = { ...base.getSnapshot(), working: project() }, flush = vi.fn();
+  render(<ReleaseRoute controller={{ ...base, getSnapshot: () => state }} href={() => null} onBeforeNewTab={flush} />);
+  const link = screen.getByRole("link", { name: "Saved host page preview" });
+  expect(link.getAttribute("href")).toBe("/composer?native=1");
+  fireEvent.pointerDown(link); expect(flush).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("link", { name: /Activated local website/ })).toBeNull();
+  expect(screen.getByText(/Activated release preview unavailable:/)).toBeTruthy();
+  base.dispose();
+});
+it("does not offer current workspace as the activated-release boundary's output", () => {
+  const view = render(<HostPreviewBoundary kind="activated" />);
+  expect(screen.getByRole("heading").textContent).toBe("Activated release preview unavailable");
+  expect(screen.getByRole("link").getAttribute("href")).toBe("/review");
+  expect(view.container.querySelector('a[href="/composer?native=1"]')).toBeNull();
+  view.rerender(<HostPreviewBoundary kind="working" />);
+  expect(screen.getByRole("link", { name: "Open saved host page preview" }).getAttribute("href")).toBe("/composer?native=1");
+});
+it("links the exact active Sitemap page and refuses to guess a route family", async () => {
+  const { HostPageAuthoringLink } = await import("../../sitemapper/ui/inspector/host-page-authoring-link");
+  const { parseIntent } = await import("../../../app/route-intents");
+  const flush = vi.fn(), sitemap = { providerId: "sitemaps-filesystem", recordId: "main", active: true };
+  const routeInfo = { status: "ready" as const, derivedRouteCount: 1, samplePath: "/lessons", diagnostics: [] };
+  const view = render(<HostPageAuthoringLink sitemap={sitemap} pageId="lessons" routeInfo={routeInfo} flush={flush} />);
+  const link = screen.getByRole("link", { name: "Open page authoring" });
+  const url = new URL(link.getAttribute("href")!, window.location.origin);
+  expect(parseIntent(url)).toEqual({ status: "matched", intent: { route: "composer", mode: "page", sitemapProviderId: "sitemaps-filesystem", sitemapId: "main", pageId: "lessons", visitorUrl: "/lessons" } });
+  fireEvent.click(link); expect(flush).toHaveBeenCalledOnce();
+  view.rerender(<HostPageAuthoringLink sitemap={sitemap} pageId="notes" routeInfo={{ ...routeInfo, derivedRouteCount: 2 }} />);
+  expect(screen.queryByRole("link")).toBeNull(); expect(screen.getByText(/does not guess a Mapping entry/)).toBeTruthy();
+  view.rerender(<HostPageAuthoringLink sitemap={{ ...sitemap, active: false }} pageId="lessons" routeInfo={routeInfo} />);
+  expect(screen.queryByRole("link")).toBeNull(); expect(screen.getByText(/requires the active Sitemap/)).toBeTruthy();
+});

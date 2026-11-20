@@ -686,6 +686,8 @@ interface ReleaseToolchain {
     /** The host's dependency spec for the pack's package, or `"self"`. */
     packSource: string;
     installedPackDigest: string;
+    /** Present only when this release is bound to a trusted host Content policy. */
+    contentValidation?: string;
     contractDigest: string;
 }
 interface StagedRelease {
@@ -728,6 +730,12 @@ declare const APP_ROOT: string;
 declare function fsModuleId(absolutePath: string): string;
 declare function appModuleId(relativePath: string): string;
 declare function resolveWorkspaceRoot(configured: string | undefined): string;
+
+interface ContentValidationConfig {
+    module: string;
+    id: string;
+    version: string;
+}
 
 /**
  * Every setting a host may declare. Path settings are relative to the host
@@ -825,7 +833,16 @@ interface NativeEditingConfig {
 }
 
 type AssistantEffort = "low" | "medium" | "high";
+interface AssistantContentFieldPolicy {
+    providerId: string;
+    modelId: string;
+    fieldIds: readonly string[];
+    /** Trusted editing constraints for declared fields; guidance never grants permission. */
+    fieldInstructions?: Readonly<Record<string, string>>;
+}
 interface AssistantCommonConfig {
+    /** Trusted Content field IDs; omitted retains the standalone Article defaults. */
+    contentFields?: readonly AssistantContentFieldPolicy[];
     /** Default display name; a site-scoped stored name may replace it. */
     name: string;
     /** `propose` permits conversation, drafts and review but never Apply. */
@@ -897,6 +914,7 @@ interface ComposerPaths {
 interface ResolvedComposerConfig {
     authoringAuthority: "source" | "workspace" | undefined;
     hostDocument: HostDocumentConfig | undefined;
+    contentValidation: ContentValidationConfig | undefined;
     nativeEditing: NativeEditingConfig | undefined;
     assistant: AssistantConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */

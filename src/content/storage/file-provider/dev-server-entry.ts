@@ -1,10 +1,11 @@
+import type { ContentValidationPolicy } from "../../validation";
 // Loaded only by the active Vite development server. Keeping this Node-side
 // import behind `ssrLoadModule` prevents filesystem modules entering clients.
 //
 // The plugin graph cannot use `instanceof`, so the domain-error predicate is
 // exported from here rather than reimplemented as a duck-type check.
 import { ContentPersistenceError } from "../../library";
-import { createContentAiService, createNativeContentEditorial, EditorialError, runContentAiOperation, type ContentAiInference, type ContentAiProposalStore, type ContentAiProposer, type ContentAiWireResult } from "../../editorial";
+import { createContentAiService, createContentAiStager, createNativeContentEditorial, EditorialError, runContentAiOperation, type ContentAiFieldPolicy, type ContentAiInference, type ContentAiProposalStore, type ContentAiProposer, type ContentAiWireResult } from "../../editorial";
 import { openContentAiProposalStore } from "../filesystem/content-ai-proposals";
 import type { ContentEntryRecord } from "../../model";
 import { createFilesystemContentStore, type FilesystemContentStore } from "../filesystem";
@@ -19,8 +20,8 @@ const CONTENT_EDITOR_PROVENANCE = { actor: { id: "local-owner" }, source: "conte
  * `workspace-v1-` prefix is never spelled a second time in the Vite config
  * graph, which cannot import TypeScript.
  */
-export function createWorkspaceScopedContentStore(contentRoot: string, workspaceId: string) {
-  return createFilesystemContentStore({ contentRoot: workspaceScopedRoot(contentRoot, workspaceId), revisionProvenance: CONTENT_EDITOR_PROVENANCE });
+export function createWorkspaceScopedContentStore(contentRoot: string, workspaceId: string, validationPolicy?: ContentValidationPolicy) {
+  return createFilesystemContentStore({ contentRoot: workspaceScopedRoot(contentRoot, workspaceId), revisionProvenance: CONTENT_EDITOR_PROVENANCE, validationPolicy });
 }
 export { CONTENT_FILE_PROVIDER_OPERATIONS } from "./types";
 
@@ -83,6 +84,7 @@ export interface NativeContentAiHost {
   provider: { label: string; proposer: ContentAiProposer; inference(): Promise<ContentAiInference> };
   canApply: boolean;
   proposalRoot: string;
+  contentFields?: readonly ContentAiFieldPolicy[];
 }
 
 /**
@@ -105,17 +107,27 @@ export async function runContentAi(
       : { configured: false },
     async service() {
       if (!configured) throw new EditorialError("configuration-required", "Content-AI needs an Assistant provider in zudo-composer.config.ts.");
-      let proposals = proposalStores.get(configured.proposalRoot);
-      if (!proposals) proposalStores.set(configured.proposalRoot, proposals = openContentAiProposalStore(configured.proposalRoot));
-      return createContentAiService({
-        boundary: (provenance) => createNativeContentEditorial({ store, provenance, readPublished: () => readPublishedFrom(store, readActivated) }),
-        actor: CONTENT_EDITOR_PROVENANCE.actor,
-        owner: `native:${store.root}`,
-        proposer: configured.provider.proposer,
-        store: await proposals,
-        createId: () => globalThis.crypto.randomUUID(),
-        canApply: configured.canApply,
-      });
+      return createNativeContentAiService(store, readActivated, configured);
     },
   }, operation, payload);
+}
+
+async function nativeAiOptions(store: FilesystemContentStore, readActivated: ActivatedReader, configured: NativeContentAiHost) {
+  let proposals = proposalStores.get(configured.proposalRoot);
+  if (!proposals) proposalStores.set(configured.proposalRoot, proposals = openContentAiProposalStore(configured.proposalRoot));
+  return {
+    boundary: (provenance: Parameters<typeof createNativeContentEditorial>[0]["provenance"]) => createNativeContentEditorial({ store, provenance, readPublished: () => readPublishedFrom(store, readActivated) }),
+    actor: CONTENT_EDITOR_PROVENANCE.actor, owner: `native:${store.root}`, proposer: configured.provider.proposer,
+    store: await proposals, createId: () => globalThis.crypto.randomUUID(), canApply: configured.canApply,
+    contentFields: configured.contentFields,
+    validationIdentity: () => store.contentValidationIdentity(),
+  };
+}
+
+/** Internal adapters shared by the Content editor and host-reviewed Assistant. */
+export async function createNativeContentAiService(store: FilesystemContentStore, readActivated: ActivatedReader, configured: NativeContentAiHost) {
+  return createContentAiService(await nativeAiOptions(store, readActivated, configured));
+}
+export async function createNativeContentAiStager(store: FilesystemContentStore, readActivated: ActivatedReader, configured: NativeContentAiHost) {
+  return createContentAiStager({ ...await nativeAiOptions(store, readActivated, configured), providerLabel: configured.provider.label });
 }

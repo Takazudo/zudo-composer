@@ -2,7 +2,7 @@ import { a as validateContentEntryRecord, c as cloneJson, d as HostedContentErro
 import { t as canonicalSerialize } from "./chunks/canonical-CF-xy2oG.mjs";
 import { a as hostedReadyMessage, c as hostedRenderSchema, d as matchesHostedPreviewBinding, f as readHostedPreviewRequest, h as COMPOSER_PREVIEW_PROTOCOL_VERSION, i as hostedPreviewResponseSchema, l as hostedRenderedMessage, m as COMPOSER_PREVIEW_CHANNEL, n as hostedDocumentErrorSchema, o as hostedReadySchema, p as readHostedPreviewResponse, r as hostedPreviewBindingSchema, s as hostedRenderMessage, t as hostedDocumentErrorMessage, u as hostedRenderedSchema } from "./chunks/preview-D3orPTyN.mjs";
 import { t as EditorialError } from "./chunks/types-nfgY3xip.mjs";
-import { a as createMemoryContentAiProposalStore, i as createFakeContentAiProposer, n as contentAiCandidateDigest, r as createContentAiService, t as CONTENT_AI_FIELD_KEYS } from "./chunks/ai-Zzw-Xxvt.mjs";
+import { a as createMemoryContentAiProposalStore, i as createFakeContentAiProposer, n as contentAiCandidateDigest, r as createContentAiService, t as CONTENT_AI_FIELD_KEYS } from "./chunks/ai-fVpyFh6B.mjs";
 import { parser } from "@lezer/markdown";
 import { ContractValidationError, RESERVED_PERSISTED_KEYS, componentPackManifestSchema, validateFieldValue } from "@zudo-composer/component-contract";
 //#region src/composer/model/types.ts

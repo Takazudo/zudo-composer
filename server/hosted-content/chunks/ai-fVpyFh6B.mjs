@@ -22,9 +22,135 @@ async function contentAiCandidateDigest(value) {
 	const bytes = new TextEncoder().encode(canonicalEditorialJson({
 		entry: value.entry,
 		expected: value.expected,
-		candidate: value.candidate
+		candidate: value.candidate,
+		...value.validationPolicy === void 0 ? {} : { validationPolicy: value.validationPolicy }
 	}));
 	return [...new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function contentAiScope(options, ai, entry) {
+	const policy = options.contentFields?.find((item) => item.providerId === entry.providerId && item.modelId === entry.modelId);
+	const fields = (await ai.readFields({ entry })).filter((field) => CONTENT_AI_KINDS.has(field.kind) && (options.contentFields === void 0 ? CONTENT_AI_FIELD_KEYS.includes(field.key) : policy?.fieldIds.includes(field.id)));
+	if (!fields.length) throw new EditorialError("forbidden", "No editable text fields are permitted by this host's Content-AI policy.");
+	return fields;
+}
+async function sha256(value) {
+	const bytes = new TextEncoder().encode(canonicalEditorialJson(value));
+	return [...new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function preparationIdentity(options, request, provider) {
+	if (typeof request.summary !== "string" || request.summary.length > 1e3 || !request.values || typeof request.values !== "object" || Array.isArray(request.values) || Object.keys(request.values).length > 100) throw new EditorialError("invalid-request", "Malformed bounded Content proposal.");
+	if (request.preparationKey !== void 0 && (typeof request.preparationKey !== "string" || !request.preparationKey.trim() || request.preparationKey.length > 512)) throw new EditorialError("invalid-request", "Malformed proposal preparation key.");
+	return {
+		keyDigest: request.preparationKey === void 0 ? void 0 : await sha256({
+			owner: options.owner,
+			actorId: options.actor?.id ?? null,
+			key: request.preparationKey
+		}),
+		payloadDigest: await sha256({
+			entry: request.entry,
+			expected: request.expected,
+			values: request.values,
+			summary: request.summary,
+			provider
+		})
+	};
+}
+async function readPreparedProposal(options, identity, guard) {
+	const { keyDigest, payloadDigest } = identity;
+	guard.signal?.throwIfAborted();
+	if (!keyDigest) return null;
+	const id = `stage-${keyDigest}`;
+	const record = await options.store.read(id);
+	if (!record) return null;
+	if (record.owner !== options.owner || record.actorId !== (options.actor?.id ?? null) || record.proposal.id !== id || record.preparation?.keyDigest !== keyDigest || record.preparation.payloadDigest !== payloadDigest) throw new EditorialError("operation-key-reuse", "This preparation key belongs to another proposal.");
+	guard.signal?.throwIfAborted();
+	await guard.beforePersist?.();
+	guard.signal?.throwIfAborted();
+	return {
+		status: "proposed",
+		proposal: structuredClone(record.proposal)
+	};
+}
+async function stageValidatedContentAi(options, raw, provider, guard) {
+	const request = structuredClone(raw);
+	guard.signal?.throwIfAborted();
+	const identity = await preparationIdentity(options, request, provider);
+	const { keyDigest, payloadDigest } = identity;
+	const id = keyDigest ? `stage-${keyDigest}` : options.createId();
+	const replay = () => readPreparedProposal(options, identity, guard);
+	const prior = await replay();
+	if (prior) return prior;
+	const ai = options.boundary({
+		actor: options.actor,
+		source: "content-ai"
+	});
+	const fields = await contentAiScope(options, ai, request.entry);
+	for (const [id, value] of Object.entries(request.values)) {
+		const field = fields.find((field) => field.id === id);
+		if (!field) throw new EditorialError("forbidden", `Content-AI may not write "${id}".`);
+		if (typeof value !== "string" || value.length > MAX_VALUE) throw new EditorialError("invalid-value", `The proposed ${field.label} is not usable text.`);
+	}
+	if (!Object.keys(request.values).length) return {
+		status: "refused",
+		message: "The model proposed no change."
+	};
+	const validationPolicy = await options.validationIdentity?.();
+	const validation = await ai.validateFields({
+		entry: request.entry,
+		expected: request.expected,
+		values: request.values,
+		clear: []
+	});
+	if (!validation.differences.length) return {
+		status: "refused",
+		message: "The proposal matches the saved values; there is nothing to apply."
+	};
+	const createdAt = options.now?.() ?? /* @__PURE__ */ new Date();
+	const proposal = {
+		id,
+		entry: request.entry,
+		expected: request.expected,
+		summary: request.summary,
+		values: request.values,
+		differences: validation.differences,
+		candidate: validation.values,
+		...validationPolicy === void 0 ? {} : { validationPolicy },
+		candidateDigest: await contentAiCandidateDigest({
+			entry: request.entry,
+			expected: request.expected,
+			candidate: validation.values,
+			validationPolicy
+		}),
+		operationKey: `content-ai:${id}`,
+		provider,
+		createdAt: createdAt.toISOString(),
+		expiresAt: new Date(createdAt.getTime() + (options.ttlMs ?? DAY_MS)).toISOString()
+	};
+	guard.signal?.throwIfAborted();
+	await guard.beforePersist?.();
+	if (await options.validationIdentity?.() !== validationPolicy) throw new EditorialError("revision-conflict", "Content validation policy changed during proposal review.");
+	guard.signal?.throwIfAborted();
+	try {
+		await options.store.create({
+			schemaVersion: 1,
+			owner: options.owner,
+			actorId: options.actor?.id ?? null,
+			proposal,
+			...keyDigest ? { preparation: {
+				keyDigest,
+				payloadDigest
+			} } : {}
+		});
+	} catch (error) {
+		const recovered = await replay();
+		if (recovered) return recovered;
+		throw error;
+	}
+	guard.signal?.throwIfAborted();
+	return {
+		status: "proposed",
+		proposal: structuredClone(proposal)
+	};
 }
 function createContentAiService(options) {
 	const ai = options.boundary({
@@ -32,11 +158,8 @@ function createContentAiService(options) {
 		source: "content-ai"
 	});
 	const now = () => options.now?.() ?? /* @__PURE__ */ new Date();
-	const ttl = options.ttlMs ?? DAY_MS;
 	async function scope(entry) {
-		const fields = (await ai.readFields({ entry })).filter((field) => CONTENT_AI_FIELD_KEYS.includes(field.key) && CONTENT_AI_KINDS.has(field.kind));
-		if (!fields.length) throw new EditorialError("forbidden", "Content-AI edits only an Article's title and body; this Entry has neither.");
-		return fields;
+		return contentAiScope(options, ai, entry);
 	}
 	async function stored(proposalId) {
 		if (typeof proposalId !== "string" || !PROPOSAL_ID.test(proposalId)) throw new EditorialError("invalid-request", "Malformed proposal id.");
@@ -52,6 +175,7 @@ function createContentAiService(options) {
 			if (!instruction || instruction.length > MAX_INSTRUCTION) throw new EditorialError("invalid-request", `Describe the change in 1 to ${MAX_INSTRUCTION} characters.`);
 			const proposer = options.proposer;
 			if (!proposer) throw new EditorialError("unavailable", "No AI provider is available on this host. Saved Content, history and committed AI operations stay readable.");
+			request.signal?.throwIfAborted();
 			const fields = await scope(request.entry);
 			const pinned = await ai.readEntry({
 				entry: request.entry,
@@ -67,6 +191,7 @@ function createContentAiService(options) {
 				})),
 				signal: request.signal ?? new AbortController().signal
 			});
+			request.signal?.throwIfAborted();
 			if (output.kind === "refusal") return {
 				status: "refused",
 				message: output.message || "The model declined this change."
@@ -78,50 +203,12 @@ function createContentAiService(options) {
 				if (typeof value !== "string" || value.length > MAX_VALUE) throw new EditorialError("invalid-value", `The proposed ${field.label} is not usable text.`);
 				values[field.id] = value;
 			}
-			if (!Object.keys(values).length) return {
-				status: "refused",
-				message: "The model proposed no change."
-			};
-			const validation = await ai.validateFields({
+			return stageValidatedContentAi(options, {
 				entry: request.entry,
 				expected: pinned.expected,
 				values,
-				clear: []
-			});
-			if (!validation.differences.length) return {
-				status: "refused",
-				message: "The proposal matches the saved values; there is nothing to apply."
-			};
-			const id = options.createId();
-			const createdAt = now();
-			const proposal = {
-				id,
-				entry: structuredClone(request.entry),
-				expected: pinned.expected,
-				summary: output.summary,
-				values,
-				differences: validation.differences,
-				candidate: validation.values,
-				candidateDigest: await contentAiCandidateDigest({
-					entry: request.entry,
-					expected: pinned.expected,
-					candidate: validation.values
-				}),
-				operationKey: `content-ai:${id}`,
-				provider: proposer.label,
-				createdAt: createdAt.toISOString(),
-				expiresAt: new Date(createdAt.getTime() + ttl).toISOString()
-			};
-			await options.store.create({
-				schemaVersion: 1,
-				owner: options.owner,
-				actorId: options.actor?.id ?? null,
-				proposal
-			});
-			return {
-				status: "proposed",
-				proposal: structuredClone(proposal)
-			};
+				summary: output.summary
+			}, proposer.label, { signal: request.signal });
 		},
 		async read(request) {
 			const proposal = await stored(request.proposalId);
@@ -149,9 +236,12 @@ function createContentAiService(options) {
 				receipt: committed,
 				recovered: true
 			};
+			if (await options.validationIdentity?.() !== proposal.validationPolicy) throw new EditorialError("revision-conflict", "Content validation policy changed; prepare and review a new proposal.");
 			if (options.canApply === false) throw new EditorialError("forbidden", "This host permits AI proposals but not Apply.");
 			if (now().getTime() > Date.parse(proposal.expiresAt)) throw new EditorialError("invalid-request", "This proposal expired before it was applied; prepare it again.");
 			if (request.renderedCandidate !== proposal.candidateDigest) throw new EditorialError("invalid-request", "Apply needs a successful render of this exact candidate first.");
+			const fields = await scope(proposal.entry);
+			for (const id of Object.keys(proposal.values)) if (!fields.some((field) => field.id === id)) throw new EditorialError("forbidden", "This proposal includes a field no longer permitted by the host policy.");
 			return {
 				receipt: await ai.saveFields({
 					entry: proposal.entry,
@@ -222,14 +312,13 @@ function createFakeContentAiProposer() {
 				message: "The fake provider declines instructions that ask it to refuse."
 			};
 			const values = {};
-			for (const field of fields) {
-				if (field.key === "title") values.title = `${field.value} — ${instruction}`.slice(0, 200);
-				if (field.key === "body") values.body = `${field.value}\n\n## Revision note\n\n${instruction}`;
-			}
+			for (const field of fields) if (field.key === "title") values.title = `${field.value} — ${instruction}`.slice(0, 200);
+			else if (field.key === "body") values.body = `${field.value}\n\n## Revision note\n\n${instruction}`;
+			else values[field.key] = `${field.value} — ${instruction}`.slice(0, MAX_VALUE);
 			return {
 				kind: "proposal",
 				values,
-				summary: `Applied the instruction "${instruction}" to ${fields.map((field) => field.label).join(" and ")}.`
+				summary: `Applied the instruction "${instruction}" to ${fields.map((field) => field.label).join(" and ")}.`.slice(0, 1e3)
 			};
 		}
 	};

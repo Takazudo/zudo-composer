@@ -1,8 +1,9 @@
+import { ContentBooleanControl } from "./boolean-control";
 import { useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";
 import type { JsonValue } from "@zudo-composer/component-contract";
 import type { ContentValueSchema } from "../../content/model/types";
-import { Input, Select, Switch, Textarea } from "../../components/ui/form-controls";
+import { Input, Select, Textarea } from "../../components/ui/form-controls";
 
 export interface ContentScalarControlProps {
   schema: ContentValueSchema;
@@ -27,7 +28,7 @@ const text = (value: JsonValue | undefined) => typeof value === "string" || type
 export function ContentScalarControl({ schema, value, label, required, maxLength, disabled, emptyChoiceLabel = "Choose an option", emptyChoiceDisabled, retainIncompleteNumber, allowEmptyNumber = true, onIncompleteNumber, invalid, describedBy, onChange }: ContentScalarControlProps): JSX.Element {
   const common = { "aria-label": label, required, disabled, "aria-invalid": invalid ? "true" as const : undefined, "aria-describedby": describedBy };
   if (schema.kind === "choice") return <Select {...common} value={text(value)} onChange={(event) => onChange(event.currentTarget.value || undefined)}><option value="" disabled={emptyChoiceDisabled}>{emptyChoiceLabel}</option>{schema.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select>;
-  if (schema.kind === "boolean") return <Switch label={label ?? "Boolean"} aria-label={label} checked={value === true} disabled={disabled} onCheckedChange={onChange} />;
+  if (schema.kind === "boolean") return <ContentBooleanControl label={label} value={value} required={required} disabled={disabled} describedBy={describedBy} onChange={onChange} />;
   if (schema.kind === "long-text") return <Textarea {...common} rows={5} maxLength={maxLength} value={text(value)} onInput={(event) => onChange(event.currentTarget.value)} />;
   if (schema.kind === "number" && retainIncompleteNumber) return <RetainedNumberControl value={value} label={label} required={required} disabled={disabled} invalid={invalid} describedBy={describedBy} allowEmpty={allowEmptyNumber} onIncomplete={onIncompleteNumber} onChange={onChange} />;
   if (schema.kind === "number") return <Input {...common} type="number" value={text(value)} onInput={(event) => onChange(event.currentTarget.value === "" ? undefined : event.currentTarget.valueAsNumber)} />;

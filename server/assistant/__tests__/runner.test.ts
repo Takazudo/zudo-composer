@@ -11,9 +11,16 @@ import { captureHost } from "../../edit/inspect";
 import { defineSite, node } from "../../../src/site-project/authoring";
 import { createFilesystemAssetStore } from "../../../src/assets/storage/filesystem/store";
 import { openAssistantStore, type RunEvent } from "../store";
+import type { RunnerOptions } from "../runner";
+import type { HostReviewCard, InspectedOwner } from "../../../src/shared/host-review-types";
 import { createAssistantRunner } from "../runner";
 import { ProviderError, type ModelProvider, type ProviderRequest, type ProviderTurn } from "../provider";
 import { parseAssistant } from "../../config/assistant";
+import { resolveHostOwnership } from "../../host-document/ownership";
+import { hostDocumentTargets } from "../../host-document/render";
+import { compileSiteProject } from "../../../src/site-project/compiler";
+import { createComponentCatalog } from "../../../src/composer/model/types";
+import type { AuthoringWorkspaceSnapshot } from "../../authoring-workspace/capture";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -27,7 +34,7 @@ function fakeProvider(script: Script, status: ReturnType<ModelProvider["status"]
 const text = (value: string): ProviderTurn => ({ content: [{ type: "text", text: value }], stopReason: "end_turn" });
 const tool = (name: string, input: unknown, id = `tool-${name}-${Math.random().toString(16).slice(2)}`): ProviderTurn => ({ content: [{ type: "tool_use", id, name, input }], stopReason: "tool_use" });
 
-async function fixture(script: Script, status?: ReturnType<ModelProvider["status"]>, longText = false) {
+async function fixture(script: Script, status?: ReturnType<ModelProvider["status"]>, longText = false, hostReview?: RunnerOptions["hostReview"]) {
   const root = await mkdtemp(join(tmpdir(), "assistant-runner-")); roots.push(root);
   await cp(resolve("fixtures/edit-host"), root, { recursive: true });
   await writeFile(join(root, "package.json"), JSON.stringify({ name: "native-edit-host", version: "1.0.0", type: "module", exports: { "./components": "./components/pack.mjs" }, dependencies: { preact: "10.27.2", "@zudo-composer/component-contract": "workspace:*" } }));
@@ -48,10 +55,10 @@ async function fixture(script: Script, status?: ReturnType<ModelProvider["status
   const service = createEditingService(options);
   const store = await openAssistantStore(host.composerConfig.paths.data);
   const fake = fakeProvider(script, status);
-  const runner = createAssistantRunner({ store, service, provider: fake.provider, config: parseAssistant({ name: "Nightjar Bot" })!, lease: { execute: action => action() }, capture: () => captureHost(options), siteName: capture => capture.workspace.metadata.name });
+  const runner = createAssistantRunner({ hostReview, store, service, provider: fake.provider, config: parseAssistant({ name: "Nightjar Bot" })!, lease: { execute: action => action() }, capture: () => captureHost(options), siteName: capture => capture.workspace.metadata.name });
   const scope = { host: await (await import("node:fs/promises")).realpath(root), workspaceId: "proof" };
   const homeJson = join(host.composerConfig.paths.compositions, "workspace-v1-proof", "composition-home.composition.json");
-  return { runner, store, service, fake, scope, homeJson };
+  return { runner, store, service, fake, scope, homeJson, options };
 }
 const context = { page: { sitemapId: "main", pageId: "home", title: "Home" }, selection: null, payloadIds: [] };
 const turn = () => crypto.randomUUID();
@@ -316,4 +323,81 @@ describe("restricted Assistant runner", () => {
     expect(recalled.body).toBe("Prefer metric units.");
     expect(recalled.used.revision).toBe(1);
   });
+});
+
+
+const hostSelection = { revision: "a".repeat(64), pathname: "/", target: { renderedNodeId: "bound", providerId: "files", recordId: "shared", nodeId: "bound" }, prop: "text" };
+const contentOwner: InspectedOwner = { capabilityId: "review-capability", baseDigest: hostSelection.revision, pathname: "/", target: hostSelection.target, field: { prop: "text", label: "Price", current: "100" }, owner: { domain: "content", entry: { providerId: "content-filesystem", modelId: "course", recordId: "consultation" }, fieldIds: ["course-price"] }, capabilities: { fields: [{ id: "course-price", label: "Price", kind: "text" }], insertSlots: [] }, affectedUses: [{ pathname: "/", target: hostSelection.target, prop: "text" }] };
+const contentCard: HostReviewCard = { id: "review-price", workspaceId: "proof", operation: { domain: "content", proposalId: "proposal-price", contentCandidateDigest: "b".repeat(64) }, baseDigest: hostSelection.revision, candidateDigest: "c".repeat(64), summary: "Price", ownerLabel: "Course/consultation", affectedUses: contentOwner.affectedUses, routes: [{ pathname: "/", title: "Home" }], status: "open" };
+it("feeds actual ownership rules/tools to the model and stages Content once without Composition shadowing or model Apply", async () => {
+  const staged: unknown[] = [];
+  const state = await fixture((_request, call) => call === 1 ? tool("inspect_owner", {}) : call === 2 ? tool("propose_content", { capabilityId: contentOwner.capabilityId, values: { "course-price": "120" }, summary: "Requested price" }, "price-tool") : text("Ready for separate Content review."), undefined, false, {
+    inspect: async (_input, fence) => { await fence.assertActive(); return contentOwner; },
+    stageContent: async (input, fence) => { await fence.assertActive(); staged.push({ input, toolCallId: fence.toolCallId }); return contentCard; },
+    reviewComposition: async () => { throw new Error("Content must not use Composition draft"); },
+  });
+  const before = await readFile(state.homeJson, "utf8"), conversation = await state.store.createConversation(state.scope);
+  const result = await state.runner.start("proof", { conversationId: conversation.id, clientTurnId: turn(), text: "Set shared course price to120", context: { ...context, hostSelection } });
+  expect((await complete(state.runner, result.runId)).status).toBe("completed");
+  expect(staged).toEqual([{ input: { workspaceId: "proof", capabilityId: "review-capability", values: { "course-price": "120" }, summary: "Requested price" }, toolCallId: "price-tool" }]);
+  expect(state.fake.requests).toHaveLength(3);
+  expect(state.fake.requests[0]!.system).toContain("Never shadow a bound Content value");
+  expect(state.fake.requests[0]!.tools.map(tool => tool.name)).toContain("inspect_owner");
+  expect(state.fake.requests[0]!.tools.map(tool => tool.name)).not.toContain("applyHostReview");
+  expect(JSON.stringify(state.fake.requests[1]!.messages)).toContain("course-price");
+  expect((await state.store.conversation(state.scope, conversation.id)).messages.at(-1)?.hostReviews).toEqual([{ reviewId: "review-price", domain: "content" }]);
+  expect(await readFile(state.homeJson, "utf8")).toBe(before);
+});
+it("does not advertise a staged Content review after the active run is cancelled", async () => {
+  let release!: () => void, started!: () => void;
+  const reached = new Promise<void>(resolve => { started = resolve; });
+  const paused = new Promise<void>(resolve => { release = resolve; });
+  const state = await fixture((_request, call) => call === 1 ? tool("inspect_owner", {}) : tool("propose_content", { capabilityId: contentOwner.capabilityId, values: { "course-price": "120" }, summary: "Requested price" }), undefined, false, {
+    inspect: async () => contentOwner,
+    stageContent: async () => { started(); await paused; return contentCard; },
+    reviewComposition: async () => { throw new Error("unexpected"); },
+  });
+  const conversation = await state.store.createConversation(state.scope);
+  const result = await state.runner.start("proof", { conversationId: conversation.id, clientTurnId: turn(), text: "Change price", context: { ...context, hostSelection } });
+  await reached;
+  const stop = state.runner.stopAll(run => run.id === result.runId);
+  release(); await stop; await state.runner.settled(result.runId);
+  expect((await state.store.conversation(state.scope, conversation.id)).messages.at(-1)?.hostReviews).toBeUndefined();
+});
+
+
+it.each([[100, 4], [41_000, 4], [100, 41_000]])("delivers selected Note editing constraints and capability to the actual model tool context with %i current and %i label characters", async (length, labelLength) => {
+  const state = await fixture((_request, call) => call === 1 ? tool("inspect_owner", {}) : text("The selected field rules are available."), undefined, false, {
+    inspect: async input => ({ ...resolveHostOwnership({ ...ownershipInput, selection: input.selection }), capabilityId: "note-body-capability" }),
+    stageContent: async () => { throw new Error("Read-only context proof must not propose"); },
+    reviewComposition: async () => { throw new Error("Read-only context proof must not edit Composition"); },
+  });
+  const site = defineSite({ id: "guidance-proof", name: "Guidance proof", componentPack: state.options.pack });
+  const note = site.model({ id: "note", name: "Note", kind: "collection", fields: [{ key: "body", label: "B".repeat(labelLength), kind: "markdown" }, { key: "title", label: "Title", kind: "text" }] });
+  site.entry(note, { id: "selected-note", values: { body: "x".repeat(length), title: "Title" } });
+  const presentation = site.page({ id: "body", name: "Body", root: [node("native.paragraph", { text: "" }, {}, "body-text")] });
+  const mapping = site.mapping({ id: "body", name: "Body", model: note, composition: presentation, mode: { kind: "collection" }, bindings: [{ field: "body", nodeId: "body-text", prop: "text" }] });
+  const home = site.page({ id: "home", name: "Home", root: [node("native.frame", {}, { body: [] }, "frame")] });
+  site.attach(mapping, { composition: home, nodeId: "frame", slotId: "body" });
+  site.sitemap({ id: "main", name: "Main", root: { id: "home", title: "Home", page: home } });
+  const project = site.toSiteProject();
+  const compilation = await compileSiteProject(project, { componentCatalog: createComponentCatalog(state.options.pack.manifest), policy: "release" });
+  if (compilation.status !== "ready") throw new Error(JSON.stringify(compilation.diagnostics));
+  const target = hostDocumentTargets(compilation.build.routes[0]!).find(target => target.nodeId === "body-text")!;
+  const selection = { revision: "a".repeat(64), pathname: "/", target: { renderedNodeId: target.renderedNodeId, providerId: target.providerId, recordId: target.recordId, nodeId: target.nodeId }, prop: "text" };
+  const instructions = "Only nonempty ## headings, paragraphs and flat '- ' lists. No raw HTML or images. Preserve unrelated fields.";
+  const ownershipInput: Parameters<typeof resolveHostOwnership>[0] = { snapshot: { digest: selection.revision, workspaceId: "proof", project } as AuthoringWorkspaceSnapshot, compiled: { project, build: compilation.build, projectSourceRevision: selection.revision, assetFiles: [] }, selection, manifest: state.options.pack.manifest, contentFields: parseAssistant({ provider: "fake", contentFields: [{ providerId: "content-filesystem", modelId: "note", fieldIds: ["note-body", "note-title"], fieldInstructions: { "note-body": instructions, "note-title": "Unrelated title instructions" } }] })!.contentFields };
+  const before = await readFile(state.homeJson, "utf8"), conversation = await state.store.createConversation(state.scope);
+  const run = await state.runner.start("proof", { conversationId: conversation.id, clientTurnId: turn(), text: "Inspect the selected Note rules.", context: { ...context, hostSelection: selection } });
+  expect((await complete(state.runner, run.runId)).status).toBe("completed");
+  const result = state.fake.requests[1]!.messages.flatMap(message => message.content).find(block => block.type === "tool_result");
+  expect(result?.type).toBe("tool_result");
+  if (result?.type !== "tool_result") throw new Error("Missing actual model tool result");
+  expect(result.content).toContain('"capabilityId":"note-body-capability"');
+  expect(result.content).toContain('"entry":{"providerId":"content-filesystem","modelId":"note","recordId":"selected-note"}');
+  expect(result.content).toContain(JSON.stringify({ instructions, authority: "guidance-only" }));
+  expect(result.content).not.toContain("Unrelated title instructions");
+  expect(result.content).toContain('"kind":"markdown"');
+  expect(result.content.includes("[truncated]")).toBe(length > 40_000 || labelLength > 40_000);
+  expect(await readFile(state.homeJson, "utf8")).toBe(before);
 });

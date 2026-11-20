@@ -101,13 +101,13 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
       key: "source",
       header: "Source model",
       variant: "muted",
-      cell: (row) => details[row.id]?.definition.contentModel?.document.name ?? "Missing Content model",
+      cell: (row) => details[row.id] ? details[row.id].definition.contentModel?.document.name ?? "Missing Content model" : "Checking…",
     },
     {
       key: "target",
       header: "Target composition",
       variant: "muted",
-      cell: (row) => details[row.id]?.definition.composition?.document.name ?? "Missing Composition",
+      cell: (row) => details[row.id] ? details[row.id].definition.composition?.document.name ?? "Missing Composition" : "Checking…",
     },
     { key: "bindings", header: "Bindings", variant: "num", cell: (row) => row.bindingCount },
   ];

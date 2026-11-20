@@ -13,7 +13,7 @@ import { createComponentCatalog } from "../../src/composer/model/types";
 import { canonicalStringifyJson, serializeSiteProject } from "../../src/site-project/model/canonical";
 import { validateSiteProject } from "../../src/site-project/model/validation";
 import type { SiteProject } from "../../src/site-project/model/types";
-import { captureSiteProjectAssetLock } from "../../src/site-project/assets/capture";
+import { captureAuthoringProjectAssetLock } from "../../src/site-project/assets/capture";
 import { compileSiteProject } from "../../src/site-project/compiler";
 import { validateAssetReferenceLock, type AssetReferenceLock } from "../../src/assets/references";
 import { validateAssetSnapshot, type AssetSnapshot } from "../../src/assets/model";
@@ -113,7 +113,9 @@ function nativeProject(host: Awaited<ReturnType<typeof openCapture>>["host"], va
 }
 
 /** Offline capture requires Save and a stopped editor. A live server must hold its
- * authoring lease and flush browser sessions before invoking this operation. */
+ * authoring lease. Operations claiming current editor/build state must flush browser
+ * sessions first. Explicit saved-only read capabilities may omit browser flushing:
+ * this capture includes persisted state only and still checks all durable tokens. */
 export async function captureAuthoringWorkspace(options: CaptureAuthoringWorkspaceOptions): Promise<AuthoringWorkspaceSnapshot> {
   validateIdentities(options);
   return executeAuthoringOperation(options.composerConfig.workspaceRoot, async () => {
@@ -126,8 +128,11 @@ export async function captureAuthoringWorkspace(options: CaptureAuthoringWorkspa
     const validation = validateSiteProject(project, { componentPack: options.pack.manifest });
     if (!validation.ok) throw new Error(`Captured project is invalid: ${validation.diagnostics.map(({ message }) => message).join(" ")}`);
     const snapshot = capture.values.assets as AssetSnapshot;
-    const locked = await captureSiteProjectAssetLock(project, host.manifest, host.stores.assets, snapshot);
-    if (locked.status !== "ready" || !locked.lock) throw new Error("Referenced Assets could not be captured exactly.");
+    const locked = await captureAuthoringProjectAssetLock(project, host.manifest, host.stores.assets, snapshot);
+    if (locked.status !== "ready" || !locked.lock) {
+      const diagnostics = locked.status === "blocked" ? [...locked.causes, ...locked.diagnostics] : [];
+      throw new Error(`Referenced Assets could not be captured exactly. ${diagnostics.map(({ message }) => message).join(" ")}`);
+    }
     const files: AuthoringWorkspaceSnapshot["assets"]["files"] = [];
     for (const pin of locked.lock.pins) {
       if (files.some(({ fileName }) => fileName === pin.url.slice(1))) continue;
@@ -242,7 +247,7 @@ export async function compileAuthoringWorkspaceSnapshot(options: CompileAuthorin
 function safeRelativePath(value: string): boolean {
   return !!value && !isAbsolute(value) && !value.includes("\\") && !value.includes("\0") && value.split("/").every(part => !!part && part !== "." && part !== "..");
 }
-async function capturePublicFiles(options: Pick<CaptureAuthoringWorkspaceOptions, "composerConfig" | "publicFiles">): Promise<CapturedPublicFile[]> {
+export async function capturePublicFiles(options: Pick<CaptureAuthoringWorkspaceOptions, "composerConfig" | "publicFiles">): Promise<CapturedPublicFile[]> {
   const result: CapturedPublicFile[] = [];
   const root = await realpath(options.composerConfig.workspaceRoot);
   const manifest = options.publicFiles ?? await publicDirectoryManifest(root, options.composerConfig.hostDocument?.publicDir);

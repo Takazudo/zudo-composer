@@ -19,6 +19,7 @@ export {
   type NativeEditingConfig,
   type AssistantConfig,
   type HostDocumentConfig,
+  type ContentValidationConfig,
 } from "./config";
 export {
   loadComposerConfig,

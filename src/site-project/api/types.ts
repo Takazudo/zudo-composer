@@ -23,6 +23,8 @@ export interface ReleaseToolchain {
   /** The host's dependency spec for the pack's package, or `"self"`. */
   packSource: string;
   installedPackDigest: string;
+  /** Present only when this release is bound to a trusted host Content policy. */
+  contentValidation?: string;
   contractDigest: string;
 }
 export interface ReleaseChange { domain: string; providerId: string; recordId: string; kind: "added" | "changed" | "removed" }
@@ -57,6 +59,7 @@ export interface SiteProjectApiDependencies {
   componentCatalog: ComponentCatalog; projectStore: SiteProjectStoreAdapter; buildStore: SiteProjectBuildAdapter;
   toolchain: ReleaseToolchain; hash(text: string): Promise<string>;
   assetStore?: VersionedAssetStore; compiler?: SiteProjectCompiler;
+  validatePublication?(project: SiteProject, selection: readonly ContentPublicationSelection[]): Promise<void>;
   /** Browser workspace adapter verifies its coherent captured generation before staging. */
   isWorkingCurrent?(project: SiteProject, precondition: JsonValue): Promise<boolean>;
   /** Owning adapter matches working generation AND digest, never overwriting newer edits. */

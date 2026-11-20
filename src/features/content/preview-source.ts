@@ -1,5 +1,5 @@
 import type { ComponentCatalog, CompositionDocument } from "../../composer/model/types";
-import type { ContentModelRef } from "../../content/catalog";
+import type { ContentCatalog, ContentModelRef } from "../../content/catalog";
 import type { ContentEntryRecord } from "../../content/model";
 import {
   evaluateResolvedMapping,
@@ -12,6 +12,7 @@ import {
   type MappingEntryDiagnostic,
   type MappingEvaluationResult,
   type MappingRecordRef,
+  type MappingRecord,
 } from "../../mapping";
 
 export interface ContentPreviewFailure {
@@ -111,10 +112,20 @@ export class ContentPreviewSource {
       const mappingFailure = initializationFailure(mappingInitialization, "Mapping storage could not be initialized.");
       if (mappingFailure) return this.fail(revision, modelRef, mappingFailure);
 
-      const listed = await this.options.mappings.list();
+      const listed = this.options.mappings.readInventory ? await this.options.mappings.readInventory() : await this.options.mappings.list();
       if (revision !== this.requestRevision) return this.current;
       const failures: ContentPreviewFailure[] = listed.failures.map((failure) => ({ scope: "catalog", providerId: failure.providerId, message: `${failure.providerLabel}: ${failure.reason}` }));
-      const resolved = await Promise.all(listed.entries.map((candidate) => this.resolveCandidate(candidate, modelRef)));
+      const captured = new Map("snapshots" in listed ? listed.snapshots.map(({ providerId, snapshot }) => [providerId, new Map(snapshot.records.map(record => [record.id, record]))]) : []);
+      // This memo belongs only to this load, including failures and pending reads.
+      const models = new Map<string, ReturnType<ContentCatalog["resolveModel"]>>();
+      const content: ContentCatalog = { ...this.options.catalogs.content, resolveModel: ref => {
+        if (!ref || typeof ref !== "object" || Array.isArray(ref) || Object.keys(ref).sort().join(",") !== "providerId,recordId") return this.options.catalogs.content.resolveModel(ref);
+        const key = JSON.stringify([ref.providerId, ref.recordId]);
+        let pending = models.get(key);
+        if (!pending) { pending = Promise.resolve().then(() => this.options.catalogs.content.resolveModel(ref)); models.set(key, pending); }
+        return pending;
+      } };
+      const resolved = await Promise.all(listed.entries.map((candidate) => this.resolveCandidate(candidate, modelRef, content, captured.get(candidate.ref.providerId))));
       if (revision !== this.requestRevision) return this.current;
 
       const candidates: ContentPreviewCandidate[] = [];
@@ -194,9 +205,10 @@ export class ContentPreviewSource {
     this.listeners.clear();
   }
 
-  private async resolveCandidate(candidate: MappingCatalogEntry, modelRef: ContentModelRef): Promise<{ candidate?: ContentPreviewCandidate; failure?: ContentPreviewFailure } | null> {
+  private async resolveCandidate(candidate: MappingCatalogEntry, modelRef: ContentModelRef, content: ContentCatalog, records?: ReadonlyMap<string, MappingRecord>): Promise<{ candidate?: ContentPreviewCandidate; failure?: ContentPreviewFailure } | null> {
     try {
-      const outcome = await this.options.mappings.resolve(candidate.ref);
+      const record = records?.get(candidate.ref.recordId);
+      const outcome = records ? record ? { status: "resolved" as const, record } : { status: "not-found" as const } : await this.options.mappings.resolve(candidate.ref);
       if (outcome.status !== "resolved") {
         const message = outcome.status === "not-found" ? "Mapping was not found." : outcome.reason;
         return {
@@ -204,7 +216,7 @@ export class ContentPreviewSource {
         };
       }
       if (!sameRef(outcome.record.document.contentModel, modelRef)) return null;
-      const definition = await resolveMappingDefinition(outcome.record, this.options.catalogs, this.options.manifest);
+      const definition = await resolveMappingDefinition(outcome.record, { ...this.options.catalogs, content }, this.options.manifest);
       return {
         candidate: {
           ...candidate,

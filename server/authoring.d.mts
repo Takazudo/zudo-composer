@@ -1149,6 +1149,12 @@ interface WorkspaceRecord {
     requiresBeforeComplete?: true;
 }
 
+interface ContentValidationConfig {
+    module: string;
+    id: string;
+    version: string;
+}
+
 /**
  * Every setting a host may declare. Path settings are relative to the host
  * project root; `pack` is a module specifier.
@@ -1245,7 +1251,16 @@ interface NativeEditingConfig {
 }
 
 type AssistantEffort = "low" | "medium" | "high";
+interface AssistantContentFieldPolicy {
+    providerId: string;
+    modelId: string;
+    fieldIds: readonly string[];
+    /** Trusted editing constraints for declared fields; guidance never grants permission. */
+    fieldInstructions?: Readonly<Record<string, string>>;
+}
 interface AssistantCommonConfig {
+    /** Trusted Content field IDs; omitted retains the standalone Article defaults. */
+    contentFields?: readonly AssistantContentFieldPolicy[];
     /** Default display name; a site-scoped stored name may replace it. */
     name: string;
     /** `propose` permits conversation, drafts and review but never Apply. */
@@ -1317,6 +1332,7 @@ interface ComposerPaths {
 interface ResolvedComposerConfig {
     authoringAuthority: "source" | "workspace" | undefined;
     hostDocument: HostDocumentConfig | undefined;
+    contentValidation: ContentValidationConfig | undefined;
     nativeEditing: NativeEditingConfig | undefined;
     assistant: AssistantConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */
@@ -1490,7 +1506,9 @@ declare function resolveAuthoringRendererIdentity(options: {
     composerConfig: ResolvedComposerConfig;
 }): Promise<AuthoringRendererIdentity>;
 /** Offline capture requires Save and a stopped editor. A live server must hold its
- * authoring lease and flush browser sessions before invoking this operation. */
+ * authoring lease. Operations claiming current editor/build state must flush browser
+ * sessions first. Explicit saved-only read capabilities may omit browser flushing:
+ * this capture includes persisted state only and still checks all durable tokens. */
 declare function captureAuthoringWorkspace(options: CaptureAuthoringWorkspaceOptions): Promise<AuthoringWorkspaceSnapshot>;
 /** Reopen durable stores and compare their tokens; Content generation also rejects edit/revert. */
 declare function isAuthoringWorkspaceSnapshotCurrent(options: CaptureAuthoringWorkspaceOptions, snapshot: AuthoringWorkspaceSnapshot): Promise<boolean>;
@@ -1509,13 +1527,39 @@ interface HostDocumentIdentity {
     rendererVersion: string;
     rendererDigest: string;
 }
+/** Informational captured provenance, never an editing capability. */
+interface HostFieldSource {
+    prop: string;
+    label: string;
+    sources: readonly {
+        entry: {
+            providerId: string;
+            modelId: string;
+            recordId: string;
+        };
+        fieldId?: string;
+        fieldLabel: string;
+        reason?: string;
+        affectedUses: readonly {
+            pathname: string;
+            renderedNodeId: string;
+            prop: string;
+        }[];
+    }[];
+    reason?: string;
+}
 interface HostDocumentTarget {
+    fieldSources?: readonly HostFieldSource[];
     presentation?: {
         label: string;
         kindTitle: string;
         transparent: boolean;
     };
     capabilities?: {
+        remove?: {
+            allowed: boolean;
+            reason?: string;
+        };
         fields: {
             allowed: boolean;
             reason?: string;
@@ -1589,5 +1633,23 @@ declare function renderHostDocument(renderer: HostDocumentRenderer, route: SiteC
     pathnames: readonly string[];
 }): Promise<HostDocumentPreview>;
 
+/** Trusted host code. Field-local validation only; never mutates or normalizes values. */
+interface ContentFieldValidationInput {
+    providerId: string;
+    model: ContentModelRecord;
+    entry: ContentEntryRecord;
+    field: ContentFieldDefinition;
+    value: JsonValue | undefined;
+    previousValue: JsonValue | undefined;
+    purpose: "write" | "publish";
+}
+interface ContentPolicyIssue {
+    code: string;
+    message: string;
+}
+interface ContentValidationModule {
+    validateContentField(input: ContentFieldValidationInput): readonly ContentPolicyIssue[];
+}
+
 export { ASSET_PROVIDER_ID, COMPOSITION_PROVIDER_ID, CONTENT_PROVIDER_ID, DEFAULT_TIMESTAMP, MAPPING_PROVIDER_ID, SITEMAP_PROVIDER_ID, assetAuthoringUrl, assetMimeTypeForExtension, canonicalStringifyJson, captureAuthoringWorkspace, createFilesystemAssetStore, defineSite, entryRef, hostDocumentTargets, imageUse, initializeAuthoringWorkspace, isAuthoringWorkspaceSnapshotCurrent, isAuthoringWorkspaceSourceCurrent, node, renderHostDocument, resolveAuthoringPackIdentity, resolveAuthoringRendererIdentity, slugify, validateSiteProject };
-export type { AuthoringPackIdentity, AuthoringPublicFile, AuthoringRendererIdentity, AuthoringWorkspaceSnapshot, CaptureAuthoringWorkspaceOptions, CapturedPublicFile, HostDocumentIdentity, HostDocumentPreview, HostDocumentRenderInput, HostDocumentRenderer, HostDocumentTarget };
+export type { AuthoringPackIdentity, AuthoringPublicFile, AuthoringRendererIdentity, AuthoringWorkspaceSnapshot, CaptureAuthoringWorkspaceOptions, CapturedPublicFile, ContentFieldValidationInput, ContentPolicyIssue, ContentValidationModule, HostDocumentIdentity, HostDocumentPreview, HostDocumentRenderInput, HostDocumentRenderer, HostDocumentTarget };

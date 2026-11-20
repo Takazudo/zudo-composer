@@ -17,7 +17,12 @@ function hostRoute(route: SiteCompiledRoute): { route: SiteCompiledRoute; target
         seen.add(canonicalId);
         const source = route.materializationSources?.find(value => value.renderedNodeId === canonicalId);
         node.id = `${prefix}${canonicalId}`;
-        targets.push({ renderedNodeId: node.id, providerId: source?.providerId ?? owner.providerId, recordId: source?.recordId ?? owner.recordId, nodeId: source?.nodeId ?? canonicalId, componentId: node.componentId, parentRenderedNodeId: parentId, slotId, props: node.props, entries: source?.entries ?? [] });
+        // Root Sitemap Mapping evaluation owns only its local Composition.
+        // Attached materializations carry their own entries (including empty
+        // provenance); linked Global templates never inherit the route entry.
+        const entries = source ? source.entries : route.source.kind === "mapping" && route.selectedEntry
+          && owner.providerId === route.composition.local.providerId && owner.recordId === route.composition.local.recordId ? [route.selectedEntry] : [];
+        targets.push({ renderedNodeId: node.id, providerId: source?.providerId ?? owner.providerId, recordId: source?.recordId ?? owner.recordId, nodeId: source?.nodeId ?? canonicalId, componentId: node.componentId, parentRenderedNodeId: parentId, slotId, props: node.props, entries });
         for (const [childSlot, descendants] of Object.entries(node.slots)) walk(descendants, node.id, childSlot);
       }
     };

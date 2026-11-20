@@ -73,6 +73,32 @@ export function fakeDecide(document) {
     const suggest = /^suggest\s+"([\s\S]+)"$/i.exec(request);
     if (suggest) return step === 0 ? reply("", [{ name: "suggest_wording", input: { text: suggest[1] } }]) : reply("I offered that wording; the draft is unchanged.");
     const replace = /^replace\s+"([\s\S]+?)"\s+with\s+"([\s\S]*?)"(\s+on all pages)?\.?$/i.exec(request);
+    if (replace && document.tools.some(tool => tool.name === "inspect_owner")) {
+      if (replace[3]) return reply("Select one owning target first. Shared Content changes affect its listed uses; cross-domain requests require separate reviews.");
+      const proposed = last("propose_content") ?? last("propose_changes");
+      if (proposed) return proposed.isError ? reply(failed(proposed)) : reply("Prepared the selected owner's change for review. Nothing is saved before its separate human Apply.");
+      const inspected = last("inspect_owner");
+      if (!inspected) return reply("", [{ name: "inspect_owner", input: {} }]);
+      if (inspected.isError) return reply(failed(inspected));
+      const owner = inspected.content;
+      if (owner?.owner?.domain === "unsupported") return reply(String(owner.owner.reason));
+      if (typeof owner?.field?.current !== "string" || !owner.field.current.includes(replace[1])) return reply("Select the exact textual property containing that text using Ask Assistant.");
+      const value = owner.field.current.split(replace[1]).join(replace[2]);
+      if (owner.owner.domain === "content") return reply("", [{ name: "propose_content", input: { capabilityId: owner.capabilityId, values: { [owner.owner.fieldIds[0]]: value }, summary: "Requested replacement in shared Content" } }]);
+      if (owner.owner.domain === "composition") return reply("", [{ name: "propose_changes", input: { operations: [{ kind: "updateField", page: owner.owner.page, nodeId: owner.owner.nodeId, prop: owner.field.prop, value, reason: "Requested replacement in the selected local field" }] } }]);
+      return reply("No supported owner was resolved.");
+    }
+    const insertion = /^insert "([^"\n]+)" into "([^"\n]+)" with (\{[\s\S]*\})$/i.exec(request);
+    if (insertion && document.tools.some(tool => tool.name === "inspect_owner")) {
+      const proposed = last("propose_changes");
+      if (proposed) return proposed.isError ? reply(failed(proposed)) : reply("Prepared local insertion for review. Nothing is saved before Apply.");
+      const inspected = last("inspect_owner");
+      if (!inspected) return reply("", [{ name: "inspect_owner", input: {} }]);
+      if (inspected.isError) return reply(failed(inspected));
+      const owner = inspected.content, props = json(insertion[3]);
+      if (owner?.owner?.domain !== "composition" || !props || Array.isArray(props) || typeof props !== "object") return reply("Select a supported local parent and provide component properties as a JSON object.");
+      return reply("", [{ name: "propose_changes", input: { operations: [{ kind: "insertComponent", page: owner.owner.page, componentId: insertion[1], at: { parentId: owner.owner.nodeId, slotId: insertion[2], index: 0 }, props, reason: "Requested local component insertion" }] } }]);
+    }
     if (replace) return replaceFlow(replace[1], replace[2], !!replace[3]);
     return reply('Fake provider (offline). Try: replace "A" with "B", replace "A" with "B" on all pages, suggest "text", remember: a fact, or wait.');
   };

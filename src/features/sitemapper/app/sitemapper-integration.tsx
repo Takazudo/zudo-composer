@@ -535,6 +535,7 @@ export function SitemapperIntegration({
         }
         inspector={
           <InspectorPanel
+            sitemap={{ providerId, recordId: record.id, active: activeSitemap }}
             document={document}
             node={selectedNode}
             routes={outline.routes}

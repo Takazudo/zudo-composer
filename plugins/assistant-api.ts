@@ -1,3 +1,4 @@
+import type { HostReviewService } from "../src/shared/host-review-types";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ViteDevServer } from "vite";
 import { z } from "zod";
@@ -13,9 +14,9 @@ type Service = ReturnType<typeof createEditingService>;
 interface Coordinator { run<T>(id: string, action: () => Promise<T>, mutates?: boolean): Promise<T> }
 const name = z.string().min(1).max(256);
 const command = z.object({ operation: z.string().regex(/^[a-z][a-zA-Z]{1,40}$/), workspaceId: name, input: z.record(z.string(), z.unknown()).default({}) }).strict();
-const safeCodes = new Set(["approval-denied", "approval-mismatch", "authoring-busy", "browser-dirty", "browser-unavailable", "busy", "component-invalid", "conflict", "draft-full", "empty-draft", "inactive-draft", "invalid-asset", "invalid-payload", "invalid-request", "invalid-table", "limit", "memory-change-invalid", "memory-conflict", "memory-fenced", "memory-oversized", "missing-credential", "not-applied", "not-configured", "not-installed", "not-logged-in", "probe-failed", "unsupported-platform", "unsupported-version", "not-found", "run-inactive", "stale-asset", "stale-browser", "stale-draft", "stale-plan", "store-corrupt", "tampered-plan", "undo-conflict", "unrequested-content", "unsupported-capability", "unsupported-scope", "unsupported-target", "wrong-workspace", "commit-uncertain", "write-failed"]);
+const safeCodes = new Set(["approval-denied", "approval-mismatch", "authoring-busy", "browser-dirty", "browser-unavailable", "busy", "component-invalid", "conflict", "draft-full", "empty-draft", "inactive-draft", "invalid-asset", "invalid-payload", "invalid-request", "invalid-table", "limit", "memory-change-invalid", "memory-conflict", "revision-conflict", "memory-fenced", "memory-oversized", "missing-credential", "not-applied", "not-configured", "not-installed", "not-logged-in", "probe-failed", "unsupported-platform", "unsupported-version", "not-found", "run-inactive", "stale-asset", "stale-browser", "stale-draft", "stale-plan", "store-corrupt", "tampered-plan", "undo-conflict", "unrequested-content", "unsupported-capability", "unsupported-scope", "unsupported-target", "wrong-workspace", "commit-uncertain", "write-failed"]);
 // Approval-bearing operations: explicit user action, approval capability and full browser coordination.
-const approvals = new Set(["applyDraft", "undoDraft"]);
+const approvals = new Set(["applyDraft", "undoDraft", "applyHostReview", "undoHostReview"]);
 
 /**
  * Local operator channel for the AI Assistant. Same loopback/capability/bound
@@ -23,6 +24,7 @@ const approvals = new Set(["applyDraft", "undoDraft"]);
  * named below and validated by its owner.
  */
 export function installAssistantApi(server: ViteDevServer, deps: {
+  hostReview?: HostReviewService;
   service: Service; store: AssistantStore; runner: AssistantRunner; config: AssistantConfig; lease: { execute<T>(action: () => Promise<T>): Promise<T> };
   coordinator: Coordinator; capability: string; approvalCapability: string; peers: Map<string, unknown>; capture(): Promise<HostCapture>;
 }) {
@@ -77,7 +79,12 @@ export function installAssistantApi(server: ViteDevServer, deps: {
       await deps.store.updateMessage(scope, conversation.id, conversation.messages.find(message => message.suggestions?.some(candidate => candidate.id === suggestion.id))!.id, message => { message.suggestions = message.suggestions!.map(candidate => candidate.id === suggestion.id ? { ...candidate, status: "staged" } : candidate); });
       return result;
     },
-    applyDraft: async (workspaceId, input, clientId) => deps.coordinator.run(clientId, () => deps.lease.execute(() => draftOps.apply({ workspaceId, ...input })), true),
+    hostReview: async (workspaceId, input) => { if (!deps.hostReview) throw Object.assign(new Error("Host review is unavailable."), { code: "unsupported-capability" }); const request = z.object({ reviewId: name }).strict().parse(input); return deps.lease.execute(() => deps.hostReview!.read({ workspaceId, ...request })); },
+    prepareHostComposition: async (workspaceId, input, clientId) => { if (!deps.hostReview) throw Object.assign(new Error("Host review is unavailable."), { code: "unsupported-capability" }); const request = z.object({ draftId: name, revision: z.number().int().nonnegative(), candidateDigest: name }).strict().parse(input); return deps.coordinator.run(clientId, () => deps.lease.execute(() => deps.hostReview!.reviewComposition({ workspaceId, ...request }))); },
+    previewHostReview: async (workspaceId, input, clientId) => { if (!deps.hostReview) throw Object.assign(new Error("Host review is unavailable."), { code: "unsupported-capability" }); const request = z.object({ reviewId: name, pathname: name }).strict().parse(input); return deps.coordinator.run(clientId, () => deps.lease.execute(() => deps.hostReview!.preview({ workspaceId, ...request }))); },
+    applyHostReview: async (workspaceId, input, clientId) => { if (!deps.hostReview) throw Object.assign(new Error("Host review is unavailable."), { code: "unsupported-capability" }); return deps.coordinator.run(clientId, () => deps.lease.execute(() => deps.hostReview!.apply({ ...input, workspaceId } as Parameters<HostReviewService["apply"]>[0])), true); },
+    undoHostReview: async (workspaceId, input, clientId) => { if (!deps.hostReview) throw Object.assign(new Error("Host review is unavailable."), { code: "unsupported-capability" }); const request = z.object({ reviewId: name }).strict().parse(input); return deps.coordinator.run(clientId, () => deps.lease.execute(() => deps.hostReview!.undo({ workspaceId, ...request })), true); },
+    applyDraft: async (workspaceId, input, clientId) => { if (deps.hostReview) throw Object.assign(new Error("Review the exact host-rendered candidate and use its domain Apply action."), { code: "unsupported-scope" }); return deps.coordinator.run(clientId, () => deps.lease.execute(() => draftOps.apply({ workspaceId, ...input })), true); },
     undoDraft: async (workspaceId, input, clientId) => deps.coordinator.run(clientId, () => deps.lease.execute(() => draftOps.undo({ workspaceId, ...input })), true),
   };
   const respond = (res: ServerResponse, status: number, value: unknown) => {

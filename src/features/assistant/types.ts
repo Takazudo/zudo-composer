@@ -1,3 +1,4 @@
+import type { HostSelection } from "../../shared/host-review-types";
 import type { CompositionRecord } from "../../composer/library/types";
 import type { PreviewLinkedSourceContext } from "../composer/preview/protocol";
 
@@ -21,9 +22,10 @@ export interface DraftView {
 export interface UsedMemory { status: "used" | "empty" | "off" | "unavailable"; revision: number | null; mode: MemoryMode; characters: number }
 export type MemoryMode = "off" | "read-only" | "auto";
 export interface MemoryView { revision: number; body: string; mode: MemoryMode; modeRevision: number; clearGeneration: number; updatedAt: string | null; history: { revision: number; actor: string; kind: string; createdAt: string; restoredFrom?: number }[] }
-export interface MessageContext { page: (PageRef & { title?: string }) | null; selection: { nodeId: string; componentId?: string; label?: string } | null; payloadIds: string[] }
+export interface MessageContext { hostSelection?: HostSelection; page: (PageRef & { title?: string }) | null; selection: { nodeId: string; componentId?: string; label?: string } | null; payloadIds: string[] }
 export interface ChatMessage {
   id: string; role: "user" | "assistant"; text: string; createdAt: string; turnId: string; runId?: string; context?: MessageContext; memory?: UsedMemory;
+  hostReviews?: { reviewId: string; domain: "composition" | "content" }[];
   draft?: { draftId: string; operationIds: string[] } | null;
   memoryProposals?: { id: string; baseRevision: number; change: { kind: "append"; text: string } | { kind: "replace"; find: string; text: string }; status: string; resolvedRevision?: number }[];
   remembered?: { revision: number }[]; suggestions?: { id: string; text: string; target: { page: PageRef; nodeId: string; prop: string } | null; status: string }[];

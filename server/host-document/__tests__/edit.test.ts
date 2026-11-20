@@ -120,3 +120,21 @@ it("describes semantic labels and supported defaults while distinguishing shared
   expect(() => validateHostComponentPresentation({ missing: {} }, options.pack.manifest)).toThrow("Unknown");
   expect(() => validateHostComponentPresentation({ paragraph: { labelProp: "invented" } }, options.pack.manifest)).toThrow("textual field");
 });
+it("removes an inserted local child with a replayable receipt and refuses roots/shared sources without writes", async () => {
+  const options = await fixture(false, true, true), before = await captureAuthoringWorkspace(options);
+  const base = { workspaceId: "proof", revision: before.digest, pathname: "/", operationId: randomUUID(), target: { renderedNodeId: "first", providerId: "files", recordId: "home", nodeId: "first" }, change: { kind: "remove" } };
+  await expect(editHostDocument(options, base)).rejects.toMatchObject({ code: "unsupported-scope" });
+  const compiled = await compileAuthoringWorkspaceSnapshot({ ...options, snapshot: before });
+  const shared = hostDocumentTargets(compiled.build.routes[0]!).find(target => target.nodeId === "price")!;
+  await expect(editHostDocument(options, { ...base, operationId: randomUUID(), target: { renderedNodeId: shared.renderedNodeId, providerId: shared.providerId, recordId: shared.recordId, nodeId: shared.nodeId } })).rejects.toMatchObject({ code: "unsupported-scope" });
+  expect((await captureAuthoringWorkspace(options)).digest).toBe(before.digest);
+  const nodeId = randomUUID();
+  await editHostDocument(options, { ...base, operationId: randomUUID(), target: { ...base.target, renderedNodeId: "local-group", nodeId: "local-group" }, change: { kind: "insert", componentId: "paragraph", slotId: "items", nodeId } });
+  const inserted = await captureAuthoringWorkspace(options);
+  const remove = { ...base, revision: inserted.digest, operationId: randomUUID(), target: { ...base.target, renderedNodeId: nodeId, nodeId } };
+  const receipt = await editHostDocument(options, remove);
+  expect(await editHostDocument(options, remove)).toEqual(receipt);
+  const saved = await captureAuthoringWorkspace(options);
+  expect(saved.project.providers.compositions.find(provider => provider.id === "files")!.records.find(record => record.id === "home")!.document.root.find(node => node.id === "local-group")!.slots.items).toEqual([]);
+  await expect(compileAuthoringWorkspaceSnapshot({ ...options, snapshot: saved })).resolves.toHaveProperty("build");
+});

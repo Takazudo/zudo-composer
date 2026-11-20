@@ -397,9 +397,9 @@ describe("ContentAuthoringController", () => {
     const saved = await provider.store.getEntry("entry-1"); expect(saved.status === "loaded" && saved.record.values.title).toBe("Saved before schema");
   });
 
-  it("transitions count-loading failures into the recoverable error UI state", async () => {
-    const provider = createMemoryContentProvider(); vi.spyOn(provider.store, "countEntries").mockRejectedValue(new Error("count failed"));
+  it("transitions library snapshot failures into the recoverable error UI state", async () => {
+    const provider = createMemoryContentProvider(); vi.spyOn(provider.store, "readAll").mockRejectedValue(new Error("snapshot failed"));
     const controller = createContentAuthoringController(provider); await controller.initialize();
-    expect(controller.state.phase).toBe("error"); expect(controller.state.message).toBe("count failed");
+    expect(controller.state.phase).toBe("error"); expect(controller.state.message).toBe("snapshot failed");
   });
 });

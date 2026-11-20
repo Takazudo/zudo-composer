@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { hostDocumentTargets, renderHostDocument } from "../render";
 import type { SiteCompiledRoute } from "../../../src/site-project/compiler/types";
 const node = (id: string) => ({ id, componentId: "test.text", componentVersion: 1, props: { text: "Hello" }, slots: {} });
-const route = { pathname: "/lessons/", composition: { local: { providerId: "files", recordId: "lessons" }, document: { root: [{ ...node("section"), slots: { main: [node("course-price")] } }] } }, materializationSources: [{ renderedNodeId: "course-price", providerId: "files", recordId: "consultation", nodeId: "price", attachmentId: "course", entries: [{ providerId: "content-filesystem", modelId: "course", recordId: "consultation" }] }] } as unknown as SiteCompiledRoute;
+const route = { pathname: "/lessons/", source: { kind: "composition", ref: { providerId: "files", recordId: "lessons" } }, composition: { local: { providerId: "files", recordId: "lessons" }, document: { root: [{ ...node("section"), slots: { main: [node("course-price")] } }] } }, materializationSources: [{ renderedNodeId: "course-price", providerId: "files", recordId: "consultation", nodeId: "price", attachmentId: "course", entries: [{ providerId: "content-filesystem", modelId: "course", recordId: "consultation" }] }] } as unknown as SiteCompiledRoute;
 const identity = { workspaceId: "pinsel", revision: "a".repeat(64), pathname: "/lessons/", packId: "pinsel", packVersion: "1", rendererId: "pinsel-zfb", rendererVersion: "1", rendererDigest: "b".repeat(64) };
 describe("host document renderer", () => {
   it("retains mapped ownership and slot hierarchy without feeding a component into Preact", async () => {

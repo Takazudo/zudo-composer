@@ -22,6 +22,12 @@ export interface DraftReceipt {
   candidateDigest: string; workspaceId: string; committedAt: string;
   pages: { identity: DraftPage["identity"]; beforeDigest: string; afterDigest: string; jsxDigest: string }[];
 }
+/** Trusted server-only guard; never parsed from browser or model input. */
+export type DraftCommitGuard = (input: {
+  state: HostCapture;
+  compositions: { mutationToken: string; records: readonly import("../../src/composer/library/types").CompositionRecord[] };
+  draftId: string; revision: number; candidateDigest: string;
+}) => Promise<void>;
 export interface DraftContext {
   host(): Promise<string>;
   dataRoot: string;
@@ -312,7 +318,7 @@ export function createDraftOperations(context: DraftContext) {
         });
       });
     },
-    async apply(input: unknown): Promise<DraftReceipt> {
+    async apply(input: unknown, guard?: DraftCommitGuard): Promise<DraftReceipt> {
       const request = parse(draftRefSchema.extend({ approve: z.string().regex(/^[a-f0-9]{64}$/) }).strict(), input);
       if (context.permission !== "apply") throw new EditError("approval-denied", "This host permits Assistant proposals and review, but not Apply.");
       return context.leased(async () => {
@@ -341,8 +347,9 @@ export function createDraftOperations(context: DraftContext) {
               schemaVersion: 1, kind: "draft-applied", operationId, draftId: draft.id, revision: draft.revision, candidateDigest: digest, workspaceId: draft.workspaceId, committedAt: new Date().toISOString(),
               pages: changed.map(page => ({ identity: page.identity, beforeDigest: context.digest(page.before), afterDigest: context.digest(page.candidate), jsxDigest: context.digest(page.jsx) })),
             };
-            return state.stores.compositions.commitReviewedEdit({ operationId, planDigest: digest, expectedSnapshotToken: state.tokens.compositions, changes: changed.map(page => ({ candidate: page.candidate, jsx: page.jsx })), receipt: value }, async () => {
+            return state.stores.compositions.commitReviewedEdit({ operationId, planDigest: digest, expectedSnapshotToken: state.tokens.compositions, changes: changed.map(page => ({ candidate: page.candidate, jsx: page.jsx })), receipt: value }, async compositions => {
               if (await dependencies(state) !== draft.dependencyDigest) throw new EditError("stale-plan", "Pack or source changed at the writer boundary.");
+              await guard?.({ state, compositions, draftId: draft.id, revision: draft.revision, candidateDigest: digest });
             });
           });
           await drafts.write({ ...draft, status: "applied", applied: { operationId: receipt.operationId, candidateDigest: receipt.candidateDigest, committedAt: receipt.committedAt }, updatedAt: new Date().toISOString() });

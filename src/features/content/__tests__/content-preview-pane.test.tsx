@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createContentEntryRecord, createContentModelRecord } from "../../../content";
 import type { ContentPreviewSource, ContentPreviewState } from "../preview-source";
 
+const hostMode = vi.hoisted(() => ({ enabled: false }));
+vi.mock("../../delivery/host-preview-policy", () => ({ get hostDocumentPreviewConfigured() { return hostMode.enabled; } }));
+vi.mock("../../native-editing/session", () => ({ nativeContentRead: vi.fn(), nativeEditingAvailable: false }));
 const previewHost = vi.hoisted(() => vi.fn());
 vi.mock("../../composer/preview/composition-preview-host", async () => {
   const { h } = await import("preact");
@@ -12,7 +15,7 @@ vi.mock("../../composer/preview/composition-preview-host", async () => {
 import { ContentPreviewPane } from "../content-preview-pane";
 
 // Vitest runs without `globals`, so Testing Library installs no auto-cleanup.
-afterEach(cleanup);
+afterEach(() => { cleanup(); hostMode.enabled = false; previewHost.mockClear(); });
 
 const stamp = "2026-08-30T00:00:00.000Z";
 const model = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "body", key: "body", label: "Body", required: true, kind: "markdown" }] }, { id: "articles", timestamp: stamp });
@@ -74,4 +77,12 @@ describe("ContentPreviewPane", () => {
     expect(screen.getByRole("link", { name: "Broken page" })).toBeInTheDocument();
     expect(screen.getByText("blocked")).toBeInTheDocument();
   });
+});
+
+it("keeps Mapping metadata but never mounts Preact fragment renderer for a host document pack", async () => {
+ hostMode.enabled = true; const source = sourceFixture();
+ render(<ContentPreviewPane providerId="content-filesystem" model={model} entry={entry} entryName="Draft" saveStatus="dirty" componentProvider={{} as never} createPreviewSource={() => source}/>);
+ await screen.findByRole("combobox", {name: "Mapping definition"});
+ expect(previewHost).not.toHaveBeenCalled();expect(screen.getByText("Saved page preview")).toBeInTheDocument();expect(screen.getByText(/standalone Mapping fragments are unsupported/)).toBeInTheDocument();
+ fireEvent.click(screen.getByRole("tab",{name:/^Mapping/}));expect(screen.getByRole("link",{name:"Open Mapping"})).toHaveAttribute("href","/mapping?provider=mapping-filesystem&mapping=map%20one");
 });

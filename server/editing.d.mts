@@ -1481,6 +1481,41 @@ interface DraftReceipt {
         jsxDigest: string;
     }[];
 }
+/** Trusted server-only guard; never parsed from browser or model input. */
+type DraftCommitGuard = (input: {
+    state: HostCapture;
+    compositions: {
+        mutationToken: string;
+        records: readonly CompositionRecord[];
+    };
+    draftId: string;
+    revision: number;
+    candidateDigest: string;
+}) => Promise<void>;
+
+/** Trusted host code. Field-local validation only; never mutates or normalizes values. */
+interface ContentFieldValidationInput {
+    providerId: string;
+    model: ContentModelRecord;
+    entry: ContentEntryRecord;
+    field: ContentFieldDefinition;
+    value: JsonValue | undefined;
+    previousValue: JsonValue | undefined;
+    purpose: "write" | "publish";
+}
+interface ContentPolicyIssue {
+    code: string;
+    message: string;
+}
+interface ContentValidationModule {
+    validateContentField(input: ContentFieldValidationInput): readonly ContentPolicyIssue[];
+}
+interface ContentValidationPolicy extends ContentValidationModule {
+    /** Attested module graph identity, persisted with proposed changes. */
+    identity?: string;
+    /** The loader refuses reuse after the attested source graph changes. */
+    assertCurrent?(): Promise<void>;
+}
 
 interface SafeRootFilesystemOperations {
     mkdir(path: string, options: {
@@ -1528,6 +1563,7 @@ type RecordMutationTokenSource = (next: Omit<RecordTransactionSnapshot, "mutatio
 }) => string;
 
 interface FilesystemContentStoreOptions {
+    validationPolicy?: ContentValidationPolicy;
     /** The fixed directory below which every Content record file lives. */
     contentRoot: string;
     /** Test/fault-injection seam. Omitted methods use Node's real filesystem. */
@@ -1566,13 +1602,21 @@ declare class TransactionalContentStore implements ContentStore {
     private readonly records;
     private readonly now;
     private readonly revisionProvenance;
+    private readonly validationPolicy?;
     readonly provider: {
         readonly id: "content-filesystem";
         readonly label: "Project files";
     };
     readonly transactionScope: "provider";
-    protected constructor(records: RecordTransactionStorage, now: () => string, revisionProvenance: ContentProvenance);
-    static fromRecords(records: RecordTransactionStorage, now?: () => string, revisionProvenance?: ContentProvenance): Promise<TransactionalContentStore>;
+    protected constructor(records: RecordTransactionStorage, now: () => string, revisionProvenance: ContentProvenance, validationPolicy?: ContentValidationPolicy | undefined);
+    static fromRecords(records: RecordTransactionStorage, now?: () => string, revisionProvenance?: ContentProvenance, validationPolicy?: ContentValidationPolicy): Promise<TransactionalContentStore>;
+    contentValidationIdentity(): Promise<string | undefined>;
+    /** Read-only preflight shared by human and AI editors. Commit repeats it inside the writer. */
+    validateEntryValues(entry: ContentEntryRecord, model: ContentModelRecord, previous?: ContentEntryRecord, purpose?: "write" | "publish"): Promise<{
+        fieldId: string;
+        code: string;
+        message: string;
+    }[]>;
     get root(): string;
     /**
      * Stamp the layout marker on a brand-new store, and refuse an existing one
@@ -2029,6 +2073,13 @@ declare class FilesystemCompositionStore implements CompositionLifecycleStore {
         readonly label: "Local files";
         readonly storageLabel: "Development composition files";
     };
+    /** Internal read barrier for another domain's reviewed commit. The callback
+     * must not reenter this Composition store or mutate its root. A foreign
+     * uncertain commit must not strand our read-only writer lock. */
+    withSnapshotBarrier<T>(action: (snapshot: {
+        mutationToken: string;
+        records: readonly CompositionRecord[];
+    }) => Promise<T>): Promise<T>;
     /** Content fingerprint, not a filesystem transaction or notification counter. */
     snapshot(): Promise<{
         mutationToken: string;
@@ -2220,6 +2271,12 @@ interface ResolvedComponentPack {
   entryPath: string;
 }
 
+interface ContentValidationConfig {
+    module: string;
+    id: string;
+    version: string;
+}
+
 /**
  * Every setting a host may declare. Path settings are relative to the host
  * project root; `pack` is a module specifier.
@@ -2316,7 +2373,16 @@ interface NativeEditingConfig {
 }
 
 type AssistantEffort = "low" | "medium" | "high";
+interface AssistantContentFieldPolicy {
+    providerId: string;
+    modelId: string;
+    fieldIds: readonly string[];
+    /** Trusted editing constraints for declared fields; guidance never grants permission. */
+    fieldInstructions?: Readonly<Record<string, string>>;
+}
 interface AssistantCommonConfig {
+    /** Trusted Content field IDs; omitted retains the standalone Article defaults. */
+    contentFields?: readonly AssistantContentFieldPolicy[];
     /** Default display name; a site-scoped stored name may replace it. */
     name: string;
     /** `propose` permits conversation, drafts and review but never Apply. */
@@ -2388,6 +2454,7 @@ interface ComposerPaths {
 interface ResolvedComposerConfig {
     authoringAuthority: "source" | "workspace" | undefined;
     hostDocument: HostDocumentConfig | undefined;
+    contentValidation: ContentValidationConfig | undefined;
     nativeEditing: NativeEditingConfig | undefined;
     assistant: AssistantConfig | undefined;
     /** Absolute host project root. Every relative setting resolves against it. */
@@ -2924,7 +2991,7 @@ declare function createEditingService$1(options: CaptureHostOptions): {
                 candidateDigest: string | null;
             };
         }>;
-        apply(input: unknown): Promise<DraftReceipt>;
+        apply(input: unknown, guard?: DraftCommitGuard): Promise<DraftReceipt>;
         receipt(input: unknown): Promise<{
             status: DraftStatus;
             applied: DraftReceipt | null;

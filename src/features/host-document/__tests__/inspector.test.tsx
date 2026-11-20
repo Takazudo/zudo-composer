@@ -105,3 +105,40 @@ it("accepts schema-valid decimals with no step and retains explicit step constra
   fireEvent.click(view.getByRole("button", { name: "Save field" }));
   expect(onSave).toHaveBeenLastCalledWith({ kind: "field", prop: "count", value: 1.5 });
 });
+it("removes only a server-qualified local child and keeps dirty drafts protected", () => {
+  const eligible = { ...target, capabilities: { ...target.capabilities!, remove: { allowed: true } } };
+  const onSave = vi.fn(async () => {}), view = render(<HostInspector target={eligible} component={component} disabled={false} onDirty={() => {}} onSave={onSave} />);
+  fireEvent.input(view.getByRole("textbox", { name: "Heading" }), { target: { value: "Unsaved" } });
+  expect((view.getByRole("button", { name: "Remove component" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(onSave).not.toHaveBeenCalled();
+  fireEvent.click(view.getByRole("button", { name: "Discard local draft" }));
+  fireEvent.click(view.getByRole("button", { name: "Remove component" }));
+  expect(onSave).toHaveBeenCalledExactlyOnceWith({ kind: "remove" });
+  view.rerender(<HostInspector target={{ ...eligible, capabilities: { ...eligible.capabilities, remove: { allowed: false, reason: "Root components cannot be removed here." } } }} component={component} disabled={false} onDirty={() => {}} onSave={onSave} />);
+  expect((view.getByRole("button", { name: "Remove component" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(view.getByText("Root components cannot be removed here.")).toBeTruthy();
+});
+
+it("shows field-specific shared source uses separately from local capabilities and hides stale source actions", () => {
+  const shared: HostDocumentTarget = { ...target, fieldSources: [{ prop: "title", label: "Heading", sources: [{ entry: { providerId: "content-filesystem", modelId: "course", recordId: "consultation" }, fieldId: "course-price", fieldLabel: "Price", affectedUses: [{ pathname: "/", renderedNodeId: "home-price", prop: "price" }, { pathname: "/lessons", renderedNodeId: "price", prop: "title" }] }] }], capabilities: { ...target.capabilities!, fields: { allowed: false, reason: "Shared Mapping source." }, uses: ["/lessons"] } };
+  const onSave = vi.fn(async () => {});
+  const view = render(<HostInspector target={shared} component={component} disabled={false} onDirty={() => {}} onSave={onSave} />);
+  expect(view.getByRole("region", { name: "Heading source" }).textContent).toContain("content-filesystem/course/consultation/course-price");
+  expect(view.getByText("/")).toBeTruthy(); expect(view.getByText("/lessons")).toBeTruthy();
+  expect(view.getByRole("link", { name: "Open Price source" }).getAttribute("href")).toBe("/content?provider=content-filesystem&model=course&entry=consultation");
+  expect(onSave).not.toHaveBeenCalled();
+  view.rerender(<HostInspector target={shared} component={component} disabled={true} onDirty={() => {}} onSave={onSave} />);
+  expect(view.queryByRole("link", { name: "Open Price source" })).toBeNull();
+  expect(view.getByText("/")).toBeTruthy();
+});
+
+it("withholds shared source navigation while a different local field has an unsaved draft", () => {
+  const mixed: HostDocumentTarget = { ...target, fieldSources: [{ prop: "body", label: "Body", sources: [{ entry: { providerId: "content-filesystem", modelId: "course", recordId: "consultation" }, fieldId: "course-price", fieldLabel: "Price", affectedUses: [] }] }] };
+  const view = render(<HostInspector target={mixed} component={component} disabled={false} onDirty={() => {}} onSave={async () => {}} />);
+  expect(view.getByRole("link", { name: "Open Price source" })).toBeTruthy();
+  fireEvent.input(view.getByRole("textbox", { name: "Heading" }), { target: { value: "Pending local title" } });
+  expect(view.queryByRole("link", { name: "Open Price source" })).toBeNull();
+  expect((view.getByRole("textbox", { name: "Heading" }) as HTMLInputElement).value).toBe("Pending local title");
+  fireEvent.click(view.getByRole("button", { name: "Discard local draft" }));
+  expect(view.getByRole("link", { name: "Open Price source" })).toBeTruthy();
+});

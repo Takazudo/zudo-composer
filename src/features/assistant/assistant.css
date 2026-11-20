@@ -158,3 +158,8 @@
   .cms-assistant-compose textarea { block-size: 3.25em; }
   .cms-assistant-chat__name { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
+
+.cms-host-assistant { padding: 1rem; display: grid; gap: 1rem; }
+.cms-host-assistant textarea { display: block; width: 100%; min-height: 6rem; }
+.cms-host-review-card { border: 1px solid currentColor; padding: 1rem; display: grid; gap: .75rem; }
+.cms-host-assistant iframe { width: 100%; min-height: 32rem; border: 0; }

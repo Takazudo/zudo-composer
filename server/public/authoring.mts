@@ -34,3 +34,5 @@ export {
 } from "../authoring-workspace/capture.js";
 export type { HostDocumentRenderer, HostDocumentRenderInput, HostDocumentIdentity, HostDocumentTarget, HostDocumentPreview } from "../host-document/types.js";
 export { renderHostDocument, hostDocumentTargets } from "../host-document/render.js";
+
+export type { ContentFieldValidationInput, ContentPolicyIssue, ContentValidationModule } from "../../src/content/validation.js";

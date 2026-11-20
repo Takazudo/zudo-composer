@@ -41,6 +41,12 @@ strings and arrays, nested required values, and missing per-use accessible
 text. `false` and `0` are complete. An optional absent object does not require
 its children, but a present object does. All populated list items are checked.
 
+Boolean fields distinguish missing values from saved `false`. An unset field shows
+**Not set** and offers **Set to No** to author `false` directly; its switch can
+author `true`. Both actions use the normal field-change/save path, including nested
+fields. Opening an editor does not populate defaults or change optional absence.
+Existing saved booleans keep their ordinary switch behavior.
+
 Optional `presentation` has `groups`, `views`, and `inverses`. Groups/views name
 existing top-level field IDs. Inverses name `{source:{providerId,recordId},fieldId}`
 on the owning model; the field must be a top-level reference/ref-list targeting

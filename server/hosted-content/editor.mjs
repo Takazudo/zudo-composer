@@ -570,7 +570,8 @@ lineIcon(() => [
 		r: .35
 	})
 ]);
-lineIcon(() => [h("path", { d: "M13.5 8a5.5 5.5 0 1 1-1.61-3.89" }), h("polyline", { points: "13.5 3.5 13.5 8 9 8" })]);
+/** In-flight/loading state; motion is left to the owning control's CSS. */
+var LoadingIcon = lineIcon(() => [h("path", { d: "M13.5 8a5.5 5.5 0 1 1-1.61-3.89" }), h("polyline", { points: "13.5 3.5 13.5 8 9 8" })]);
 lineIcon(() => [h("path", { d: "M2.25 4.25h4l1.25 1.5h6.25v7.5H2.25v-9Z" }), h("path", { d: "M2.25 6.25h11.5" })]);
 lineIcon(() => [h("path", { d: "M1.75 4.25h4l1.25 1.5h7.25v7.5H1.75v-9Z" })]);
 lineIcon(() => [
@@ -1406,6 +1407,60 @@ function useDomId() {
 	return id;
 }
 //#endregion
+//#region src/components/ui/button.tsx
+function Button(props) {
+	const { variant = "default", size = "md", iconOnly = false, class: className, type = "button", elementRef, busy = false, disabled, children, ...rest } = props;
+	return /* @__PURE__ */ jsxs("button", {
+		ref: elementRef,
+		type,
+		class: cx("cms-btn", variant !== "default" && `cms-btn--${variant}`, size !== "md" && `cms-btn--${size}`, iconOnly && "cms-btn--icon", className),
+		...rest,
+		disabled: busy || disabled,
+		"aria-busy": busy ? true : rest["aria-busy"],
+		children: [busy ? /* @__PURE__ */ jsx(LoadingIcon, {
+			size: "sm",
+			class: "cms-btn__spinner"
+		}) : null, children]
+	});
+}
+//#endregion
+//#region src/features/content/boolean-control.tsx
+/** Absence stays absent until the author explicitly chooses Yes or No. */
+function ContentBooleanControl({ value, label = "Boolean", id, required, disabled, describedBy, class: className, onChange }) {
+	const unsetId = useDomId();
+	const field = useFieldControl();
+	const description = [describedBy ?? field?.describedBy, value === void 0 ? unsetId : void 0].filter(Boolean).join(" ") || void 0;
+	return /* @__PURE__ */ jsxs("div", { children: [/* @__PURE__ */ jsx(Switch, {
+		id,
+		class: className,
+		"aria-label": label,
+		label: /* @__PURE__ */ jsxs(Fragment, { children: [label, required ? /* @__PURE__ */ jsx("span", {
+			class: "sg-content-req",
+			"aria-hidden": "true",
+			children: " *"
+		}) : null] }),
+		checked: value === true,
+		disabled,
+		"aria-describedby": description,
+		onCheckedChange: onChange
+	}), value === void 0 ? /* @__PURE__ */ jsxs("div", { children: [
+		/* @__PURE__ */ jsx("span", {
+			id: unsetId,
+			children: "Not set"
+		}),
+		" ",
+		/* @__PURE__ */ jsx(Button, {
+			size: "sm",
+			disabled,
+			"aria-label": `Set ${label} to No`,
+			onClick: () => {
+				if (!disabled) onChange(false);
+			},
+			children: "Set to No"
+		})
+	] }) : null] });
+}
+//#endregion
 //#region src/features/content/scalar-control.tsx
 var text = (value) => typeof value === "string" || typeof value === "number" ? String(value) : "";
 /** The same primitive value widgets serve local structured forms and hosted forms. */
@@ -1430,12 +1485,13 @@ function ContentScalarControl({ schema, value, label, required, maxLength, disab
 			children: option.label
 		}, option.value))]
 	});
-	if (schema.kind === "boolean") return /* @__PURE__ */ jsx(Switch, {
-		label: label ?? "Boolean",
-		"aria-label": label,
-		checked: value === true,
+	if (schema.kind === "boolean") return /* @__PURE__ */ jsx(ContentBooleanControl, {
+		label,
+		value,
+		required,
 		disabled,
-		onCheckedChange: onChange
+		describedBy,
+		onChange
 	});
 	if (schema.kind === "long-text") return /* @__PURE__ */ jsx(Textarea, {
 		...common,
