@@ -167,7 +167,7 @@ describe("Rail", () => {
     fireEvent.click(site);
     expect(onNavigate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("link", { name: "Compositions" }));
-    expect(onNavigate).toHaveBeenCalledWith("/composer");
+    expect(onNavigate).toHaveBeenCalledWith("/composer", screen.getByRole("link", { name: "Compositions" }));
   });
 
   it("gives the working-preview flush a head start on pointerdown and Enter, and never on other items", () => {

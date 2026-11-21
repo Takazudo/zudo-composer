@@ -1,3 +1,4 @@
+import { transportFailureMessage } from "../coordination-error";
 import { AUTHORING_READ_HEADER } from "../authoring-read-retry";
 import { notifyPersistenceChange } from "../persistence-generation";
 import {
@@ -103,7 +104,7 @@ export class DomainFileProviderClient<Operation extends string, DomainError exte
     } catch (cause) {
       throw this.adapter.transportError(
         operation,
-        `The development ${this.adapter.domain} provider is unavailable. Confirm \`pnpm dev\` is running and retry.`,
+        transportFailureMessage(cause, `The development ${this.adapter.domain} provider is unavailable. Confirm \`pnpm dev\` is running and retry.`),
         cause,
       );
     }

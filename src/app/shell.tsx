@@ -191,6 +191,16 @@ export function Shell({ children, path, themeController, themeSnapshot, summary,
     void (async () => {
       const initialized = await integration.initialization.initialize();
       if (initialized.status !== "ready") throw initialized.error;
+      // One read-all instead of list-models plus one get-model per model.
+      const readAll = integration.contentProvider?.store.readAll;
+      // A snapshot refused for one bad record falls through to the per-model path,
+      // which still lists every readable model.
+      const snapshot = readAll ? await readAll.call(integration.contentProvider.store).catch(() => null) : null;
+      if (snapshot) {
+        const providerId = integration.contentProvider.descriptor.id;
+        if (live) { setModels(snapshot.models.map((model) => ({ providerId, modelId: model.id, label: model.document.name, kind: model.document.kind, views: model.document.presentation?.views ?? [] }))); setModelError(null); }
+        return;
+      }
       const catalog = await integration.contentCatalog.listModels();
       const values = await Promise.allSettled(catalog.entries.map(async (entry) => {
         const result = await integration.contentCatalog.resolveModel(entry.ref);
@@ -230,7 +240,7 @@ export function Shell({ children, path, themeController, themeSnapshot, summary,
     onPinsChange: (value: typeof pins) => { setPins(value); writePins(value); },
     onToggleCollapsed: toggleRail,
     onBeforeNewTab,
-    ...(workspace ? { onNavigate: (href: string) => { void workspace.navigate(href).then((ok) => { if (ok) { close(false); requestAnimationFrame(() => document.getElementById("workspace-destination")?.focus()); } }); } } : {}),
+    ...(workspace ? { onNavigate: (href: string, source?: Element | null) => { void workspace.navigate(href, source).then((ok) => { if (ok) { close(false); requestAnimationFrame(() => document.getElementById("workspace-destination")?.focus()); } }); } } : {}),
   };
   const temporaryRail = <Rail {...railProps} collapsed={false} hideToggle />;
 

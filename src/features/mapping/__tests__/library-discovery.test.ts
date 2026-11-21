@@ -39,3 +39,23 @@ describe("Mapping library discovery",()=>{
   const r=mappingRecord([READY_BINDING]);const h=harness([r]);await h.controller.initialize({providerId:h.provider.descriptor.id,mappingId:'missing'});expect(h.controller.state.deepLink?.status).toBe('missing');expect(h.controller.state.mapping).toBeNull();expect(h.controller.state.libraryDetails[r.id]?.definition.status).toBe('ready');
  });
 });
+
+describe("library rows from one snapshot", () => {
+  it("resolves every library row from one Mapping snapshot instead of one get per row", async () => {
+    const records = Array.from({ length: 40 }, (_, i) => mappingRecord([READY_BINDING], `bulk-${i}`)); const h = harness(records);
+    const get = vi.spyOn(h.provider.store, "get");
+    const snapshot = vi.fn(async () => ({ mutationToken: "t", records }));
+    Object.assign(h.provider.store, { snapshot });
+    await h.controller.initialize();
+    expect(snapshot).toHaveBeenCalledTimes(1); expect(get).not.toHaveBeenCalled();
+    expect(Object.keys(h.controller.state.libraryDetails)).toEqual(records.map((r) => r.id));
+  });
+});
+
+it("resolves library rows without waiting for a slow or stuck attachments capture", async () => {
+  const records = Array.from({ length: 5 }, (_, i) => mappingRecord([READY_BINDING], `rows-${i}`));
+  const attachments = { list: () => new Promise<never>(() => {}) } as unknown as NonNullable<NonNullable<Parameters<typeof harness>[2]>["attachments"]>;
+  const h = harness(records, undefined, { attachments });
+  void h.controller.initialize();
+  await vi.waitFor(() => expect(Object.keys(h.controller.state.libraryDetails)).toEqual(records.map((r) => r.id)));
+});

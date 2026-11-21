@@ -315,6 +315,10 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
   // repair. Keep each real snapshot (including its token) only until the normal
   // Composition invalidation/refresh boundary. An old promise cannot repopulate
   // a cleared cache when it settles after a newer read.
+  // One Content read-all per refresh, shared by the Content counts and the
+  // Mapping diagnostics so neither falls back to one get-model per model.
+  let contentSnapshot: Promise<ContentSnapshot> | undefined;
+  const readContentSnapshot = (): Promise<ContentSnapshot> => contentSnapshot ??= integration.contentProvider.store.readAll!();
   let compositionInventory = new Map<string, Promise<PersistedSnapshot<CompositionRecord>>>();
   const inventory = (provider: WorkspaceSummaryIntegration["compositionProviders"][number]) => {
     let pending = compositionInventory.get(provider.descriptor.id);
@@ -428,11 +432,20 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     // One evaluation may reference the same model hundreds of times. Preserve
     // the original outcome per qualified owner; do not cache across refreshes.
     const models = new Map<string, ReturnType<ContentCatalog["resolveModel"]>>();
+    const resolveFromSnapshot: ContentCatalog["resolveModel"] = async (ref) => {
+      if (integration.contentProvider.store.readAll && ref.providerId === integration.contentProvider.descriptor.id) {
+        try {
+          const record = (await readContentSnapshot()).models.find((model) => model.id === ref.recordId);
+          if (record) return { status: "resolved", record: structuredClone(record) };
+        } catch { /* An unreadable snapshot falls back to the per-model catalog outcome. */ }
+      }
+      return integration.contentCatalog.resolveModel(ref);
+    };
     const content: ContentCatalog = { ...integration.contentCatalog, resolveModel: ref => {
       if (!ref || typeof ref !== "object" || Array.isArray(ref) || Object.keys(ref).sort().join(",") !== "providerId,recordId") return integration.contentCatalog.resolveModel(ref);
       const key = JSON.stringify([ref.providerId, ref.recordId]);
       let pending = models.get(key);
-      if (!pending) { pending = integration.contentCatalog.resolveModel(ref); models.set(key, pending); }
+      if (!pending) { pending = resolveFromSnapshot(ref); models.set(key, pending); }
       return pending;
     } };
     for (const entry of listing.entries) {
@@ -499,7 +512,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
   const loadContent = async (): Promise<ContentData> => {
     await ensureInitialized();
     // One domain snapshot per summary refresh; never reused as a write precondition.
-    const captured = integration.contentProvider.store.readAll ? structuredClone(await integration.contentProvider.store.readAll()) : null;
+    const captured = integration.contentProvider.store.readAll ? structuredClone(await readContentSnapshot()) : null;
     if (integration.contentProvider.store.readAll) validateSummaryContent(captured!, integration.contentProvider.descriptor.id);
     const models = captured ? captured.models.map(summarizeContentModel).sort(compareContentModelsNewestFirst) : await integration.contentProvider.store.listModels();
     const records: WorkspaceRecord[] = [];
@@ -585,16 +598,16 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
   const stopChanges = integration.subscribeChanges?.((channel) => {
     if (channel === "sessions") return; // Pending edits are not persisted counts.
     if (channel === COMPOSITION_FILE_PROVIDER_CHANNEL) { compositionInventory = new Map(); delete cached.compositions; delete cached.mappings; }
-    else if (channel === CONTENT_FILE_PROVIDER_DOMAIN) { delete cached.content; delete cached.mappings; }
+    else if (channel === CONTENT_FILE_PROVIDER_DOMAIN) { contentSnapshot = undefined; delete cached.content; delete cached.mappings; }
     else if (channel === MAPPING_FILE_PROVIDER_DOMAIN) { mappingInventory = new Map(); delete cached.mappings; }
     else if (channel === SITEMAP_FILE_PROVIDER_DOMAIN) delete cached.sitemaps;
     else if (channel === ASSET_PERSISTENCE_CHANNEL) delete cached.assets;
-    else { cached = {}; compositionInventory = new Map(); mappingInventory = new Map(); } // Workspace selection and legacy broad hints.
+    else { cached = {}; contentSnapshot = undefined; compositionInventory = new Map(); mappingInventory = new Map(); } // Workspace selection and legacy broad hints.
     for (const listener of listeners) listener();
   });
   return {
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    dispose() { stopChanges?.(); cached = {}; compositionInventory = new Map(); mappingInventory = new Map(); listeners.clear(); },
+    dispose() { stopChanges?.(); cached = {}; contentSnapshot = undefined; compositionInventory = new Map(); mappingInventory = new Map(); listeners.clear(); },
     async counts() {
       const data = await read();
       return {
@@ -630,6 +643,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     },
     refresh() {
       cached = {};
+      contentSnapshot = undefined;
       compositionInventory = new Map();
       mappingInventory = new Map();
       for (const listener of listeners) listener();

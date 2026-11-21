@@ -1,3 +1,4 @@
+import { transportFailureMessage } from "../../../shared/coordination-error";
 import { authoringFetch } from "../../../shared/authoring-fetch";
 import { fileProviderConfig } from "virtual:composer-file-provider-config";
 import { notifyPersistenceChange } from "../../../shared/persistence-generation";
@@ -115,7 +116,7 @@ class BrowserFileProviderAssetStore implements AssetFileProviderStore {
       if (encodedMetadata !== undefined) headers[this.config.assetMetadataHeader] = encodedMetadata;
       response = await this.fetchImpl(this.config.assetEndpoint, { method: "POST", headers, body, cache: "no-store", credentials: "same-origin" });
     } catch (cause) {
-      throw persistenceError(operationFor(operation), "unavailable", "The development assets provider is unavailable. Confirm `pnpm dev` is running and retry.", cause);
+      throw persistenceError(operationFor(operation), "unavailable", transportFailureMessage(cause, "The development assets provider is unavailable. Confirm `pnpm dev` is running and retry."), cause);
     }
     let payload: unknown;
     try { payload = await response.json(); } catch (cause) { throw persistenceError(operationFor(operation), "unknown", "The development assets provider returned malformed JSON.", cause); }

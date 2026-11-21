@@ -64,4 +64,17 @@ describe("browser authoring exclusion", () => {
     await expect(gate.provider("a", 0, async () => {})).rejects.toMatchObject({ code: "authoring-busy" });
     await gate.drain();
   });
+  it("refuses a new tab's bind during a round and admits it once the round settles", async () => {
+    const gate = createBrowserCoordinator({ challengeMs: 100 });
+    const a = { send: (value: { challenge: string; epoch: number }) => gate.answer("a", a, value.challenge, value.epoch, true), resume: () => {} };
+    const b = { send: () => {}, resume: () => {} };
+    gate.bind("a", a);
+    let finish!: () => void, entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const round = gate.run("a", async () => { entered(); await new Promise<void>(resolve => { finish = resolve; }); });
+    await started;
+    expect(() => gate.bind("b", b)).toThrow(expect.objectContaining({ code: "authoring-busy" }));
+    finish(); await round;
+    expect(gate.bind("b", b)).toBe(gate.epoch);
+  });
 });

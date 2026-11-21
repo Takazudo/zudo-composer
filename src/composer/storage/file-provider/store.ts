@@ -1,3 +1,4 @@
+import { transportFailureMessage } from "../../../shared/coordination-error";
 import { AUTHORING_READ_HEADER } from "../../../shared/authoring-read-retry";
 import { authoringFetch } from "../../../shared/authoring-fetch";
 import { fileProviderConfig } from "virtual:composer-file-provider-config";
@@ -361,7 +362,7 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
       throw persistenceError(
         persistenceOperation(operation),
         "unavailable",
-        "The development file provider is unavailable. Confirm `pnpm dev` is running and retry.",
+        transportFailureMessage(cause, "The development file provider is unavailable. Confirm `pnpm dev` is running and retry."),
         true,
         cause,
       );

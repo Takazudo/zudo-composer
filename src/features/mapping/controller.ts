@@ -501,11 +501,19 @@ export class MappingEditorController {
         // An exact editor route needs its own definition, not every library row.
         // Deferred rows remain Checking until a real library visit resolves them.
         this.libraryDetailsDeferred = !!deepLink;
-        await this.refreshAttachments();
         if (deepLink) {
+          // The attachments capture flushes workspace sessions; finish it before
+          // the editor opens so it cannot silently save the first edits.
+          await this.refreshAttachments();
           const opened = await this.openDeepLink(deepLink);
           if (opened.status !== "ready") await this.refreshLibraryDetails();
-        } else { await this.refreshLibraryDetails(); this.set({ ...this.current, message: "Mapping library ready." }); }
+        } else {
+          // That capture can be slow; library rows must never wait behind it.
+          const attachments = this.refreshAttachments();
+          attachments.catch(() => undefined); // Observed below; avoid an unhandled-rejection report while rows load.
+          await this.refreshLibraryDetails(); this.set({ ...this.current, message: "Mapping library ready." });
+          await attachments;
+        }
       } else if (outcome.status === "recovery-required") {
         this.set({
           ...initialState,
@@ -649,8 +657,12 @@ export class MappingEditorController {
     const catalogs = libraryResolutionCatalogs(this.catalogs);
     // Clear obsolete readiness while this pass checks current records.
     this.set({ ...this.current, libraryDetails: {} });
+    // One snapshot serves every row; rows it does not hold keep their exact get.
+    const snapshot = this.provider.store.snapshot ? await this.provider.store.snapshot().then((value) => new Map(value.records.map((record) => [record.id, record])), () => null) : null;
+    if (revision !== this.libraryDetailsRevision) return;
     const rows = await mapLibraryRows(this.current.mappings, async (summary) => {
-      const outcome = await this.provider.store.get(summary.id); if (outcome.status !== "loaded") return null;
+      const captured = snapshot?.get(summary.id);
+      const outcome = captured ? { status: "loaded" as const, record: structuredClone(captured) } : await this.provider.store.get(summary.id); if (outcome.status !== "loaded") return null;
       return [summary.id, { record: outcome.record, definition: await resolveMappingDefinition(outcome.record, catalogs, this.manifest) }] as const;
     });
     if (revision !== this.libraryDetailsRevision) return;
