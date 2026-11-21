@@ -482,8 +482,15 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   const contentCatalog = createContentCatalog(guardedContentProviders);
   // The Mapping and Sitemapper composition catalogs read only `record` from
   // get, so a snapshot-served outcome without derivedOutput is exact for them.
-  const bulkCompositions = new Map(compositionProviders.map((provider) => [provider.descriptor.id, provider.store.snapshot ? createBulkRecordCache(async () => (await provider.store.snapshot!()).records, (record) => record.id) : null] as const));
-  const recordOnlyCompositionProviders = () => guardedCompositionProviders().map((provider) => ({ ...provider, store: { ...provider.store, get: async (id: string) => { await ensureReady(); const record = await bulkCompositions.get(provider.descriptor.id)?.(id); return record ? { status: "loaded" as const, record } : provider.store.get(id); } } }));
+  // Composition providers are spliced in at initialization, so the cache is per live store, made on first use.
+  const bulkCompositions = new WeakMap<CompositionProvider["store"], ((id: string) => Promise<Awaited<ReturnType<NonNullable<CompositionProvider["store"]["snapshot"]>>>["records"][number] | undefined>) | null>();
+  const bulkComposition = (id: string, providerId: string) => {
+    const store = compositionProviders.find((provider) => provider.descriptor.id === providerId)?.store;
+    if (!store) return Promise.resolve(undefined);
+    if (!bulkCompositions.has(store)) bulkCompositions.set(store, store.snapshot ? createBulkRecordCache(async () => (await store.snapshot!()).records, (record) => record.id) : null);
+    return bulkCompositions.get(store)?.(id) ?? Promise.resolve(undefined);
+  };
+  const recordOnlyCompositionProviders = () => guardedCompositionProviders().map((provider) => ({ ...provider, store: { ...provider.store, get: async (id: string) => { await ensureReady(); const record = await bulkComposition(id, provider.descriptor.id); return record ? { status: "loaded" as const, record } : provider.store.get(id); } } }));
   const rawMappingCompositionCatalog = () => createMappingCompositionCatalog(recordOnlyCompositionProviders());
   const mappingCompositionCatalog: MappingCompositionCatalog = {
     list: async () => { try { await ensureReady(); return rawMappingCompositionCatalog().list(); } catch (error) { return { status: "listed", entries: [], failures: [{ providerId: "site-project", providerLabel: "Active SiteProject", reason: error instanceof Error ? error.message : "SiteProject initialization failed." }] }; } },
