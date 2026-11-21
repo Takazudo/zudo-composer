@@ -1,6 +1,6 @@
 {
-  "packageOutputSha": "cfaa6f245f797b00d6ec2091bdbf2c4955875b1d",
-  "payloadSha256": "04fb8ab2315dc06ccb811ca6bf4d7670703c6685d13ef1d1a7bce41cae52a1ad",
+  "packageOutputSha": "8f00996bd754c85c337d66a64d31c976221a002b",
+  "payloadSha256": "2607e0ff5073aeb23c2a5366a2fd911fecd181dde6e13a12d2a54cd49a41c5fb",
   "rawPackageJsonSha256": "3247ccc706e22ccd176f6b255b42f5e1345e0eab1e588702b28f8ffeee278098",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
@@ -1374,9 +1374,9 @@
     },
     {
       "path": "src/app/page-loading/page-loading.ts",
-      "bytes": 3053,
+      "bytes": 3131,
       "mode": 420,
-      "sha256": "07d1fc06353e7286883b6982600d3a820db6bf76e24ba49048d6f0bd3d76aca4"
+      "sha256": "e90789b8161b2a531648be5dbc05b493ba8943c18ad9319344c5cb9b0e42543d"
     },
     {
       "path": "src/app/persistence-channels.ts",
