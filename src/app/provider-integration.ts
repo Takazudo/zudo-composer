@@ -22,6 +22,7 @@ import { projectFromWorkspace, type WorkspaceRecord } from "./workspace-record";
 import { createWorkspaceSaveRegistry, type WorkspaceSaveRegistry } from "./workspace-sessions";
 import { captureWorkspaceSnapshot, checkWorkspaceCapture, type WorkspaceCapture, type WorkspaceCaptureOutcome, type WorkspaceSnapshotSource, type WorkspaceToken } from "./workspace-snapshot";
 import { subscribePersistenceChanges } from "../shared/persistence-generation";
+import { createBulkRecordCache } from "./bulk-record-cache";
 import { createMappingAttachmentService } from "./mapping-attachment-service";
 import { discardWorkspaceSeed } from "./workspace-seeding";
 
@@ -462,22 +463,28 @@ export function createProductionProviderIntegration(options: ProductionProviderI
 
   const contentProviders = [contentProvider] as const; const mappingProviders = [mappingProvider] as const;
   const ensureReady = async (): Promise<void> => { const result = await lifecycle.initialize(); if (result.status === "error") throw result.error; };
-  const guardedContentProviders = contentProviders.map((provider) => ({ descriptor: provider.descriptor, store: {
+  // Catalog resolution (Mapping library, Sitemapper assignments, previews, rail)
+  // reads records one by one; serve those from one bulk read per domain burst.
+  const guardedContentProviders = contentProviders.map((provider) => { const bulkModel = provider.store.readAll ? createBulkRecordCache(async () => (await provider.store.readAll!()).models, (model) => model.id) : null; return { descriptor: provider.descriptor, store: {
     listModels: async () => { await ensureReady(); return provider.store.listModels(); },
-    getModel: async (id: string) => { await ensureReady(); return provider.store.getModel(id); },
+    getModel: async (id: string) => { await ensureReady(); const record = await bulkModel?.(id); return record ? { status: "loaded" as const, record } : provider.store.getModel(id); },
     scanEntries: async (id: string) => { await ensureReady(); return provider.store.scanEntries(id); },
-  } }));
+  } }; });
   const guardedCompositionProviders = () => compositionProviders.map((provider) => ({ descriptor: provider.descriptor, store: {
     list: async () => { await ensureReady(); return provider.store.list(); },
     get: async (id: string) => { await ensureReady(); return provider.store.get(id); },
   } }));
-  const guardedMappingProviders = mappingProviders.map((provider) => ({ descriptor: provider.descriptor, store: {
+  const guardedMappingProviders = mappingProviders.map((provider) => { const bulkMapping = provider.store.snapshot ? createBulkRecordCache(async () => (await provider.store.snapshot!()).records, (record) => record.id) : null; return { descriptor: provider.descriptor, store: {
     list: async () => { await ensureReady(); return provider.store.list(); },
-    get: async (id: string) => { await ensureReady(); return provider.store.get(id); },
+    get: async (id: string) => { await ensureReady(); const record = await bulkMapping?.(id); return record ? { status: "loaded" as const, record } : provider.store.get(id); },
     ...(provider.store.snapshot ? { snapshot: async () => { await ensureReady(); return provider.store.snapshot!(); } } : {}),
-  } }));
+  } }; });
   const contentCatalog = createContentCatalog(guardedContentProviders);
-  const rawMappingCompositionCatalog = () => createMappingCompositionCatalog(guardedCompositionProviders());
+  // The Mapping and Sitemapper composition catalogs read only `record` from
+  // get, so a snapshot-served outcome without derivedOutput is exact for them.
+  const bulkCompositions = new Map(compositionProviders.map((provider) => [provider.descriptor.id, provider.store.snapshot ? createBulkRecordCache(async () => (await provider.store.snapshot!()).records, (record) => record.id) : null] as const));
+  const recordOnlyCompositionProviders = () => guardedCompositionProviders().map((provider) => ({ ...provider, store: { ...provider.store, get: async (id: string) => { await ensureReady(); const record = await bulkCompositions.get(provider.descriptor.id)?.(id); return record ? { status: "loaded" as const, record } : provider.store.get(id); } } }));
+  const rawMappingCompositionCatalog = () => createMappingCompositionCatalog(recordOnlyCompositionProviders());
   const mappingCompositionCatalog: MappingCompositionCatalog = {
     list: async () => { try { await ensureReady(); return rawMappingCompositionCatalog().list(); } catch (error) { return { status: "listed", entries: [], failures: [{ providerId: "site-project", providerLabel: "Active SiteProject", reason: error instanceof Error ? error.message : "SiteProject initialization failed." }] }; } },
     resolve: async (ref) => { try { await ensureReady(); return rawMappingCompositionCatalog().resolve(ref); } catch (error) { return { status: "provider-error", reason: error instanceof Error ? error.message : "SiteProject initialization failed." }; } },
@@ -490,7 +497,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   const sitemapperMappingCatalog = createMappingAssignmentCatalog(guardedMappingProviders, guardedContentProviders, async (mapping) => { const definition = await resolveMappingDefinition(mapping, { content: contentCatalog, compositions: mappingCompositionCatalog }, activeComponentProvider.catalog); return definition.status === "ready" ? { status: "ready" } : { status: "blocked", diagnostics: definition.diagnostics.map(({ code, message }) => ({ code, message })) }; });
   const preview = () => createContentPreviewSource({ mappings: mappingCatalog, catalogs: { content: contentCatalog, compositions: mappingCompositionCatalog }, manifest: activeComponentProvider.catalog, initializeContent: async () => { const result = await lifecycle.initialize(); return result.status === "ready" ? { status: "ready" } : { status: "error", reason: result.error.message }; }, initializeMappings: async () => { const result = await lifecycle.initialize(); return result.status === "ready" ? { status: "ready" } : { status: "error", reason: result.error.message }; } });
 
-  const initializedCompositionCatalog = () => createCompositionCatalog(guardedCompositionProviders());
+  const initializedCompositionCatalog = () => createCompositionCatalog(recordOnlyCompositionProviders());
   const compositionCatalog: CompositionCatalog = {
     listCompositions: async () => { try { await ensureReady(); return initializedCompositionCatalog().listCompositions(); } catch (error) { return { entries: [], failures: [{ providerId: "site-project", providerLabel: "Active SiteProject", reason: error instanceof Error ? error.message : "SiteProject initialization failed." }] }; } },
     resolveComposition: async (ref) => { try { await ensureReady(); return initializedCompositionCatalog().resolveComposition(ref); } catch { return { status: "provider-unavailable" }; } },
