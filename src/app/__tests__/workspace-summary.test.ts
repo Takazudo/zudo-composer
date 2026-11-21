@@ -816,3 +816,17 @@ it("keeps native incomplete and missing-provider graph diagnostics non-fatal", a
  expect((await summary.counts()).content).toMatchObject({status: "ok", value: {models: 1, entries: 1}});
  expect(value((await summary.attention()).content).length).toBeGreaterThan(0);
 });
+
+it("resolves Mapping diagnostic models from the shared Content read-all, never one get-model per model", async () => {
+  const models = Array.from({ length: 23 }, (_, i) => contentModel(`model-${i}`, AT(1)));
+  const records = Array.from({ length: 40 }, (_, i) => { const record = mappingRecord(`mapping-${i}`); record.document.contentModel.recordId = `model-${i % 23}`; return record; });
+  const { integration } = createFakeIntegration({ models });
+  const readAll = vi.fn(async () => ({ providerId: "content-filesystem", mutationToken: 1, models, entries: [] }));
+  Object.assign(integration.contentProvider.store, { readAll });
+  const resolveModel = vi.spyOn(integration.contentCatalog, "resolveModel");
+  const summary = createWorkspaceSummary({ ...integration, mappingProviders: [{ descriptor: { id: "mapping-filesystem", label: "Mappings" }, store: { snapshot: async () => ({ mutationToken: "mappings-token", records }) } }] });
+  expect(value((await summary.counts()).mappings)).toEqual({ mappings: 40, blockedMappings: 0 });
+  expect(readAll).toHaveBeenCalledTimes(1); expect(resolveModel).not.toHaveBeenCalled();
+  summary.refresh(); await summary.counts();
+  expect(readAll).toHaveBeenCalledTimes(2); expect(resolveModel).not.toHaveBeenCalled();
+});
