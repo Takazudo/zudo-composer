@@ -17,7 +17,9 @@ import { PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "./
 import { publishPendingState } from "./shared/pending-broadcast";
 import { createProjectAssetUsageInspection } from "./site-project/assets/usage";
 import { Shell } from "./app/shell";
-import { createPageLoading } from "./app/page-loading/page-loading";
+import { createPageLoading, PageLoadingContext } from "./app/page-loading/page-loading";
+import { authoringRequestsInFlight, subscribeAuthoringActivity } from "./shared/authoring-fetch";
+import { isCoordinationBusy } from "./shared/coordination-error";
 import { PageLoadingOverlay } from "./app/page-loading/page-loading-overlay";
 import { createWorkspaceSummary } from "./app/workspace-summary";
 import ComposerApp from "./features/composer/chrome/composer-app";
@@ -29,6 +31,9 @@ import { ReleaseRoute, createReleaseController, createReleaseTransport } from ".
 import { createApplicationOperationGate } from "./app/operation-gate";
 import { HostedDemoNotice } from "./features/delivery/hosted-demo-notice";
 import { bootstrapTheme, createThemeController, type ThemeController } from "./theme/theme";
+
+const OPENING_BUSY_RETRY_MS = 1000;
+const OPENING_BUSY_DEADLINE_MS = 60_000;
 
 function NotFound() { return <main class="route-placeholder"><h1>Not found</h1><p>This standalone route does not exist.</p><a href="/">Return home</a></main>; }
 
@@ -71,7 +76,8 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     setOpeningReason(cause instanceof ProviderIntegrationError ? cause.sourceReason ?? "storage" : "storage");
     setError(cause instanceof Error ? cause.message : "Workspace initialization failed.");
   };
-  const pageLoading = useMemo(createPageLoading, []);
+  const pageLoading = useMemo(() => createPageLoading({ inFlight: authoringRequestsInFlight, subscribe: subscribeAuthoringActivity }), []);
+  useEffect(() => () => pageLoading.dispose(), [pageLoading]);
   const navigationTicket = useRef(0);
   const replacing = useRef(false);
   const historyIndex = useRef<number>(Number.isInteger(window.history.state?.workspaceIndex) ? window.history.state.workspaceIndex : 0);
@@ -122,6 +128,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
         window.history[replace ? "replaceState" : "pushState"]({ workspaceIndex: historyIndex.current }, "", next);
       }
       setLocation(next);
+      pageLoading.settle(source);
       requestAnimationFrame(() => document.getElementById("workspace-destination")?.focus());
       return true;
     } catch (cause) { if (ticket === navigationTicket.current) setError(cause instanceof Error ? cause.message : "Navigation failed."); return false; }
@@ -133,7 +140,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     replacing.current = true;
     const endLoading = pageLoading.begin();
     setBusy(true); setError(null);
-    try { await flush(); const replacement = await action(); if (operationGate.disposed) return false; if (replacement === providers) { setReady(true); return true; } await new Promise<void>((resolve) => { swapCommitted.current = resolve; setProviders(replacement); setReady(true); }); return true; }
+    try { await flush(); const replacement = await action(); if (operationGate.disposed) return false; if (replacement === providers) { setReady(true); return true; } await new Promise<void>((resolve) => { swapCommitted.current = resolve; setProviders(replacement); setReady(true); }); pageLoading.settle(); return true; }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Workspace could not be opened. The existing workspace remains selected."); return false; }
     finally { endLoading(); replacing.current = false; setBusy(false); releaseGate(); }
   };
@@ -144,14 +151,23 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     finally { setBusy(false); }
   };
   useEffect(() => {
-    let live = true;
+    let live = true, timer: ReturnType<typeof setTimeout> | undefined;
+    const started = Date.now();
     setReady(false);
-    void providers.initialization.initialize().then((result) => {
+    // Another tab's coordination round refuses this tab until it settles; that
+    // is a wait, not a failed open, so keep the healthy opening state meanwhile.
+    const failed = (cause: unknown) => {
+      if (!live) return;
+      if (isCoordinationBusy(cause) && Date.now() - started < OPENING_BUSY_DEADLINE_MS) timer = setTimeout(() => attempt(() => providers.initialization.retry()), OPENING_BUSY_RETRY_MS);
+      else openingFailed(cause);
+    };
+    const attempt = (open: () => ReturnType<typeof providers.initialization.initialize>) => void open().then((result) => {
       if (!live) return;
       if (result.status === "ready") { setReady(true); setError(null); }
-      else openingFailed(result.error);
-    }).catch((cause: unknown) => { if (live) openingFailed(cause); });
-    return () => { live = false; };
+      else failed(result.error);
+    }).catch(failed);
+    attempt(() => providers.initialization.initialize());
+    return () => { live = false; clearTimeout(timer); };
   }, [providers]);
   useEffect(() => {
     const pop = (event: PopStateEvent) => {
@@ -163,7 +179,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
       if (transition?.phase === "committing") {
         historyIndex.current = transition.targetIndex;
         window.history.replaceState({ ...window.history.state, workspaceIndex: historyIndex.current }, "");
-        traversal.current = null; transition.endLoading();
+        traversal.current = null; pageLoading.settle(); transition.endLoading();
         setRouteEpoch((value) => value + 1); setLocation(target); setBusy(false);
         requestAnimationFrame(() => document.getElementById("workspace-destination")?.focus());
         return;
@@ -191,7 +207,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
       const next = window.location.pathname + window.location.search + window.location.hash;
       if ((event as CustomEvent).detail === "push") historyIndex.current++;
       window.history.replaceState({ ...window.history.state, workspaceIndex: historyIndex.current }, "");
-      locationRef.current = next; setLocation(next);
+      locationRef.current = next; setLocation(next); pageLoading.settle();
     };
     const click = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !(event.target instanceof Element)) return;
@@ -301,5 +317,5 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     return item.domain === "assets" ? "/assets" : item.domain === "mappings" ? "/mapping" : item.domain === "sitemaps" ? "/sitemapper" : null;
   }} />;
   else content = <NotFound />;
-  return <WorkspaceContext.Provider value={{ integration: providers, navigate: (href, source) => navigate(href, false, source), reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell hostedDemo={hostedDemo} path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary} onBeforeNewTab={flushOnPreviewActivation}>{nativeStale && <p role="alert">This tab retains edits from an older draft revision. Keep and copy/export pending values before reopening current records. Old writes are blocked; reconnecting cannot overwrite the newer draft.</p>}{hostedDemo && <HostedDemoNotice includeExport />}<div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell><PageLoadingOverlay loading={pageLoading} /></WorkspaceContext.Provider>;
+  return <PageLoadingContext.Provider value={pageLoading}><WorkspaceContext.Provider value={{ integration: providers, navigate: (href, source) => navigate(href, false, source), reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell hostedDemo={hostedDemo} path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary} onBeforeNewTab={flushOnPreviewActivation}>{nativeStale && <p role="alert">This tab retains edits from an older draft revision. Keep and copy/export pending values before reopening current records. Old writes are blocked; reconnecting cannot overwrite the newer draft.</p>}{hostedDemo && <HostedDemoNotice includeExport />}<div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell><PageLoadingOverlay loading={pageLoading} /></WorkspaceContext.Provider></PageLoadingContext.Provider>;
 }

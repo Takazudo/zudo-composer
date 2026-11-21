@@ -11,6 +11,7 @@ import { ContentRouteContent } from "../../features/content";
 import { notifyPersistenceChange } from "../../shared/persistence-generation";
 import { AUTHORING_PERSISTENCE_CHANNELS } from "../persistence-channels";
 import * as releaseFeature from "../../features/release";
+import { authoringFetch, installAuthoringFetch } from "../../shared/authoring-fetch";
 
 vi.mock("../provider-integration", async (importOriginal) => ({
   ...await importOriginal<typeof import("../provider-integration")>(),
@@ -207,7 +208,41 @@ describe("application workspace lifetime", () => {
     expect(overlay).toHaveAttribute("aria-hidden", "false"); expect(link).toHaveAttribute("data-cms-nav-pending");
     await act(async () => finish());
     await screen.findByRole("heading", { name: "Content editor" });
-    expect(screen.getByTestId("page-loading-overlay")).not.toHaveAttribute("data-visible"); expect(link).not.toHaveAttribute("data-cms-nav-pending");
+    await waitFor(() => expect(screen.getByTestId("page-loading-overlay")).not.toHaveAttribute("data-visible")); expect(link).not.toHaveAttribute("data-cms-nav-pending");
+  });
+  it("keeps the overlay and link mark until the destination route's data requests drain", async () => {
+    const integration = workspace();
+    render(<App integration={integration as unknown as ProductionProviderIntegration} />); await screen.findByRole("heading", { name: "Workspace one" });
+    let finishRead!: (response: Response) => void;
+    const transport = vi.fn(() => new Promise<Response>((resolve) => { finishRead = resolve; }));
+    const reset = installAuthoringFetch(transport as unknown as typeof fetch);
+    try {
+      const link = screen.getByRole("link", { name: "Content" });
+      fireEvent.click(link);
+      await screen.findByRole("heading", { name: "Content editor" });
+      const read = authoringFetch("/__zudo-read");
+      await waitFor(() => expect(screen.getByTestId("page-loading-overlay")).toHaveAttribute("data-visible"));
+      expect(link).toHaveAttribute("data-cms-nav-pending");
+      await act(async () => { finishRead(new Response("{}")); await read; });
+      await waitFor(() => expect(screen.getByTestId("page-loading-overlay")).not.toHaveAttribute("data-visible"));
+      expect(link).not.toHaveAttribute("data-cms-nav-pending");
+    } finally { reset(); }
+  });
+  it("keeps opening (no failure screen) while coordination is busy, then opens once it settles", async () => {
+    const integration = workspace();
+    const busy = { status: "error", error: Object.assign(new Error("Workspace could not be opened."), { cause: Object.assign(new Error("settling"), { code: "authoring-busy" }) }) };
+    integration.initialization.initialize.mockResolvedValue(busy as never);
+    integration.initialization.retry.mockResolvedValueOnce(busy as never).mockResolvedValue({ status: "ready" } as never);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(<App integration={integration as unknown as ProductionProviderIntegration} />);
+      expect(await screen.findByRole("status")).toHaveTextContent("Opening the selected workspace…");
+      await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+      expect(screen.queryByRole("button", { name: "Retry opening" })).toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+      await screen.findByRole("heading", { name: "Workspace one" });
+      expect(integration.initialization.retry).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); }
   });
   it("clears the page-loading overlay when a navigation or browser traversal fails", async () => {
     const integration = workspace(); let fail = false;

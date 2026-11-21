@@ -10,6 +10,7 @@ import { HostInspector } from "./inspector";
 import type { WorkspaceSaveRegistry } from "../../app/workspace-sessions";
 import { writeHostSelection } from "../assistant/host-selection";
 import "./page.css";
+import { usePageLoadingWhile } from "../../app/page-loading/page-loading";
 
 type Preview = HostDocumentPreview & { documentUrl: string; routes: { pathname: string; title: string; pageId: string }[] };
 export function HostDocumentPage() {
@@ -71,6 +72,7 @@ export function HostDocumentPage() {
     finally { if (request === sequence.current) setLoading(false); }
   };
   useEffect(() => { void refresh(); return () => { sequence.current++; }; }, [integration]);
+  usePageLoadingWhile(loading);
   useEffect(() => {
     if (!preview) return;
     const onMessage = (event: MessageEvent) => {
