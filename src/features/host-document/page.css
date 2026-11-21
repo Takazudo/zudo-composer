@@ -1,22 +1,132 @@
-.cms-host-document { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(0, 3fr) minmax(14rem, 1fr); gap: 1rem; height: 100%; min-height: 35rem; }
-.cms-host-document > header { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
-.cms-host-document > nav, .cms-host-document > aside { overflow: auto; min-width: 0; padding: .75rem; }
+/* Page authoring (native host-document route). Tokens come from
+ * `src/styles/app-tokens.css`; the header, pane and heading scale mirror
+ * `.cms-library` and `.cms-pane` so this route reads like the other screens. */
+.cms-host-document {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(0, 3fr) minmax(14rem, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+  gap: var(--sp-b2);
+  height: 100%;
+  min-height: 35rem;
+  padding: var(--page-inset);
+  color: var(--color-fg);
+  font-size: .875rem;
+}
+
+.cms-host-document > header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-b2);
+  min-width: 0;
+}
+.cms-host-document > header > h1 {
+  margin: 0 var(--sp-2) 0 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+.cms-host-document > header > label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--color-muted);
+  font-size: .8125rem;
+  font-weight: 550;
+}
+.cms-host-document > header > label > .cms-select { width: auto; min-width: 14rem; max-width: 28rem; }
+.cms-host-document > header > [role="status"] {
+  margin: 0 0 0 auto;
+  color: var(--color-muted);
+  font-size: .75rem;
+  white-space: nowrap;
+}
+.cms-host-document > header > [role="alert"] {
+  flex-basis: 100%;
+  margin: 0;
+  padding: var(--sp-2) var(--sp-b2);
+  border: 1px solid color-mix(in oklch, var(--color-danger) 40%, var(--color-border));
+  border-radius: var(--radius);
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+  font-size: .8125rem;
+}
+
+/* Tree, canvas and inspector are panels on the page background. */
+.cms-host-document > nav,
+.cms-host-document > aside,
+.cms-host-document > section {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+.cms-host-document > nav,
+.cms-host-document > aside { overflow: auto; overscroll-behavior: contain; padding: 0 var(--sp-b2) var(--sp-b2); }
+.cms-host-document > section { overflow: hidden; background: var(--sg-composer-canvas-backdrop); }
+
+/* Panel headings use the pane header scale; sticky so they stay while the panel scrolls. */
+.cms-host-document > nav > h2,
+.cms-host-document > aside > h2 {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  height: 36px;
+  margin: 0 calc(-1 * var(--sp-b2)) var(--sp-b2);
+  padding-inline: var(--sp-b2);
+  border-block-end: 1px solid var(--color-border);
+  color: var(--color-muted);
+  background: var(--color-surface);
+  font-size: .75rem;
+  font-weight: 650;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.cms-host-document aside h3 { margin: 0 0 var(--sp-2); font-size: .875rem; font-weight: 650; line-height: 1.25; }
+.cms-host-document aside > p { margin-block: var(--sp-2); color: var(--color-muted); }
+.cms-host-document aside > details { margin-block: var(--sp-b2); color: var(--color-muted); font-size: .8125rem; }
+.cms-host-document aside > details > summary { cursor: pointer; color: var(--color-fg); }
+.cms-host-document aside > details > p { margin-block: var(--sp-1); overflow-wrap: anywhere; }
+.cms-host-document aside > a:not(.cms-btn),
+.cms-host-document aside > p > a { color: var(--color-link); }
+.cms-host-document aside ul { margin-block: var(--sp-1); padding-inline-start: var(--sp-3); }
+.cms-host-document code { font-family: var(--font-mono); font-size: .75rem; }
+
 .cms-host-tree, .cms-host-tree ul { list-style: none; padding: 0; margin: 0; }
-.cms-host-tree ul { margin-inline-start: 1rem; border-inline-start: 1px solid currentColor; padding-inline-start: .25rem; }
+.cms-host-tree ul { margin-inline-start: 1rem; border-inline-start: 1px solid var(--color-border); padding-inline-start: .25rem; }
 .cms-host-tree [role="treeitem"] { outline: none; }
-.cms-host-tree-row { display: flex; align-items: start; gap: .25rem; padding: .375rem; cursor: pointer; border-radius: .25rem; overflow-wrap: anywhere; }
+.cms-host-tree-row { display: flex; align-items: start; gap: .25rem; padding: .375rem; cursor: pointer; border-radius: var(--radius-sm); overflow-wrap: anywhere; }
+.cms-host-tree-row:hover { background: var(--color-surface-2); }
 .cms-host-tree-row > button, .cms-host-tree-leaf { width: 1.5rem; flex: 0 0 1.5rem; }
-.cms-host-tree-row > button { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
-.cms-host-tree-row small { display: block; font-size: .75rem; opacity: .75; }
-.cms-host-tree [aria-selected="true"] > .cms-host-tree-row { background: Highlight; color: HighlightText; }
-.cms-host-tree [role="treeitem"]:focus-visible > .cms-host-tree-row { outline: 2px solid Highlight; outline-offset: 2px; }
-.cms-host-document iframe { width: 100%; height: 100%; min-height: 35rem; border: 0; }
+.cms-host-tree-row > button { padding: 0; border: 0; background: transparent; color: var(--color-muted); cursor: pointer; }
+.cms-host-tree-row small { display: block; color: var(--color-muted); font-size: .75rem; }
+.cms-host-tree [aria-selected="true"] > .cms-host-tree-row { color: var(--color-accent); background: var(--color-accent-soft); box-shadow: inset 2px 0 0 var(--color-accent); }
+.cms-host-tree [aria-selected="true"] > .cms-host-tree-row small { color: inherit; }
+.cms-host-tree [role="treeitem"]:focus-visible > .cms-host-tree-row { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+.cms-host-document iframe { display: block; width: 100%; height: 100%; min-height: 35rem; border: 0; }
 .cms-host-document dd { margin-inline-start: 0; overflow-wrap: anywhere; }
-@media (width < 60rem) { .cms-host-document { grid-template-columns: 1fr; height: auto; } }
-.cms-host-inspector { display: grid; gap: 1rem; }
-.cms-host-inspector fieldset { min-width: 0; border: 0; padding: 0; margin: 0; display: grid; gap: .75rem; }
-.cms-host-inspector legend { font-weight: 600; margin-block-end: .5rem; }
-.cms-host-inspector section { display: flex; flex-wrap: wrap; gap: .5rem; }
-.cms-host-inspector section > h3, .cms-host-inspector section > p, .cms-host-inspector section > label { flex-basis: 100%; margin-block: .25rem; }
+@media (width < 60rem) {
+  .cms-host-document { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; height: auto; padding: var(--page-inset-narrow); }
+  .cms-host-document > header > [role="status"] { margin-inline-start: 0; }
+}
+.cms-host-inspector { display: grid; gap: var(--sp-3); }
+.cms-host-inspector fieldset { min-width: 0; border: 0; padding: 0; margin: 0; display: grid; gap: var(--sp-b2); }
+.cms-host-inspector legend { padding: 0; font-weight: 650; margin-block-end: var(--sp-2); }
+.cms-host-inspector label { color: var(--color-muted); font-size: .8125rem; }
+.cms-host-inspector section,
+.cms-host-document aside > section { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-block: var(--sp-b2); }
+.cms-host-inspector section > h3, .cms-host-inspector section > p, .cms-host-inspector section > label,
+.cms-host-document aside > section > h3, .cms-host-document aside > section > p, .cms-host-document aside > section > label,
+.cms-host-document aside > section > ul,
+.cms-host-inspector section > h4, .cms-host-inspector section > div, .cms-host-inspector section > ul { flex-basis: 100%; margin-block: .25rem; }
+.cms-host-inspector section > h4 { font-size: .8125rem; font-weight: 650; }
+.cms-host-inspector section > label,
+.cms-host-document aside > section > label { display: grid; gap: var(--sp-1); color: var(--color-muted); font-size: .8125rem; }
+.cms-host-document aside select:not(.cms-select) { height: var(--control-h); padding-inline: var(--sp-2); border: 1px solid var(--color-border); border-radius: var(--radius); color: var(--color-fg); background: var(--color-surface); font: inherit; }
 .cms-host-inspector-field { min-width: 0; }
-.cms-host-tree-options { display: flex; gap: .5rem; align-items: center; margin-block-end: .75rem; font-size: .875rem; }
+.cms-host-tree-options { display: flex; gap: .5rem; align-items: center; margin-block-end: .75rem; color: var(--color-muted); font-size: .8125rem; }
