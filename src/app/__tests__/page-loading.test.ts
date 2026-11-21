@@ -8,7 +8,7 @@ const activity = (count = 0) => {
 
 describe("page loading settle", () => {
   afterEach(() => { vi.useRealTimers(); });
-  it("releases after activity stays quiet and never sticks past the cap", () => {
+  it("releases after activity stays quiet, or at the budget while per-item reads keep streaming", () => {
     vi.useFakeTimers();
     const source = document.createElement("a");
     const quiet = activity(); const loading = createPageLoading(quiet, { quietMs: 100, maxSettleMs: 1000 });

@@ -21,11 +21,12 @@ export interface PageLoading {
 export interface PageLoadingOptions {
   /** How long activity must stay at zero before a settle releases. */
   quietMs?: number;
-  /** A settle never holds longer than this, so the overlay cannot stick. */
+  /** The scrim covers the route's first load only; per-item lazy reads after
+   * this show their own inline states instead of the full-screen overlay. */
   maxSettleMs?: number;
 }
 
-export function createPageLoading(activity: PageActivity, { quietMs = 150, maxSettleMs = 20_000 }: PageLoadingOptions = {}): PageLoading {
+export function createPageLoading(activity: PageActivity, { quietMs = 150, maxSettleMs = 1_500 }: PageLoadingOptions = {}): PageLoading {
   let active = 0;
   const marks = new Map<Element, number>();
   const listeners = new Set<() => void>();
