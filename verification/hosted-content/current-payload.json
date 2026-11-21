@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "ccf2ebbae60ed4296885a5a3705933906d985144",
-  "payloadSha256": "81564c77b159e9b73056325fae57952966856b3faa6e5d6bdb8b72e1a71b40e0",
-  "rawPackageJsonSha256": "ca4141ff3d500b0aeb849aa8df4dbb091d46338cb427001180b327f9ef362362",
+  "packageOutputSha": "e4a1a095ed1439b84f4285fe1d60b1a3e86e7303",
+  "payloadSha256": "24ed41f5531c96d5ee8266b4a3c30857eef503f7dc16be59ecd628066321ddea",
+  "rawPackageJsonSha256": "274e7c0f78df70845acb53e992c331915d4d408c15e95e76e753d84b66216ea1",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -3438,9 +3438,9 @@
     },
     {
       "path": "src/features/mapping/controller.ts",
-      "bytes": 41766,
+      "bytes": 42044,
       "mode": 420,
-      "sha256": "78e64b23d3c44e28ccaf4b395a5ab141b85416d78a32777623bae1aa638f14cf"
+      "sha256": "2e2bece6a6ab6a58b88ff6209d05ee969396cbb54423917d7d71e1c99d3e68af"
     },
     {
       "path": "src/features/mapping/deep-link.ts",
