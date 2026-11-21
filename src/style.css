@@ -22,3 +22,25 @@
 @media (max-width: 42rem) {
   .route-placeholder { width: min(100% - 2rem, 72rem); }
 }
+
+/* Workspace opening and its failure recovery: a compact card, not a hero. */
+.cms-opening {
+  display: grid;
+  align-content: start;
+  gap: var(--sp-b2);
+  max-width: 40rem;
+  padding: var(--page-inset);
+}
+.cms-opening__title { margin: 0; font-size: 1.125rem; font-weight: 650; line-height: 1.25; }
+.cms-opening__text { margin: 0; color: var(--color-muted); font-size: .875rem; }
+.cms-opening__status { display: inline-flex; align-items: center; gap: var(--sp-2); margin: 0; color: var(--color-muted); font-size: .875rem; }
+.cms-opening__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-border);
+  border-block-start-color: var(--color-accent);
+  border-radius: 50%;
+  animation: cms-spin 1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { .cms-opening__spinner { animation: none; } }
+.cms-opening__actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }

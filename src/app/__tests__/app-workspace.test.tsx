@@ -196,6 +196,34 @@ describe("application workspace lifetime", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Content (content-filesystem / draft): disk full");
     expect(window.location.pathname).toBe("/"); expect(screen.getByRole("textbox")).toHaveValue("draft");
   });
+  it("shows the page-loading overlay and marks the clicked link while a navigation flush is pending", async () => {
+    const integration = workspace(); let finish!: () => void;
+    integration.sessions.register({ feature: "Content", providerId: "content-filesystem", recordId: "draft" }, { flush: () => new Promise<void>((resolve) => { finish = resolve; }) });
+    render(<App integration={integration as unknown as ProductionProviderIntegration} />); await screen.findByRole("heading", { name: "Workspace one" });
+    const overlay = screen.getByTestId("page-loading-overlay"); const link = screen.getByRole("link", { name: "Content" });
+    expect(overlay).not.toHaveAttribute("data-visible");
+    fireEvent.click(link);
+    await waitFor(() => expect(overlay).toHaveAttribute("data-visible"));
+    expect(overlay).toHaveAttribute("aria-hidden", "false"); expect(link).toHaveAttribute("data-cms-nav-pending");
+    await act(async () => finish());
+    await screen.findByRole("heading", { name: "Content editor" });
+    expect(screen.getByTestId("page-loading-overlay")).not.toHaveAttribute("data-visible"); expect(link).not.toHaveAttribute("data-cms-nav-pending");
+  });
+  it("clears the page-loading overlay when a navigation or browser traversal fails", async () => {
+    const integration = workspace(); let fail = false;
+    render(<App integration={integration as unknown as ProductionProviderIntegration} />); await screen.findByRole("heading", { name: "Workspace one" });
+    fireEvent.click(screen.getByRole("link", { name: "Assets" })); await screen.findByRole("heading", { name: "Asset editor" });
+    integration.sessions.register({ feature: "Asset", providerId: "asset-files" }, { flush: async () => { if (fail) throw new Error("pending upload failed"); } });
+    fail = true;
+    const link = screen.getByRole("link", { name: "Review & release" });
+    fireEvent.click(link);
+    expect(await screen.findByRole("alert")).toHaveTextContent("pending upload failed");
+    await waitFor(() => expect(screen.getByTestId("page-loading-overlay")).not.toHaveAttribute("data-visible")); expect(link).not.toHaveAttribute("data-cms-nav-pending");
+    act(() => history.back());
+    await waitFor(() => expect(location.pathname).toBe("/assets"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("pending upload failed"));
+    await waitFor(() => expect(screen.getByTestId("page-loading-overlay")).not.toHaveAttribute("data-visible"));
+  });
   it("swaps only a successfully initialized reset replacement and retains the old integration after failure", async () => {
     const original = workspace(), replacement = workspace("two");
     original.workspace.reset.mockRejectedValueOnce(new Error("reset unavailable")).mockResolvedValueOnce(replacement);
@@ -211,6 +239,15 @@ describe("application workspace lifetime", () => {
     render(<App integration={workspace() as unknown as ProductionProviderIntegration} />);
     await screen.findByRole("heading", { name: "Invalid workspace link" });
     expect(screen.queryByRole("heading", { name: "Content editor" })).toBeNull();
+  });
+  it("shows only a loading status while a healthy workspace is still opening", async () => {
+    const integration = workspace(); let open!: () => void;
+    integration.initialization.initialize.mockReturnValue(new Promise((resolve) => { open = () => resolve({ status: "ready" }); }) as never);
+    render(<App integration={integration as unknown as ProductionProviderIntegration} />);
+    expect(await screen.findByRole("status")).toHaveTextContent("Opening the selected workspace…");
+    expect(screen.queryByRole("button", { name: "Retry opening" })).toBeNull(); expect(screen.queryByRole("button", { name: "Create fresh workspace" })).toBeNull();
+    await act(async () => open());
+    await screen.findByRole("heading", { name: "Workspace one" });
   });
   it("retries opening without reseeding and exposes explicit reset recovery", async () => {
     const integration = workspace(); integration.initialization.initialize.mockResolvedValue({ status: "error", error: new Error("Reset required") } as never);

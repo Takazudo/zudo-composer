@@ -159,7 +159,7 @@ export interface RailProps {
   pins?: readonly NavigationPin[];
   onPinsChange?: (pins: NavigationPin[]) => void;
   onBrowse?: () => void;
-  onNavigate?: (href: string) => void;
+  onNavigate?: (href: string, source?: Element | null) => void;
   hideToggle?: boolean;
   /**
    * Called on `pointerdown` and Enter activation of a `newTab` item, before
@@ -176,7 +176,7 @@ export function Rail({ path, collapsed, onToggleCollapsed, counts = {}, models =
   const [label, setLabel] = useState("");
   const navigate = (event: JSX.TargetedMouseEvent<HTMLAnchorElement>, href: string) => {
     if (!onNavigate || event.currentTarget.target || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-    event.preventDefault(); onNavigate(href);
+    event.preventDefault(); onNavigate(href, event.currentTarget);
   };
   const addPin = (pin: NavigationPin) => {
     if (!pins.some((value) => formatIntent(value.target) === formatIntent(pin.target))) onPinsChange?.([...pins, pin]);

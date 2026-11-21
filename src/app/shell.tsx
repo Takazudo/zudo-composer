@@ -230,7 +230,7 @@ export function Shell({ children, path, themeController, themeSnapshot, summary,
     onPinsChange: (value: typeof pins) => { setPins(value); writePins(value); },
     onToggleCollapsed: toggleRail,
     onBeforeNewTab,
-    ...(workspace ? { onNavigate: (href: string) => { void workspace.navigate(href).then((ok) => { if (ok) { close(false); requestAnimationFrame(() => document.getElementById("workspace-destination")?.focus()); } }); } } : {}),
+    ...(workspace ? { onNavigate: (href: string, source?: Element | null) => { void workspace.navigate(href, source).then((ok) => { if (ok) { close(false); requestAnimationFrame(() => document.getElementById("workspace-destination")?.focus()); } }); } } : {}),
   };
   const temporaryRail = <Rail {...railProps} collapsed={false} hideToggle />;
 

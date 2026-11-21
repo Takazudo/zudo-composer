@@ -17,6 +17,8 @@ import { PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "./
 import { publishPendingState } from "./shared/pending-broadcast";
 import { createProjectAssetUsageInspection } from "./site-project/assets/usage";
 import { Shell } from "./app/shell";
+import { createPageLoading } from "./app/page-loading/page-loading";
+import { PageLoadingOverlay } from "./app/page-loading/page-loading-overlay";
 import { createWorkspaceSummary } from "./app/workspace-summary";
 import ComposerApp from "./features/composer/chrome/composer-app";
 import { ContentRouteContent } from "./features/content";
@@ -69,11 +71,13 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     setOpeningReason(cause instanceof ProviderIntegrationError ? cause.sourceReason ?? "storage" : "storage");
     setError(cause instanceof Error ? cause.message : "Workspace initialization failed.");
   };
+  const pageLoading = useMemo(createPageLoading, []);
   const navigationTicket = useRef(0);
   const replacing = useRef(false);
   const historyIndex = useRef<number>(Number.isInteger(window.history.state?.workspaceIndex) ? window.history.state.workspaceIndex : 0);
-  const traversal = useRef<{ phase: "restoring" | "waiting" | "committing"; target: string; targetIndex: number; delta: number } | null>(null);
+  const traversal = useRef<{ phase: "restoring" | "waiting" | "committing"; target: string; targetIndex: number; delta: number; endLoading: () => void } | null>(null);
   useEffect(() => { window.history.replaceState({ ...window.history.state, workspaceIndex: historyIndex.current }, ""); }, []);
+  useEffect(() => () => traversal.current?.endLoading(), []);
   const flush = async () => {
     const outcome = await providers.sessions.flush();
     if (outcome.status === "failed") throw new Error(outcome.failures.map((failure) => `${failure.feature} (${failure.providerId}${failure.recordId ? ` / ${failure.recordId}` : ""}): ${failure.error.message}`).join("; "));
@@ -100,9 +104,10 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
   const flushOnPreviewActivation = () => {
     void providers.sessions.flush().catch(() => undefined);
   };
-  const navigate = async (href: string, replace = false): Promise<boolean> => {
+  const navigate = async (href: string, replace = false, source?: Element | null): Promise<boolean> => {
     if (replacing.current || traversal.current) return false;
     const ticket = ++navigationTicket.current;
+    const endLoading = pageLoading.begin(source);
     setBusy(true); setError(null);
     try {
       const url = new URL(href, window.location.href);
@@ -120,16 +125,17 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
       requestAnimationFrame(() => document.getElementById("workspace-destination")?.focus());
       return true;
     } catch (cause) { if (ticket === navigationTicket.current) setError(cause instanceof Error ? cause.message : "Navigation failed."); return false; }
-    finally { if (ticket === navigationTicket.current) setBusy(false); }
+    finally { endLoading(); if (ticket === navigationTicket.current) setBusy(false); }
   };
   const replaceWorkspace = async (action: () => Promise<ProductionProviderIntegration>): Promise<boolean> => {
     if (replacing.current || traversal.current || busy) return false;
     const releaseGate = operationGate.claim("replacement"); if (!releaseGate) return false;
     replacing.current = true;
+    const endLoading = pageLoading.begin();
     setBusy(true); setError(null);
     try { await flush(); const replacement = await action(); if (operationGate.disposed) return false; if (replacement === providers) { setReady(true); return true; } await new Promise<void>((resolve) => { swapCommitted.current = resolve; setProviders(replacement); setReady(true); }); return true; }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Workspace could not be opened. The existing workspace remains selected."); return false; }
-    finally { replacing.current = false; setBusy(false); releaseGate(); }
+    finally { endLoading(); replacing.current = false; setBusy(false); releaseGate(); }
   };
   const retry = async () => {
     setBusy(true); setError(null);
@@ -157,7 +163,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
       if (transition?.phase === "committing") {
         historyIndex.current = transition.targetIndex;
         window.history.replaceState({ ...window.history.state, workspaceIndex: historyIndex.current }, "");
-        traversal.current = null;
+        traversal.current = null; transition.endLoading();
         setRouteEpoch((value) => value + 1); setLocation(target); setBusy(false);
         requestAnimationFrame(() => document.getElementById("workspace-destination")?.focus());
         return;
@@ -167,7 +173,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
         transition.phase = "waiting";
         void flush().then(() => { if (traversal.current !== transition) return; transition.phase = "committing"; window.history.go(transition.delta); }).catch((cause: unknown) => {
           if (traversal.current !== transition) return;
-          traversal.current = null; setBusy(false); setError(cause instanceof Error ? cause.message : "Navigation failed.");
+          traversal.current = null; transition.endLoading(); setBusy(false); setError(cause instanceof Error ? cause.message : "Navigation failed.");
         });
         return;
       }
@@ -177,7 +183,8 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
       navigationTicket.current++; // Supersede any pending link navigation before rolling back.
       // Restore the current entry by traversal, never by overwriting the
       // destination. A rejected flush leaves Back/Forward history intact.
-      traversal.current = { phase: "restoring", target, targetIndex, delta };
+      traversal.current?.endLoading();
+      traversal.current = { phase: "restoring", target, targetIndex, delta, endLoading: pageLoading.begin() };
       setBusy(true); setError(null); window.history.go(-delta);
     };
     const selection = (event: Event) => {
@@ -195,7 +202,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
       // visitor documents now, so taking one over here could only push it into a
       // shell that no longer renders it.
       if (url.origin !== window.location.origin || !["/", "/content", "/composer", "/mapping", "/sitemapper", "/assets", "/review"].includes(url.pathname)) return;
-      event.preventDefault(); void navigate(url.href);
+      event.preventDefault(); void navigate(url.href, false, anchor);
     };
     window.addEventListener("popstate", pop, true);
     window.addEventListener("workspace-route-selection", selection);
@@ -262,11 +269,16 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
   const intent = parseIntent(location);
   const target = intent.status === "matched" ? intent.intent : null;
   const providerKnown = !target || !("providerId" in target) || (target.route === "content" ? providers.contentProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "composer" ? providers.compositionProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "mapping" ? providers.mappingProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "assets" ? providers.assetProvider?.descriptor.id === target.providerId : providers.sitemapProvider.descriptor?.id === target.providerId);
-  if (!ready) content = <main class="route-placeholder"><h1>Open workspace</h1>
-    <p>{openingReason === "absent" ? "No SiteProject is activated. Create a project to start your first workspace, or activate a source and retry opening." : openingReason === "invalid" ? "The activated SiteProject is invalid. Fix the configured source, then retry opening." : openingReason === "storage" ? "The workspace could not be read or opened. Retry opening after resolving the storage error. Existing drafts remain stored." : "Opening the selected workspace…"}</p>
+  if (!ready && !openingReason) content = <main class="cms-opening" aria-busy="true"><h1 class="cms-opening__title">Open workspace</h1>
+    <p class="cms-opening__status" role="status"><span class="cms-opening__spinner" aria-hidden="true" />Opening the selected workspace…</p>
+  </main>;
+  else if (!ready) content = <main class="cms-opening"><h1 class="cms-opening__title">Open workspace</h1>
+    <p class="cms-opening__text">{openingReason === "absent" ? "No SiteProject is activated. Create a project to start your first workspace, or activate a source and retry opening." : openingReason === "invalid" ? "The activated SiteProject is invalid. Fix the configured source, then retry opening." : "The workspace could not be read or opened. Retry opening after resolving the storage error. Existing drafts remain stored."}</p>
+    <div class="cms-opening__actions">
     <Button disabled={busy} onClick={() => void retry()}>Retry opening</Button>
     <Button disabled={busy || openingReason === "absent" || openingReason === "invalid"} onClick={() => void replaceWorkspace(() => providers.workspace.reset())}>Create fresh workspace</Button>
     {openingReason === "absent" && <Button disabled={busy} onClick={() => { setError(null); setCreatingProject(true); }}>Create project</Button>}
+    </div>
     {creatingProject && <NewProjectDialog busy={busy} error={error} onClose={() => setCreatingProject(false)} onSubmit={(name) => {
       void replaceWorkspace(async () => {
         const project = createEmptySiteProject(name);
@@ -289,5 +301,5 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     return item.domain === "assets" ? "/assets" : item.domain === "mappings" ? "/mapping" : item.domain === "sitemaps" ? "/sitemapper" : null;
   }} />;
   else content = <NotFound />;
-  return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell hostedDemo={hostedDemo} path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary} onBeforeNewTab={flushOnPreviewActivation}>{nativeStale && <p role="alert">This tab retains edits from an older draft revision. Keep and copy/export pending values before reopening current records. Old writes are blocked; reconnecting cannot overwrite the newer draft.</p>}{hostedDemo && <HostedDemoNotice includeExport />}<div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;
+  return <WorkspaceContext.Provider value={{ integration: providers, navigate: (href, source) => navigate(href, false, source), reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell hostedDemo={hostedDemo} path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary} onBeforeNewTab={flushOnPreviewActivation}>{nativeStale && <p role="alert">This tab retains edits from an older draft revision. Keep and copy/export pending values before reopening current records. Old writes are blocked; reconnecting cannot overwrite the newer draft.</p>}{hostedDemo && <HostedDemoNotice includeExport />}<div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell><PageLoadingOverlay loading={pageLoading} /></WorkspaceContext.Provider>;
 }

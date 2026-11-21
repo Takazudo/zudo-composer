@@ -5,7 +5,8 @@ import type { ProductionProviderIntegration } from "./provider-integration";
 /** Shared application lifetime services; feature factories register their save queues here. */
 export interface WorkspaceContextValue {
   integration: ProductionProviderIntegration;
-  navigate(href: string): Promise<boolean>;
+  /** `source` is the clicked control; it carries the pending-navigation marker until the swap. */
+  navigate(href: string, source?: Element | null): Promise<boolean>;
   reset(): Promise<boolean>;
   open(id: string): Promise<boolean>;
   busy: boolean;
