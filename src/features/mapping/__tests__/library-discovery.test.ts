@@ -54,7 +54,7 @@ describe("library rows from one snapshot", () => {
 
 it("resolves library rows without waiting for a slow or stuck attachments capture", async () => {
   const records = Array.from({ length: 5 }, (_, i) => mappingRecord([READY_BINDING], `rows-${i}`));
-  const attachments = { list: () => new Promise<never>(() => {}) } as unknown as NonNullable<Parameters<typeof harness>[2]["attachments"]>;
+  const attachments = { list: () => new Promise<never>(() => {}) } as unknown as NonNullable<NonNullable<Parameters<typeof harness>[2]>["attachments"]>;
   const h = harness(records, undefined, { attachments });
   void h.controller.initialize();
   await vi.waitFor(() => expect(Object.keys(h.controller.state.libraryDetails)).toEqual(records.map((r) => r.id)));
