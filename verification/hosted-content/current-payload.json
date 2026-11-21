@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "e4a1a095ed1439b84f4285fe1d60b1a3e86e7303",
-  "payloadSha256": "24ed41f5531c96d5ee8266b4a3c30857eef503f7dc16be59ecd628066321ddea",
-  "rawPackageJsonSha256": "274e7c0f78df70845acb53e992c331915d4d408c15e95e76e753d84b66216ea1",
+  "packageOutputSha": "672c6a558388ec4a13608e95276b90924d2609bc",
+  "payloadSha256": "3f31b203e1c3ae53ea7033beccc10d6a73e20ff8f79eb4bbb95a574d28825f69",
+  "rawPackageJsonSha256": "7d875c22af95830e860d9e1e663120d6274beaec3b78369012781fbcc017c15c",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -1392,9 +1392,9 @@
     },
     {
       "path": "src/app/provider-integration.ts",
-      "bytes": 55905,
+      "bytes": 56462,
       "mode": 420,
-      "sha256": "38540607ce447a286e8879b54a01cbf0abbbce82ddc5393abcbb1550cc2597d7"
+      "sha256": "676af7dbcc221b9aba9915bc4078ea343aad5299286c77934aff74e65e324b00"
     },
     {
       "path": "src/app/rail.tsx",
