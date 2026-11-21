@@ -13,6 +13,9 @@ const ownership = coordinated ? nativeBrowserOwner(globalThis as typeof globalTh
   (Number(value) ^ (crypto.getRandomValues(new Uint8Array(1))[0]! & (15 >> (Number(value) / 4)))).toString(16))) : null;
 const clientId = ownership?.owner.clientId ?? "";
 let epoch = ownership?.owner.epoch ?? -1, connected = false, frozen = false, inputLocked = false, enrolled = false;
+// Set while the server refuses binds because a coordination round is in flight;
+// readers treat that as retriable `authoring-busy`, never as a dead dev server.
+let bindBusy = false, rebindTimer: ReturnType<typeof setTimeout> | undefined;
 let isPending = () => true;
 let flushPending = async () => false;
 const waiting = new Set<(ready: boolean) => void>();
@@ -39,15 +42,16 @@ if (coordinated) {
   hot!.on("native:bound", (message: { clientId: string; epoch: number }) => {
     if (ownership?.changedServer || message.clientId !== clientId || !Number.isSafeInteger(message.epoch)) return;
     if (epoch >= 0 && epoch !== message.epoch) { connected = false; settle(false); window.dispatchEvent(new CustomEvent("native-authoring-stale")); return; }
-    epoch = message.epoch; ownership!.owner.epoch = epoch; connected = true; settle(true);
+    bindBusy = false; epoch = message.epoch; ownership!.owner.epoch = epoch; connected = true; settle(true);
   });
   hot!.on("native:unavailable", (message: { clientId: string; reason?: string }) => {
     if (message.clientId !== clientId) return;
+    bindBusy = message.reason === "authoring-busy";
     settle(false);
     if (message.reason === "stale-browser") {
       connected = false; freeze(false);
       window.dispatchEvent(new CustomEvent("native-authoring-stale"));
-    } else setTimeout(bind, 1000);
+    } else if (rebindTimer === undefined) rebindTimer = setTimeout(() => { rebindTimer = undefined; bind(); }, 1000);
   });
   hot!.on("native:challenge", async (message: { challenge: string; epoch: number; phase: "prepare" | "freeze" }) => {
     if (!connected || message.epoch !== epoch || !/^[a-f0-9-]{36}$/.test(message.challenge)) return;
@@ -77,7 +81,7 @@ if (coordinated) {
       else { freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-stale")); }
     } else { freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-resumed")); }
   });
-  hot!.on("vite:ws:disconnect", () => { connected = false; settle(false); freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-disconnected")); });
+  hot!.on("vite:ws:disconnect", () => { connected = false; bindBusy = false; settle(false); freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-disconnected")); });
   hot!.on("native:invalidated", () => window.dispatchEvent(new CustomEvent("native-authoring-invalidated")));
   hot!.on("vite:ws:connect", bind);
 }
@@ -93,8 +97,10 @@ async function ready(signal?: AbortSignal) {
   const online = connected || await new Promise<boolean>(resolve => {
     const abort = () => finish(false);
     const finish = (value: boolean) => { clearTimeout(timer); signal?.removeEventListener("abort", abort); waiting.delete(finish); resolve(value); };
-    const timer = setTimeout(() => finish(false), 5000); waiting.add(finish); signal?.addEventListener("abort", abort, { once: true }); if (signal?.aborted) abort(); else bind();
+    // A scheduled rebind will settle this wait; sending another bind now only adds a refusal.
+    const timer = setTimeout(() => finish(false), 5000); waiting.add(finish); signal?.addEventListener("abort", abort, { once: true }); if (signal?.aborted) abort(); else if (rebindTimer === undefined) bind();
   });
+  if (!online && bindBusy) throw Object.assign(new Error("Authoring coordination is settling another tab's operation. Waiting to reconnect; input is retained."), { code: "authoring-busy" });
   if (!online) throw new Error("Authoring coordination is disconnected. No write was sent.");
 }
 /** Wait for this exact browser epoch to resume; never sends or replays an operation. */
