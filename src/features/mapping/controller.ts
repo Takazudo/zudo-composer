@@ -501,11 +501,15 @@ export class MappingEditorController {
         // An exact editor route needs its own definition, not every library row.
         // Deferred rows remain Checking until a real library visit resolves them.
         this.libraryDetailsDeferred = !!deepLink;
-        await this.refreshAttachments();
+        // Attachments capture the whole workspace and can be slow; library rows
+        // must never wait behind them.
+        const attachments = this.refreshAttachments();
+        attachments.catch(() => undefined); // Observed below; avoid an unhandled-rejection report while rows load.
         if (deepLink) {
           const opened = await this.openDeepLink(deepLink);
           if (opened.status !== "ready") await this.refreshLibraryDetails();
         } else { await this.refreshLibraryDetails(); this.set({ ...this.current, message: "Mapping library ready." }); }
+        await attachments;
       } else if (outcome.status === "recovery-required") {
         this.set({
           ...initialState,
