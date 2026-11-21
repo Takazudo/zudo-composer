@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "8f00996bd754c85c337d66a64d31c976221a002b",
-  "payloadSha256": "2607e0ff5073aeb23c2a5366a2fd911fecd181dde6e13a12d2a54cd49a41c5fb",
-  "rawPackageJsonSha256": "3247ccc706e22ccd176f6b255b42f5e1345e0eab1e588702b28f8ffeee278098",
+  "packageOutputSha": "ccf2ebbae60ed4296885a5a3705933906d985144",
+  "payloadSha256": "81564c77b159e9b73056325fae57952966856b3faa6e5d6bdb8b72e1a71b40e0",
+  "rawPackageJsonSha256": "ca4141ff3d500b0aeb849aa8df4dbb091d46338cb427001180b327f9ef362362",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -1295,6 +1295,12 @@
       "sha256": "267405019e5d9057b56dd8c78fe792bb4a53399ffaee5d1bbba2ff42a6e1642f"
     },
     {
+      "path": "src/app/bulk-record-cache.ts",
+      "bytes": 1591,
+      "mode": 420,
+      "sha256": "f2628b8255178723bb0e98f9c10cc9882789bad5660926e28114985854b8fa9a"
+    },
+    {
       "path": "src/app/chrome-context.ts",
       "bytes": 6789,
       "mode": 420,
@@ -1386,9 +1392,9 @@
     },
     {
       "path": "src/app/provider-integration.ts",
-      "bytes": 54423,
+      "bytes": 55905,
       "mode": 420,
-      "sha256": "346643646843495213a6960b15622e51e3c6e1cdb93264b43c10aca877729b6c"
+      "sha256": "38540607ce447a286e8879b54a01cbf0abbbce82ddc5393abcbb1550cc2597d7"
     },
     {
       "path": "src/app/rail.tsx",
@@ -3432,9 +3438,9 @@
     },
     {
       "path": "src/features/mapping/controller.ts",
-      "bytes": 41312,
+      "bytes": 41766,
       "mode": 420,
-      "sha256": "0ec800b7d815fc9f57d496974b3e043a3e700af8a2eed7f09338f9817638e2f1"
+      "sha256": "78e64b23d3c44e28ccaf4b395a5ab141b85416d78a32777623bae1aa638f14cf"
     },
     {
       "path": "src/features/mapping/deep-link.ts",
