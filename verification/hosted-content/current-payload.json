@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "e6a0c0551421822b0b83d8c3a8696a7e9a759eeb",
-  "payloadSha256": "bc12cecf901b2fb229f713cec3c1377aaae443f2c07a9a9a9ab565b62f9c805e",
-  "rawPackageJsonSha256": "a2edbdd1b1a6698b39afca8d880be2a87a03eca2e64bdd4631f994ebadf0b890",
+  "packageOutputSha": "cfaa6f245f797b00d6ec2091bdbf2c4955875b1d",
+  "payloadSha256": "04fb8ab2315dc06ccb811ca6bf4d7670703c6685d13ef1d1a7bce41cae52a1ad",
+  "rawPackageJsonSha256": "3247ccc706e22ccd176f6b255b42f5e1345e0eab1e588702b28f8ffeee278098",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -1290,9 +1290,9 @@
     },
     {
       "path": "src/App.tsx",
-      "bytes": 25064,
+      "bytes": 26270,
       "mode": 420,
-      "sha256": "ceb60a0a7cf40c3f4a0b8c564ea728ada57c4fdca0978e90039bcba872a9f559"
+      "sha256": "267405019e5d9057b56dd8c78fe792bb4a53399ffaee5d1bbba2ff42a6e1642f"
     },
     {
       "path": "src/app/chrome-context.ts",
@@ -1362,9 +1362,9 @@
     },
     {
       "path": "src/app/page-loading/page-loading-overlay.tsx",
-      "bytes": 618,
+      "bytes": 1030,
       "mode": 420,
-      "sha256": "3f0b5fdcdd61a6e31edc660ae3b665085bb45a5bf2115640dc173f4c3f6e11f0"
+      "sha256": "36dd81a7499db60f3ecf3502decc911915cf1e0283cf83e3090eb3af2aaf6a5b"
     },
     {
       "path": "src/app/page-loading/page-loading.css",
@@ -1374,9 +1374,9 @@
     },
     {
       "path": "src/app/page-loading/page-loading.ts",
-      "bytes": 942,
+      "bytes": 3053,
       "mode": 420,
-      "sha256": "b4715341e141f879c07a2d3f3530f43c4a514e973126f3a1a0b268dd7573cff2"
+      "sha256": "07d1fc06353e7286883b6982600d3a820db6bf76e24ba49048d6f0bd3d76aca4"
     },
     {
       "path": "src/app/persistence-channels.ts",
@@ -3378,9 +3378,9 @@
     },
     {
       "path": "src/features/host-document/page.tsx",
-      "bytes": 16385,
+      "bytes": 16492,
       "mode": 420,
-      "sha256": "e8af6b54548039bdfa2c7550eaec17d3c3a2d6b43194f51132d23e13274ffc1c"
+      "sha256": "ba6e413c4ec8fbd6b5c13cec2676331361d87bea50bdeb29cc27cb46f1f0dce1"
     },
     {
       "path": "src/features/host-document/protocol.ts",
@@ -4098,9 +4098,9 @@
     },
     {
       "path": "src/shared/authoring-fetch.ts",
-      "bytes": 469,
+      "bytes": 1066,
       "mode": 420,
-      "sha256": "a1b5918218e4549c12d2b5de6bb78c4a4f05852dc2d039ba03f8014cda22ba8b"
+      "sha256": "9ba56dd1abf84c650b8a25380b5c675cd5bdbb7fa3ca269cba3b929c918b0297"
     },
     {
       "path": "src/shared/authoring-read-retry.ts",
@@ -4116,9 +4116,9 @@
     },
     {
       "path": "src/shared/coordination-error.ts",
-      "bytes": 728,
+      "bytes": 1248,
       "mode": 420,
-      "sha256": "b85d776163bdcd53afabcc936b3e76fd6e038c4914e8bd461ac58650ef1106ac"
+      "sha256": "42305a15f4e4579d9f5e1b85a9dc563f290f83b18537b1d11665088b43a2366e"
     },
     {
       "path": "src/shared/file-provider/client.ts",
