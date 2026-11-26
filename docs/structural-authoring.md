@@ -109,7 +109,17 @@ top-level omission remains read-only here; it is never converted to JSON null.
 Local unsaved drafts are memory state with an unload warning, not a durable draft
 store. Once submitted, the exact operation is durably retained for receipt-based
 recovery across reload/restart; another operation's recovery cannot clear a local
-draft silently.
+draft silently. The initiating tab records an authoritative edit response before
+applying the coordinator’s automatic reload. A matching committed receipt is
+returned without replaying the write. A new request includes the local Composition
+store identity alongside its original revision. After the journal is reconciled,
+an exact request with a stale revision and matching store identity records a
+durable refusal against its UUID. That UUID remains unavailable for any future
+write. Reload or refresh the saved page to make a separately reviewed edit.
+Older retained requests can recover an exact existing receipt. With no matching
+receipt and no original store identity, preserve the request for investigation.
+Moving or copying a store changes its local identity. Filesystems that do not
+provide a usable directory identity support existing receipt lookup only.
 
 Server-derived capabilities distinguish local Composition fields/arrangement,
 shared Mapping/global sources, and page-owned placement. The Inspector shows

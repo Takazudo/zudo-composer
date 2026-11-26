@@ -39,7 +39,7 @@ export function createWorkspaceSaveRegistry() {
       return {
         /** Call when an editor accepts a draft, before its debounce/write begins. */
         changed() { const session = sessions.get(key); if (!session) return; session.revision++; changed(); },
-        retry() { handle.retry?.(); changed(); void settle(key); },
+        retry() { handle.retry?.(); changed(); return settle(key); },
         detach() {
           const session = sessions.get(key);
           if (!session || session.detached) return;

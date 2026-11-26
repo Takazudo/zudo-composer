@@ -5,12 +5,20 @@ import { notifyPersistenceChange } from "../../../shared/persistence-generation"
 import { COMPOSITION_FILE_PROVIDER_CHANNEL } from "../../../composer/storage/file-provider";
 import { createProductionProviderIntegration } from "../../../app/provider-integration";
 import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../../test/workspace-providers";
+import { createHash, webcrypto } from "node:crypto";
+import { canonicalStringifyJson } from "../../../site-project/model/canonical";
 import { HostDocumentPage } from "../page";
 const mocks = vi.hoisted(() => ({ request: vi.fn(), integration: { workspace: { id: "proof" }, subscribeChanges: () => () => {} } }));
 Object.assign(mocks.integration, { sessions: createWorkspaceSaveRegistry() });
-vi.mock("../../native-editing/session", () => ({ nativeEditRequest: mocks.request }));
+vi.mock("../../native-editing/session", () => ({ nativeEditRequest: mocks.request, holdNativeAuthoringReload: () => () => false }));
 vi.mock("../protocol", async importOriginal => ({ ...await importOriginal<typeof import("../protocol")>(), matchesHostDocumentFrame: () => true }));
 vi.mock("../../../app/workspace-context", () => ({ useWorkspace: () => ({ integration: mocks.integration }) }));
+const receiptFor = (request: Parameters<typeof canonicalStringifyJson>[0] & { operationId: string; workspaceId: string; revision: string; target: { recordId: string } }) => ({
+  operationId: `host-${request.operationId}`, planDigest: createHash("sha256").update(canonicalStringifyJson(request)).digest("hex"),
+  workspaceId: request.workspaceId, beforeRevision: request.revision, recordId: request.target.recordId,
+  before: { id: request.target.recordId }, after: { id: request.target.recordId }, committedAt: "2026-11-26T00:00:00Z",
+});
+Object.defineProperty(globalThis.crypto, "subtle", { configurable: true, value: webcrypto.subtle });
 const hosts: TemporaryWorkspaceProviders[] = [];
 afterEach(async () => { cleanup(); await Promise.all(hosts.splice(0).map(host => host.dispose())); localStorage.clear(); sessionStorage.clear(); vi.clearAllMocks(); });
 it("does not enroll an empty, unresponsive iframe before the saved document arrives", async () => {
@@ -34,7 +42,7 @@ it("blocks refresh, selection, and workspace flush while a field draft is unsave
   Object.assign(mocks.integration, { sessions, subscribeChanges: integration.subscribeChanges, componentProvider: { manifest: pack.manifest } });
   const identity = { workspaceId: "proof", pathname: "/", revision: "a".repeat(64), packId: "proof", packVersion: "1", rendererId: "proof", rendererVersion: "1", rendererDigest: "b".repeat(64) };
   const targets = ["first", "second"].map(id => ({ renderedNodeId: id, parentRenderedNodeId: null, slotId: null, providerId: "files", recordId: "page", nodeId: id, componentId: "paragraph", props: { text: id }, entries: [], capabilities: { fields: { allowed: true }, structure: { allowed: true }, placement: { allowed: false }, uses: ["/"], insertSlots: [] } }));
-  const preview = { identity, frameId: "frame", documentUrl: "about:blank", targets, routes: [] };
+  const preview = { identity, editAuthority: "c".repeat(64), frameId: "frame", documentUrl: "about:blank", targets, routes: [] };
   mocks.request.mockResolvedValue(preview);
   const view = render(<HostDocumentPage />);
   await waitFor(() => expect(view.container.querySelector("iframe")).toBeTruthy());
@@ -77,7 +85,7 @@ it("blocks refresh, selection, and workspace flush while a field draft is unsave
     writes++;
     if (writes === 1) { original = structuredClone(request); throw new Error("Response lost"); }
     expect(request).toEqual(original);
-    return { operationId: `host-${request.operationId}`, committed: true };
+    return receiptFor(request);
   });
   fireEvent.click(view.getByRole("button", { name: "Save field" }));
   await waitFor(() => expect(view.getByRole("alert").textContent).toContain("outcome remains uncertain"));
@@ -98,16 +106,20 @@ it("blocks refresh, selection, and workspace flush while a field draft is unsave
   expect(writes).toBe(2);
   fireEvent.click(view.getByRole("button", { name: "Discard local draft" }));
 });
-it("retains the exact qualified Remove request across response loss and reload", async () => {
+it("retains the exact qualified Remove through response loss and wrong receipt, then settles the matching refusal", async () => {
   const { fireEvent } = await import("@testing-library/preact");
   Object.assign(mocks.integration, { sessions: createWorkspaceSaveRegistry(), subscribeChanges: () => () => {}, componentProvider: { manifest: { components: [] } } });
   const identity = { workspaceId: "proof", pathname: "/", revision: "a".repeat(64), packId: "proof", packVersion: "1", rendererId: "proof", rendererVersion: "1", rendererDigest: "b".repeat(64) };
   const target = { renderedNodeId: "rendered-child", parentRenderedNodeId: "parent", slotId: "items", providerId: "files", recordId: "page", nodeId: "child", componentId: "paragraph", props: {}, entries: [], capabilities: { fields: { allowed: true }, structure: { allowed: true }, placement: { allowed: false }, remove: { allowed: true }, uses: ["/"], insertSlots: [] } };
-  const preview = { identity, frameId: "frame", documentUrl: "about:blank", targets: [target], routes: [] };
+  const preview = { identity, editAuthority: "c".repeat(64), frameId: "frame", documentUrl: "about:blank", targets: [target], routes: [] };
   const requests: unknown[] = [];
   mocks.request.mockImplementation(async (operation, request) => {
-    if (operation === "document-edit") { requests.push(request); if (requests.length === 1) throw new Error("Lost Remove response"); return { committed: true }; }
-    return preview;
+    if (operation !== "document-edit") return preview;
+    requests.push(request);
+    if (requests.length === 1) throw new Error("Lost Remove response");
+    const receipt = receiptFor(request);
+    if (requests.length === 2) return { ...receipt, operationId: `host-${crypto.randomUUID()}` };
+    throw Object.assign(new Error("Stale preview"), { code: "document-edit-not-accepted", receipt: { ...receipt, outcome: "document-edit-not-accepted" } });
   });
   let view = render(<HostDocumentPage />);
   await waitFor(() => expect(view.container.querySelector("iframe")).toBeTruthy());
@@ -121,6 +133,12 @@ it("retains the exact qualified Remove request across response loss and reload",
   fireEvent.click(await view.findByRole("button", { name: /Recover pending save/ }));
   await waitFor(() => expect(requests).toHaveLength(2));
   expect(requests[1]).toEqual(requests[0]);
+  await waitFor(() => expect(view.getByRole("alert").textContent).toContain("could not record"));
+  fireEvent.click(view.getByRole("button", { name: /Recover pending save/ }));
+  await waitFor(() => expect(view.queryByRole("button", { name: /Recover pending save/ })).toBeNull());
+  expect(requests[2]).toEqual(requests[0]);
+  expect(view.getByText(/changed before this page edit was accepted/)).toBeTruthy();
+  window.history.replaceState(null, "");
 });
 it("sends the qualified Sitemap page on handoff and clears it for deliberate page navigation", async () => {
   const { fireEvent } = await import("@testing-library/preact");

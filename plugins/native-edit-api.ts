@@ -2,6 +2,7 @@ import { describeHostContent, selectHostContentUse, hostContentContextInput, hos
 import { describeHostFieldSources } from "../server/host-document/field-sources";
 import { describeHostDocumentTargets } from "../server/host-document/capabilities";
 import { validateHostComponentPresentation } from "../server/config/host-document";
+import { hostDocumentEditAuthority } from "../server/host-document/edit-authority";
 import { selectHostDocumentRoute } from "../server/host-document/route-selection";
 import { watch } from "node:fs";
 import { join } from "node:path";
@@ -24,7 +25,7 @@ const command = z.object({ operation: z.enum(["inspect", "resolve", "plan", "rev
 const bindSchema = z.object({ clientId: z.uuid(), capability: z.string(), epoch: z.number().int().nonnegative().nullable() }).strict();
 const answerSchema = z.object({ clientId: z.uuid(), challenge: z.uuid(), epoch: z.number().int().nonnegative(), clean: z.boolean() }).strict();
 const unbindSchema = z.object({ clientId: z.uuid(), capability: z.string() }).strict();
-const browserErrorCodes = new Set(["already-applied", "approval-mismatch", "authoring-busy", "browser-dirty", "browser-unavailable", "stale-browser", "component-invalid", "conflict", "effect-invalid", "inactive-plan", "invalid-asset", "invalid-request", "invalid-table", "not-applied", "not-found", "stale-asset", "stale-config", "stale-plan", "tampered-plan", "undo-conflict", "unsupported-capability", "unsupported-scope", "unsupported-source", "unsupported-target", "wrong-host", "wrong-target", "wrong-workspace", "commit-uncertain", "write-failed", "read-failed", "unavailable", "blocked"]);
+const browserErrorCodes = new Set(["already-applied", "approval-mismatch", "authoring-busy", "browser-dirty", "browser-unavailable", "stale-browser", "component-invalid", "document-edit-not-accepted", "document-edit-authority-unproven", "conflict", "effect-invalid", "inactive-plan", "invalid-asset", "invalid-request", "invalid-table", "not-applied", "not-found", "stale-asset", "stale-config", "stale-plan", "tampered-plan", "undo-conflict", "unsupported-capability", "unsupported-scope", "unsupported-source", "unsupported-target", "wrong-host", "wrong-target", "wrong-workspace", "commit-uncertain", "write-failed", "read-failed", "unavailable", "blocked"]);
 const planProjection = (plan: EditPlan) => ({ id: plan.id, digest: plan.digest, request: plan.request, identity: plan.identity, before: plan.before, candidate: plan.candidate, dependencyDigest: editDigest(plan.revisions), createdAt: plan.createdAt });
 const receiptProjection = (receipt: EditReceipt | null) => receipt && ({ schemaVersion: receipt.schemaVersion, operationId: receipt.operationId, planId: receipt.planId, reviewDigest: receipt.reviewDigest, kind: receipt.kind, identity: receipt.identity, beforeDigest: receipt.beforeDigest, afterDigest: receipt.afterDigest, committedAt: receipt.committedAt });
 
@@ -203,7 +204,8 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
               uses.set(key, paths);
             }
             if (content && !await captureModule.isAuthoringWorkspaceSnapshotCurrent(options, snapshot)) throw Object.assign(new Error("Saved workspace changed while rendering Content."), { code: "stale-plan" });
-            return { ...preview, ...(content ? { content } : {}), targets: describeHostDocumentTargets(preview.targets, snapshot.project, context.pack.manifest, host.componentPresentation, uses).map(target => ({ ...target, fieldSources: fieldSources(route, target) })), documentUrl: documentCache.put(preview.html, preview.navigation.url), routes };
+            const editAuthority = request.operation === "document-preview" ? await hostDocumentEditAuthority(context.composerConfig, snapshot.workspaceId) : undefined;
+            return { ...preview, ...(content ? { content } : {}), ...(editAuthority ? { editAuthority } : {}), targets: describeHostDocumentTargets(preview.targets, snapshot.project, context.pack.manifest, host.componentPresentation, uses).map(target => ({ ...target, fieldSources: fieldSources(route, target) })), documentUrl: documentCache.put(preview.html, preview.navigation.url), routes };
           }
           case "plan": {
             const plan = await service.plan(request.input);
@@ -243,8 +245,9 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
       const internalCode = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "invalid-request";
       const code = browserErrorCodes.has(internalCode) ? internalCode : "invalid-request";
       // Native/provider diagnostics may name absolute source paths. Project a safe operator message.
-      const known = { "browser-dirty": "Save all authoring tabs and finish or cancel inline editing before retrying. Pending input is retained.", "stale-plan": "Draft or dependencies changed. Review a fresh plan; source changes require a process restart.", "undo-conflict": "A later edit changed this draft; undo cannot overwrite it.", "unsupported-scope": "This page is source-authored, mapped, shared or unsupported. Use Structure or its owning source.", "authoring-busy": "Another authoring operation is active.", "already-applied": "This operation committed. Recover its receipt; use guarded Undo.", "invalid-table": "Supply one cell per column in every row." };
-      respond(409, { ok: false, error: { code, message: known[code as keyof typeof known] ?? "Native editing refused this operation. Inspect the page, retained plan and receipt before retrying; restart the server if source changed." } });
+      const known = { "document-edit-authority-unproven": "Open the original saved workspace. The saved operation needs a matching receipt or proof it came from this store.", "document-edit-not-accepted": "The saved workspace changed before this page edit was accepted. Refresh the saved page before making a new edit.", "browser-dirty": "Save all authoring tabs and finish or cancel inline editing before retrying. Pending input is retained.", "stale-plan": "Draft or dependencies changed. Review a fresh plan; source changes require a process restart.", "undo-conflict": "A later edit changed this draft; undo cannot overwrite it.", "unsupported-scope": "This page is source-authored, mapped, shared or unsupported. Use Structure or its owning source.", "authoring-busy": "Another authoring operation is active.", "already-applied": "This operation committed. Recover its receipt; use guarded Undo.", "invalid-table": "Supply one cell per column in every row." };
+      const receipt = code === "document-edit-not-accepted" && error && typeof error === "object" && "refusalReceipt" in error ? error.refusalReceipt : undefined;
+      respond(409, { ok: false, error: { code, message: known[code as keyof typeof known] ?? "Native editing refused this operation. Inspect the page, retained plan and receipt before retrying; restart the server if source changed.", ...(receipt ? { receipt } : {}) } });
     } finally { clearTimeout(timer); activeRequests--; }
   });
   return {

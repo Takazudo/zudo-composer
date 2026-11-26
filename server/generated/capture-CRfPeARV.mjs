@@ -5879,6 +5879,22 @@ var ReviewedEditJournal = class {
 		if (existing && existing.planDigest !== planDigest) throw new CompositionPersistenceError(operation, "conflict", "Operation id already belongs to a different reviewed plan.", false);
 		return existing?.value;
 	}
+	async recordRefusal(operation, id, planDigest, value) {
+		const existing = await this.matchingReceipt(operation, id, planDigest);
+		if (existing) {
+			await syncDirectory(this.fs, operation, this.fs.realRoot);
+			return existing;
+		}
+		if (!validDigest(planDigest)) throw new CompositionPersistenceError(operation, "validation", "Invalid reviewed operation digest.", false);
+		const envelope = {
+			schemaVersion: 1,
+			operationId: id,
+			planDigest,
+			value
+		};
+		await commitDocument(this.fs, operation, this.fs.ownedPath(this.receiptName(id)), JSON.stringify(envelope) + "\n");
+		return structuredClone(value);
+	}
 	async commit(operation, edit) {
 		this.receiptName(edit.operationId);
 		const ids = Array.isArray(edit.changes) ? edit.changes.map((change) => change?.candidate?.id) : [];
@@ -6504,6 +6520,9 @@ var FilesystemCompositionStore = class FilesystemCompositionStore {
 	}
 	async reviewedEditReceipt(operationId) {
 		return this.run("get", () => this.reviewedJournal().receipt("get", operationId));
+	}
+	async recordReviewedEditRefusal(operationId, planDigest, receipt) {
+		return this.run("put", () => this.reviewedJournal().recordRefusal("put", operationId, planDigest, receipt));
 	}
 	async commitReviewedEdit(input, recheck) {
 		const edit = cloneJson(input);
@@ -9291,7 +9310,7 @@ function createWorkspaceSaveRegistry() {
 				retry() {
 					handle.retry?.();
 					changed();
-					settle(key);
+					return settle(key);
 				},
 				detach() {
 					const session = sessions.get(key);

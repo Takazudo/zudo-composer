@@ -754,6 +754,10 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
     return this.run("get", () => this.reviewedJournal().receipt<T>("get", operationId));
   }
 
+  async recordReviewedEditRefusal<T extends object>(operationId: string, planDigest: string, receipt: T): Promise<T> {
+    return this.run("put", () => this.reviewedJournal().recordRefusal("put", operationId, planDigest, receipt));
+  }
+
   async commitReviewedEdit<T extends object>(input: ReviewedCompositionEdit<T>, recheck?: (snapshot: { mutationToken: string; records: readonly CompositionRecord[] }) => Promise<void>): Promise<T> {
     // Detach caller-owned objects before waiting for the writer queue.
     const edit = cloneJson(input);

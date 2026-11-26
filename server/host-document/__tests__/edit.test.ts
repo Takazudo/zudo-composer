@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -12,7 +12,11 @@ import { hostDocumentTargets } from "../render";
 import { captureAuthoringWorkspace, compileAuthoringWorkspaceSnapshot } from "../../authoring-workspace/capture";
 import { describeHostDocumentTargets } from "../capabilities";
 import { validateHostComponentPresentation } from "../../config/host-document";
+import { hostDocumentEditAuthority } from "../edit-authority";
 import { editHostDocument } from "../edit";
+import { captureHost } from "../../edit/inspect";
+import { editDigest } from "../../edit/service";
+import { workspaceDomainRoots } from "../../../src/shared/workspace-scope";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture(shared = false, consultation = false, localSlot = false) {
@@ -33,16 +37,16 @@ async function fixture(shared = false, consultation = false, localSlot = false) 
   }
   if (localSlot) page.record.document.root.push({ id: "local-group", componentId: "group", componentVersion: 1, props: {}, slots: { items: [] } });
   await initializeAuthoringWorkspace({ composerConfig, pack, project: site.toSiteProject(), workspaceId: "proof" });
-  return { composerConfig, pack, packIdentity: { specifier: "proof/components", source: "self", digest: "a".repeat(64), compiler: "proof-compiler", contractDigest: "b".repeat(64) }, renderer: { id: "proof", version: "1", module: "proof/renderer", digest: "c".repeat(64) } };
+  return { composerConfig, pack, authority: await hostDocumentEditAuthority(composerConfig, "proof"), packIdentity: { specifier: "proof/components", source: "self", digest: "a".repeat(64), compiler: "proof-compiler", contractDigest: "b".repeat(64) }, renderer: { id: "proof", version: "1", module: "proof/renderer", digest: "c".repeat(64) } };
 }
 it("saves exact owner field, recovers retry receipt, refuses stale and invalid writes, and persists reorder", async () => {
   const options = await fixture(); const before = await captureAuthoringWorkspace(options);
-  const request = { workspaceId: "proof", revision: before.digest, pathname: "/", operationId: randomUUID(), target: { renderedNodeId: "first", providerId: "files", recordId: "home", nodeId: "first" }, change: { kind: "field", prop: "text", value: "Changed" } };
+  const request = { workspaceId: "proof", authority: options.authority, revision: before.digest, pathname: "/", operationId: randomUUID(), target: { renderedNodeId: "first", providerId: "files", recordId: "home", nodeId: "first" }, change: { kind: "field", prop: "text", value: "Changed" } };
   const receipt = await editHostDocument(options, request);
   expect(await editHostDocument(options, request)).toEqual(receipt);
   const saved = await captureAuthoringWorkspace(options);
   expect(saved.project.providers.compositions[0]!.records[0]!.document.root[0]!.props.text).toBe("Changed");
-  await expect(editHostDocument(options, { ...request, operationId: randomUUID() })).rejects.toMatchObject({ code: "stale-plan" });
+  await expect(editHostDocument(options, { ...request, operationId: randomUUID() })).rejects.toMatchObject({ code: "document-edit-not-accepted" });
   await expect(editHostDocument(options, { ...request, revision: saved.digest, operationId: randomUUID(), change: { kind: "field", prop: "text", value: 42 } })).rejects.toMatchObject({ code: "component-invalid" });
   expect((await captureAuthoringWorkspace(options)).digest).toBe(saved.digest);
   await editHostDocument(options, { ...request, revision: saved.digest, operationId: randomUUID(), change: { kind: "reorder", direction: "down" } });
@@ -52,7 +56,7 @@ it("saves exact owner field, recovers retry receipt, refuses stale and invalid w
 
 it("refuses a purported local property edit when direct Sitemap routes share the composition", async () => {
   const options = await fixture(true); const before = await captureAuthoringWorkspace(options);
-  await expect(editHostDocument(options, { workspaceId: "proof", revision: before.digest, pathname: "/", operationId: randomUUID(), target: { renderedNodeId: "first", providerId: "files", recordId: "home", nodeId: "first" }, change: { kind: "field", prop: "text", value: "Shared change" } })).rejects.toMatchObject({ code: "unsupported-scope" });
+  await expect(editHostDocument(options, { workspaceId: "proof", authority: options.authority, revision: before.digest, pathname: "/", operationId: randomUUID(), target: { renderedNodeId: "first", providerId: "files", recordId: "home", nodeId: "first" }, change: { kind: "field", prop: "text", value: "Shared change" } })).rejects.toMatchObject({ code: "unsupported-scope" });
   expect((await captureAuthoringWorkspace(options)).digest).toBe(before.digest);
 });
 
@@ -66,7 +70,7 @@ it("moves the local placement of a mapped Consultation root without editing its 
   expect(section.placement).toEqual({ providerId: "files", recordId: "home", nodeId: "consultation", parentNodeId: null, slotId: null });
   expect(price.placement).toBeUndefined();
   const coordinates = (target: typeof section) => ({ renderedNodeId: target.renderedNodeId, providerId: target.providerId, recordId: target.recordId, nodeId: target.nodeId });
-  const request = { workspaceId: "proof", pathname: "/", revision: before.digest, operationId: randomUUID(), target: coordinates(section), change: { kind: "reorder-placement", direction: "up" } };
+  const request = { workspaceId: "proof", authority: options.authority, pathname: "/", revision: before.digest, operationId: randomUUID(), target: coordinates(section), change: { kind: "reorder-placement", direction: "up" } };
   for (const invalid of [
     { ...request, target: coordinates(price) },
     { ...request, target: { ...coordinates(section), nodeId: "consultation" } },
@@ -81,14 +85,14 @@ it("moves the local placement of a mapped Consultation root without editing its 
   expect(after.project.providers.mappings).toEqual(before.project.providers.mappings);
   expect(after.project.providers.compositions[0]!.records.find(record => record.id === "lessons-consultation")).toEqual(before.project.providers.compositions[0]!.records.find(record => record.id === "lessons-consultation"));
   expect(after.project.providers.compositions[0]!.records.find(record => record.id === "home")!.document.root.map(node => node.id)).toEqual(["first", "consultation", "second"]);
-  await expect(editHostDocument(options, { ...request, operationId: randomUUID() })).rejects.toMatchObject({ code: "stale-plan" });
+  await expect(editHostDocument(options, { ...request, operationId: randomUUID() })).rejects.toMatchObject({ code: "document-edit-not-accepted" });
   expect((await captureAuthoringWorkspace(options)).digest).toBe(after.digest);
 });
 
 it("inserts a stable local node and recovers its exact receipt without duplicate children", async () => {
   const options = await fixture(false, false, true), before = await captureAuthoringWorkspace(options);
   const nodeId = randomUUID();
-  const request = { workspaceId: "proof", pathname: "/", revision: before.digest, operationId: randomUUID(), target: { renderedNodeId: "local-group", providerId: "files", recordId: "home", nodeId: "local-group" }, change: { kind: "insert", slotId: "items", componentId: "paragraph", nodeId } };
+  const request = { workspaceId: "proof", authority: options.authority, pathname: "/", revision: before.digest, operationId: randomUUID(), target: { renderedNodeId: "local-group", providerId: "files", recordId: "home", nodeId: "local-group" }, change: { kind: "insert", slotId: "items", componentId: "paragraph", nodeId } };
   const receipt = await editHostDocument(options, request);
   expect(await editHostDocument(options, request)).toEqual(receipt);
   const after = await captureAuthoringWorkspace(options);
@@ -98,8 +102,64 @@ it("inserts a stable local node and recovers its exact receipt without duplicate
 });
 it("refuses insertion into a Mapping-populated local slot without writes", async () => {
   const options = await fixture(false, true), before = await captureAuthoringWorkspace(options);
-  await expect(editHostDocument(options, { workspaceId: "proof", pathname: "/", revision: before.digest, operationId: randomUUID(), target: { renderedNodeId: "consultation", providerId: "files", recordId: "home", nodeId: "consultation" }, change: { kind: "insert", slotId: "items", componentId: "paragraph", nodeId: randomUUID() } })).rejects.toMatchObject({ code: "unsupported-scope" });
+  await expect(editHostDocument(options, { workspaceId: "proof", authority: options.authority, pathname: "/", revision: before.digest, operationId: randomUUID(), target: { renderedNodeId: "consultation", providerId: "files", recordId: "home", nodeId: "consultation" }, change: { kind: "insert", slotId: "items", componentId: "paragraph", nodeId: randomUUID() } })).rejects.toMatchObject({ code: "unsupported-scope" });
   expect((await captureAuthoringWorkspace(options)).digest).toBe(before.digest);
+});
+
+it("seals a stale Remove UUID without changing the latest workspace and permits a fresh operation", async () => {
+  const options = await fixture(false, true, true);
+  const original = await captureAuthoringWorkspace(options);
+  const nodeId = randomUUID();
+  const identity = { workspaceId: "proof", authority: options.authority, pathname: "/" };
+  const target = { renderedNodeId: nodeId, providerId: "files", recordId: "home", nodeId };
+  await editHostDocument(options, { ...identity, revision: original.digest, operationId: randomUUID(), target: { ...target, renderedNodeId: "local-group", nodeId: "local-group" }, change: { kind: "insert", componentId: "paragraph", slotId: "items", nodeId } });
+  const inserted = await captureAuthoringWorkspace(options);
+  const remove = { ...identity, revision: inserted.digest, operationId: randomUUID(), target, change: { kind: "remove" } };
+  await editHostDocument(options, { ...identity, revision: inserted.digest, operationId: randomUUID(), target: { ...target, renderedNodeId: "second", nodeId: "second" }, change: { kind: "field", prop: "text", value: "Other saved change" } });
+  const current = await captureAuthoringWorkspace(options);
+  expect(current.digest).not.toBe(inserted.digest);
+
+  await expect(editHostDocument(options, remove)).rejects.toMatchObject({ code: "document-edit-not-accepted" });
+  await expect(editHostDocument(options, structuredClone(remove))).rejects.toMatchObject({ code: "document-edit-not-accepted" });
+  await expect(editHostDocument(options, { ...remove, revision: current.digest })).rejects.toMatchObject({ code: "conflict" });
+  expect(await captureAuthoringWorkspace(options)).toEqual(current);
+
+  const fresh = { ...remove, revision: current.digest, operationId: randomUUID() };
+  const receipt = await editHostDocument(options, fresh);
+  const saved = await captureAuthoringWorkspace(options);
+  expect(await editHostDocument(options, fresh)).toEqual(receipt);
+  await expect(editHostDocument(options, { ...fresh, target: { ...target, nodeId: "second" } })).rejects.toMatchObject({ code: "conflict" });
+  expect(await captureAuthoringWorkspace(options)).toEqual(saved);
+  expect(saved.project.providers.content).toEqual(current.project.providers.content);
+  expect(saved.project.providers.mappings).toEqual(current.project.providers.mappings);
+  const home = saved.project.providers.compositions[0]!.records.find(record => record.id === "home")!;
+  expect(home.document.root.find(node => node.id === "second")!.props.text).toBe("Other saved change");
+  expect(home.document.root.find(node => node.id === "local-group")!.slots.items).toEqual([]);
+});
+
+it("preserves uncertain legacy or foreign-store operations and recognizes an exact historical receipt", async () => {
+  const options = await fixture();
+  const foreign = await fixture();
+  const before = await captureAuthoringWorkspace(options);
+  const { stores } = await captureHost({ config: options.composerConfig, pack: options.pack });
+  const legacy = { workspaceId: "proof", pathname: "/", revision: before.digest, operationId: randomUUID(), target: { renderedNodeId: "first", providerId: "files", recordId: "home", nodeId: "first" }, change: { kind: "field", prop: "text", value: "Historical save" } };
+  const foreignBefore = await captureAuthoringWorkspace(foreign);
+  expect(foreign.authority).not.toBe(options.authority);
+  await expect(editHostDocument(foreign, { ...legacy, authority: options.authority })).rejects.toMatchObject({ code: "document-edit-authority-unproven" });
+  await expect(editHostDocument(options, legacy)).rejects.toMatchObject({ code: "document-edit-authority-unproven" });
+  expect(await captureAuthoringWorkspace(foreign)).toEqual(foreignBefore);
+  expect(await captureAuthoringWorkspace(options)).toEqual(before);
+  expect(await stores.compositions.reviewedEditReceipt(`host-${legacy.operationId}`)).toBeUndefined();
+
+  await editHostDocument(options, { ...legacy, operationId: randomUUID(), authority: options.authority });
+  const saved = await captureAuthoringWorkspace(options);
+  const after = saved.project.providers.compositions[0]!.records.find(record => record.id === "home")!;
+  const operationId = `host-${legacy.operationId}`, planDigest = editDigest(legacy);
+  const historical = { operationId, planDigest, beforeRevision: legacy.revision, after };
+  const jsx = await readFile(join(workspaceDomainRoots(options.composerConfig.paths, "proof").compositions, "composition-home.tsx"), "utf8");
+  await stores.compositions.commitReviewedEdit({ operationId, planDigest, expectedSnapshotToken: String(saved.tokens.compositions), changes: [{ candidate: after, jsx }], receipt: historical });
+  expect(await editHostDocument(options, legacy)).toEqual(historical);
+  expect(await captureAuthoringWorkspace(options)).toEqual(saved);
 });
 
 it("describes semantic labels and supported defaults while distinguishing shared owners and local placement", async () => {
@@ -122,7 +182,7 @@ it("describes semantic labels and supported defaults while distinguishing shared
 });
 it("removes an inserted local child with a replayable receipt and refuses roots/shared sources without writes", async () => {
   const options = await fixture(false, true, true), before = await captureAuthoringWorkspace(options);
-  const base = { workspaceId: "proof", revision: before.digest, pathname: "/", operationId: randomUUID(), target: { renderedNodeId: "first", providerId: "files", recordId: "home", nodeId: "first" }, change: { kind: "remove" } };
+  const base = { workspaceId: "proof", authority: options.authority, revision: before.digest, pathname: "/", operationId: randomUUID(), target: { renderedNodeId: "first", providerId: "files", recordId: "home", nodeId: "first" }, change: { kind: "remove" } };
   await expect(editHostDocument(options, base)).rejects.toMatchObject({ code: "unsupported-scope" });
   const compiled = await compileAuthoringWorkspaceSnapshot({ ...options, snapshot: before });
   const shared = hostDocumentTargets(compiled.build.routes[0]!).find(target => target.nodeId === "price")!;
