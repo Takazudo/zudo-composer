@@ -3,6 +3,7 @@ import { AUTHORING_READ_HEADER, retryAuthoringRead } from "../../shared/authorin
 import { fileProviderConfig } from "virtual:composer-file-provider-config";
 import { createFrameInputGuard } from "./frame-input-guard";
 import { installAuthoringFetch } from "../../shared/authoring-fetch";
+import { createNativeReloadHold } from "./reload-hold";
 import { nativeBrowserOwner, type NativeBrowserOwner } from "./session-owner";
 
 const config = fileProviderConfig?.nativeEditing;
@@ -20,6 +21,8 @@ let isPending = () => true;
 let flushPending = async () => false;
 const waiting = new Set<(ready: boolean) => void>();
 const frameInput = coordinated ? createFrameInputGuard(() => document.getElementById("app"), window, config!.pack) : null;
+const reloadHold = createNativeReloadHold();
+export const holdNativeAuthoringReload = reloadHold.hold;
 const settle = (ready: boolean) => { for (const finish of waiting) finish(ready); waiting.clear(); };
 const freeze = (value: boolean, blockRequests = value) => {
   inputLocked = value;
@@ -77,8 +80,11 @@ if (coordinated) {
       // and server plan references are retained separately in sessionStorage.
       // Only a continuously locked tab can prove no new DOM/debounced input
       // appeared after preparation. Disconnects unlock input and lose that proof.
-      if (inputLocked && !isPending() && !frameInput?.busy()) window.location.reload();
-      else { freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-stale")); }
+      reloadHold.afterSettlement(() => {
+        if (inputLocked && !isPending() && !frameInput?.busy()) { window.location.reload(); return true; }
+        freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-stale"));
+        return false;
+      });
     } else { freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-resumed")); }
   });
   hot!.on("vite:ws:disconnect", () => { connected = false; bindBusy = false; settle(false); freeze(false); window.dispatchEvent(new CustomEvent("native-authoring-disconnected")); });
@@ -130,7 +136,7 @@ export async function nativeEditRequest<T>(operation: string, input: unknown, ap
   await ready();
   const response = await globalThis.fetch(config!.endpoint, { method: "POST", credentials: "same-origin", redirect: "error", headers: { "content-type": "application/json", "x-zudo-native-client": clientId, "x-zudo-native-capability": config!.capability, ...(approved ? { "x-zudo-native-approval": config!.approvalCapability } : {}) }, body: JSON.stringify({ operation, input, ...(expected ? { expected } : {}) }) });
   const body = await response.json();
-  if (!response.ok || body?.ok !== true) throw Object.assign(new Error(body?.error?.message ?? "Native operation response unavailable. Recover the retained receipt before retrying."), { code: body?.error?.code ?? "commit-uncertain" });
+  if (!response.ok || body?.ok !== true) throw Object.assign(new Error(body?.error?.message ?? "Native operation response unavailable. Recover the retained receipt before retrying."), { code: body?.error?.code ?? "commit-uncertain", receipt: body?.error?.receipt });
   return body.result as T;
 }
 

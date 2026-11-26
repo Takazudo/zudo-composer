@@ -23,11 +23,13 @@ describe("host document evidence", () => {
 });
 
 it("never discards an uncertain original request because recovery now fails its current guards", () => {
-  for (const code of ["stale-plan", "wrong-workspace", "invalid-request", "component-invalid"]) {
+  for (const code of ["stale-plan", "wrong-workspace", "component-invalid"]) {
     expect(confirmedFirstAttemptRefusal(true, code)).toBe(false);
     expect(confirmedFirstAttemptRefusal(false, code)).toBe(true);
   }
-  expect(confirmedFirstAttemptRefusal(false, "commit-uncertain")).toBe(false);
+  for (const code of ["commit-uncertain", "invalid-request", "conflict", "browser-dirty"]) {
+    expect(confirmedFirstAttemptRefusal(false, code)).toBe(false);
+  }
 });
 
 it("binds visitor query/hash and accepts only captured same-origin navigation", () => {

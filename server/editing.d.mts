@@ -2149,6 +2149,7 @@ declare class FilesystemCompositionStore implements CompositionLifecycleStore {
     private run;
     private reviewedJournal;
     reviewedEditReceipt<T extends object = Record<string, unknown>>(operationId: string): Promise<T | undefined>;
+    recordReviewedEditRefusal<T extends object>(operationId: string, planDigest: string, receipt: T): Promise<T>;
     commitReviewedEdit<T extends object>(input: ReviewedCompositionEdit<T>, recheck?: (snapshot: {
         mutationToken: string;
         records: readonly CompositionRecord[];

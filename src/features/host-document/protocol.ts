@@ -39,5 +39,5 @@ export function acceptHostDocumentMessage(event: Pick<MessageEvent, "source" | "
 
 /** A later refusal says nothing about whether an earlier lost response committed. */
 export function confirmedFirstAttemptRefusal(recovering: boolean, code: unknown): boolean {
-  return !recovering && ["stale-plan", "component-invalid", "unsupported-scope", "unsupported-target", "wrong-workspace", "invalid-request"].includes(String(code));
+  return !recovering && ["stale-plan", "component-invalid", "unsupported-scope", "unsupported-target", "wrong-workspace"].includes(String(code));
 }

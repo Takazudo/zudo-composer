@@ -43,6 +43,17 @@ export class ReviewedEditJournal {
     if (existing && existing.planDigest !== planDigest) throw new CompositionPersistenceError(operation, "conflict", "Operation id already belongs to a different reviewed plan.", false);
     return existing?.value as T | undefined;
   }
+  async recordRefusal<T extends object>(operation: CompositionPersistenceOperation, id: string, planDigest: string, value: T): Promise<T> {
+    const existing = await this.matchingReceipt<T>(operation, id, planDigest);
+    if (existing) {
+      await syncDirectory(this.fs, operation, this.fs.realRoot);
+      return existing;
+    }
+    if (!validDigest(planDigest)) throw new CompositionPersistenceError(operation, "validation", "Invalid reviewed operation digest.", false);
+    const envelope: ReceiptEnvelope = { schemaVersion: 1, operationId: id, planDigest, value };
+    await commitDocument(this.fs, operation, this.fs.ownedPath(this.receiptName(id)), JSON.stringify(envelope) + "\n");
+    return structuredClone(value);
+  }
   async commit<T extends object>(operation: CompositionPersistenceOperation, edit: ReviewedCompositionEdit<T>): Promise<T> {
     this.receiptName(edit.operationId);
     const ids = Array.isArray(edit.changes) ? edit.changes.map(change => change?.candidate?.id) : [];

@@ -5,6 +5,7 @@ import { captureHost } from "../edit/inspect";
 import { editDigest } from "../edit/service";
 import { executeAuthoringOperation } from "../edit/authoring-lease.mjs";
 import { EditError } from "../edit/plans";
+import { hostDocumentEditAuthority } from "./edit-authority";
 import { hostDocumentTargets } from "./render";
 import { updateProps, reorderNode, removeNode, addNode } from "../../src/composer/model/commands";
 import { planLinkedJsxModules } from "../../src/composer/source/plan-linked-jsx";
@@ -16,7 +17,14 @@ import { localOwnerReason, mappedSlot, removalReason } from "./capabilities";
 import type { JsonObject } from "../../src/composer/model/types";
 
 const name = z.string().min(1).max(256);
-export const documentEditSchema = z.object({ workspaceId: name, revision: z.string().regex(/^[a-f0-9]{64}$/), pathname: name, operationId: z.uuid(), target: z.object({ renderedNodeId: name, providerId: name, recordId: name, nodeId: name }).strict(), change: z.discriminatedUnion("kind", [z.object({ kind: z.literal("field"), prop: name, value: z.json() }).strict(), z.object({ kind: z.literal("reorder"), direction: z.enum(["up", "down"]) }).strict(), z.object({ kind: z.literal("reorder-placement"), direction: z.enum(["up", "down"]) }).strict(), z.object({ kind: z.literal("remove") }).strict(), z.object({ kind: z.literal("insert"), slotId: name, componentId: name, nodeId: z.uuid() }).strict()]) }).strict();
+export const documentEditSchema = z.object({ workspaceId: name, authority: z.string().regex(/^[a-f0-9]{64}$/).optional(), revision: z.string().regex(/^[a-f0-9]{64}$/), pathname: name, operationId: z.uuid(), target: z.object({ renderedNodeId: name, providerId: name, recordId: name, nodeId: name }).strict(), change: z.discriminatedUnion("kind", [z.object({ kind: z.literal("field"), prop: name, value: z.json() }).strict(), z.object({ kind: z.literal("reorder"), direction: z.enum(["up", "down"]) }).strict(), z.object({ kind: z.literal("reorder-placement"), direction: z.enum(["up", "down"]) }).strict(), z.object({ kind: z.literal("remove") }).strict(), z.object({ kind: z.literal("insert"), slotId: name, componentId: name, nodeId: z.uuid() }).strict()]) }).strict();
+
+const refused = "document-edit-not-accepted";
+type HostReceipt = { operationId: string; planDigest: string; workspaceId: string; beforeRevision: string; outcome?: typeof refused };
+const refusalResult = (receipt: HostReceipt) => {
+  if (receipt.outcome === refused) throw Object.assign(new EditError(refused, "The saved workspace changed before this operation was accepted."), { refusalReceipt: receipt });
+  return receipt;
+};
 
 /** One explicit human operation, validated by the same pure commands and journal used by Composition. */
 export async function editHostDocument(options: CaptureAuthoringWorkspaceOptions, input: unknown) {
@@ -29,13 +37,26 @@ async function editHostDocumentLeased(options: CaptureAuthoringWorkspaceOptions,
   if (initial.workspaceId !== request.workspaceId || options.composerConfig.authoringAuthority !== "workspace") throw new EditError("wrong-workspace", "Explicit native workspace authority is required.");
   const operationId = `host-${request.operationId}`;
   const planDigest = editDigest(request);
-  const existing = await initial.stores.compositions.reviewedEditReceipt<{ planDigest: string }>(operationId);
-  if (existing) { if (existing.planDigest !== planDigest) throw new EditError("conflict", "Operation id belongs to a different change."); return existing; }
+  const store = initial.stores.compositions;
+  const authority = await hostDocumentEditAuthority(options.composerConfig, request.workspaceId);
+  const unproven = () => new EditError("document-edit-authority-unproven", "Open the original saved workspace. Without a matching receipt or store identity, the original outcome remains uncertain.");
+  if (request.authority && request.authority !== authority) throw unproven();
+  const existing = await store.reviewedEditReceipt<HostReceipt>(operationId);
+  if (existing) {
+    if (existing.planDigest !== planDigest) throw new EditError("conflict", "Operation id belongs to a different change.");
+    return refusalResult(existing.outcome === refused ? await store.recordReviewedEditRefusal(operationId, planDigest, existing) : existing);
+  }
+  if (!request.authority) throw unproven();
   const roots = workspaceDomainRoots(options.composerConfig.paths, request.workspaceId);
   const barriers = [join(options.composerConfig.paths.data, "workspaces"), roots.content, roots.mappings, roots.sitemaps, options.composerConfig.paths.assets];
   const execute = async () => {
     const snapshot = await captureAuthoringWorkspace(options);
-    if (snapshot.digest !== request.revision) throw new EditError("stale-plan", "Saved preview changed. Refresh before applying.");
+    if (snapshot.digest !== request.revision) {
+      // Seal this exact UUID in the same receipt namespace as commits. Later
+      // delivery cannot accept it even if earlier snapshot bytes reappear.
+      const receipt = { operationId, planDigest, workspaceId: request.workspaceId, beforeRevision: request.revision, outcome: refused } satisfies HostReceipt;
+      return refusalResult(await store.recordReviewedEditRefusal<HostReceipt>(operationId, planDigest, receipt));
+    }
     const compiled = await compileAuthoringWorkspaceSnapshot({ ...options, snapshot });
     const route = compiled.build.routes.find(value => value.pathname === request.pathname);
     // Resolve every owner coordinate independently; a repeated rendered instance is never a source id.
@@ -68,7 +89,7 @@ async function editHostDocumentLeased(options: CaptureAuthoringWorkspaceOptions,
     const compilation = await compileSiteProject(validated.project, { componentCatalog: state.manifest, policy: "release", assetLock: snapshot.assets.lock });
     if (compilation.status !== "ready") throw new EditError("component-invalid", "Change leaves invalid routes, mappings or slots.");
     const receipt = { operationId, planDigest, workspaceId: request.workspaceId, beforeRevision: snapshot.digest, recordId: record.id, before: record, after: candidate, committedAt: new Date().toISOString() };
-    return state.stores.compositions.commitReviewedEdit({ operationId, planDigest, expectedSnapshotToken: String(snapshot.tokens.compositions), changes: [{ candidate, jsx: output.code }], receipt });
+    return store.commitReviewedEdit({ operationId, planDigest, expectedSnapshotToken: String(snapshot.tokens.compositions), changes: [{ candidate, jsx: output.code }], receipt });
   };
   const lock = (index: number): Promise<unknown> => index === barriers.length ? execute() : withMutationBarrier(barriers[index]!, () => lock(index + 1));
   return lock(0);
