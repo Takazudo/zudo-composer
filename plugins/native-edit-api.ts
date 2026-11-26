@@ -57,11 +57,13 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
   const hostCapture = hostDocument ? await server.ssrLoadModule(appModuleId("server/authoring-workspace/capture.ts")) : null;
   const hostRendererIdentity = hostCapture ? await hostCapture!.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig }) : null;
   const hostRenderer = hostDocument ? await createModuleEvaluator(context.composerConfig.workspaceRoot, { jsxImportSource: hostDocument.jsxImportSource })(resolveComponentPack(context.composerConfig.workspaceRoot, hostDocument.module).entryPath) : null;
-  const assertDocumentSourcesCurrent = async () => {
+  const checkedDocumentRendererIdentity = async (capture = hostCapture) => {
     await service.initializeSourceEpoch();
-    if (!hostCapture || !hostRendererIdentity || editDigest(await hostCapture!.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig })) !== editDigest(hostRendererIdentity)) throw Object.assign(new Error("Host renderer source changed. Restart authoring before preview or save."), { code: "stale-plan" });
+    const renderer = await capture?.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig });
+    if (!renderer || !hostRendererIdentity || editDigest(renderer) !== editDigest(hostRendererIdentity)) throw Object.assign(new Error("Host renderer source changed. Restart authoring before preview or save."), { code: "stale-plan" });
+    return renderer;
   };
-  if (hostDocument) await assertDocumentSourcesCurrent();
+  if (hostDocument) await checkedDocumentRendererIdentity();
   const assistantConfig = context.composerConfig.assistant;
   let assistant: { endpoint: string; name: string } | undefined;
   let assistantRunner: { stopAll(): Promise<void> } | undefined;
@@ -118,7 +120,7 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
       hostReview = create({
         config: context.composerConfig, drafts: service.drafts, renderer: hostRenderer as unknown as Parameters<typeof create>[0]["renderer"], documentCache,
         options: async () => ({ composerConfig: context.composerConfig, pack: context.pack, renderer: await hostCapture!.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig }), packIdentity: await hostCapture!.resolveAuthoringPackIdentity({ composerConfig: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity }) }),
-        assertSourcesCurrent: assertDocumentSourcesCurrent,
+        assertSourcesCurrent: async () => { await checkedDocumentRendererIdentity(); },
         resolveOwnership: ownershipModule.resolveHostOwnership,
         content: async workspaceId => {
           const root = workspaceDomainRoots(context.composerConfig.paths, workspaceId).content;
@@ -162,17 +164,16 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
         }
         switch (request.operation) {
           case "document-edit": {
-            await assertDocumentSourcesCurrent();
             const host = context.composerConfig.hostDocument;
             if (!host) throw Object.assign(new Error("Host renderer is not configured."), { code: "unsupported-capability" });
             const captureModule = await server.ssrLoadModule(appModuleId("server/authoring-workspace/capture.ts"));
             const editModule = await server.ssrLoadModule(appModuleId("server/host-document/edit.ts"));
-            return editModule.editHostDocument({ composerConfig: context.composerConfig, pack: context.pack, renderer: await captureModule.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig }), packIdentity: await captureModule.resolveAuthoringPackIdentity({ composerConfig: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity }) }, request.input);
+            const renderer = await checkedDocumentRendererIdentity(captureModule);
+            return editModule.editHostDocument({ composerConfig: context.composerConfig, pack: context.pack, renderer, packIdentity: await captureModule.resolveAuthoringPackIdentity({ composerConfig: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity }) }, request.input);
           }
           case "content-preview-context":
           case "content-document-preview":
           case "document-preview": {
-            await assertDocumentSourcesCurrent();
             const host = context.composerConfig.hostDocument;
             if (!host) throw Object.assign(new Error("Host document renderer is not configured."), { code: "unsupported-capability" });
             const input = request.operation === "content-preview-context" ? hostContentContextInput.parse(request.input) : request.operation === "content-document-preview" ? hostContentDocumentInput.parse(request.input) : z.object({ workspaceId: z.string().min(1), pathname: z.string().startsWith("/").optional(), visitorUrl: z.string().startsWith("/").max(8192).optional(), pageId: z.string().min(1).optional(), sitemapId: z.string().min(1).optional(), sitemapProviderId: z.string().min(1).optional() }).strict().parse(request.input);
@@ -180,7 +181,8 @@ export async function installNativeEditApi(server: ViteDevServer, lease: { execu
             const renderModule = await server.ssrLoadModule(appModuleId("server/host-document/render.ts"));
             const renderer = hostRenderer;
             if (typeof renderer?.renderDocument !== "function") throw new Error("Host document module has no renderDocument export.");
-            const options = { composerConfig: context.composerConfig, pack: context.pack, renderer: await captureModule.resolveAuthoringRendererIdentity({ composerConfig: context.composerConfig }), packIdentity: await captureModule.resolveAuthoringPackIdentity({ composerConfig: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity }) };
+            const rendererIdentity = await checkedDocumentRendererIdentity(captureModule);
+            const options = { composerConfig: context.composerConfig, pack: context.pack, renderer: rendererIdentity, packIdentity: await captureModule.resolveAuthoringPackIdentity({ composerConfig: context.composerConfig, pack: context.pack, packIdentity: context.packIdentity }) };
             const snapshot = await captureModule.captureAuthoringWorkspace(options);
             if (snapshot.workspaceId !== input.workspaceId) throw Object.assign(new Error("Workspace changed."), { code: "wrong-workspace" });
             const compiled: Awaited<ReturnType<typeof import("../server/authoring-workspace/capture").compileAuthoringWorkspaceSnapshot>> = await captureModule.compileAuthoringWorkspaceSnapshot({ ...options, snapshot });
