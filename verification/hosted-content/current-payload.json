@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "0ec2e6949a72daca8619aa863989732763702e84",
-  "payloadSha256": "4f6de41cc9dd4f20b8522643f729c60e7f20ad249a1979e879a38ab90030b6df",
-  "rawPackageJsonSha256": "a2edbdd1b1a6698b39afca8d880be2a87a03eca2e64bdd4631f994ebadf0b890",
+  "packageOutputSha": "10c4d8342b3c95c7142e14927361d2d774744736",
+  "payloadSha256": "af91577862d60d3179e193e84b1793b1865a0f2332beb95635d99faf1154a182",
+  "rawPackageJsonSha256": "3247ccc706e22ccd176f6b255b42f5e1345e0eab1e588702b28f8ffeee278098",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -2598,9 +2598,9 @@
     },
     {
       "path": "src/features/assistant/draft-refresh.ts",
-      "bytes": 877,
+      "bytes": 1125,
       "mode": 420,
-      "sha256": "1d7faca5f7b8834eea1b4671ae1a8c0d8f2ce97902768e12e38727bee9770a47"
+      "sha256": "1abdea2e27a2e0cd5b5bb638d433e6723a115867f0cbd5f5e00d1fedd5cfa858"
     },
     {
       "path": "src/features/assistant/host-assistant-route.tsx",
