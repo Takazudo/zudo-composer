@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "10c4d8342b3c95c7142e14927361d2d774744736",
-  "payloadSha256": "af91577862d60d3179e193e84b1793b1865a0f2332beb95635d99faf1154a182",
-  "rawPackageJsonSha256": "3247ccc706e22ccd176f6b255b42f5e1345e0eab1e588702b28f8ffeee278098",
+  "packageOutputSha": "623c292e3215d7a846721a82781f68ad1424bb3c",
+  "payloadSha256": "52fe12b1e82a409651d09a90912ab763a3724047e18a598ab1d4b4478865379a",
+  "rawPackageJsonSha256": "46fb6d30346708cbd3aa89750738c476527dd5988079a24288f4ce49b9640ada",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -414,9 +414,9 @@
     },
     {
       "path": "plugins/native-edit-api.ts",
-      "bytes": 27203,
+      "bytes": 27199,
       "mode": 420,
-      "sha256": "1e83ac61a99468178ace291742eb9f7ae9a0ec5a113754079f320811de17983e"
+      "sha256": "25b06feff39e3f161805271ae7abab97745f7715e7597dc58334490eb3df18c6"
     },
     {
       "path": "plugins/release-api-plugin.ts",

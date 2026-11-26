@@ -45,14 +45,44 @@ async function fixture(realStorage=false){
   actualLease=await acquireAuthoringLease(workspaceRoot,"saved-preview-test");cleanup.push(()=>actualLease!.release());readSnapshot=()=>actualLease!.execute(()=>realCapture.captureAuthoringWorkspace(options));
  }
  const handlers=new Map<string, (...args:unknown[])=>void>();let middleware: ((...args:unknown[])=>Promise<void>)|undefined;
- const server={config:{server:{https:false}},ws:{on:(name:string,fn:(...args:unknown[])=>void)=>handlers.set(name,fn),send:vi.fn()},watcher:{on:vi.fn()},middlewares:{use:(fn:typeof middleware)=>{middleware=fn;}},ssrLoadModule:async(id:string)=>id.endsWith('server/edit/service.ts')?{createEditingService:()=>({initializeSourceEpoch:vi.fn(async()=>{})})}:id.endsWith('server/authoring-workspace/capture.ts')?capture:id.endsWith('server/host-document/render.ts')?rendering:Promise.reject(Error(id))};
+ const loadModule = vi.fn(async (id: string) => {
+  if (id.endsWith("server/edit/service.ts")) return { createEditingService: () => ({ initializeSourceEpoch: vi.fn(async () => {}) }) };
+  if (id.endsWith("server/authoring-workspace/capture.ts")) return capture;
+  if (id.endsWith("server/host-document/render.ts")) return rendering;
+  throw Error(id);
+ });
+ const server={config:{server:{https:false}},ws:{on:(name:string,fn:(...args:unknown[])=>void)=>handlers.set(name,fn),send:vi.fn()},watcher:{on:vi.fn()},middlewares:{use:(fn:typeof middleware)=>{middleware=fn;}},ssrLoadModule:loadModule};
  const lease={execute:vi.fn(async(action:()=>Promise<unknown>)=>actualLease?actualLease.execute(action):action())};const api=await installNativeEditApi(server as unknown as ViteDevServer,lease as never,"/missing-test");cleanup.push(api.close);
  const socket=new EventEmitter(),peer={socket,send:vi.fn()};handlers.get('connection')!(socket,{headers:{host:'127.0.0.1:4300',origin:'http://127.0.0.1:4300'}});const clientId='10000000-1000-4000-8000-000000000001';handlers.get('native:bind')!({clientId,capability:api.config.capability,epoch:null},peer);
  expect(peer.send).toHaveBeenCalledWith('native:bound',expect.objectContaining({epoch:0}));peer.send.mockClear();
  const call=async(operation:string,input:unknown,epoch=0)=>{const request=httpRequest([Buffer.from(JSON.stringify({operation,input}))]);request.url='/__zudo-native-edit';request.method='POST';request.headers={host:'127.0.0.1:4300',origin:'http://127.0.0.1:4300','content-type':'application/json','x-zudo-native-capability':api.config.capability,'x-zudo-native-client':clientId,'x-zudo-native-epoch':String(epoch)};Object.defineProperties(request.socket,{remoteAddress:{value:'127.0.0.1'},localPort:{value:4300}});const response=httpResponse();await middleware!(request,response,()=>{throw Error('unexpected next');});return{status:response.statusCode,body:JSON.parse(String(response.end.mock.calls[0]![0]))};};
- return{...data,capture,lease,peer,call,contentStore,readSnapshot};
+ return{...data,capture,lease,peer,call,contentStore,readSnapshot,loadModule};
 }
 const input={workspaceId:'proof',entry:{providerId:'content-filesystem',modelId:'course',recordId:'consultation'}};
+it("captures with the verified renderer identity and checks it anew on the next request", async () => {
+ const f = await fixture();
+ const resolveRenderer = f.capture.resolveAuthoringRendererIdentity;
+ resolveRenderer.mockClear();
+
+ const verified = { ...f.snapshot.renderer };
+ resolveRenderer.mockResolvedValueOnce(verified);
+ expect((await f.call("content-preview-context", input)).status).toBe(200);
+ expect(resolveRenderer).toHaveBeenCalledTimes(1);
+ expect(f.capture.captureAuthoringWorkspace).toHaveBeenCalledWith(expect.objectContaining({ renderer: verified }));
+
+ const originalLoad = f.loadModule.getMockImplementation()!;
+ f.loadModule.mockImplementation(async id => {
+  const loaded = await originalLoad(id);
+  if (id.endsWith("server/host-document/render.ts")) resolveRenderer.mockResolvedValueOnce({ ...verified, digest: "d".repeat(64) });
+  return loaded;
+ });
+ const stale = await f.call("content-preview-context", input);
+ expect(stale.status).toBe(409);
+ expect(stale.body.error.code).toBe("stale-plan");
+ expect(resolveRenderer).toHaveBeenCalledTimes(2);
+ expect(f.capture.captureAuthoringWorkspace).toHaveBeenCalledTimes(1);
+ expect(mocks.renderer.renderDocument).not.toHaveBeenCalled();
+});
 it('actual native endpoint discovers and renders with one capture/compile per read, no dirty-tab prepare or mutation',async()=>{
  const f=await fixture(),first=await f.call('content-preview-context',input);expect(first.status).toBe(200);expect(first.body.result.uses).toHaveLength(1);expect(f.capture.captureAuthoringWorkspace).toHaveBeenCalledTimes(1);expect(f.capture.compileAuthoringWorkspaceSnapshot).toHaveBeenCalledTimes(1);expect(mocks.renderer.renderDocument).not.toHaveBeenCalled();
  const use=first.body.result.uses[0];const second=await f.call('content-document-preview',{...input,revision:first.body.result.revision,sitemapProviderId:use.sitemapProviderId,sitemapId:use.sitemapId,pageId:use.pageId,pathname:use.pathname});expect(second.status).toBe(200);expect(second.body.result.identity.revision).toBe(first.body.result.revision);expect(second.body.result.content.entry).toEqual(input.entry);expect(mocks.renderer.renderDocument).toHaveBeenCalledTimes(1);expect(f.capture.captureAuthoringWorkspace).toHaveBeenCalledTimes(2);expect(f.capture.compileAuthoringWorkspaceSnapshot).toHaveBeenCalledTimes(2);expect(f.lease.execute).toHaveBeenCalledTimes(2);expect(f.peer.send).not.toHaveBeenCalled();
