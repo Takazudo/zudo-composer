@@ -8,6 +8,37 @@ const deferred = () => {
 };
 const view = (revision: number): DraftView => ({ generation: 0, permission: "apply", draft: { id: "draft", revision, status: "open", createdAt: "2026-01-01", updatedAt: "2026-01-01", applied: null, undone: null, dependenciesCurrent: true, operations: [], pages: [], changes: [], stale: [], buildError: null, candidateDigest: null } });
 describe("Assistant authoritative draft responses", () => {
+  it("shows the post-proposal draft while the overlapping completion read is still pending", async () => {
+    const accept = vi.fn(), fail = vi.fn();
+    const controller = createDraftRefreshController(accept, fail);
+    const proposal = deferred(), completion = deferred();
+    const proposalRead = controller.refresh(() => proposal.promise);
+    const completionRead = controller.refresh(() => completion.promise);
+    const staged = view(1), completed = view(2);
+
+    proposal.resolve(staged);
+    expect(await proposalRead).toEqual(staged);
+    expect(accept).toHaveBeenCalledExactlyOnceWith(staged);
+
+    completion.resolve(completed);
+    await completionRead;
+    expect(accept.mock.calls).toEqual([[staged], [completed]]);
+    expect(fail).not.toHaveBeenCalled();
+  });
+
+  it("keeps a newer completed draft when an older successful read arrives late", async () => {
+    const accept = vi.fn();
+    const controller = createDraftRefreshController(accept, vi.fn());
+    const older = deferred(), newer = deferred();
+    const oldRead = controller.refresh(() => older.promise);
+    const newRead = controller.refresh(() => newer.promise);
+    const current = view(2);
+    newer.resolve(current);
+    await newRead;
+    older.resolve(view(1));
+    expect(await oldRead).toBeNull();
+    expect(accept).toHaveBeenCalledExactlyOnceWith(current);
+  });
   it("displays withdrawal immediately while older reads and follow-up reads remain pending", async () => {
     const shown: DraftView[] = [], errors = vi.fn();
     const controller = createDraftRefreshController(next => shown.push(next), errors);
