@@ -1925,8 +1925,8 @@ var FilesystemAssetStore = class FilesystemAssetStore {
 		if (!ref || ref.providerId !== this.provider.id || !isSafeRecordId(ref.assetId) || !/^[a-f0-9]{64}$/.test(ref.versionId)) throw operationError$1("pin", "validation", "Invalid provider-qualified Assets version reference.");
 		const record = snapshot.records.find(({ id }) => id === ref.assetId);
 		const version = record?.document.versions.find(({ id }) => id === ref.versionId);
-		if (!version) throw operationError$1("pin", "not-found", "Exact Assets version is not retained.");
-		if (await this.verifyBytes("pin", this.versionPath(version.url), version.byteLength, version.checksum)) throw operationError$1("pin", "bytes-missing", "Exact Assets version bytes are missing or corrupted.");
+		if (!version) throw operationError$1("pin", "not-found", `Exact Assets version is not retained (asset "${ref.assetId}").`);
+		if (await this.verifyBytes("pin", this.versionPath(version.url), version.byteLength, version.checksum)) throw operationError$1("pin", "bytes-missing", `Exact Assets version bytes are missing or corrupted (asset "${record.id}").`);
 		return {
 			providerId: this.provider.id,
 			assetId: record.id,
@@ -9488,9 +9488,13 @@ async function createAssetReferenceLock(store, refs, suppliedSnapshot) {
 					});
 				}
 			} catch (error) {
+				const message = error instanceof Error ? error.message : "pin manifest failed.";
+				const named = /\(asset "([^"]+)"\)/.exec(message)?.[1];
+				const failed = [...pending.values()].find(({ exact }) => exact.assetId === named);
 				diagnostics.push({
 					code: "corrupt",
-					message: `Assets bytes could not be verified for ${pending.size} exact version(s): ${error instanceof Error ? error.message : "pin manifest failed."}`
+					...failed ? { ref: failed.ref } : {},
+					message: `Assets bytes could not be verified for ${pending.size} exact version(s): ${message}`
 				});
 			}
 		}
