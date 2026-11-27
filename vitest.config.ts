@@ -67,7 +67,7 @@ export default defineConfig({
           testTimeout: 60_000,
           // Creator tests can leave generated host specs in `.artifacts/` after
           // an interrupted run; those are fixtures, not repository tests.
-          exclude: [...configDefaults.exclude, '**/worktrees/**', '**/.artifacts/**', 'templates/**', 'server/**', 'packages/image-editor/src/__tests__/**/*.test.ts', 'packages/demo-*/**', 'packages/ui/**', 'styleguide/**', 'tests/ui-pack/**'],
+          exclude: [...configDefaults.exclude, '**/worktrees/**', '**/.artifacts/**', 'templates/**', 'server/**', 'packages/image-editor/src/__tests__/**/*.test.ts', 'packages/demo-*/**', 'packages/ui/**', 'styleguide/**', 'tests/ui-pack/**', 'tests/zudo-react-proof/**'],
         },
       },
       {
@@ -82,6 +82,17 @@ export default defineConfig({
           include: ['packages/demo-*/**/*.test.?(c|m)[jt]s?(x)'],
           environment: 'node',
           testTimeout: 60_000,
+          exclude: [...configDefaults.exclude, '**/worktrees/**'],
+        },
+      },
+      {
+        // R0 prototype (#1003): zudo-react runtime proofs. JSX compiles to the
+        // owned runtime only here; no Preact plugin and no app aliases.
+        oxc: { jsx: { runtime: 'automatic', importSource: '@takazudo/zfb/zudo-react' } },
+        test: {
+          name: 'zudo-react-proof',
+          include: ['tests/zudo-react-proof/**/*.test.?(c|m)[jt]s?(x)'],
+          environment: 'jsdom',
           exclude: [...configDefaults.exclude, '**/worktrees/**'],
         },
       },
