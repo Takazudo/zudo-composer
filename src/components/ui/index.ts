@@ -23,13 +23,12 @@ export type { CountBadgeProps, KbdProps } from "./badge";
 export { SegmentedControl } from "./segmented-control";
 export type { SegmentedControlProps, SegmentedOption } from "./segmented-control";
 
-export { Checkbox, Input, Select, Switch, Textarea } from "./form-controls";
-export type { CheckboxProps, ControlSize, InputProps, SelectProps, SwitchProps, TextareaProps } from "./form-controls";
+export { Checkbox, Input, Select, Switch, Textarea, useElementRef } from "./form-controls";
+export type { CheckboxProps, ControlSize, ElementRef, InputProps, SelectProps, SwitchProps, TextareaProps } from "./form-controls";
 
 export { Field } from "./field";
-export type { FieldProps } from "./field";
-export { FieldContext, useFieldControl } from "./field-context";
-export type { FieldControlContext } from "./field-context";
+export type { FieldError, FieldProps } from "./field";
+export type { FieldControl } from "./field-context";
 
 export { Banner } from "./banner";
 export type { BannerProps, BannerTone } from "./banner";
@@ -47,5 +46,6 @@ export { Pane, PaneBody, PaneHeader, PaneSection, PaneTabs } from "./pane";
 export type { PaneBodyProps, PaneHeaderProps, PaneProps, PaneSectionProps, PaneTab, PaneTabsProps } from "./pane";
 
 export { cx } from "./class-names";
+export type { NativeProps, WithPlainClass } from "./class-names";
 export { nextRovingIndex } from "./roving";
 export type { RovingOptions, RovingOrientation } from "./roving";

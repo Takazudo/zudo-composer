@@ -1,93 +1,103 @@
+import { h, signal } from "@takazudo/zfb/zudo-react";
 import { describe, expect, it } from "vitest";
-import { act, renderHook } from "@testing-library/preact";
+import { render, settle } from "../../../test/render";
 import "./library-test-environment";
-import { useLibrarySelection } from "../library-selection";
+import { createLibrarySelection, type LibrarySelectionController, type LibrarySelectionOptions } from "../library-selection";
 import { RECORDS, type Record_ } from "./library-fixtures";
 
 const rowId = (row: Record_) => row.id;
 const ids = (rows: readonly Record_[]) => rows.map(rowId);
 
-describe("useLibrarySelection", () => {
+/** The controller sweeps in its caller's scope, so it is created inside a mounted component. */
+function mountSelection(options: LibrarySelectionOptions<Record_>): LibrarySelectionController<Record_> {
+  let controller: LibrarySelectionController<Record_> | null = null;
+  function Harness() {
+    controller = createLibrarySelection(options);
+    return null;
+  }
+  render(h(Harness, null));
+  if (!controller) throw new Error("selection harness did not run");
+  return controller;
+}
+
+describe("createLibrarySelection", () => {
   it("starts empty and reports the count the bulk bar shows", () => {
-    const { result } = renderHook(() => useLibrarySelection({ rows: RECORDS, rowId }));
-    expect(result.current.selectedCount).toBe(0);
-    expect(result.current.selectedIds.size).toBe(0);
+    const selection = mountSelection({ rows: RECORDS, rowId });
+    expect(selection.selectedCount.value).toBe(0);
+    expect(selection.selectedIds.value.size).toBe(0);
   });
 
   it("keeps the selected records in the source list's order", () => {
-    const { result } = renderHook(() => useLibrarySelection({ rows: RECORDS, rowId }));
-    act(() => result.current.toggleRow("landing-hero", true));
-    act(() => result.current.toggleRow("blog-post", true));
-    expect(ids(result.current.selectedRows)).toEqual(["blog-post", "landing-hero"]);
-    expect(result.current.isSelected("blog-post")).toBe(true);
+    const selection = mountSelection({ rows: RECORDS, rowId });
+    selection.toggleRow("landing-hero", true);
+    selection.toggleRow("blog-post", true);
+    expect(ids(selection.selectedRows.value)).toEqual(["blog-post", "landing-hero"]);
+    expect(selection.isSelected("blog-post")).toBe(true);
   });
 
   it("deselects a row and clears the whole selection", () => {
-    const { result } = renderHook(() => useLibrarySelection({ rows: RECORDS, rowId }));
-    act(() => result.current.toggleAll(true));
-    expect(result.current.selectedCount).toBe(RECORDS.length);
+    const selection = mountSelection({ rows: RECORDS, rowId });
+    selection.toggleAll(true);
+    expect(selection.selectedCount.value).toBe(RECORDS.length);
 
-    act(() => result.current.toggleRow("blog-post", false));
-    expect(result.current.isSelected("blog-post")).toBe(false);
+    selection.toggleRow("blog-post", false);
+    expect(selection.isSelected("blog-post")).toBe(false);
 
-    act(() => result.current.clear());
-    expect(result.current.selectedCount).toBe(0);
+    selection.clear();
+    expect(selection.selectedCount.value).toBe(0);
   });
 
-  it("survives filtering: a row hidden by the filter stays selected", () => {
+  it("survives filtering: a row hidden by the filter stays selected", async () => {
     const visible = RECORDS.filter((row) => row.kind === "pattern");
-    const { result, rerender } = renderHook(
-      ({ visibleRows }: { visibleRows: readonly Record_[] }) =>
-        useLibrarySelection({ rows: RECORDS, visibleRows, rowId }),
-      { initialProps: { visibleRows: RECORDS } },
-    );
-    act(() => result.current.toggleRow("blog-post", true));
-    rerender({ visibleRows: visible });
-    expect(result.current.isSelected("blog-post")).toBe(true);
-    expect(result.current.selectedCount).toBe(1);
+    const visibleRows = signal<readonly Record_[]>(RECORDS);
+    const selection = mountSelection({ rows: RECORDS, visibleRows, rowId });
+    selection.toggleRow("blog-post", true);
+    visibleRows.value = visible;
+    await settle();
+    expect(selection.isSelected("blog-post")).toBe(true);
+    expect(selection.selectedCount.value).toBe(1);
   });
 
-  it("does not survive deletion: a record that left the library leaves the selection", () => {
-    const { result, rerender } = renderHook(
-      ({ rows }: { rows: readonly Record_[] }) => useLibrarySelection({ rows, rowId }),
-      { initialProps: { rows: RECORDS } },
-    );
-    act(() => result.current.toggleRow("blog-post", true));
-    act(() => result.current.toggleRow("site-frame", true));
+  it("does not survive deletion: a record that left the library leaves the selection", async () => {
+    const rows = signal<readonly Record_[]>(RECORDS);
+    const selection = mountSelection({ rows, rowId });
+    selection.toggleRow("blog-post", true);
+    selection.toggleRow("site-frame", true);
 
-    rerender({ rows: RECORDS.filter((row) => row.id !== "blog-post") });
-    expect(ids(result.current.selectedRows)).toEqual(["site-frame"]);
-    expect(result.current.selectedIds.has("blog-post")).toBe(false);
+    rows.value = RECORDS.filter((row) => row.id !== "blog-post");
+    await settle();
+    expect(ids(selection.selectedRows.value)).toEqual(["site-frame"]);
+    expect(selection.selectedIds.value.has("blog-post")).toBe(false);
   });
 
-  it("does not re-select a later record that reuses a deleted record's id", () => {
+  it("does not re-select a later record that reuses a deleted record's id", async () => {
     // A route slugging ids from names hands out the same `untitled-record`
     // again as soon as the first one is deleted.
     const reused: Record_ = { ...RECORDS[1], name: "Untitled" };
-    const { result, rerender } = renderHook(
-      ({ rows }: { rows: readonly Record_[] }) => useLibrarySelection({ rows, rowId }),
-      { initialProps: { rows: RECORDS } },
-    );
-    act(() => result.current.toggleRow("blog-post", true));
+    const rows = signal<readonly Record_[]>(RECORDS);
+    const selection = mountSelection({ rows, rowId });
+    selection.toggleRow("blog-post", true);
 
     const without = RECORDS.filter((row) => row.id !== "blog-post");
-    rerender({ rows: without });
-    expect(result.current.selectedCount).toBe(0);
+    rows.value = without;
+    await settle();
+    expect(selection.selectedCount.value).toBe(0);
 
-    rerender({ rows: [...without, reused] });
-    expect(result.current.selectedCount).toBe(0);
-    expect(result.current.isSelected("blog-post")).toBe(false);
+    rows.value = [...without, reused];
+    await settle();
+    expect(selection.selectedCount.value).toBe(0);
+    expect(selection.isSelected("blog-post")).toBe(false);
   });
 
   it("covers exactly the visible rows when selecting and deselecting all", () => {
     const visible = RECORDS.filter((row) => row.kind === "pattern");
-    const { result } = renderHook(() => useLibrarySelection({ rows: RECORDS, visibleRows: visible, rowId }));
+    const selection = mountSelection({ rows: RECORDS, visibleRows: visible, rowId });
 
-    act(() => result.current.toggleAll(true));
-    expect(ids(result.current.selectedRows)).toEqual(["product-overview", "landing-hero"]);
+    selection.toggleAll(true);
+    expect(ids(selection.selectedRows.value)).toEqual(["product-overview", "landing-hero"]);
 
-    act(() => result.current.toggleRow("blog-post", true));
-    act(() => result.current.toggleAll(false));
-    expect(ids(result.current.selectedRows)).toEqual(["blog-post"]);
+    selection.toggleRow("blog-post", true);
+    selection.toggleAll(false);
+    expect(ids(selection.selectedRows.value)).toEqual(["blog-post"]);
   });
 });

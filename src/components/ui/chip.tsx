@@ -1,11 +1,10 @@
-import type { JSX } from "preact";
 import { cx } from "./class-names";
-import type { WithPlainClass } from "./class-names";
+import type { NativeProps } from "./class-names";
 
 /** `neutral` is the bordered default; `plain` is the borderless filled variant. */
 export type ChipTone = "neutral" | "ok" | "warn" | "err" | "accent" | "plain";
 
-export interface ChipProps extends WithPlainClass<Omit<JSX.IntrinsicElements["span"], "ref">> {
+export interface ChipProps extends NativeProps<HTMLSpanElement> {
   tone?: ChipTone;
   /** Leading status dot, inheriting the chip's tone colour. */
   dot?: boolean;

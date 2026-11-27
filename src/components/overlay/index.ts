@@ -16,13 +16,13 @@ export {
   type MenuViewport,
 } from "./menu-position";
 export {
-  useMenu,
+  createMenu,
   type CloseMenuOptions,
   type MenuController,
   type MenuFocusIntent,
+  type MenuOptions,
   type MenuTriggerProps,
   type MenuTriggerRef,
-  type UseMenuOptions,
 } from "./use-menu";
 export {
   Menu,

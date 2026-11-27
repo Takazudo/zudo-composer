@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
+import { signal } from "@takazudo/zfb/zudo-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, settle } from "../../test/render";
 import {
   currentRailItem,
   persistRailState,
@@ -12,7 +13,6 @@ import {
 import type { WorkspaceCounts } from "../workspace-summary";
 
 afterEach(() => {
-  cleanup();
   window.localStorage.removeItem(RAIL_STORAGE_KEY);
 });
 
@@ -117,7 +117,7 @@ describe("rail collapse persistence", () => {
 });
 
 describe("Rail", () => {
-  it("lists arbitrary singleton/collection models and pins a provider-qualified view", () => {
+  it("lists arbitrary singleton/collection models and pins a provider-qualified view", async () => {
     const onPinsChange = vi.fn();
     renderRail({ onPinsChange, models: [
       { providerId: "catalog", modelId: "people", label: "People", kind: "collection", views: [{ id: "contacts", label: "Contact details" }] },
@@ -126,20 +126,24 @@ describe("Rail", () => {
     expect(screen.getByRole("link", { name: "People" })).toHaveAttribute("href", "/content?provider=catalog&model=people");
     expect(screen.getByRole("link", { name: "Site identity" })).toHaveAttribute("href", "/content?provider=editorial&model=identity");
     fireEvent.click(screen.getByRole("button", { name: "People actions" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Pin Contact details" }));
+    await settle();
     expect(onPinsChange).toHaveBeenCalledWith([{ label: "Contact details", target: { route: "content", providerId: "catalog", modelId: "people", viewId: "contacts" } }]);
   });
 
-  it("keeps stale pins visibly unavailable and removable without a fallback link", () => {
+  it("keeps stale pins visibly unavailable and removable without a fallback link", async () => {
     const onPinsChange = vi.fn();
     renderRail({ onPinsChange, pins: [{ label: "Old contacts", target: { route: "content", providerId: "missing", modelId: "people" } }] });
     expect(screen.getByText("Old contacts · unavailable")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Old contacts" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Old contacts pin actions" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Remove pin" }));
+    await settle();
     expect(onPinsChange).toHaveBeenCalledWith([]);
   });
-  it("marks only the current route", () => {
+  it("marks only the current route", async () => {
     renderRail({ path: "/content" });
     const nav = screen.getByRole("navigation", { name: "Main navigation" });
     const current = nav.querySelectorAll('a[aria-current="page"]');
@@ -147,12 +151,12 @@ describe("Rail", () => {
     expect(current[0]).toHaveTextContent("Content");
   });
 
-  it("marks nothing on a route the chrome does not own", () => {
+  it("marks nothing on a route the chrome does not own", async () => {
     renderRail({ path: "/nowhere" });
     expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
   });
 
-  it("opens the Site entry in its own tab and never marks it current", () => {
+  it("opens the Site entry in its own tab and never marks it current", async () => {
     const onNavigate = vi.fn();
     renderRail({ path: "/", onNavigate });
     const site = screen.getByRole("link", { name: "Website preview — choose preview source" });
@@ -165,31 +169,38 @@ describe("Rail", () => {
     // The visitor document is a separate entry graph, so the click is the
     // browser's to handle and must not become an in-shell navigation.
     fireEvent.click(site);
+    await settle();
     expect(onNavigate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("link", { name: "Compositions" }));
+    await settle();
     expect(onNavigate).toHaveBeenCalledWith("/composer", screen.getByRole("link", { name: "Compositions" }));
   });
 
-  it("gives the working-preview flush a head start on pointerdown and Enter, and never on other items", () => {
+  it("gives the working-preview flush a head start on pointerdown and Enter, and never on other items", async () => {
     const onBeforeNewTab = vi.fn();
     renderRail({ onBeforeNewTab });
     const site = screen.getByRole("link", { name: "Website preview — choose preview source" });
     fireEvent.pointerDown(site);
+    await settle();
     expect(onBeforeNewTab).toHaveBeenCalledTimes(1);
     expect(onBeforeNewTab).toHaveBeenCalledWith(expect.objectContaining({ id: "site", href: "/website-preview" }));
     fireEvent.keyDown(site, { key: "Enter" });
+    await settle();
     expect(onBeforeNewTab).toHaveBeenCalledTimes(2);
     fireEvent.keyDown(site, { key: " " });
+    await settle();
     expect(onBeforeNewTab).toHaveBeenCalledTimes(2);
 
     onBeforeNewTab.mockClear();
     const composer = screen.getByRole("link", { name: "Compositions" });
     fireEvent.pointerDown(composer);
+    await settle();
     fireEvent.keyDown(composer, { key: "Enter" });
+    await settle();
     expect(onBeforeNewTab).not.toHaveBeenCalled();
   });
 
-  it("renders a count only where the summary supplied one", () => {
+  it("renders a count only where the summary supplied one", async () => {
     renderRail({ counts: { content: 2, composer: 6 } });
     const content = screen.getByRole("link", { name: "Content" });
     const assets = screen.getByRole("link", { name: "Assets" });
@@ -197,7 +208,7 @@ describe("Rail", () => {
     expect(assets.querySelector(".cms-rail__count")).toBeNull();
   });
 
-  it("keeps every item accessibly named while collapsed", () => {
+  it("keeps every item accessibly named while collapsed", async () => {
     renderRail({ collapsed: true });
     for (const item of RAIL_ITEMS) {
       const name = item.accessibleName ?? item.label;
@@ -205,16 +216,19 @@ describe("Rail", () => {
     }
   });
 
-  it("labels the collapse control by the action it performs", () => {
+  it("labels the collapse control by the action it performs", async () => {
     const onToggleCollapsed = vi.fn();
-    const { rerender } = renderRail({ onToggleCollapsed });
+    const collapsed = signal(false);
+    renderRail({ onToggleCollapsed, collapsed });
     const collapse = screen.getByRole("button", { name: "Collapse navigation" });
     expect(collapse).toHaveAttribute("aria-expanded", "true");
     expect(document.getElementById(collapse.getAttribute("aria-controls")!)).toHaveAttribute("aria-label", "Main navigation");
     fireEvent.click(collapse);
+    await settle();
     expect(onToggleCollapsed).toHaveBeenCalledTimes(1);
 
-    rerender(<Rail path="/" collapsed onToggleCollapsed={onToggleCollapsed} />);
+    collapsed.value = true;
+    await settle();
     expect(screen.getByRole("button", { name: "Expand navigation" })).toHaveAttribute("aria-expanded", "false");
   });
 });

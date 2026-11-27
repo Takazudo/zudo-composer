@@ -1,11 +1,8 @@
-import { useState } from "preact/hooks";
-
-// Preact's useId counts per render root and restarts from P0-0 when a component
-// that re-renders itself passes host children through (Preact 10.29.8), so ids
-// from it collide; this sequence is unique for the whole document.
+// A document-wide id sequence. zudo-react has no `useId`, and every overlay
+// layer is a separate root, so ids come from one module counter that is unique
+// for the whole document; call it once in a component's setup.
 let nextDomId = 0;
 
-export function useDomId(): string {
-  const [id] = useState(() => `cms-id-${++nextDomId}`);
-  return id;
+export function createDomId(): string {
+  return `cms-id-${++nextDomId}`;
 }

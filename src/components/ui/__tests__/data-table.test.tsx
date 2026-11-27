@@ -1,7 +1,7 @@
 import "./cleanup";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/preact";
-import { useState } from "preact/hooks";
+import { computed, signal } from "@takazudo/zfb/zudo-react";
+import { fireEvent, render, screen, settle, within } from "../../../test/render";
 import { Button } from "../button";
 import { DataTable } from "../data-table";
 import type { DataTableColumn } from "../data-table";
@@ -43,7 +43,7 @@ function setScrollGeometry(
 }
 
 function SelectableHarness({ rows = ROWS }: { rows?: readonly Composition[] }) {
-  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const selectedIds = signal<ReadonlySet<string>>(new Set());
   return (
     <DataTable
       {...baseProps()}
@@ -51,16 +51,15 @@ function SelectableHarness({ rows = ROWS }: { rows?: readonly Composition[] }) {
       selection={{
         selectedIds,
         rowLabel: (row) => row.name,
-        onToggleRow: (id, selected) =>
-          setSelectedIds((current) => {
-            const next = new Set(current);
-            if (selected) next.add(id);
-            else next.delete(id);
-            return next;
-          }),
-        onToggleAll: (selected) => setSelectedIds(selected ? new Set(rows.map((row) => row.id)) : new Set()),
+        onToggleRow: (id, selected) => {
+          const next = new Set(selectedIds.value);
+          if (selected) next.add(id);
+          else next.delete(id);
+          selectedIds.value = next;
+        },
+        onToggleAll: (selected) => { selectedIds.value = selected ? new Set(rows.map((row) => row.id)) : new Set(); },
       }}
-      bulkBar={selectedIds.size > 0 ? <span>{selectedIds.size} selected</span> : undefined}
+      bulkBar={computed(() => (selectedIds.value.size > 0 ? <span>{selectedIds.value.size} selected</span> : undefined))}
     />
   );
 }
@@ -86,30 +85,34 @@ describe("DataTable", () => {
     expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
   });
 
-  it("selects a row by its own name and reflects it on the row", () => {
+  it("selects a row by its own name and reflects it on the row", async () => {
     render(<SelectableHarness />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Pricing" }));
+    await settle();
     const rows = screen.getAllByRole("row").slice(1);
     expect(rows[0]).toHaveAttribute("aria-selected", "false");
     expect(rows[1]).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("1 selected")).toBeInTheDocument();
   });
 
-  it("moves the header box through mixed to fully selected", () => {
+  it("moves the header box through mixed to fully selected", async () => {
     render(<SelectableHarness />);
     const selectAll = () => screen.getByRole("checkbox", { name: "Select all rows" }) as HTMLInputElement;
     expect(selectAll().indeterminate).toBe(false);
     expect(selectAll()).not.toBeChecked();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Pricing" }));
+    await settle();
     expect(selectAll().indeterminate).toBe(true);
 
     fireEvent.click(selectAll());
+    await settle();
     expect(selectAll()).toBeChecked();
     expect(selectAll().indeterminate).toBe(false);
     expect(screen.getAllByRole("row").slice(1).every((row) => row.getAttribute("aria-selected") === "true")).toBe(true);
 
     fireEvent.click(selectAll());
+    await settle();
     expect(screen.getByText("Product overview")).toBeInTheDocument();
     expect(screen.queryByText("1 selected")).toBeNull();
   });
@@ -125,7 +128,7 @@ describe("DataTable", () => {
       <DataTable
         {...baseProps()}
         rowActions={(row) => (
-          <Button size="sm" iconOnly aria-label={`More actions for ${row.name}`} onClick={() => onOpen(row.id)}>
+          <Button size="sm" iconOnly aria-label={`More actions for ${row.name}`} on:click={() => onOpen(row.id)}>
             {"⋯"}
           </Button>
         )}
@@ -169,7 +172,7 @@ describe("DataTable", () => {
     expect(wrap!.querySelector("table.cms-table")).not.toBeNull();
   });
 
-  it.each([false, true])("reports all four scroll-edge states with bulk bar rendered: %s", (withBulkBar) => {
+  it.each([false, true])("reports all four scroll-edge states with bulk bar rendered: %s", async (withBulkBar) => {
     const { container } = render(
       <DataTable {...baseProps()} bulkBar={withBulkBar ? <span>Bulk actions</span> : undefined} />,
     );
@@ -186,6 +189,7 @@ describe("DataTable", () => {
     for (const { geometry, edge } of states) {
       setScrollGeometry(scrollport, geometry);
       fireEvent.scroll(scrollport);
+      await settle();
       expect(shell).toHaveAttribute("data-scroll-edge", edge);
     }
 
@@ -193,7 +197,7 @@ describe("DataTable", () => {
     expect(shell.parentElement).toHaveClass("cms-table-frame");
   });
 
-  it("re-measures when either the scrollport or table is resized", () => {
+  it("re-measures when either the scrollport or table is resized", async () => {
     let callback: ResizeObserverCallback | undefined;
     const observed: Element[] = [];
     class ResizeObserverMock {
@@ -211,11 +215,13 @@ describe("DataTable", () => {
     expect(observed).toEqual([scrollport, table]);
 
     setScrollGeometry(scrollport, { scrollLeft: 0, scrollWidth: 500, clientWidth: 300 });
-    act(() => callback!([{ target: table } as unknown as ResizeObserverEntry], {} as ResizeObserver));
+    callback!([{ target: table } as unknown as ResizeObserverEntry], {} as ResizeObserver);
+    await settle();
     expect(shell).toHaveAttribute("data-scroll-edge", "end");
 
     setScrollGeometry(scrollport, { scrollLeft: 0, scrollWidth: 300, clientWidth: 300 });
-    act(() => callback!([], {} as ResizeObserver));
+    callback!([], {} as ResizeObserver);
+    await settle();
     expect(shell).toHaveAttribute("data-scroll-edge", "none");
   });
 

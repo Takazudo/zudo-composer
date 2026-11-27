@@ -1,6 +1,6 @@
 import "./cleanup";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/preact";
+import { fireEvent, render, screen } from "../../../test/render";
 import { ComposerIcon } from "../../icons";
 import { Button } from "../button";
 import { EmptyState } from "../empty-state";
@@ -14,7 +14,7 @@ describe("EmptyState", () => {
         title="No compositions yet"
         description="Start from a blank document or a global template."
         action={
-          <Button variant="primary" onClick={onCreate}>
+          <Button variant="primary" on:click={onCreate}>
             New composition
           </Button>
         }

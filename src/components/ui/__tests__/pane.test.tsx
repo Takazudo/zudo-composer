@@ -1,7 +1,7 @@
 import "./cleanup";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/preact";
-import { useState } from "preact/hooks";
+import { computed, signal } from "@takazudo/zfb/zudo-react";
+import { fireEvent, render, screen, settle, within } from "../../../test/render";
 import { SettingsIcon } from "../../icons";
 import { Button } from "../button";
 import { Pane, PaneBody, PaneHeader, PaneSection, PaneTabs } from "../pane";
@@ -34,7 +34,7 @@ describe("PaneHeader", () => {
         title="Components"
         count={12}
         actions={
-          <Button size="xs" iconOnly aria-label="Pane settings" onClick={onSettings}>
+          <Button size="xs" iconOnly aria-label="Pane settings" on:click={onSettings}>
             <SettingsIcon size="sm" />
           </Button>
         }
@@ -70,11 +70,11 @@ const TABS: readonly PaneTab<"page" | "source" | "diagnostics">[] = [
 ];
 
 function TabsHarness({ tabs = TABS, initial = "page" as "page" | "source" | "diagnostics" }) {
-  const [activeId, setActiveId] = useState(initial);
+  const activeId = signal(initial);
   return (
     <>
-      <PaneTabs label="Inspector" tabs={tabs} activeId={activeId} onSelect={setActiveId} panelId={(id) => `panel-${id}`} />
-      <div id={`panel-${activeId}`} role="tabpanel">
+      <PaneTabs label="Inspector" tabs={tabs} activeId={activeId} onSelect={(id) => { activeId.value = id; }} panelId={(id) => `panel-${id}`} />
+      <div id={computed(() => `panel-${activeId.value}`)} role="tabpanel">
         {activeId}
       </div>
     </>
@@ -96,36 +96,42 @@ describe("PaneTabs", () => {
     expect(tabs[1]).toHaveAttribute("tabindex", "0");
   });
 
-  it("activates the tab the arrow keys move to, and wraps", () => {
+  it("activates the tab the arrow keys move to, and wraps", async () => {
     render(<TabsHarness />);
     const tabs = screen.getAllByRole("tab");
     fireEvent.keyDown(tabs[0], { key: "ArrowRight" });
+    await settle();
     expect(screen.getByRole("tab", { name: "Source", selected: true })).toBe(document.activeElement);
     fireEvent.keyDown(tabs[1], { key: "ArrowLeft" });
+    await settle();
     expect(screen.getByRole("tab", { name: "Page", selected: true })).toBe(document.activeElement);
     fireEvent.keyDown(tabs[0], { key: "ArrowLeft" });
+    await settle();
     expect(screen.getByRole("tab", { name: /Diagnostics/, selected: true })).toBe(document.activeElement);
   });
 
-  it("jumps to the ends with Home and End", () => {
+  it("jumps to the ends with Home and End", async () => {
     render(<TabsHarness initial="source" />);
     const tabs = screen.getAllByRole("tab");
     fireEvent.keyDown(tabs[1], { key: "End" });
+    await settle();
     expect(screen.getByRole("tab", { name: /Diagnostics/, selected: true })).toBeInTheDocument();
     fireEvent.keyDown(tabs[2], { key: "Home" });
+    await settle();
     expect(screen.getByRole("tab", { name: "Page", selected: true })).toBeInTheDocument();
   });
 
-  it("ignores the vertical arrows a horizontal tablist does not own", () => {
+  it("ignores the vertical arrows a horizontal tablist does not own", async () => {
     render(<TabsHarness />);
     const tabs = screen.getAllByRole("tab");
     tabs[0].focus();
     fireEvent.keyDown(tabs[0], { key: "ArrowDown" });
+    await settle();
     expect(document.activeElement).toBe(tabs[0]);
     expect(screen.getByRole("tab", { name: "Page", selected: true })).toBeInTheDocument();
   });
 
-  it("skips a disabled tab and never selects it", () => {
+  it("skips a disabled tab and never selects it", async () => {
     render(
       <TabsHarness
         tabs={[
@@ -136,13 +142,15 @@ describe("PaneTabs", () => {
       />,
     );
     fireEvent.keyDown(screen.getAllByRole("tab")[0], { key: "ArrowRight" });
+    await settle();
     expect(screen.getByRole("tab", { name: "Diagnostics", selected: true })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Source" })).toBeDisabled();
   });
 
-  it("selects on click", () => {
+  it("selects on click", async () => {
     render(<TabsHarness />);
     fireEvent.click(screen.getByRole("tab", { name: "Source" }));
+    await settle();
     expect(screen.getByRole("tab", { name: "Source", selected: true })).toBeInTheDocument();
   });
 
@@ -156,7 +164,7 @@ describe("PaneSection", () => {
   it("titles its content and hosts a trailing action", () => {
     const onAdd = vi.fn();
     render(
-      <PaneSection title="Bindings" action={<Button size="xs" onClick={onAdd}>Add</Button>}>
+      <PaneSection title="Bindings" action={<Button size="xs" on:click={onAdd}>Add</Button>}>
         <p>Two bindings applied.</p>
       </PaneSection>,
     );

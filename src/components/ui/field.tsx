@@ -1,29 +1,46 @@
-import type { ComponentChildren } from "preact";
+import { computed, Show, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import { ErrorIcon } from "../icons";
+import { isSignal } from "../reactive";
 import { cx } from "./class-names";
-import { FieldContext } from "./field-context";
-import { useDomId } from "../use-dom-id";
+import type { FieldControl } from "./field-context";
+import { createDomId } from "../use-dom-id";
+
+/** Error text: a static child, or a signal for a validation message that comes and goes. */
+export type FieldError = Child | ReadonlySignal<string | null | undefined>;
 
 export interface FieldProps {
-  label: ComponentChildren;
+  label: Child;
   required?: boolean;
   /** Right-aligned muted hint naming the value's kind, e.g. "Markdown" or "Slug". */
-  kind?: ComponentChildren;
-  help?: ComponentChildren;
+  kind?: Child;
+  help?: Child;
   /** Present error text switches the field — and the control it wraps — to the invalid state. */
-  error?: ComponentChildren;
-  /** Explicit control id; otherwise a generated one is shared through context. */
+  error?: FieldError;
+  /** Explicit control id; otherwise a generated one is handed to the control. */
   controlId?: string;
   class?: string;
-  children?: ComponentChildren;
+  /** The wrapped control. A function receives the wiring to pass as the control's `field` prop. */
+  children?: Child | ((field: FieldControl) => Child);
+}
+
+function present(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== false && value !== "";
 }
 
 export function Field({ label, required = false, kind, help, error, controlId, class: className, children }: FieldProps) {
-  const generatedId = useDomId();
-  const id = controlId ?? generatedId;
+  const id = controlId ?? createDomId();
   const helpId = `${id}-help`;
   const errorId = `${id}-error`;
-  const describedBy = cx(help ? helpId : undefined, error ? errorId : undefined) || undefined;
+  const errorSignal = isSignal(error) ? (error as ReadonlySignal<string | null | undefined>) : null;
+  const invalid = computed(() => (errorSignal ? present(errorSignal.value) : present(error)));
+  const describedBy = computed(() => cx(present(help) ? helpId : undefined, invalid.value ? errorId : undefined) || undefined);
+  const control: FieldControl = { controlId: id, describedBy, invalid, required };
+  const errorText = (content: Child) => (
+    <p class="cms-field__error" id={errorId}>
+      <ErrorIcon size="sm" class="cms-field__error-icon" />
+      {content}
+    </p>
+  );
 
   return (
     <div class={cx("cms-field", className)}>
@@ -45,20 +62,15 @@ export function Field({ label, required = false, kind, help, error, controlId, c
           </span>
         ) : null}
       </label>
-      <FieldContext.Provider value={{ controlId: id, describedBy, invalid: Boolean(error), required }}>
-        {children}
-      </FieldContext.Provider>
+      {typeof children === "function" ? children(control) : children}
       {help ? (
         <p class="cms-field__help" id={helpId}>
           {help}
         </p>
       ) : null}
-      {error ? (
-        <p class="cms-field__error" id={errorId}>
-          <ErrorIcon size="sm" class="cms-field__error-icon" />
-          {error}
-        </p>
-      ) : null}
+      {errorSignal
+        ? <Show when={invalid}>{() => errorText(errorSignal as Child)}</Show>
+        : present(error) ? errorText(error as Child) : null}
     </div>
   );
 }

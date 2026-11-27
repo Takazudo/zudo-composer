@@ -1,5 +1,7 @@
-import type { ComponentChildren } from "preact";
+import { computed, type Child } from "@takazudo/zfb/zudo-react";
 import { ChevronLeftIcon, ChevronRightIcon } from "../icons";
+import { read, type MaybeSignal } from "../reactive";
+import { liveSlot, type LiveChild } from "../rebuild";
 import { Button, cx } from "../ui";
 
 // The line under the table (issue #164): what is on screen and where it came
@@ -9,10 +11,10 @@ import { Button, cx } from "../ui";
 
 export interface LibraryPaginationProps {
   /** The left-hand line: counts, and the provider the records came from. */
-  summary: ComponentChildren;
+  summary: LiveChild;
   /** 1-based. */
-  page?: number;
-  pageCount?: number;
+  page?: MaybeSignal<number>;
+  pageCount?: MaybeSignal<number>;
   onPageChange?: (page: number) => void;
   previousLabel?: string;
   nextLabel?: string;
@@ -27,17 +29,17 @@ export function LibraryPagination({
   previousLabel = "Previous page",
   nextLabel = "Next page",
   class: className,
-}: LibraryPaginationProps) {
+}: LibraryPaginationProps): Child {
   return (
     <div class={cx("cms-library-pager", className)}>
-      <span class="cms-library-pager__summary">{summary}</span>
+      <span class="cms-library-pager__summary">{liveSlot(summary)}</span>
       {onPageChange ? (
         <div class="cms-library-pager__nav">
-          <span class="cms-library-pager__position">{`Page ${page} of ${pageCount}`}</span>
-          <Button size="sm" iconOnly aria-label={previousLabel} disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
+          <span class="cms-library-pager__position">{computed(() => `Page ${read(page)} of ${read(pageCount)}`)}</span>
+          <Button size="sm" iconOnly aria-label={previousLabel} disabled={computed(() => read(page) <= 1)} on:click={() => onPageChange(read(page) - 1)}>
             <ChevronLeftIcon size="sm" />
           </Button>
-          <Button size="sm" iconOnly aria-label={nextLabel} disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}>
+          <Button size="sm" iconOnly aria-label={nextLabel} disabled={computed(() => read(page) >= read(pageCount))} on:click={() => onPageChange(read(page) + 1)}>
             <ChevronRightIcon size="sm" />
           </Button>
         </div>

@@ -1,15 +1,16 @@
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { computed, getScope, Show, signal, type Child, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
 import { PlusIcon } from "../icons";
 import { Button, Input, cx, isComposingKey } from "../ui";
-import { useOutlineTree } from "./outline-context";
+import type { OutlineTreeState } from "./outline-tree-state";
 import { isSameTarget } from "./tree-model";
 import type { OutlineInsertTarget, OutlineNode } from "./types";
 
 interface InlineEditorProps {
-  target: OutlineInsertTarget;
+  tree: OutlineTreeState;
+  target: ReadonlySignal<OutlineInsertTarget>;
   depth: number;
   /** Doubles as the placeholder and the input's accessible name. */
-  label: string;
+  label: ReadonlySignal<string>;
   variant?: "root";
 }
 
@@ -20,22 +21,19 @@ interface InlineEditorProps {
  * floats it on the row boundary, and in place of an "Add …" row it stays in
  * flow at exactly that row's height. Either way no row moves.
  */
-function OutlineInlineEditor({ target, depth, label, variant }: InlineEditorProps) {
-  const tree = useOutlineTree();
-  // `Input` omits `ref` from its props, so the editor takes the focus from its
-  // own wrapper rather than reaching into that component's API.
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const [value, setValue] = useState("");
-  const composing = useRef(false);
-  const title = value.trim();
+function OutlineInlineEditor({ tree, target, depth, label, variant }: InlineEditorProps) {
+  const inputRef: Ref<HTMLInputElement> = { current: null };
+  const value = signal("");
+  const title = computed(() => value.value.trim());
+  let composing = false;
 
-  useLayoutEffect(() => {
-    const input = wrapperRef.current?.querySelector("input");
-    if (!input) return;
-    // Native lowercase event names are portable even where the DOM exposes
-    // no oncompositionstart property for Preact's JSX event-name inference.
-    const start = () => { composing.current = true; };
-    const end = () => { composing.current = false; };
+  getScope().onActivate(() => {
+    const input = inputRef.current;
+    if (!input) return undefined;
+    // Native listeners with explicit teardown, so composition tracking ends
+    // exactly when the editor does.
+    const start = () => { composing = true; };
+    const end = () => { composing = false; };
     input.addEventListener("compositionstart", start);
     input.addEventListener("compositionend", end);
     input.focus();
@@ -43,28 +41,24 @@ function OutlineInlineEditor({ target, depth, label, variant }: InlineEditorProp
       input.removeEventListener("compositionstart", start);
       input.removeEventListener("compositionend", end);
     };
-  }, []);
+  });
 
   function commit() {
-    if (title === "") return;
-    tree.commitAdd(target, title);
+    if (title.value === "") return;
+    tree.commitAdd(target.value, title.value);
   }
 
   return (
-    <div
-      ref={wrapperRef}
-      class={cx("cms-tree-inline", variant === "root" && "cms-tree-inline--root")}
-      style={{ "--depth": String(depth) }}
-    >
+    <div class={cx("cms-tree-inline", variant === "root" && "cms-tree-inline--root")} style={`--depth:${depth}`}>
       <Input
         size="sm"
-        value={value}
+        elementRef={inputRef}
+        modelValue={value}
         placeholder={label}
         aria-label={label}
-        onInput={(event) => setValue(event.currentTarget.value)}
-        onKeyDown={(event) => {
+        on:keydown={(event: KeyboardEvent) => {
           event.stopPropagation();
-          if (composing.current || isComposingKey(event)) return;
+          if (composing || isComposingKey(event)) return;
           if (event.key === "Enter") {
             event.preventDefault();
             commit();
@@ -75,10 +69,10 @@ function OutlineInlineEditor({ target, depth, label, variant }: InlineEditorProp
           }
         }}
       />
-      <Button variant="primary" size="sm" disabled={title === ""} onClick={commit}>
+      <Button variant="primary" size="sm" disabled={computed(() => title.value === "")} on:click={commit}>
         Add
       </Button>
-      <Button variant="ghost" size="sm" onClick={() => tree.cancelEdit()}>
+      <Button variant="ghost" size="sm" on:click={() => tree.cancelEdit()}>
         Cancel
       </Button>
     </div>
@@ -86,10 +80,11 @@ function OutlineInlineEditor({ target, depth, label, variant }: InlineEditorProp
 }
 
 interface InsertGapProps {
-  target: OutlineInsertTarget;
+  tree: OutlineTreeState;
+  target: ReadonlySignal<OutlineInsertTarget>;
   depth: number;
   /** The row the gap sits above — it names the button. */
-  beforeTitle: string;
+  beforeTitle: ReadonlySignal<string>;
   /** Between two root categories, where there is no connector column. */
   root?: boolean;
 }
@@ -102,29 +97,43 @@ interface InsertGapProps {
  * inserting one of these between every pair of rows costs no height and
  * hovering or editing shifts nothing. Coarse pointers reserve 44px in flow.
  */
-export function OutlineInsertGap({ target, depth, beforeTitle, root }: InsertGapProps) {
-  const tree = useOutlineTree();
-  if (!tree.canInsert(target)) return null;
-  const editing = isSameTarget(tree.editing, target);
-  const label = `Insert before ${beforeTitle}`;
+export function OutlineInsertGap({ tree, target, depth, beforeTitle, root }: InsertGapProps) {
+  const available = computed(() => tree.canInsert(target.value));
+  const editing = computed(() => isSameTarget(tree.editing.value, target.value));
+  const label = computed(() => `Insert before ${beforeTitle.value}`);
 
   return (
-    <div
-      class={cx("cms-tree-insert", root && "cms-tree-insert--root", isSameTarget(tree.pending, target) && "is-active")}
-      style={{ "--depth": String(depth) }}
-    >
-      <span class="cms-tree-insert__hit" aria-hidden="true" />
-      <button class="cms-tree-insert__btn" type="button" aria-label={label} onClick={(event) => { event.currentTarget.focus(); tree.requestInsert(target); }}>
-        <PlusIcon size="sm" />
-      </button>
-      {editing ? <OutlineInlineEditor target={target} depth={depth} label={label} /> : null}
-    </div>
+    <Show when={available}>
+      {() => (
+        <div
+          class={computed(() => cx("cms-tree-insert", root && "cms-tree-insert--root", isSameTarget(tree.pending.value, target.value) && "is-active"))}
+          style={`--depth:${depth}`}
+        >
+          <span class="cms-tree-insert__hit" aria-hidden="true" />
+          <button class="cms-tree-insert__btn" type="button" aria-label={label} on:click={(event) => { event.currentTarget.focus(); tree.requestInsert(target.value); }}>
+            <PlusIcon size="sm" />
+          </button>
+          <Show when={editing}>{() => <OutlineInlineEditor tree={tree} target={target} depth={depth} label={label} />}</Show>
+        </div>
+      )}
+    </Show>
   );
 }
 
+/** A terminal add button, registered so focus can return to it after an edit. */
+function TerminalButton({ tree, parentId, target, class: className, children }: { tree: OutlineTreeState; parentId: string | null; target: ReadonlySignal<OutlineInsertTarget>; class: ReadonlySignal<string>; children: Child }) {
+  const ref: Ref<HTMLButtonElement> = { current: null };
+  getScope().onActivate(() => {
+    const element = ref.current;
+    return element ? tree.registerTerminal(parentId, element) : undefined;
+  });
+  return <button ref={ref} class={className} type="button" on:click={(event) => { event.currentTarget.focus(); tree.requestInsert(target.value); }}>{children}</button>;
+}
+
 interface AddRowProps {
-  parent: OutlineNode;
-  target: OutlineInsertTarget;
+  tree: OutlineTreeState;
+  parent: ReadonlySignal<OutlineNode>;
+  target: ReadonlySignal<OutlineInsertTarget>;
   depth: number;
 }
 
@@ -132,46 +141,62 @@ interface AddRowProps {
  * The terminal "Add …" row that closes a children list. It always sits last,
  * so it — not the node above it — carries `is-last`.
  */
-export function OutlineAddRow({ parent, target, depth }: AddRowProps) {
-  const tree = useOutlineTree();
-  if (!tree.canInsert(target)) return null;
-  const label = tree.addLabel(parent);
+export function OutlineAddRow({ tree, parent, target, depth }: AddRowProps) {
+  const available = computed(() => tree.canInsert(target.value));
+  const editing = computed(() => isSameTarget(tree.editing.value, target.value));
+  const label = computed(() => tree.addLabel(parent.value));
+  const hint = computed(() => parent.value.hint);
 
   return (
-    <div class="cms-tree-add-wrap is-last" style={{ "--depth": String(depth) }}>
-      <span class="cms-tree-vline" />
-      <span class="cms-tree-hline" />
-      {isSameTarget(tree.editing, target) ? (
-        <OutlineInlineEditor target={target} depth={depth} label={label} />
-      ) : (
-        <button ref={(element) => tree.registerTerminal(target.parentId, element)} class={cx("cms-tree-add", isSameTarget(tree.pending, target) && "is-active")} type="button" onClick={(event) => { event.currentTarget.focus(); tree.requestInsert(target); }}>
-          <span class="cms-tree-add__btn" aria-hidden="true">
-            <PlusIcon size="xs" />
-          </span>
-          {label}
-          {/* The parent slot/document row already carries the allowed-kinds hint
-              (`outline-model.ts`'s `describeRuleDisplay`) — the Add row just echoes
-              it so the affordance names what it accepts without a second lookup. */}
-          {parent.hint === undefined ? null : <span class="cms-tree-hint">{parent.hint}</span>}
-        </button>
+    <Show when={available}>
+      {() => (
+        <div class="cms-tree-add-wrap is-last" style={`--depth:${depth}`}>
+          <span class="cms-tree-vline" />
+          <span class="cms-tree-hline" />
+          <Show
+            when={editing}
+            fallback={() => (
+                <TerminalButton tree={tree} parentId={target.value.parentId} target={target} class={computed(() => cx("cms-tree-add", isSameTarget(tree.pending.value, target.value) && "is-active"))}>
+                  <span class="cms-tree-add__btn" aria-hidden="true">
+                    <PlusIcon size="xs" />
+                  </span>
+                  {label}
+                  {/* The parent slot/document row already carries the allowed-kinds hint
+                      (`outline-model.ts`'s `describeRuleDisplay`) — the Add row just echoes
+                      it so the affordance names what it accepts without a second lookup. */}
+                  <Show when={computed(() => hint.value !== undefined)}>{() => <span class="cms-tree-hint">{computed(() => hint.value ?? "")}</span>}</Show>
+                </TerminalButton>
+            )}
+          >
+            {() => <OutlineInlineEditor tree={tree} target={target} depth={depth} label={label} />}
+          </Show>
+        </div>
       )}
-    </div>
+    </Show>
   );
 }
 
 /** The dashed full-width button that appends a new root category. */
-export function OutlineAddRoot({ target }: { target: OutlineInsertTarget }) {
-  const tree = useOutlineTree();
-  if (!tree.canInsert(target)) return null;
-  const label = tree.addLabel(null);
+export function OutlineAddRoot({ tree, target }: { tree: OutlineTreeState; target: ReadonlySignal<OutlineInsertTarget> }) {
+  const available = computed(() => tree.canInsert(target.value));
+  const editing = computed(() => isSameTarget(tree.editing.value, target.value));
+  const label = computed(() => tree.addLabel(null));
 
-  if (isSameTarget(tree.editing, target)) {
-    return <OutlineInlineEditor target={target} depth={0} label={label} variant="root" />;
-  }
   return (
-    <button ref={(element) => tree.registerTerminal(null, element)} class={cx("cms-tree-add-root", isSameTarget(tree.pending, target) && "is-active")} type="button" onClick={(event) => { event.currentTarget.focus(); tree.requestInsert(target); }}>
-      <PlusIcon size="sm" />
-      {label}
-    </button>
+    <Show when={available}>
+      {() => (
+        <Show
+          when={editing}
+          fallback={() => (
+              <TerminalButton tree={tree} parentId={null} target={target} class={computed(() => cx("cms-tree-add-root", isSameTarget(tree.pending.value, target.value) && "is-active"))}>
+                <PlusIcon size="sm" />
+                {label}
+              </TerminalButton>
+          )}
+        >
+          {() => <OutlineInlineEditor tree={tree} target={target} depth={0} label={label} variant="root" />}
+        </Show>
+      )}
+    </Show>
   );
 }

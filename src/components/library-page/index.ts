@@ -61,8 +61,8 @@ export {
   applyLibraryQuery,
   defaultFacetValues,
   isLibraryQueryFiltered,
+  createLibraryQuery,
   matchesLibrarySearch,
-  useLibraryQuery,
 } from "./library-query";
 export type {
   LibraryFacet,
@@ -70,15 +70,15 @@ export type {
   LibraryQueryController,
   LibraryQueryDefinition,
   LibraryQueryState,
+  LibraryQueryOptions,
   LibrarySort,
-  UseLibraryQueryOptions,
 } from "./library-query";
 
-export { useLibrarySelection } from "./library-selection";
-export type { LibrarySelectionController, UseLibrarySelectionOptions } from "./library-selection";
+export { createLibrarySelection } from "./library-selection";
+export type { LibrarySelectionController, LibrarySelectionOptions } from "./library-selection";
 
-export { useLibraryConfirm } from "./use-library-confirm";
-export type { LibraryConfirmController, LibraryConfirmRequest } from "./use-library-confirm";
+export { createLibraryConfirm } from "./library-confirm";
+export type { LibraryConfirmController, LibraryConfirmRequest } from "./library-confirm";
 
 export { formatLibraryTimestamp, formatLibraryTimestampFull, toLibraryDate } from "./library-format";
 export type { LibraryTimestamp } from "./library-format";

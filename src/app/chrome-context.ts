@@ -2,20 +2,21 @@
 //
 // A route knows its own breadcrumb trail and save state; the Shell knows where
 // to draw them. Putting the contract here means neither imports the other: the
-// Shell reads `useChrome()`, a route calls `useBreadcrumb()` / `useEditorStatus()`,
+// Shell reads `chromeSnapshot()`, a route calls `bindBreadcrumb()` /
+// `bindEditorStatus()` with the `ChromeStore` it was handed (`services.chrome`),
 // and an editor surface can publish its status without ever importing chrome.
 //
-// The store is deliberately equality-guarded. Routes publish inline literals on
-// every render, so an unguarded store would notify the Shell, re-render the
-// route, and publish again forever. `onRetry` is republished through one stable
-// wrapper for the same reason: the Shell's snapshot must never hold a stale
-// closure, and a new closure identity must not count as a status change.
+// The store is deliberately equality-guarded. Routes republish a computed
+// trail whenever any of its inputs change, and an unguarded store would notify
+// the Shell for every unchanged value. `onRetry` is republished through one
+// stable wrapper for the same reason: the Shell's snapshot must never hold a
+// stale closure, and a new closure identity must not count as a status change.
 //
-// This module is JSX-free so it can be imported from `.ts` route models; the
-// Shell supplies `ChromeContext.Provider` itself.
+// This module is JSX-free so it can be imported from `.ts` route models.
 
-import { createContext } from "preact";
-import { useContext, useEffect, useRef, useState } from "preact/hooks";
+import type { ReadonlySignal, Scope } from "@takazudo/zfb/zudo-react";
+import { storeSignal } from "../runtime";
+import { read, type MaybeSignal } from "../components/reactive";
 
 export interface BreadcrumbItem {
   readonly label: string;
@@ -122,46 +123,34 @@ export function createChromeStore(): ChromeStore {
   };
 }
 
-/** `null` outside a provider, so a route rendered without chrome stays silent. */
-export const ChromeContext = createContext<ChromeStore | null>(null);
-
-function useOwner(): ChromeOwner {
-  const owner = useRef<ChromeOwner | null>(null);
-  owner.current ??= {};
-  return owner.current;
-}
-
-/** Read the currently published chrome state. The Shell is the only expected caller. */
-export function useChrome(): ChromeSnapshot {
-  const store = useContext(ChromeContext);
-  const [snapshot, setSnapshot] = useState<ChromeSnapshot>(() => store?.getSnapshot() ?? EMPTY_CHROME_SNAPSHOT);
-  useEffect(() => {
-    if (!store) {
-      setSnapshot(EMPTY_CHROME_SNAPSHOT);
-      return undefined;
-    }
-    setSnapshot(store.getSnapshot());
-    return store.subscribe(setSnapshot);
-  }, [store]);
-  return snapshot;
+/**
+ * The currently published chrome state, owned by `scope`. The Shell is the only
+ * expected caller; a `null` store (a route rendered without chrome) reads empty.
+ */
+export function chromeSnapshot(scope: Scope, store: ChromeStore | null): ReadonlySignal<ChromeSnapshot> {
+  return storeSignal(scope, store ?? { getSnapshot: () => EMPTY_CHROME_SNAPSHOT, subscribe: () => () => {} });
 }
 
 /**
- * Publish this route's breadcrumb trail. Republished on every render because
- * callers pass inline literals; the store drops an unchanged publish, so this
- * cannot loop. The trail is cleared when the publishing component unmounts.
+ * Publish this scope's breadcrumb trail. A signal trail republishes whenever it
+ * changes; the store drops an unchanged publish. The trail is released when
+ * `scope` is disposed, and a `null` store keeps the route silent.
  */
-export function useBreadcrumb(items: readonly BreadcrumbItem[]): void {
-  const store = useContext(ChromeContext);
-  const owner = useOwner();
-  useEffect(() => { store?.publishBreadcrumb(owner, items); });
-  useEffect(() => () => store?.releaseBreadcrumb(owner), [store, owner]);
+export function bindBreadcrumb(scope: Scope, store: ChromeStore | null, items: MaybeSignal<readonly BreadcrumbItem[]>): void {
+  if (!store) return;
+  const owner: ChromeOwner = {};
+  scope.effect(() => {
+    store.publishBreadcrumb(owner, read(items));
+  });
+  scope.onCleanup(() => store.releaseBreadcrumb(owner));
 }
 
-/** Publish this editor's save state; `null` withdraws it without unmounting. */
-export function useEditorStatus(status: EditorStatus | null): void {
-  const store = useContext(ChromeContext);
-  const owner = useOwner();
-  useEffect(() => { store?.publishEditorStatus(owner, status); });
-  useEffect(() => () => store?.releaseEditorStatus(owner), [store, owner]);
+/** Publish this editor's save state; `null` withdraws it without disposing the scope. */
+export function bindEditorStatus(scope: Scope, store: ChromeStore | null, status: MaybeSignal<EditorStatus | null>): void {
+  if (!store) return;
+  const owner: ChromeOwner = {};
+  scope.effect(() => {
+    store.publishEditorStatus(owner, read(status));
+  });
+  scope.onCleanup(() => store.releaseEditorStatus(owner));
 }

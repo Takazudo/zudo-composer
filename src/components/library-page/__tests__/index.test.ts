@@ -74,9 +74,9 @@ describe("library-page module", () => {
         "isLibraryQueryFiltered",
         "matchesLibrarySearch",
         "toLibraryDate",
-        "useLibraryConfirm",
-        "useLibraryQuery",
-        "useLibrarySelection",
+        "createLibraryConfirm",
+        "createLibraryQuery",
+        "createLibrarySelection",
       ].sort(),
     );
   });

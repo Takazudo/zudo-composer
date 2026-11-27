@@ -1,5 +1,6 @@
-import type { ComponentChildren } from "preact";
+import { computed, type Child } from "@takazudo/zfb/zudo-react";
 import { SearchIcon, type IconComponent } from "../icons";
+import { read, type MaybeSignal } from "../reactive";
 import { Banner, Button, EmptyState, cx } from "../ui";
 
 // The states a library route moves through (issue #164): loading, empty,
@@ -17,7 +18,7 @@ export interface LibrarySkeletonProps {
   class?: string;
 }
 
-export function LibrarySkeleton({ rows = 5, columns = 4, label = "Loading records…", class: className }: LibrarySkeletonProps) {
+export function LibrarySkeleton({ rows = 5, columns = 4, label = "Loading records…", class: className }: LibrarySkeletonProps): Child {
   return (
     <div class={cx("cms-library-skeleton", className)} role="status" aria-busy="true">
       <span class="cms-sr-only">{label}</span>
@@ -34,15 +35,15 @@ export function LibrarySkeleton({ rows = 5, columns = 4, label = "Loading record
 
 export interface LibraryEmptyProps {
   icon?: IconComponent;
-  title: ComponentChildren;
+  title: Child;
   /** One line saying what the library holds once it has records. */
-  description?: ComponentChildren;
+  description?: Child;
   /** The primary action — the same one the page header offers. */
-  action?: ComponentChildren;
+  action?: Child;
   class?: string;
 }
 
-export function LibraryEmpty({ icon, title, description, action, class: className }: LibraryEmptyProps) {
+export function LibraryEmpty({ icon, title, description, action, class: className }: LibraryEmptyProps): Child {
   return (
     <div class={cx("cms-library-state", className)}>
       <EmptyState icon={icon} title={title} description={description} action={action} />
@@ -52,9 +53,9 @@ export function LibraryEmpty({ icon, title, description, action, class: classNam
 
 export interface LibraryNoMatchProps {
   /** The active filter text, quoted in the default title. */
-  search?: string;
-  title?: ComponentChildren;
-  description?: ComponentChildren;
+  search?: MaybeSignal<string | undefined>;
+  title?: Child;
+  description?: Child;
   onClearFilters: () => void;
   clearLabel?: string;
   class?: string;
@@ -67,17 +68,20 @@ export function LibraryNoMatch({
   onClearFilters,
   clearLabel = "Clear filters",
   class: className,
-}: LibraryNoMatchProps) {
-  const query = search?.trim() ?? "";
+}: LibraryNoMatchProps): Child {
+  const fallbackTitle = computed(() => {
+    const query = read(search)?.trim() ?? "";
+    return query ? `No matches for “${query}”` : "No matching records";
+  });
   return (
     <div class={cx("cms-library-state", "cms-library-state--inline", className)}>
       <EmptyState
         inline
         icon={SearchIcon}
-        title={title ?? (query ? `No matches for “${query}”` : "No matching records")}
+        title={title ?? fallbackTitle}
         description={description}
         action={
-          <Button size="sm" onClick={onClearFilters}>
+          <Button size="sm" on:click={() => onClearFilters()}>
             {clearLabel}
           </Button>
         }
@@ -87,9 +91,9 @@ export function LibraryNoMatch({
 }
 
 export interface LibraryRecoveryBannerProps {
-  title: ComponentChildren;
+  title: Child;
   /** What Retry keeps and what Start fresh discards. */
-  description?: ComponentChildren;
+  description?: Child;
   onRetry: () => void;
   /** Destructive, so it always ends in an ellipsis and opens a `ConfirmDialog`. */
   onStartFresh: () => void;
@@ -106,7 +110,7 @@ export function LibraryRecoveryBanner({
   retryLabel = "Retry",
   startFreshLabel = "Start fresh…",
   class: className,
-}: LibraryRecoveryBannerProps) {
+}: LibraryRecoveryBannerProps): Child {
   return (
     <Banner
       tone="warn"
@@ -114,10 +118,10 @@ export function LibraryRecoveryBanner({
       class={className}
       action={
         <>
-          <Button size="sm" onClick={onRetry}>
+          <Button size="sm" on:click={() => onRetry()}>
             {retryLabel}
           </Button>
-          <Button size="sm" variant="danger" onClick={onStartFresh}>
+          <Button size="sm" variant="danger" on:click={() => onStartFresh()}>
             {startFreshLabel}
           </Button>
         </>
@@ -129,9 +133,9 @@ export function LibraryRecoveryBanner({
 }
 
 export interface LibraryUnavailableBannerProps {
-  title: ComponentChildren;
+  title: Child;
   /** Why the store could not be read. */
-  description?: ComponentChildren;
+  description?: Child;
   onRetry: () => void;
   retryLabel?: string;
   class?: string;
@@ -143,14 +147,14 @@ export function LibraryUnavailableBanner({
   onRetry,
   retryLabel = "Retry",
   class: className,
-}: LibraryUnavailableBannerProps) {
+}: LibraryUnavailableBannerProps): Child {
   return (
     <Banner
       tone="err"
       title={title}
       class={className}
       action={
-        <Button size="sm" onClick={onRetry}>
+        <Button size="sm" on:click={() => onRetry()}>
           {retryLabel}
         </Button>
       }

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
+import { cleanup, fireEvent, render, screen, settle, waitFor, within } from './test/render';
 import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from './test/workspace-providers';
 import { webcrypto } from 'node:crypto';
 import { createEmptySiteProject, computeSiteProjectRevision } from './app/empty-site-project';
@@ -52,9 +52,12 @@ describe('App', () => {
     render(<App integration={integration} />);
     await screen.findByText(/No SiteProject is activated/);
     fireEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    await settle();
     const dialog = screen.getByRole('dialog', { name: 'Create project' });
     fireEvent.input(within(dialog).getByLabelText('Project name'), { target: { value: '  First site  ' } });
+    await settle();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create project' }));
+    await settle();
     await screen.findByRole('heading', { name: 'Sitemaps' });
     const reopened = createProductionProviderIntegration({ project: null, createProviders: host.createProviders, assetProvider: null });
     const snapshot = await reopened.getCurrentSiteProject();
@@ -72,11 +75,15 @@ describe('App', () => {
     render(<App integration={{ ...integration, workspace: { ...integration.workspace, create } }} />);
     await screen.findByText(/No SiteProject is activated/);
     fireEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    await settle();
     const dialog = screen.getByRole('dialog');
     fireEvent.input(within(dialog).getByLabelText('Project name'), { target: { value: '   ' } });
+    await settle();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create project' }));
+    await settle();
     expect(within(dialog).getByText('Enter a project name.')).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await settle();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(create).not.toHaveBeenCalled();
     expect(await host.storage.list()).toEqual([]);
@@ -89,15 +96,20 @@ describe('App', () => {
     render(<App integration={{ ...integration, workspace: { ...integration.workspace, create } }} />);
     await screen.findByText(/No SiteProject is activated/);
     fireEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    await settle();
     const dialog = screen.getByRole('dialog');
     fireEvent.input(within(dialog).getByLabelText('Project name'), { target: { value: 'First site' } });
+    await settle();
     const submit = within(dialog).getByRole('button', { name: 'Create project' });
     fireEvent.click(submit);
+    await settle();
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(submit).toBeDisabled();
     expect(submit).toHaveAttribute('aria-busy', 'true');
     fireEvent.click(submit);
+    await settle();
     fireEvent.keyDown(within(dialog).getByLabelText('Project name'), { key: 'Enter' });
+    await settle();
     expect(create).toHaveBeenCalledTimes(1);
     reject(new Error('Disk quota exhausted'));
     await within(dialog).findByText('Disk quota exhausted');
@@ -119,6 +131,7 @@ describe('App', () => {
     await screen.findByText(/The workspace could not be read or opened/);
     expect(screen.queryByRole('button', { name: 'Create project' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retry opening' }));
+    await settle();
     await screen.findByText(/No SiteProject is activated/);
     expect(retry).toHaveBeenCalledTimes(1);
   });
@@ -157,11 +170,14 @@ describe('App', () => {
     const preview = screen.getByRole('link', { name: 'Website preview — choose preview source' });
 
     fireEvent.pointerDown(preview);
+    await settle();
     expect(flush).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(preview, { key: 'Enter' });
+    await settle();
     expect(flush).toHaveBeenCalledTimes(2);
     // A non-Enter key never counts as activation.
     fireEvent.keyDown(preview, { key: ' ' });
+    await settle();
     expect(flush).toHaveBeenCalledTimes(2);
   });
 
@@ -177,6 +193,7 @@ describe('App', () => {
     await screen.findByRole('heading', { name: GREETING });
 
     fireEvent.pointerDown(screen.getByRole('link', { name: 'Website preview — choose preview source' }));
+    await settle();
     expect(flush).toHaveBeenCalledTimes(1);
   });
 
@@ -194,8 +211,10 @@ describe('App', () => {
     const preview = screen.getByRole('link', { name: 'Website preview — choose preview source' });
 
     fireEvent.pointerDown(preview); // first flush now in flight, unresolved
+    await settle();
     expect(flush).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(preview, { key: 'Enter' }); // overlapping flush while the first is still pending
+    await settle();
     expect(flush).toHaveBeenCalledTimes(2);
     resolveFirst();
     // Neither call throws or leaves an unhandled rejection; the test failing
@@ -210,6 +229,7 @@ describe('App', () => {
     render(<App integration={integration} />);
     await screen.findByRole('heading', { name: GREETING });
     fireEvent.pointerDown(screen.getByRole('link', { name: 'Website preview — choose preview source' }));
+    await settle();
     expect(flush).toHaveBeenCalledTimes(1);
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
@@ -263,25 +283,33 @@ describe('App', () => {
 
     const trigger = screen.getByRole('button', { name: 'Theme: System' });
     fireEvent.click(trigger);
+    await settle();
     const menu = screen.getByRole('menu', { name: 'Theme preference' });
     expect(screen.getByRole('menuitemradio', { name: 'System' })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByRole('menuitemradio', { name: 'System' })).toHaveFocus();
 
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    await settle();
     expect(screen.getByRole('menuitemradio', { name: 'Light' })).toHaveFocus();
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    await settle();
     expect(screen.getByRole('menuitemradio', { name: 'Dark' })).toHaveFocus();
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Dark' }));
+    await settle();
     expect(document.documentElement.dataset.themePreference).toBe('dark');
     expect(screen.queryByRole('menu', { name: 'Theme preference' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Theme: Dark' })).toHaveFocus();
 
     fireEvent.click(screen.getByRole('button', { name: 'Theme: Dark' }));
+    await settle();
     fireEvent.pointerDown(document.body);
+    await settle();
     expect(screen.queryByRole('menu', { name: 'Theme preference' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Theme: Dark' }));
+    await settle();
     fireEvent.keyDown(screen.getByRole('menu', { name: 'Theme preference' }), { key: 'Escape' });
+    await settle();
     expect(screen.queryByRole('menu', { name: 'Theme preference' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Theme: Dark' })).toHaveFocus();
   });
@@ -292,6 +320,7 @@ describe('App', () => {
 
     const trigger = screen.getByRole('button', { name: 'Notifications' });
     fireEvent.click(trigger);
+    await settle();
     const panel = screen.getByRole('dialog', { name: 'Notifications' });
     expect(panel).toHaveTextContent(/never sends email or other notifications; the host project owns delivery/i);
     expect(panel).not.toHaveTextContent(/planned/i);
@@ -299,15 +328,18 @@ describe('App', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: 'Escape' });
+    await settle();
     expect(screen.queryByRole('dialog', { name: 'Notifications' })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
 
     fireEvent.click(trigger);
+    await settle();
     fireEvent.click(screen.getByRole('heading', { name: GREETING }));
+    await settle();
     expect(screen.queryByRole('dialog', { name: 'Notifications' })).not.toBeInTheDocument();
   });
 
-  it('keeps every preview document on its own isolated entry graph', () => {
+  it('keeps every preview document on its own isolated entry graph', async () => {
     const main = readFileSync(resolve('src/main.tsx'), 'utf8');
     const visitorBranch = main.indexOf('isSitePath(pathname) || isWorkingPreviewPath(pathname)');
     const visitorImport = main.indexOf('import("./features/delivery/visitor-entry")');

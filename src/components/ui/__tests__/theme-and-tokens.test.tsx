@@ -1,6 +1,7 @@
 import "./cleanup";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/preact";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { render, screen } from "../../../test/render";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { ComposerIcon, SearchIcon } from "../../icons";
@@ -68,15 +69,17 @@ function Gallery() {
         <PaneSection title="Forms">
           <SegmentedControl label="View" options={[{ value: "table", label: "Table" }, { value: "cards", label: "Cards" }]} value="table" onChange={vi.fn()} />
           <Field label="Title" required kind="Text" help="Shown in the library." >
-            <Input icon={SearchIcon} />
+            {(field) => <Input field={field} icon={SearchIcon} />}
           </Field>
           <Field label="Kind" error="Pick a kind.">
-            <Select onChange={vi.fn()}>
-              <option value="page">Page</option>
-            </Select>
+            {(field) => (
+              <Select field={field} modelValue={signal("page")} on:change={vi.fn()}>
+                <option value="page">Page</option>
+              </Select>
+            )}
           </Field>
           <Field label="Body">
-            <Textarea />
+            {(field) => <Textarea field={field} />}
           </Field>
           <Switch checked onCheckedChange={vi.fn()} label="Auto slug" />
           <Checkbox checked={false} onCheckedChange={vi.fn()} label="Include drafts" />

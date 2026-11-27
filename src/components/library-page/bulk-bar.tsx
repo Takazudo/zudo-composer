@@ -1,5 +1,6 @@
-import { Fragment } from "preact";
+import { computed, type Child } from "@takazudo/zfb/zudo-react";
 import type { IconComponent } from "../icons";
+import { read, type MaybeSignal } from "../reactive";
 import { Button } from "../ui";
 
 // The bulk action bar (issue #164).
@@ -16,12 +17,12 @@ export interface BulkAction {
   readonly label: string;
   readonly icon?: IconComponent;
   readonly tone?: "default" | "danger";
-  readonly disabled?: boolean;
+  readonly disabled?: MaybeSignal<boolean>;
   readonly onSelect: () => void;
 }
 
 export interface BulkBarProps {
-  readonly count: number;
+  readonly count: MaybeSignal<number>;
   readonly actions: readonly BulkAction[];
   onClear: () => void;
   /** Overrides `{n} selected` — routes name their records ("2 compositions"). */
@@ -29,10 +30,14 @@ export interface BulkBarProps {
   clearLabel?: string;
 }
 
-export function BulkBar({ count, actions, onClear, describeCount, clearLabel = "Clear selection" }: BulkBarProps) {
+export function BulkBar({ count, actions, onClear, describeCount, clearLabel = "Clear selection" }: BulkBarProps): Child {
+  const countText = computed(() => {
+    const value = read(count);
+    return describeCount ? describeCount(value) : `${value} selected`;
+  });
   return (
-    <Fragment>
-      <strong class="cms-library-bulk__count">{describeCount ? describeCount(count) : `${count} selected`}</strong>
+    <>
+      <strong class="cms-library-bulk__count">{countText}</strong>
       {actions.map((action) => {
         const Icon = action.icon;
         return (
@@ -41,16 +46,16 @@ export function BulkBar({ count, actions, onClear, describeCount, clearLabel = "
             size="sm"
             variant={action.tone === "danger" ? "danger" : "default"}
             disabled={action.disabled}
-            onClick={action.onSelect}
+            on:click={() => action.onSelect()}
           >
             {Icon ? <Icon size="sm" /> : null}
             {action.label}
           </Button>
         );
       })}
-      <Button size="sm" variant="ghost" class="cms-library-bulk__clear" onClick={onClear}>
+      <Button size="sm" variant="ghost" class="cms-library-bulk__clear" on:click={() => onClear()}>
         {clearLabel}
       </Button>
-    </Fragment>
+    </>
   );
 }

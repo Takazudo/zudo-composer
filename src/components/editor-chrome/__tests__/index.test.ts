@@ -25,8 +25,6 @@ describe("editor-chrome module contract", () => {
         "EDITOR_PANES",
         "EditorBody",
         "EditorChrome",
-        "EditorChromeContext",
-        "EditorRailsContext",
         "MAX_RAIL_W",
         "MIN_MAIN_W",
         "MIN_RAIL_W",
@@ -46,9 +44,9 @@ describe("editor-chrome module contract", () => {
         "readEditorWidths",
         "setPersistedWidth",
         "writeEditorCollapsed",
-        "useBeforeUnloadGuard",
-        "useEditorChrome",
-        "useEditorRails",
+        "createEditorChrome",
+        "createEditorRails",
+        "guardBeforeUnload",
       ].sort(),
     );
   });

@@ -1,4 +1,5 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
+import type { MaybeSignal } from "../reactive";
 
 /**
  * `category` is the root level: a `»` mark, no connectors, and a disclosure flush
@@ -56,11 +57,16 @@ export interface OutlineInsertSession {
   cancel: () => void;
 }
 
+/**
+ * `nodes`, `selectedId` and `expandedIds` follow their caller when passed as
+ * signals; every other prop is fixed for the tree's lifetime (remount, keyed,
+ * to change a callback's identity).
+ */
 export interface OutlineTreeProps {
-  nodes: readonly OutlineNode[];
+  nodes: MaybeSignal<readonly OutlineNode[]>;
   /** Accessible name of the tree. */
   label?: string;
-  selectedId?: string;
+  selectedId?: MaybeSignal<string | undefined>;
   onSelect?: (id: string) => void;
   /** Enter and double-click; the row is selected first, as a click would. */
   onOpen?: (id: string) => void;
@@ -68,10 +74,10 @@ export interface OutlineTreeProps {
    * Controlled expansion. Omit it and the tree keeps its own state with every
    * node open, which is what a freshly rendered outline shows.
    */
-  expandedIds?: readonly string[];
+  expandedIds?: MaybeSignal<readonly string[]>;
   onExpandedChange?: (ids: string[]) => void;
   /** Hover-only actions slot; it reserves no width while it is hidden. */
-  renderActions?: (node: OutlineNode) => ComponentChildren;
+  renderActions?: (node: OutlineNode) => Child;
   /** Gates every insert point, terminal "Add …" row and the root button. */
   canInsert?: (target: OutlineInsertTarget) => boolean;
   /**
@@ -87,8 +93,8 @@ export interface OutlineTreeProps {
   /** Label for the terminal add row; `null` is the root list. */
   addLabel?: (parent: OutlineNode | null) => string;
   showToolbar?: boolean;
-  /** localStorage namespace for the Show slug / Show count preferences. */
+  /** localStorage namespace for the Show slug / Show count preferences. Static. */
   prefKey?: string;
-  legend?: ComponentChildren;
+  legend?: Child;
   class?: string;
 }

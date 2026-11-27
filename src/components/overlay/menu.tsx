@@ -1,34 +1,38 @@
-import { createContext, type ComponentChildren, type JSX } from "preact";
-import { useContext, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { computed, getScope, Show, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import { allocateOverlayId } from "./overlay-id";
 import { CheckIcon, type IconComponent } from "../icons";
+import { read, type MaybeSignal } from "../reactive";
 import { computeMenuPosition } from "./menu-position";
 import { OverlayPortal } from "./portal";
 import type { CloseMenuOptions, MenuController } from "./use-menu";
-import { useMenu } from "./use-menu";
+import { createMenu } from "./use-menu";
 
 // The CMS popover menu (issue #159): `role="menu"` with roving Arrow/Home/End
 // focus, typeahead, Escape/outside-click dismissal and focus restored to the
-// trigger. It paints in a body-level portal at a fixed, viewport-clamped
+// trigger. It paints in a body-level layer at a fixed, viewport-clamped
 // position (see `menu-position.ts`) so a row menu in a scrolling table is
 // never clipped by the table's own overflow or stacking context.
+//
+// Items need no context: the panel closes the menu chain when a click lands
+// on an item that does not opt out (`data-menu-keep-open`). A submenu finds
+// its owning menu through the panel element its trigger sits in; the lookup
+// is keyed by that DOM node, so nothing is shared between unrelated menus.
 
 const ITEM_SELECTOR = '[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"]';
 
 /** How long a typeahead buffer stays live before the next key starts a new search. */
 const TYPEAHEAD_RESET_MS = 500;
 
-interface MenuContextValue {
+interface MenuSurfaceHandle {
   close: (options?: CloseMenuOptions) => void;
   register: (panel: HTMLElement) => () => void;
 }
 
-const MenuContext = createContext<MenuContextValue | null>(null);
+const surfaces = new WeakMap<Element, MenuSurfaceHandle>();
 
-function useMenuContext(): MenuContextValue {
-  const value = useContext(MenuContext);
-  if (!value) throw new Error("Menu items must be rendered inside a <Menu>.");
-  return value;
+function owningSurface(trigger: HTMLElement | null): MenuSurfaceHandle | null {
+  const panel = trigger?.closest('[role="menu"]');
+  return panel ? surfaces.get(panel) ?? null : null;
 }
 
 function enabledItems(panel: HTMLElement): HTMLElement[] {
@@ -85,33 +89,41 @@ export interface MenuProps {
   /** Accessible name for the menu region — required, menus are unlabelled otherwise. */
   label: string;
   class?: string;
-  children: ComponentChildren;
+  children: Child;
 }
 
-export function Menu({ controller, label, class: className, children }: MenuProps): JSX.Element | null {
-  // A portal is a separate Preact root: explicitly carry the owning menu.
-  const parent = useContext(MenuContext);
-  if (!controller.open) return null;
+export function Menu({ controller, label, class: className, children }: MenuProps): Child {
   return (
-    <OverlayPortal hostClass="cms-overlay-portal" container={controller.triggerRef.current?.closest("dialog[open]")}>
-      <MenuSurface controller={controller} label={label} class={className} parent={parent}>
-        {children}
-      </MenuSurface>
-    </OverlayPortal>
+    <Show when={controller.open}>
+      {() => <MenuLayer controller={controller} label={label} class={className}>{children}</MenuLayer>}
+    </Show>
   );
 }
 
-function MenuSurface({ controller, label, class: className, children, parent }: MenuProps & { parent: MenuContextValue | null }): JSX.Element {
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const descendants = useRef(new Set<HTMLElement>());
-  const typeaheadRef = useRef({ buffer: "", at: 0 });
+function MenuLayer(props: MenuProps): Child {
+  // Inside a native modal the layer stays in the dialog's top-layer subtree.
+  const container = props.controller.triggerRef.current?.closest("dialog[open]") ?? null;
+  return <OverlayPortal hostClass="cms-overlay-portal" container={container}><MenuSurface {...props} /></OverlayPortal>;
+}
+
+function MenuSurface({ controller, label, class: className, children }: MenuProps): Child {
+  const scope = getScope();
+  const panelRef: { current: HTMLDivElement | null } = { current: null };
+  const descendants = new Set<HTMLElement>();
+  const typeahead = { buffer: "", at: 0 };
   const { closeMenu, focusIntent, placement, triggerRef } = controller;
+  let parent: MenuSurfaceHandle | null = null;
 
-  useLayoutEffect(() => {
-    if (panelRef.current) return parent?.register(panelRef.current);
-  }, [parent]);
+  const handle: MenuSurfaceHandle = {
+    close: (options) => { closeMenu(options); parent?.close(options); },
+    register: (panel) => {
+      descendants.add(panel);
+      const unregisterParent = parent?.register(panel);
+      return () => { descendants.delete(panel); unregisterParent?.(); };
+    },
+  };
 
-  useLayoutEffect(() => {
+  const focusInitial = (intent: string) => {
     const panel = panelRef.current;
     if (!panel) return;
     const items = enabledItems(panel);
@@ -122,28 +134,30 @@ function MenuSurface({ controller, label, class: className, children, parent }: 
     // A menu with a chosen option opens on that option, so Enter re-picks what
     // is already in force rather than the first row.
     const checked = items.findIndex((item) => item.getAttribute("aria-checked") === "true");
-    const fallback = focusIntent === "last" ? items.length - 1 : 0;
+    const fallback = intent === "last" ? items.length - 1 : 0;
     focusItem(items, checked >= 0 ? checked : fallback);
-  }, [focusIntent]);
+  };
 
-  // Registered in an effect rather than during render, so the very click that
+  // Registered on activation rather than during setup, so the very click that
   // opened the menu can never also dismiss it.
-  useLayoutEffect(() => {
+  scope.onActivate(() => {
+    const found = panelRef.current;
+    if (!found) return undefined;
+    const menuPanel: HTMLDivElement = found;
+    parent = owningSurface(triggerRef.current);
+    surfaces.set(menuPanel, handle);
+    const unregister = parent?.register(menuPanel);
+
     function onPointerDown(event: Event): void {
-      const panel = panelRef.current;
       const target = event.target as Node | null;
-      if (!panel || !target) return;
-      if (panel.contains(target)) return;
-      if ([...descendants.current].some((descendant) => descendant.contains(target))) return;
+      if (!target) return;
+      if (menuPanel.contains(target)) return;
+      if ([...descendants].some((descendant) => descendant.contains(target))) return;
       // The trigger's own click toggles the menu shut; dismissing here too
       // would close and immediately reopen it.
       if (triggerRef.current?.contains(target)) return;
       closeMenu({ restoreFocus: false });
     }
-
-    const panel = panelRef.current;
-    if (!panel) return;
-    const menuPanel = panel;
 
     let activeTrigger: HTMLElement | null = null;
     let ancestors: HTMLElement[] = [];
@@ -203,27 +217,51 @@ function MenuSurface({ controller, label, class: className, children, parent }: 
       position(trigger);
     }
 
-    const trigger = triggerRef.current;
-    if (trigger?.isConnected) {
-      bind(trigger);
-      position(trigger);
-    } else {
-      scheduleAnchorRetry();
-    }
+    // Anchor once the whole update that opened the menu has landed: the same
+    // flush may still replace or remove the trigger node after this activates.
+    let disposed = false;
+    queueMicrotask(() => {
+      if (disposed) return;
+      const trigger = triggerRef.current;
+      if (trigger?.isConnected) {
+        bind(trigger);
+        position(trigger);
+      } else {
+        scheduleAnchorRetry();
+      }
+    });
 
     document.addEventListener("pointerdown", onPointerDown, true);
     window.addEventListener("scroll", onViewportChange);
     window.addEventListener("resize", onViewportChange);
     return () => {
+      disposed = true;
       document.removeEventListener("pointerdown", onPointerDown, true);
       window.removeEventListener("scroll", onViewportChange);
       window.removeEventListener("resize", onViewportChange);
       removeAncestorListeners();
       if (retryFrame !== null) cancelAnimationFrame(retryFrame);
+      surfaces.delete(menuPanel);
+      unregister?.();
     };
   });
 
-  function onKeyDown(event: JSX.TargetedKeyboardEvent<HTMLDivElement>): void {
+  // Focus follows the open intent: on activation, and again if the trigger
+  // reopens the still-mounted menu from the other end.
+  scope.effect(() => {
+    const intent = focusIntent.value;
+    if (panelRef.current) focusInitial(intent);
+  });
+
+  function onClick(event: MouseEvent): void {
+    const item = (event.target as Element | null)?.closest(ITEM_SELECTOR);
+    if (!item || !panelRef.current?.contains(item)) return;
+    if ((item as HTMLButtonElement).disabled || item.getAttribute("aria-disabled") === "true") return;
+    if (item.hasAttribute("data-menu-keep-open")) return;
+    handle.close();
+  }
+
+  function onKeyDown(event: KeyboardEvent): void {
     const panel = panelRef.current;
     if (!panel) return;
     if (event.isComposing || event.keyCode === 229) return;
@@ -264,7 +302,7 @@ function MenuSurface({ controller, label, class: className, children, parent }: 
   }
 
   function typeaheadTarget(items: readonly HTMLElement[], current: number, key: string): number | null {
-    const state = typeaheadRef.current;
+    const state = typeahead;
     const now = Date.now();
     state.buffer = now - state.at > TYPEAHEAD_RESET_MS ? key : state.buffer + key;
     state.at = now;
@@ -283,44 +321,36 @@ function MenuSurface({ controller, label, class: className, children, parent }: 
   }
 
   return (
-    <MenuContext.Provider value={{
-      close: (options) => { closeMenu(options); parent?.close(options); },
-      register: (panel) => {
-        descendants.current.add(panel);
-        const unregisterParent = parent?.register(panel);
-        return () => { descendants.current.delete(panel); unregisterParent?.(); };
-      },
-    }}>
-      <div
-        ref={panelRef}
-        id={controller.id}
-        role="menu"
-        aria-label={label}
-        tabIndex={-1}
-        class={className ? `cms-menu ${className}` : "cms-menu"}
-        onKeyDown={onKeyDown}
-      >
-        {children}
-      </div>
-    </MenuContext.Provider>
+    <div
+      ref={panelRef}
+      id={controller.id}
+      role="menu"
+      aria-label={label}
+      tabindex={-1}
+      class={className ? `cms-menu ${className}` : "cms-menu"}
+      on:keydown={onKeyDown}
+      on:click={onClick}
+    >
+      {children}
+    </div>
   );
 }
 
 export interface MenuSubmenuProps {
   label: string;
-  children: ComponentChildren;
-  disabled?: boolean;
+  children: Child;
+  disabled?: MaybeSignal<boolean>;
   icon?: IconComponent;
 }
 
 /** Nested actions such as Arrange. Escape/Left returns to this item's focus. */
-export function MenuSubmenu({ label, children, disabled, icon }: MenuSubmenuProps): JSX.Element {
-  const trigger = useRef<HTMLButtonElement>(null);
-  const controller = useMenu(trigger, { side: "right" });
+export function MenuSubmenu({ label, children, disabled, icon }: MenuSubmenuProps): Child {
+  const trigger: { current: HTMLButtonElement | null } = { current: null };
+  const controller = createMenu(trigger, { side: "right" });
   return <>
-    <button ref={trigger} type="button" role="menuitem" tabIndex={-1} class="cms-menu__item" disabled={disabled}
+    <button ref={trigger} type="button" role="menuitem" tabindex={-1} class="cms-menu__item" disabled={disabled} data-menu-keep-open=""
       {...controller.triggerProps}
-      onKeyDown={(event) => {
+      on:keydown={(event: KeyboardEvent) => {
         if (event.isComposing || event.keyCode === 229) return;
         if (event.key === "ArrowRight" || event.key === "Enter" || event.key === " ") {
           event.preventDefault(); event.stopPropagation(); controller.openMenu();
@@ -333,14 +363,15 @@ export function MenuSubmenu({ label, children, disabled, icon }: MenuSubmenuProp
 }
 
 export interface MenuRowProps {
-  children: ComponentChildren;
+  children: Child;
+  /** Runs before the menu closes. */
   onSelect?: () => void;
   /** Leading glyph in the fixed icon column; the column is reserved either way so labels line up. */
   icon?: IconComponent;
   /** Shortcut hint pinned to the trailing edge. Decorative — it stays out of the item's accessible name. */
   kbd?: string;
   tone?: "default" | "danger";
-  disabled?: boolean;
+  disabled?: MaybeSignal<boolean>;
   /** Set false for items that open a sub-view and keep the menu up. */
   closeOnSelect?: boolean;
   class?: string;
@@ -355,7 +386,7 @@ function rowClass(tone: MenuRowProps["tone"], className: string | undefined): st
   return ["cms-menu__item", tone === "danger" ? "cms-menu__item--danger" : null, className].filter(Boolean).join(" ");
 }
 
-function MenuRowContent({ icon: Icon, kbd, children }: Pick<MenuRowProps, "icon" | "kbd" | "children">): JSX.Element {
+function MenuRowContent({ icon: Icon, kbd, children }: Pick<MenuRowProps, "icon" | "kbd" | "children">): Child {
   return (
     <>
       <span class="cms-menu__icon" aria-hidden="true">{Icon ? <Icon size="sm" /> : null}</span>
@@ -365,28 +396,28 @@ function MenuRowContent({ icon: Icon, kbd, children }: Pick<MenuRowProps, "icon"
   );
 }
 
-export function MenuItem({ children, onSelect, icon, kbd, tone, disabled, closeOnSelect = true, class: className, href }: MenuItemProps): JSX.Element {
-  const { close } = useMenuContext();
-  function select(): void {
-    onSelect?.();
-    if (closeOnSelect) close();
-  }
+function keepOpen(closeOnSelect: boolean): Record<string, string> {
+  return closeOnSelect ? {} : { "data-menu-keep-open": "" };
+}
+
+export function MenuItem({ children, onSelect, icon, kbd, tone, disabled, closeOnSelect = true, class: className, href }: MenuItemProps): Child {
   if (href !== undefined) {
     // `disabled` is not an anchor attribute, so a disabled link is marked and
     // neutered instead — `aria-disabled` is what keeps it out of roving focus.
     return (
       <a
         role="menuitem"
-        tabIndex={-1}
+        tabindex={-1}
         class={rowClass(tone, className)}
         href={href}
-        aria-disabled={disabled ? "true" : undefined}
-        onClick={(event) => {
-          if (disabled) {
+        aria-disabled={computed(() => (disabled !== undefined && read(disabled) ? "true" : undefined))}
+        {...keepOpen(closeOnSelect)}
+        on:click={(event) => {
+          if (disabled !== undefined && read(disabled)) {
             event.preventDefault();
             return;
           }
-          select();
+          onSelect?.();
         }}
       >
         <MenuRowContent icon={icon} kbd={kbd}>{children}</MenuRowContent>
@@ -394,7 +425,7 @@ export function MenuItem({ children, onSelect, icon, kbd, tone, disabled, closeO
     );
   }
   return (
-    <button type="button" role="menuitem" tabIndex={-1} class={rowClass(tone, className)} disabled={disabled} onClick={select}>
+    <button type="button" role="menuitem" tabindex={-1} class={rowClass(tone, className)} disabled={disabled} {...keepOpen(closeOnSelect)} on:click={() => onSelect?.()}>
       <MenuRowContent icon={icon} kbd={kbd}>{children}</MenuRowContent>
     </button>
   );
@@ -402,51 +433,51 @@ export function MenuItem({ children, onSelect, icon, kbd, tone, disabled, closeO
 
 /** The check column is driven by `checked`, so these rows take no `icon`. */
 export interface MenuCheckedItemProps extends Omit<MenuRowProps, "icon"> {
-  checked: boolean;
+  checked: MaybeSignal<boolean>;
 }
 
-function CheckedItem({ role, checked, children, onSelect, kbd, tone, disabled, closeOnSelect = true, class: className }: MenuCheckedItemProps & { role: "menuitemradio" | "menuitemcheckbox" }): JSX.Element {
-  const { close } = useMenuContext();
+function CheckedItem({ role, checked, children, onSelect, kbd, tone, disabled, closeOnSelect = true, class: className }: MenuCheckedItemProps & { role: "menuitemradio" | "menuitemcheckbox" }): Child {
+  const on: ReadonlySignal<boolean> = computed(() => read(checked));
   return (
     <button
       type="button"
       role={role}
-      aria-checked={checked ? "true" : "false"}
-      tabIndex={-1}
+      aria-checked={computed(() => (on.value ? "true" : "false"))}
+      tabindex={-1}
       class={rowClass(tone, className)}
       disabled={disabled}
-      onClick={() => {
-        onSelect?.();
-        if (closeOnSelect) close();
-      }}
+      {...keepOpen(closeOnSelect)}
+      on:click={() => onSelect?.()}
     >
-      <MenuRowContent icon={checked ? CheckIcon : undefined} kbd={kbd}>{children}</MenuRowContent>
+      <span class="cms-menu__icon" aria-hidden="true"><Show when={on}>{() => <CheckIcon size="sm" />}</Show></span>
+      <span class="cms-menu__label">{children}</span>
+      {kbd ? <span class="cms-menu__kbd" aria-hidden="true">{kbd}</span> : null}
     </button>
   );
 }
 
 /** One choice in a single-select group — the theme control's shape. */
-export function MenuRadioItem(props: MenuCheckedItemProps): JSX.Element {
+export function MenuRadioItem(props: MenuCheckedItemProps): Child {
   return <CheckedItem role="menuitemradio" {...props} />;
 }
 
 /** An independently togglable option; stays open by default so several can be flipped. */
-export function MenuCheckboxItem(props: MenuCheckedItemProps): JSX.Element {
+export function MenuCheckboxItem(props: MenuCheckedItemProps): Child {
   return <CheckedItem role="menuitemcheckbox" {...props} closeOnSelect={props.closeOnSelect ?? false} />;
 }
 
-export function MenuSeparator(): JSX.Element {
+export function MenuSeparator(): Child {
   return <hr class="cms-menu__separator" />;
 }
 
 export interface MenuSectionProps {
   title: string;
-  children: ComponentChildren;
+  children: Child;
 }
 
 /** A titled run of items. `role="group"` keeps the title out of the item sequence. */
-export function MenuSection({ title, children }: MenuSectionProps): JSX.Element {
-  const [titleId] = useState(() => allocateOverlayId("menu-section"));
+export function MenuSection({ title, children }: MenuSectionProps): Child {
+  const titleId = allocateOverlayId("menu-section");
   return (
     <div class="cms-menu__section" role="group" aria-labelledby={titleId}>
       <div id={titleId} class="cms-menu__title">{title}</div>

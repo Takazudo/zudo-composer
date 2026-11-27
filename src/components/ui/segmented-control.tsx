@@ -1,6 +1,6 @@
-import type { ComponentChildren } from "preact";
-import { useRef } from "preact/hooks";
+import { computed, type Child, type Ref } from "@takazudo/zfb/zudo-react";
 import type { IconComponent } from "../icons";
+import { read, type MaybeSignal } from "../reactive";
 import { cx } from "./class-names";
 import type { ControlSize } from "./form-controls";
 import { nextRovingIndex } from "./roving";
@@ -13,13 +13,14 @@ interface SegmentedOptionBase<Value extends string> {
 
 /** An icon-only segment carries no text, so it must name itself. */
 export type SegmentedOption<Value extends string> = SegmentedOptionBase<Value> &
-  ({ label: ComponentChildren } | { ariaLabel: string; label?: undefined });
+  ({ label: Child } | { ariaLabel: string; label?: undefined });
 
 export interface SegmentedControlProps<Value extends string> {
   /** Accessible name of the whole group. */
   label: string;
+  /** Static for the control's lifetime; remount (keyed) to change the set. */
   options: readonly SegmentedOption<Value>[];
-  value: Value;
+  value: MaybeSignal<Value>;
   onChange: (value: Value) => void;
   /**
    * `radio` (default) is a single-choice radiogroup where selection follows
@@ -39,20 +40,22 @@ export function SegmentedControl<Value extends string>({
   size = "md",
   class: className,
 }: SegmentedControlProps<Value>) {
-  const buttons = useRef<(HTMLButtonElement | null)[]>([]);
-  const selectedIndex = options.findIndex((option) => option.value === value);
+  const buttons: Ref<HTMLButtonElement>[] = options.map(() => ({ current: null }));
   // With no match the roving entry point falls back to the first segment.
-  const tabStopIndex = selectedIndex === -1 ? 0 : selectedIndex;
+  const tabStopIndex = computed(() => {
+    const selectedIndex = options.findIndex((option) => option.value === read(value));
+    return selectedIndex === -1 ? 0 : selectedIndex;
+  });
 
   function handleKeyDown(event: KeyboardEvent, index: number) {
     const next = nextRovingIndex(event.key, index, options.length, {
       orientation: mode === "radio" ? "both" : "horizontal",
-      isDisabled: (candidate) => Boolean(options[candidate].disabled),
+      isDisabled: (candidate) => Boolean(options[candidate]!.disabled),
     });
     if (next === null) return;
     event.preventDefault();
-    buttons.current[next]?.focus();
-    if (mode === "radio") onChange(options[next].value);
+    buttons[next]!.current?.focus();
+    if (mode === "radio") onChange(options[next]!.value);
   }
 
   return (
@@ -63,23 +66,21 @@ export function SegmentedControl<Value extends string>({
     >
       {options.map((option, index) => {
         const Icon = option.icon;
-        const selected = option.value === value;
+        const selected = computed(() => option.value === read(value));
         return (
           <button
             key={option.value}
             type="button"
             class="cms-seg__option"
-            ref={(element) => {
-              buttons.current[index] = element;
-            }}
+            ref={buttons[index]}
             role={mode === "radio" ? "radio" : undefined}
             aria-checked={mode === "radio" ? selected : undefined}
             aria-pressed={mode === "pressed" ? selected : undefined}
             aria-label={"ariaLabel" in option ? option.ariaLabel : undefined}
             disabled={option.disabled}
-            tabIndex={index === tabStopIndex ? 0 : -1}
-            onKeyDown={(event) => handleKeyDown(event, index)}
-            onClick={() => onChange(option.value)}
+            tabindex={computed(() => (index === tabStopIndex.value ? 0 : -1))}
+            on:keydown={(event) => handleKeyDown(event, index)}
+            on:click={() => onChange(option.value)}
           >
             {Icon ? <Icon size="sm" /> : null}
             {option.label}

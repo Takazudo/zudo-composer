@@ -4,7 +4,8 @@
 // `src/features/composer/preview/preview-app.ts`).
 
 import { describe, expect, it } from "vitest";
-import { h, render } from "preact";
+import { h } from "@takazudo/zfb/zudo-react";
+import { render } from "../../../test/render";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as Icons from "../index";
@@ -18,9 +19,7 @@ const ALL_ICONS = Object.fromEntries(
 ) as Record<string, IconComponent>;
 
 function renderIcon(Icon: IconComponent, props: IconProps = {}): HTMLElement {
-  const container = document.createElement("div");
-  render(h(Icon, props), container);
-  return container;
+  return render(h(Icon, { ...props })).container;
 }
 
 describe("icons module", () => {
@@ -109,7 +108,7 @@ describe("icons module", () => {
 
   it("keeps the preview import boundary plain TypeScript and JSX-free", () => {
     const source = readFileSync(resolve("src/components/icons/index.ts"), "utf8");
-    expect(source).toMatch(/import \{ h \} from ["']preact["']/);
+    expect(source).toMatch(/import \{ h \} from ["']@takazudo\/zfb\/zudo-react["']/);
     expect(source).not.toMatch(/from ["'][^"']+\.tsx["']/);
     expect(source).not.toMatch(/^\s*<[A-Za-z][^>]*>/m);
   });

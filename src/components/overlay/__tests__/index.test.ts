@@ -37,7 +37,7 @@ describe("overlay module", () => {
       "MenuSubmenu",
       "OverlayPortal",
       "computeMenuPosition",
-      "useMenu",
+      "createMenu",
     ]);
   });
 });

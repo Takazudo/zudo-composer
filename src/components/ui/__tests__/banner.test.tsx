@@ -1,6 +1,6 @@
 import "./cleanup";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/preact";
+import { fireEvent, render, screen } from "../../../test/render";
 import { SaveIcon } from "../../icons";
 import { Banner } from "../banner";
 import { Button } from "../button";
@@ -30,7 +30,7 @@ describe("Banner", () => {
   it("renders the action slot", () => {
     const onRetry = vi.fn();
     render(
-      <Banner tone="err" title="Composition library unavailable." action={<Button size="sm" onClick={onRetry}>Retry</Button>}>
+      <Banner tone="err" title="Composition library unavailable." action={<Button size="sm" on:click={onRetry}>Retry</Button>}>
         Project files could not be read in this session.
       </Banner>,
     );
