@@ -98,7 +98,7 @@ export async function startBrowserFixture(filename) {
 }
 export async function buildBrowserFixture({ requireBroadControls = true } = {}) {
   const built = await build({ entryPoints: [join(root, "browser-checkpoint.ts")], outfile: join(rendererRoot, "dist/browser-checkpoint.js"),
-    bundle: true, format: "esm", platform: "browser", jsx: "automatic", jsxImportSource: "preact", target: "es2022", metafile: true });
+    bundle: true, format: "esm", platform: "browser", jsx: "automatic", jsxImportSource: "@takazudo/zfb/zudo-react", target: "es2022", metafile: true });
   const inputs = Object.keys(built.metafile.inputs);
   const hostLeaks = inputs.filter(input => /@takazudo[+/](?:zfb|zudo-doc|zudo-sg)|@zudo-composer[+/]ui|marked(?:@|[/\\])|renderer[/\\](?:src|public)|node:|virtual:|zudo-composer[/\\]src[/\\]|[/\\]src[/\\]app[/\\]|(?:buffer|process|crypto-browserify|path-browserify|stream-browserify|node-polyfills)[/\\]/.test(input));
   assert.deepEqual(hostLeaks, [], "The editor graph must not include host runtime/CSS, Node/polyfills, private application sources or virtual providers");
