@@ -29,7 +29,8 @@ async function installedHost() {
   }
   await symlink(join(APP_ROOT, "node_modules"), join(tool, "node_modules"), "dir");
   await mkdir(join(host, "node_modules/@zudo-composer"), { recursive: true });
-  for (const name of ["@zudo-composer/ui", "preact"]) {
+  await mkdir(join(host, "node_modules/@takazudo"), { recursive: true });
+  for (const name of ["@zudo-composer/ui", "@takazudo/zfb", "preact"]) {
     await symlink(join(APP_ROOT, "node_modules", name), join(host, "node_modules", name), "dir");
   }
   for (const file of ["zudo-composer.config.ts", "styles/base.css"]) {

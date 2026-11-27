@@ -36,7 +36,9 @@ describe("installed static build identity", () => {
       await cp(join(demo, name), join(host, name), { recursive: true });
     }
     await mkdir(join(host, "node_modules/@zudo-composer"));
+    await mkdir(join(host, "node_modules/@takazudo"));
     await symlink(join(APP_ROOT, "node_modules/preact"), join(host, "node_modules/preact"), "dir");
+    await symlink(join(APP_ROOT, "node_modules/@takazudo/zfb"), join(host, "node_modules/@takazudo/zfb"), "dir");
     await symlink(join(APP_ROOT, "node_modules/@zudo-composer/component-contract"), join(host, "node_modules/@zudo-composer/component-contract"), "dir");
     // Keep real HTML/CSS compilation, config loading and manifest verification
     // behind the actual bin, with a tiny visitor in this disposable tool copy.

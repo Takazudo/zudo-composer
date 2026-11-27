@@ -23,6 +23,8 @@ beforeEach(async () => {
   await mkdir(join(host, "node_modules/@zudo-composer"), { recursive: true });
   await symlink(APP_ROOT, join(host, "node_modules/zudo-composer"), "dir");
   await symlink(join(APP_ROOT, "node_modules/preact"), join(host, "node_modules/preact"), "dir");
+  await mkdir(join(host, "node_modules/@takazudo"), { recursive: true });
+  await symlink(join(APP_ROOT, "node_modules/@takazudo/zfb"), join(host, "node_modules/@takazudo/zfb"), "dir");
   await symlink(join(APP_ROOT, "node_modules/@zudo-composer/component-contract"), join(host, "node_modules/@zudo-composer/component-contract"), "dir");
   await writeFile(join(host, "zudo-composer.config.ts"), `
     import { writeFileSync } from "node:fs";
@@ -30,9 +32,10 @@ beforeEach(async () => {
     export default { pack: "demo-webshop/components" };
   `);
   await writeFile(join(host, "visitor.tsx"), `
-    import { render } from "preact";
+    import { mount } from "@takazudo/zfb/zudo-react/client";
     const label: string = import.meta.env.PROD ? "production-jsx-proof" : "development-jsx-proof";
-    render(<main data-env={import.meta.env.VITE_ENV_PROBE}>{label}</main>, document.getElementById("app")!);
+    function Visitor() { return <main data-env={import.meta.env.VITE_ENV_PROBE}>{label}</main>; }
+    mount(<Visitor />, document.getElementById("app")!, { identity: { component: "Visitor", build: "env-proof" } });
   `);
   vi.stubEnv("VITE_USER_NODE_ENV", undefined);
 });
@@ -53,7 +56,7 @@ function tinyBuild() {
         logLevel: "silent",
         plugins: [...config.plugins ?? [], {
           name: "bounded-site-environment-proof",
-          // Keep the actual shell, config, Preact transforms and verifier;
+          // Keep the actual shell, config, zudo-react transforms and verifier;
           // just point the shell at a tiny real TSX file for this bounded gate.
           transformIndexHtml: { order: "pre", handler(html) {
             return html.replace(`src=${JSON.stringify(appModuleId(SITE_BUILD_ENTRY))}`, 'src="/visitor.tsx"');

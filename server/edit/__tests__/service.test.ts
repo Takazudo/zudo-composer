@@ -15,10 +15,11 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 async function fixture(prose = false, variant?: "bound" | "defaults" | "wrapper" | "metadata" | "external-metadata" | "computed-dependency" | "no-optin" | "missing" | "source") {
   const root = await mkdtemp(join(tmpdir(), "native-service-")); roots.push(root);
   await cp(resolve("fixtures/edit-host"), root, { recursive: true });
-  await writeFile(join(root, "package.json"), JSON.stringify({ name: "native-edit-host", version: "1.0.0", type: "module", exports: { "./components": "./components/pack.mjs", "./metadata": "./components/metadata.mjs" }, dependencies: { preact: "10.27.2", "@zudo-composer/component-contract": "workspace:*" } }));
+  await writeFile(join(root, "package.json"), JSON.stringify({ name: "native-edit-host", version: "1.0.0", type: "module", exports: { "./components": "./components/pack.mjs", "./metadata": "./components/metadata.mjs" }, dependencies: { "@takazudo/zfb": "7.2.0", "@zudo-composer/component-contract": "workspace:*" } }));
   await mkdir(join(root, "node_modules/@zudo-composer"), { recursive: true });
+  await mkdir(join(root, "node_modules/@takazudo"), { recursive: true });
   await symlink(resolve("."), join(root, "node_modules/zudo-composer"), "dir");
-  await symlink(resolve("node_modules/preact"), join(root, "node_modules/preact"), "dir");
+  await symlink(resolve("node_modules/@takazudo/zfb"), join(root, "node_modules/@takazudo/zfb"), "dir");
   await symlink(resolve("node_modules/@zudo-composer/component-contract"), join(root, "node_modules/@zudo-composer/component-contract"), "dir");
   if (prose) {
     const packPath = join(root, "components/pack.mjs");

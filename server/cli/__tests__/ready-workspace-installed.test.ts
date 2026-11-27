@@ -25,7 +25,8 @@ async function installedHost() {
   }
   await symlink(join(APP_ROOT, "node_modules"), join(tool, "node_modules"), "dir");
   await mkdir(join(host, "node_modules/@zudo-composer"), { recursive: true });
-  for (const name of ["@zudo-composer/ui", "preact"]) await symlink(join(APP_ROOT, "node_modules", name), join(host, "node_modules", name), "dir");
+  await mkdir(join(host, "node_modules/@takazudo"), { recursive: true });
+  for (const name of ["@zudo-composer/ui", "@takazudo/zfb", "preact"]) await symlink(join(APP_ROOT, "node_modules", name), join(host, "node_modules", name), "dir");
   const manifest = JSON.parse(await readFile(join(APP_ROOT, "package.json"), "utf8"));
   await writeFile(join(host, "package.json"), JSON.stringify({ name: "ready-workspace-host", type: "module", devDependencies: { "@zudo-composer/ui": manifest.devDependencies["@zudo-composer/ui"], preact: manifest.peerDependencies.preact } }));
   await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "@zudo-composer/ui/composer-pack", dataDir: "data/cms", contentDir: "editor/content", assetsDir: "library/assets" });\n');

@@ -37,10 +37,11 @@ const tool = (name: string, input: unknown, id = `tool-${name}-${Math.random().t
 async function fixture(script: Script, status?: ReturnType<ModelProvider["status"]>, longText = false, hostReview?: RunnerOptions["hostReview"]) {
   const root = await mkdtemp(join(tmpdir(), "assistant-runner-")); roots.push(root);
   await cp(resolve("fixtures/edit-host"), root, { recursive: true });
-  await writeFile(join(root, "package.json"), JSON.stringify({ name: "native-edit-host", version: "1.0.0", type: "module", exports: { "./components": "./components/pack.mjs" }, dependencies: { preact: "10.27.2", "@zudo-composer/component-contract": "workspace:*" } }));
+  await writeFile(join(root, "package.json"), JSON.stringify({ name: "native-edit-host", version: "1.0.0", type: "module", exports: { "./components": "./components/pack.mjs" }, dependencies: { "@takazudo/zfb": "7.2.0", "@zudo-composer/component-contract": "workspace:*" } }));
   await mkdir(join(root, "node_modules/@zudo-composer"), { recursive: true });
+  await mkdir(join(root, "node_modules/@takazudo"), { recursive: true });
   await symlink(resolve("."), join(root, "node_modules/zudo-composer"), "dir");
-  await symlink(resolve("node_modules/preact"), join(root, "node_modules/preact"), "dir");
+  await symlink(resolve("node_modules/@takazudo/zfb"), join(root, "node_modules/@takazudo/zfb"), "dir");
   await symlink(resolve("node_modules/@zudo-composer/component-contract"), join(root, "node_modules/@zudo-composer/component-contract"), "dir");
   const host = await loadHostContext({ workspaceRoot: root });
   const options = { config: host.composerConfig, pack: host.pack, packIdentity: host.packIdentity };

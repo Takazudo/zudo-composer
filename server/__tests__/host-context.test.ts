@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createServer, type ViteDevServer } from "vite";
 import type { TrustedComponentPack } from "@zudo-composer/component-contract";
-import type { VNode } from "preact";
+import type { Description } from "@takazudo/zfb/zudo-react";
 import { APP_ROOT } from "../../plugins/roots.mjs";
 import { COMPONENT_PACK_ID } from "../../plugins/component-pack-plugin.mjs";
 import { resolveComposerDevConfig } from "../dev-server.mjs";
@@ -49,31 +49,32 @@ async function createDevGraph() {
 }
 
 interface IdentityProbe {
-  (): VNode;
+  (): Description;
   moduleUrl: string;
   dependency: { marker: string; moduleUrl: string };
-  preactOptions: unknown;
-  useState: unknown;
+  getScope: unknown;
+  signal: unknown;
   jsx: unknown;
   editDoc: { resize: { width: number; height: number } };
 }
 
 describe("host-owned module evaluation", () => {
-  it("loads the same host dependency and Preact runtime in dev and non-dev pack lanes", async () => {
+  it("loads the same host dependency and zudo-react runtime in dev and non-dev pack lanes", async () => {
     const packRoot = join(hostRoot, "node_modules/evaluator-fixture-pack");
     const packEntry = join(packRoot, "pack.tsx");
     const dependencyRoot = join(hostRoot, "node_modules/host-owned-dependency");
-    const hostPreactRoot = join(hostRoot, "node_modules/preact");
-    const nestedPreactRoot = join(packRoot, "node_modules/preact");
-    const installedPreactRoot = realpathSync(join(APP_ROOT, "node_modules/preact"));
+    const hostRuntimeRoot = join(hostRoot, "node_modules/@takazudo/zfb");
+    const nestedRuntimeRoot = join(packRoot, "node_modules/@takazudo/zfb");
+    const installedRuntimeRoot = realpathSync(join(APP_ROOT, "node_modules/@takazudo/zfb"));
     await Promise.all([
-      mkdir(join(packRoot, "node_modules"), { recursive: true }),
+      mkdir(join(packRoot, "node_modules/@takazudo"), { recursive: true }),
       mkdir(dependencyRoot),
       mkdir(join(hostRoot, "node_modules/@zudo-composer")),
+      mkdir(join(hostRoot, "node_modules/@takazudo")),
     ]);
     await Promise.all([
-      cp(installedPreactRoot, hostPreactRoot, { recursive: true }),
-      cp(installedPreactRoot, nestedPreactRoot, { recursive: true }),
+      cp(installedRuntimeRoot, hostRuntimeRoot, { recursive: true }),
+      cp(installedRuntimeRoot, nestedRuntimeRoot, { recursive: true }),
       symlink(realpathSync(join(APP_ROOT, "node_modules/@zudo-composer/component-contract")), join(hostRoot, "node_modules/@zudo-composer/component-contract"), "dir"),
       writeFile(join(dependencyRoot, "package.json"), JSON.stringify({ name: "host-owned-dependency", type: "module", exports: "./index.js" })),
       writeFile(join(dependencyRoot, "index.js"), 'export const identity = { marker: "host dependency", moduleUrl: import.meta.url };\n'),
@@ -81,9 +82,8 @@ describe("host-owned module evaluation", () => {
       writeFile(join(hostRoot, "zudo-composer.config.ts"), 'export default { pack: "evaluator-fixture-pack/composer-pack" };\n'),
       writeFile(packEntry, `
         import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
-        import { options } from "preact";
-        import { useState } from "preact/hooks";
-        import { jsx } from "preact/jsx-runtime";
+        import { getScope, signal } from "@takazudo/zfb/zudo-react";
+        import { jsx } from "@takazudo/zfb/zudo-react/jsx-runtime";
         import { createEditDoc } from "@zudo-composer/image-editor";
         import { identity } from "host-owned-dependency";
 
@@ -91,7 +91,7 @@ describe("host-owned module evaluation", () => {
           return <span>{identity.marker}</span>;
         }, {
           moduleUrl: import.meta.url, dependency: identity,
-          preactOptions: options, useState, jsx,
+          getScope, signal, jsx,
           editDoc: createEditDoc({ width: 32, height: 24 }),
         });
         export const componentPack = defineComponentPack({
@@ -107,10 +107,10 @@ describe("host-owned module evaluation", () => {
     ]);
 
     // Three different physical copies make an accidental tool-root or
-    // importer-relative Preact resolution observable, even at one version.
+    // importer-relative runtime resolution observable, even at one version.
     const requireHost = createRequire(join(hostRoot, "package.json"));
-    const preactPaths = [requireHost.resolve("preact"), createRequire(packEntry).resolve("preact"), createRequire(import.meta.url).resolve("preact")];
-    expect(new Set(preactPaths).size).toBe(3);
+    const runtimePaths = [requireHost.resolve("@takazudo/zfb/zudo-react"), createRequire(packEntry).resolve("@takazudo/zfb/zudo-react"), createRequire(import.meta.url).resolve("@takazudo/zfb/zudo-react")];
+    expect(new Set(runtimePaths).size).toBe(3);
     expect(() => requireHost.resolve("@zudo-composer/image-editor")).toThrow();
 
     const dev = await createDevGraph();
@@ -124,15 +124,15 @@ describe("host-owned module evaluation", () => {
     expect(nonDevProbe.dependency).toBe(devProbe.dependency);
     expect(nonDevProbe.dependency.moduleUrl).toBe(pathToFileURL(join(dependencyRoot, "index.js")).href);
 
-    const preactPackage = JSON.parse(await readFile(join(hostPreactRoot, "package.json"), "utf8")) as {
-      exports: Record<string, { import: string }>;
+    const runtimePackage = JSON.parse(await readFile(join(hostRuntimeRoot, "package.json"), "utf8")) as {
+      exports: Record<string, { default: string }>;
     };
     for (const [subpath, exportName, field] of [
-      [".", "options", "preactOptions"],
-      ["./hooks", "useState", "useState"],
-      ["./jsx-runtime", "jsx", "jsx"],
+      ["./zudo-react", "getScope", "getScope"],
+      ["./zudo-react", "signal", "signal"],
+      ["./zudo-react/jsx-runtime", "jsx", "jsx"],
     ] as const) {
-      const expectedPath = resolve(hostPreactRoot, preactPackage.exports[subpath].import);
+      const expectedPath = resolve(hostRuntimeRoot, runtimePackage.exports[subpath].default);
       const expectedModule = await import(/* @vite-ignore */ pathToFileURL(expectedPath).href);
       expect(nonDevProbe[field], subpath).toBe(devProbe[field]);
       expect(nonDevProbe[field], subpath).toBe(expectedModule[exportName]);
@@ -159,13 +159,13 @@ describe("host-owned module evaluation", () => {
     await expect(createModuleEvaluator(hostRoot)(hostEntry)).rejects.toThrow(/zod/);
   });
 
-  it("refuses a missing host Preact peer instead of borrowing the tool's copy", async () => {
+  it("refuses a missing host zudo-react peer instead of borrowing the tool's copy", async () => {
     await writeFile(join(hostRoot, "package.json"), JSON.stringify({
       name: "host-context-fixture", type: "module", exports: { "./components": "./pack.ts" },
     }));
     await writeFile(join(hostRoot, "zudo-composer.config.ts"), 'export default { pack: "host-context-fixture/components" };\n');
-    await writeFile(join(hostRoot, "pack.ts"), 'import { options } from "preact";\nexport const componentPack = { manifest: {}, options };\n');
-    await expect(loadHostContext({ workspaceRoot: hostRoot })).rejects.toThrow(/preact/);
-    await expect(createDevGraph()).rejects.toThrow(/preact/);
+    await writeFile(join(hostRoot, "pack.ts"), 'import { getScope } from "@takazudo/zfb/zudo-react";\nexport const componentPack = { manifest: {}, getScope };\n');
+    await expect(loadHostContext({ workspaceRoot: hostRoot })).rejects.toThrow(/@takazudo\/zfb/);
+    await expect(createDevGraph()).rejects.toThrow(/@takazudo\/zfb/);
   });
 });

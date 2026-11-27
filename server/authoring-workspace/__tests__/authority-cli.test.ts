@@ -11,7 +11,8 @@ it("refuses generate and seed before reading historical source or writing worksp
     await cp(resolve("fixtures/edit-host"), root, { recursive: true });
     await writeFile(join(root, "package.json"), JSON.stringify({ name: "native-edit-host", type: "module", exports: { "./components": "./components/pack.mjs" } }));
     await mkdir(join(root, "node_modules/@zudo-composer"), { recursive: true });
-    for (const name of ["preact", "@zudo-composer/component-contract"]) await symlink(resolve("node_modules", name), join(root, "node_modules", name), "dir");
+    await mkdir(join(root, "node_modules/@takazudo"), { recursive: true });
+    for (const name of ["@takazudo/zfb", "@zudo-composer/component-contract"]) await symlink(resolve("node_modules", name), join(root, "node_modules", name), "dir");
     await writeFile(join(root, "zudo-composer.config.ts"), 'export default { pack: "native-edit-host/components", authoringAuthority: "workspace" };\n');
     await writeFile(join(root, "site-project.ts"), 'throw new Error("Historical source was evaluated");\n');
     await writeFile(join(root, "site-project.json"), "historical input must remain unchanged\n");

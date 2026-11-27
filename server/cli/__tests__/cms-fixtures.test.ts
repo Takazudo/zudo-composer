@@ -117,6 +117,8 @@ async function hostRepository(options: { contractRoot?: string } = {}) {
   await symlink(APP_ROOT, join(host, "node_modules/zudo-composer"), "dir");
   await symlink(options.contractRoot ?? join(APP_ROOT, "node_modules/@zudo-composer/component-contract"), join(host, "node_modules/@zudo-composer/component-contract"), "dir");
   await symlink(join(APP_ROOT, "node_modules/preact"), join(host, "node_modules/preact"), "dir");
+  await mkdir(join(host, "node_modules/@takazudo"), { recursive: true });
+  await symlink(join(APP_ROOT, "node_modules/@takazudo/zfb"), join(host, "node_modules/@takazudo/zfb"), "dir");
   await writeFile(join(host, "package.json"), json({ name: "fixture-host", type: "module", exports: { "./pack": "./components/pack.ts" }, devDependencies: { "zudo-composer": "0.0.0", "@zudo-composer/component-contract": "1.0.0", preact: "^10.29.8" } }));
   await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "fixture-host/pack" });\n');
   await mkdir(join(host, "components"));
