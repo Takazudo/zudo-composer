@@ -1,4 +1,4 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import { ErrorIcon, InfoIcon, WarningIcon } from "../icons";
 import type { IconComponent } from "../icons";
 import { cx } from "./class-names";
@@ -13,13 +13,13 @@ const TONE_ICONS: Record<BannerTone, IconComponent> = {
 
 export interface BannerProps {
   tone?: BannerTone;
-  title?: ComponentChildren;
+  title?: Child;
   /** Overrides the tone's default icon. */
   icon?: IconComponent;
   /** Trailing controls — retry, dismiss, recovery. */
-  action?: ComponentChildren;
+  action?: Child;
   class?: string;
-  children?: ComponentChildren;
+  children?: Child;
 }
 
 export function Banner({ tone = "info", title, icon, action, class: className, children }: BannerProps) {

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { getScope, signal, type Ref } from "@takazudo/zfb/zudo-react";
 import { Input } from "./form-controls";
 
 /** Also checks the legacy composition key code emitted by some IME engines. */
@@ -15,15 +15,16 @@ export interface InlineRenameProps {
 
 /** Focus/select on mount; explicit Enter commits, Escape cancels; blur preserves edits. */
 export function InlineRename({ value, label, onCommit, onCancel }: InlineRenameProps) {
-  const [draft, setDraft] = useState(value);
-  const input = useRef<HTMLInputElement>(null);
-  const composing = useRef(false);
-  useLayoutEffect(() => {
+  const draft = signal(value);
+  const input: Ref<HTMLInputElement> = { current: null };
+  let composing = false;
+  getScope().onActivate(() => {
     const element = input.current;
-    if (!element) return;
-    // Use native names, independent of Preact's DOM-property case inference.
-    const start = () => { composing.current = true; };
-    const end = () => { composing.current = false; };
+    if (!element) return undefined;
+    // Native listeners with explicit teardown, so composition tracking ends
+    // exactly when the editor does.
+    const start = () => { composing = true; };
+    const end = () => { composing = false; };
     element.addEventListener("compositionstart", start);
     element.addEventListener("compositionend", end);
     element.focus();
@@ -32,16 +33,15 @@ export function InlineRename({ value, label, onCommit, onCancel }: InlineRenameP
       element.removeEventListener("compositionstart", start);
       element.removeEventListener("compositionend", end);
     };
-  }, []);
-  return <Input elementRef={input} size="sm" value={draft} aria-label={label}
-    onInput={(event) => setDraft(event.currentTarget.value)}
-    onKeyDown={(event) => {
+  });
+  return <Input elementRef={input} size="sm" modelValue={draft} aria-label={label}
+    on:keydown={(event: KeyboardEvent) => {
       event.stopPropagation();
-      if (composing.current || isComposingKey(event)) return;
+      if (composing || isComposingKey(event)) return;
       if (event.key === "Escape") { event.preventDefault(); onCancel(); }
       if (event.key === "Enter") {
         event.preventDefault();
-        if (draft.trim()) onCommit(draft.trim());
+        if (draft.value.trim()) onCommit(draft.value.trim());
       }
     }} />;
 }

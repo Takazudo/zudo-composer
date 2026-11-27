@@ -1,13 +1,13 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import type { IconComponent } from "../icons";
 import { cx } from "./class-names";
 
 export interface EmptyStateProps {
   icon?: IconComponent;
-  title: ComponentChildren;
+  title: Child;
   /** One line saying what this surface is for once it has content. */
-  description?: ComponentChildren;
-  action?: ComponentChildren;
+  description?: Child;
+  action?: Child;
   /** Tighter padding for an empty state sitting inside a pane or card. */
   inline?: boolean;
   class?: string;

@@ -1,6 +1,8 @@
 import "./cleanup";
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/preact";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { Rebuild } from "../../rebuild";
+import { render, screen, settle } from "../../../test/render";
 import { Chip } from "../chip";
 
 describe("Chip", () => {
@@ -29,14 +31,12 @@ describe("Chip", () => {
     ]);
   });
 
-  it("adds a decorative leading dot only when asked", () => {
-    const { container, rerender } = render(<Chip tone="ok">Published</Chip>);
+  it("adds a decorative leading dot only when asked", async () => {
+    const dot$ = signal(false);
+    const { container } = render(<Rebuild value={dot$}>{(dot) => <Chip tone="ok" dot={dot}>Published</Chip>}</Rebuild>);
     expect(container.querySelector(".cms-chip__dot")).toBeNull();
-    rerender(
-      <Chip tone="ok" dot>
-        Published
-      </Chip>,
-    );
+    dot$.value = true;
+    await settle();
     const dot = container.querySelector(".cms-chip__dot");
     expect(dot).not.toBeNull();
     expect(dot).toHaveAttribute("aria-hidden", "true");

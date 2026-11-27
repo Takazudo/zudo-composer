@@ -28,7 +28,6 @@ describe("ui module contract", () => {
         "DisclosureButton",
         "EmptyState",
         "Field",
-        "FieldContext",
         "Input",
         "InlineRename",
         "Kbd",
@@ -45,7 +44,7 @@ describe("ui module contract", () => {
         "cx",
         "isComposingKey",
         "nextRovingIndex",
-        "useFieldControl",
+        "useElementRef",
       ].sort(),
     );
   });

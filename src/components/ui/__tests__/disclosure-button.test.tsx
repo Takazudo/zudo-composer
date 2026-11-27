@@ -1,12 +1,14 @@
 import "./cleanup";
-import { fireEvent, render, screen } from "@testing-library/preact";
+import { computed, signal } from "@takazudo/zfb/zudo-react";
+import { fireEvent, render, screen, settle } from "../../../test/render";
 import { expect, it, vi } from "vitest";
 import { DisclosureButton } from "../disclosure-button";
 
-it("shares button refs and ARIA while rendering square plus/minus rather than directional arrows", () => {
+it("shares button refs and ARIA while rendering square plus/minus rather than directional arrows", async () => {
   const ref = { current: null as HTMLButtonElement | null };
   const click = vi.fn();
-  const { rerender } = render(<DisclosureButton expanded={false} aria-label="Expand navigation" elementRef={ref} onClick={click} />);
+  const expanded = signal(false);
+  render(<DisclosureButton expanded={expanded} aria-label={computed(() => (expanded.value ? "Collapse navigation" : "Expand navigation"))} elementRef={ref} on:click={click} />);
   const button = screen.getByRole("button", { name: "Expand navigation" });
   expect(ref.current).toBe(button);
   expect(button).toHaveAttribute("aria-expanded", "false");
@@ -14,7 +16,9 @@ it("shares button refs and ARIA while rendering square plus/minus rather than di
   expect(button.querySelectorAll("path")).toHaveLength(2);
   fireEvent.click(button);
   expect(click).toHaveBeenCalledOnce();
-  rerender(<DisclosureButton expanded aria-label="Collapse navigation" />);
+  expanded.value = true;
+  await settle();
+  expect(screen.getByRole("button", { name: "Collapse navigation" })).toBe(button);
   expect(button).toHaveAttribute("aria-expanded", "true");
   expect(button.querySelectorAll("path")).toHaveLength(1);
 });

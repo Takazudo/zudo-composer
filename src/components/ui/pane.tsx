@@ -1,6 +1,6 @@
-import type { ComponentChildren } from "preact";
-import { useRef } from "preact/hooks";
+import { computed, type Child, type Ref } from "@takazudo/zfb/zudo-react";
 import type { IconComponent } from "../icons";
+import { read, type MaybeSignal } from "../reactive";
 import { CountBadge } from "./badge";
 import { cx } from "./class-names";
 import { nextRovingIndex } from "./roving";
@@ -11,7 +11,7 @@ export interface PaneProps {
   /** Accessible name for the region, when the pane is a landmark of its own. */
   label?: string;
   class?: string;
-  children?: ComponentChildren;
+  children?: Child;
 }
 
 export function Pane({ variant = "default", label, class: className, children }: PaneProps) {
@@ -23,21 +23,20 @@ export function Pane({ variant = "default", label, class: className, children }:
 }
 
 export interface PaneHeaderProps {
-  title: ComponentChildren;
+  title: Child;
   /** The semantic element for the title; most pane titles remain spans. */
   as?: "span" | "h1";
-  count?: number;
+  count?: MaybeSignal<number>;
   /** Trailing controls, pushed to the inline end. */
-  actions?: ComponentChildren;
+  actions?: Child;
   class?: string;
-  children?: ComponentChildren;
+  children?: Child;
 }
 
 export function PaneHeader({ title, as = "span", count, actions, class: className, children }: PaneHeaderProps) {
-  const Title = as;
   return (
     <div class={cx("cms-pane__header", className)}>
-      <Title class="cms-pane__title">{title}</Title>
+      {as === "h1" ? <h1 class="cms-pane__title">{title}</h1> : <span class="cms-pane__title">{title}</span>}
       {count === undefined ? null : <CountBadge count={count} />}
       {children}
       {actions ? <div class="cms-pane__header-actions">{actions}</div> : null}
@@ -47,17 +46,18 @@ export function PaneHeader({ title, as = "span", count, actions, class: classNam
 
 export interface PaneTab<Id extends string> {
   id: Id;
-  label: ComponentChildren;
+  label: Child;
   icon?: IconComponent;
-  count?: number;
+  count?: MaybeSignal<number>;
   disabled?: boolean;
 }
 
 export interface PaneTabsProps<Id extends string> {
   /** Accessible name of the tab list. */
   label: string;
+  /** Static for the list's lifetime; remount (keyed) to change the set. */
   tabs: readonly PaneTab<Id>[];
-  activeId: Id;
+  activeId: MaybeSignal<Id>;
   onSelect: (id: Id) => void;
   /** Maps a tab to the id of the panel it controls, when one is rendered. */
   panelId?: (id: Id) => string;
@@ -65,18 +65,20 @@ export interface PaneTabsProps<Id extends string> {
 }
 
 export function PaneTabs<Id extends string>({ label, tabs, activeId, onSelect, panelId, class: className }: PaneTabsProps<Id>) {
-  const buttons = useRef<(HTMLButtonElement | null)[]>([]);
-  const activeIndex = tabs.findIndex((tab) => tab.id === activeId);
-  const tabStopIndex = activeIndex === -1 ? 0 : activeIndex;
+  const buttons: Ref<HTMLButtonElement>[] = tabs.map(() => ({ current: null }));
+  const tabStopIndex = computed(() => {
+    const activeIndex = tabs.findIndex((tab) => tab.id === read(activeId));
+    return activeIndex === -1 ? 0 : activeIndex;
+  });
 
   function handleKeyDown(event: KeyboardEvent, index: number) {
     const next = nextRovingIndex(event.key, index, tabs.length, {
-      isDisabled: (candidate) => Boolean(tabs[candidate].disabled),
+      isDisabled: (candidate) => Boolean(tabs[candidate]!.disabled),
     });
     if (next === null) return;
     event.preventDefault();
-    buttons.current[next]?.focus();
-    onSelect(tabs[next].id);
+    buttons[next]!.current?.focus();
+    onSelect(tabs[next]!.id);
   }
 
   return (
@@ -88,16 +90,14 @@ export function PaneTabs<Id extends string>({ label, tabs, activeId, onSelect, p
             key={tab.id}
             type="button"
             class="cms-pane__tab"
-            ref={(element) => {
-              buttons.current[index] = element;
-            }}
+            ref={buttons[index]}
             role="tab"
-            aria-selected={tab.id === activeId}
+            aria-selected={computed(() => tab.id === read(activeId))}
             aria-controls={panelId?.(tab.id)}
             disabled={tab.disabled}
-            tabIndex={index === tabStopIndex ? 0 : -1}
-            onKeyDown={(event) => handleKeyDown(event, index)}
-            onClick={() => onSelect(tab.id)}
+            tabindex={computed(() => (index === tabStopIndex.value ? 0 : -1))}
+            on:keydown={(event) => handleKeyDown(event, index)}
+            on:click={() => onSelect(tab.id)}
           >
             {Icon ? <Icon size="sm" /> : null}
             {tab.label}
@@ -110,11 +110,11 @@ export function PaneTabs<Id extends string>({ label, tabs, activeId, onSelect, p
 }
 
 export interface PaneSectionProps {
-  title: ComponentChildren;
+  title: Child;
   /** Trailing action for the section, pushed to the inline end of its title. */
-  action?: ComponentChildren;
+  action?: Child;
   class?: string;
-  children?: ComponentChildren;
+  children?: Child;
 }
 
 export function PaneSection({ title, action, class: className, children }: PaneSectionProps) {
@@ -133,7 +133,7 @@ export interface PaneBodyProps {
   /** Adds the standard pane padding. */
   padded?: boolean;
   class?: string;
-  children?: ComponentChildren;
+  children?: Child;
 }
 
 export function PaneBody({ padded = false, class: className, children }: PaneBodyProps) {

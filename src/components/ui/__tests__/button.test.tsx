@@ -1,6 +1,7 @@
 import "./cleanup";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/preact";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { fireEvent, render, screen, settle } from "../../../test/render";
 import { PlusIcon } from "../../icons";
 import { Button } from "../button";
 
@@ -12,16 +13,18 @@ describe("Button", () => {
     expect(button.className).toBe("cms-btn");
   });
 
-  it.each([false, true])("composes busy with caller disabled=%s across transitions", (disabled) => {
+  it.each([false, true])("composes busy with caller disabled=%s across transitions", async (disabled) => {
     const onClick = vi.fn();
-    const { rerender } = render(<Button busy disabled={disabled} onClick={onClick}>Retry</Button>);
+    const busy = signal(true);
+    render(<Button busy={busy} disabled={disabled} on:click={onClick}>Retry</Button>);
     const button = screen.getByRole("button", { name: "Retry" }) as HTMLButtonElement;
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("aria-busy", "true");
     expect(button.querySelector(".cms-btn__spinner svg")).toHaveAttribute("aria-hidden", "true");
     button.click();
     expect(onClick).not.toHaveBeenCalled();
-    rerender(<Button busy={false} disabled={disabled} onClick={onClick}>Retry</Button>);
+    busy.value = false;
+    await settle();
     expect(button.disabled).toBe(disabled);
     expect(button).not.toHaveAttribute("aria-busy");
     expect(button.querySelector(".cms-btn__spinner")).toBeNull();
@@ -77,7 +80,7 @@ describe("Button", () => {
     // browser's disabled-activation filter, so the attribute is the contract.
     const onClick = vi.fn();
     render(
-      <Button disabled onClick={onClick}>
+      <Button disabled on:click={onClick}>
         Delete
       </Button>,
     );
@@ -86,7 +89,7 @@ describe("Button", () => {
 
   it("fires onClick when enabled", () => {
     const onClick = vi.fn();
-    render(<Button onClick={onClick}>Duplicate</Button>);
+    render(<Button on:click={onClick}>Duplicate</Button>);
     fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
     expect(onClick).toHaveBeenCalledTimes(1);
   });
