@@ -1,4 +1,4 @@
-import type { ComponentChildren, JSX } from "preact";
+import { computed, Show, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import {
   ArrowDownIcon,
   ComposerIcon,
@@ -13,12 +13,15 @@ import {
 // ships the whole library pattern and its stylesheet, and the Dashboard needs
 // only this pure timestamp vocabulary.
 import { formatLibraryTimestamp, formatLibraryTimestampFull } from "../../components/library-page/library-format";
+import { Rebuild } from "../../components/rebuild";
 import { Banner, Button, Chip, CountBadge, EmptyState, StatusChip, cx } from "../../components/ui";
 import { formatIntent } from "../route-intents";
+import type { AppServices } from "../services";
 import type {
   WorkspaceAttention,
   WorkspaceAttentionItem,
   WorkspaceCounts,
+  WorkspaceRecent,
   WorkspaceRecord,
   WorkspaceSourceName,
   WorkspaceSummary,
@@ -36,13 +39,15 @@ import {
   type LastWrite,
   type StatCard,
 } from "./dashboard-model";
-import { useWorkspaceView } from "./use-workspace-view";
+import { createWorkspaceView } from "./workspace-view";
 import "./dashboard.css";
 
 /** The Asset stat card and the Storage row read the same three-way status. */
 type AssetStorageStatus = WorkspaceCounts["assets"]["status"];
 
 export interface DashboardProps {
+  /** The route contract every routed entry takes. The page itself reads only `summary`. */
+  services?: AppServices;
   hostedDemo?: boolean;
   /**
    * The chrome's single read model. Omitted only where no provider graph is
@@ -63,18 +68,19 @@ const NEW_COMPOSITION_HREF = formatIntent({ route: "composer", action: "new" });
  * independently, so a provider that could not be read degrades its own card to
  * `Unavailable · Retry` while the rest of the page keeps working.
  */
-export function Dashboard({ summary, now, hostedDemo = false }: DashboardProps): JSX.Element {
-  const view = useWorkspaceView(summary);
-  const { counts, recent, attention, loading, error, reload } = view;
-  const assetReady = counts?.assets.status === "ok";
+export function Dashboard({ summary, now, hostedDemo = false }: DashboardProps): Child {
+  const { counts, recent, attention, loading, error, reload } = createWorkspaceView(summary);
+  const assetReady = computed(() => counts.value?.assets.status === "ok");
   // Before the first read, no provider has answered either way; that reads the
   // same as `absent` rather than as an unreadable provider.
-  const assetStatus: AssetStorageStatus = counts === null ? "absent" : counts.assets.status;
-  const empty = counts !== null && isEmptyWorkspace(counts);
+  const assetStatus = computed<AssetStorageStatus>(() => counts.value === null ? "absent" : counts.value.assets.status);
+  const empty = computed(() => counts.value !== null && isEmptyWorkspace(counts.value));
   // Recent activity and the attention list are answers about records. With no
   // summary mounted, or after one that rejected, there is no answer to give —
   // and an empty card would read as "nothing has changed", which is a claim.
-  const answered = loading || counts !== null;
+  const answered = computed(() => loading.value || counts.value !== null);
+  const showsRecords = computed(() => !empty.value && answered.value);
+  const storage = computed(() => ({ assetStatus: assetStatus.value, recentLastWrite: recent.value === null ? null : lastWrite(recent.value) }));
 
   return (
     <main class="cms-dash" aria-label="Dashboard">
@@ -83,98 +89,119 @@ export function Dashboard({ summary, now, hostedDemo = false }: DashboardProps):
           <h1>{greeting(now)}</h1>
           <p>Everything in this workspace lives in this browser.</p>
         </div>
-        {empty ? null : <QuickActions assetReady={assetReady} />}
+        <Show when={computed(() => !empty.value)}>{() => <QuickActions assetReady={assetReady} />}</Show>
       </header>
 
-      {error ? (
-        <Banner tone="err" title="This workspace could not be read." action={<Button size="sm" onClick={reload} busy={loading}>Retry</Button>}>
-          {error}
-        </Banner>
-      ) : null}
-
-      {counts === null ? (
-        loading ? <StatsSkeleton /> : null
-      ) : empty ? (
-        <StartHere assetReady={assetReady} />
-      ) : (
-        <section class="cms-dash__stats" aria-label="Workspace status">
-          {statCards(counts).map((card) => (
-            <StatCardView key={card.id} card={card} onRetry={reload} retrying={loading} />
-          ))}
-        </section>
-      )}
-
-      <div class={cx("cms-dash__columns", empty && "cms-dash__columns--single")}>
-        {empty || !answered ? null : (
-          <DashCard title="Recent activity" titleId="cms-dash-recent" note="across all workspaces">
-            {recent === null ? (
-              <p class="cms-dash__placeholder">Reading the workspace…</p>
-            ) : (
-              <>
-                {recent.unavailable.length > 0 ? (
-                  <div class="cms-dash-card__pad">
-                    <SourcesUnavailable
-                      sources={recent.unavailable.map(({ source }) => source)}
-                      sentence={(listed) => `Records from ${listed} are not in this list.`}
-                      onRetry={reload}
-                      retrying={loading}
-                    />
-                  </div>
-                ) : null}
-                {recent.records.length > 0 ? (
-                  <div class="cms-dash-recent">
-                    {recent.records.map((record) => (
-                      <RecentRow key={`${record.kind}:${record.href}:${record.id}`} record={record} />
-                    ))}
-                  </div>
-                ) : recent.unavailable.length > 0 ? null : (
-                  <EmptyState
-                    inline
-                    title="Nothing has been edited yet"
-                    description="Records you create in any workspace show up here, newest first."
-                  />
-                )}
-              </>
-            )}
-          </DashCard>
+      <Show when={computed(() => error.value !== null)}>
+        {() => (
+          <Banner tone="err" title="This workspace could not be read." action={<Button size="sm" on:click={() => reload()} busy={loading}>Retry</Button>}>
+            {computed(() => error.value ?? "")}
+          </Banner>
         )}
+      </Show>
+
+      <Rebuild value={counts}>
+        {(current) =>
+          current === null ? (
+            <Show when={loading}>{() => <StatsSkeleton />}</Show>
+          ) : isEmptyWorkspace(current) ? (
+            <StartHere assetReady={assetReady} />
+          ) : (
+            <section class="cms-dash__stats" aria-label="Workspace status">
+              {statCards(current).map((card) => (
+                <StatCardView key={card.id} card={card} onRetry={reload} retrying={loading} />
+              ))}
+            </section>
+          )
+        }
+      </Rebuild>
+
+      <div class={computed(() => cx("cms-dash__columns", empty.value && "cms-dash__columns--single"))}>
+        <Show when={showsRecords}>
+          {() => (
+            <DashCard title="Recent activity" titleId="cms-dash-recent" note="across all workspaces">
+              <Rebuild value={recent}>{(current) => <RecentList recent={current} onRetry={reload} retrying={loading} />}</Rebuild>
+            </DashCard>
+          )}
+        </Show>
 
         <div class="cms-dash__side">
-          {empty || !answered ? null : <AttentionCard attention={attention} onRetry={reload} retrying={loading} />}
+          <Show when={showsRecords}>
+            {() => <AttentionCard attention={attention} onRetry={reload} retrying={loading} />}
+          </Show>
 
           <DashCard title="How the pieces connect" titleId="cms-dash-pipeline">
-            <div class="cms-dash-pipeline">
-              {pipelineStages(counts).map((stage, index) => {
-                const StageIcon = stage.icon;
-                return (
-                  <div key={stage.id}>
-                    {index === 0 ? null : (
-                      <div class="cms-dash-pipeline__arrow" aria-hidden="true">
-                        <ArrowDownIcon size="xs" />
-                      </div>
-                    )}
-                    <a class="cms-dash-pipeline__stage" href={stage.href}>
-                      <span class="cms-dash-tile"><StageIcon size="sm" /></span>
-                      <span class="cms-dash-pipeline__text">
-                        <strong>{stage.label}</strong>
-                        <span>{stage.description}</span>
-                      </span>
-                      {stage.count === undefined ? null : <span class="cms-dash-pipeline__count">{stage.count}</span>}
-                    </a>
-                  </div>
-                );
-              })}
-            </div>
+            <Rebuild value={counts}>{(current) => <Pipeline counts={current} />}</Rebuild>
           </DashCard>
 
-          <StorageCard hostedDemo={hostedDemo} assetStatus={assetStatus} recentLastWrite={recent === null ? null : lastWrite(recent)} />
+          <Rebuild value={storage}>
+            {(current) => <StorageCard hostedDemo={hostedDemo} assetStatus={current.assetStatus} recentLastWrite={current.recentLastWrite} />}
+          </Rebuild>
         </div>
       </div>
     </main>
   );
 }
 
-function QuickActions({ assetReady }: { assetReady: boolean }): JSX.Element {
+function RecentList({ recent, onRetry, retrying }: { recent: WorkspaceRecent | null; onRetry: () => void; retrying: ReadonlySignal<boolean> }): Child {
+  if (recent === null) return <p class="cms-dash__placeholder">Reading the workspace…</p>;
+  return (
+    <>
+      {recent.unavailable.length > 0 ? (
+        <div class="cms-dash-card__pad">
+          <SourcesUnavailable
+            sources={recent.unavailable.map(({ source }) => source)}
+            sentence={(listed) => `Records from ${listed} are not in this list.`}
+            onRetry={onRetry}
+            retrying={retrying}
+          />
+        </div>
+      ) : null}
+      {recent.records.length > 0 ? (
+        <div class="cms-dash-recent">
+          {recent.records.map((record) => (
+            <RecentRow key={`${record.kind}:${record.href}:${record.id}`} record={record} />
+          ))}
+        </div>
+      ) : recent.unavailable.length > 0 ? null : (
+        <EmptyState
+          inline
+          title="Nothing has been edited yet"
+          description="Records you create in any workspace show up here, newest first."
+        />
+      )}
+    </>
+  );
+}
+
+function Pipeline({ counts }: { counts: WorkspaceCounts | null }): Child {
+  return (
+    <div class="cms-dash-pipeline">
+      {pipelineStages(counts).map((stage, index) => {
+        const StageIcon = stage.icon;
+        return (
+          <div key={stage.id}>
+            {index === 0 ? null : (
+              <div class="cms-dash-pipeline__arrow" aria-hidden="true">
+                <ArrowDownIcon size="xs" />
+              </div>
+            )}
+            <a class="cms-dash-pipeline__stage" href={stage.href}>
+              <span class="cms-dash-tile"><StageIcon size="sm" /></span>
+              <span class="cms-dash-pipeline__text">
+                <strong>{stage.label}</strong>
+                <span>{stage.description}</span>
+              </span>
+              {stage.count === undefined ? null : <span class="cms-dash-pipeline__count">{stage.count}</span>}
+            </a>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function QuickActions({ assetReady }: { assetReady: ReadonlySignal<boolean> }): Child {
   return (
     <div class="cms-dash__quick">
       <a class="cms-btn" href="/content">
@@ -187,17 +214,19 @@ function QuickActions({ assetReady }: { assetReady: boolean }): JSX.Element {
       </a>
       {/* Upload authoring is dev-only, so the action appears only once the
           Asset provider has actually answered. */}
-      {assetReady ? (
-        <a class="cms-btn cms-btn--primary" href="/assets">
-          <UploadIcon size="sm" />
-          Upload assets
-        </a>
-      ) : null}
+      <Show when={assetReady}>
+        {() => (
+          <a class="cms-btn cms-btn--primary" href="/assets">
+            <UploadIcon size="sm" />
+            Upload assets
+          </a>
+        )}
+      </Show>
     </div>
   );
 }
 
-function StartHere({ assetReady }: { assetReady: boolean }): JSX.Element {
+function StartHere({ assetReady }: { assetReady: ReadonlySignal<boolean> }): Child {
   return (
     <section class="cms-dash__start" aria-label="Start here">
       <EmptyState
@@ -215,7 +244,7 @@ function StartHere({ assetReady }: { assetReady: boolean }): JSX.Element {
  * status yet, and a placeholder region carrying that name would answer a
  * `Workspace status` query with a card that holds no number.
  */
-function StatsSkeleton(): JSX.Element {
+function StatsSkeleton(): Child {
   return (
     <div class="cms-dash__stats" aria-busy="true">
       <p class="cms-sr-only" role="status">Reading the workspace…</p>
@@ -230,7 +259,7 @@ function StatsSkeleton(): JSX.Element {
   );
 }
 
-function StatCardView({ card, onRetry, retrying }: { card: StatCard; onRetry: () => void; retrying: boolean }): JSX.Element {
+function StatCardView({ card, onRetry, retrying }: { card: StatCard; onRetry: () => void; retrying: ReadonlySignal<boolean> }): Child {
   const CardIcon = card.icon;
   const head = (
     <span class="cms-dash-stat__head">
@@ -274,7 +303,7 @@ function StatCardView({ card, onRetry, retrying }: { card: StatCard; onRetry: ()
   );
 }
 
-function RecentRow({ record }: { record: WorkspaceRecord }): JSX.Element {
+function RecentRow({ record }: { record: WorkspaceRecord }): Child {
   const kind = recordKindPresentation(record.kind);
   const KindIcon = kind.icon;
   return (
@@ -285,47 +314,50 @@ function RecentRow({ record }: { record: WorkspaceRecord }): JSX.Element {
         <span class="cms-dash-recent__id">{record.id}</span>
       </span>
       <Chip tone={kind.accent ? "accent" : "plain"}>{kind.label}</Chip>
-      <time dateTime={record.updatedAt} title={formatLibraryTimestampFull(record.updatedAt)}>
+      <time datetime={record.updatedAt} title={formatLibraryTimestampFull(record.updatedAt)}>
         {formatLibraryTimestamp(record.updatedAt)}
       </time>
     </a>
   );
 }
 
-function AttentionCard({ attention, onRetry, retrying }: { attention: WorkspaceAttention | null; onRetry: () => void; retrying: boolean }): JSX.Element {
-  const view = attention === null ? null : attentionView(attention);
+function AttentionCard({ attention, onRetry, retrying }: { attention: ReadonlySignal<WorkspaceAttention | null>; onRetry: () => void; retrying: ReadonlySignal<boolean> }): Child {
+  const view = computed(() => (attention.value === null ? null : attentionView(attention.value)));
   return (
-    <DashCard title="Needs attention" titleId="cms-dash-attention" count={view?.total}>
+    <DashCard title="Needs attention" titleId="cms-dash-attention" count={computed(() => view.value?.total)}>
       <div class="cms-dash-card__pad cms-dash-attention">
-        {view === null ? (
-          <p class="cms-dash__placeholder">Reading the workspace…</p>
-        ) : (
-          <>
-            {view.unavailable.length > 0 ? (
-              <SourcesUnavailable
-                sources={view.unavailable.map(({ source }) => source)}
-                sentence={(listed) => `${listed} could not be checked.`}
-                onRetry={onRetry}
-                retrying={retrying}
-              />
-            ) : null}
-            {view.rows.map((item) => (
-              <AttentionRow key={`${item.kind}:${item.href}:${item.id}`} item={item} />
-            ))}
-            {view.hidden > 0 ? (
-              <p class="cms-dash__placeholder">{`${view.hidden} more ${view.hidden === 1 ? "needs" : "need"} attention.`}</p>
-            ) : null}
-            {view.total === 0 && view.unavailable.length === 0 ? (
-              <EmptyState inline title="Nothing needs attention" description="Blocked Mappings, unassigned pages and incomplete Entries appear here." />
-            ) : null}
-          </>
-        )}
+        <Rebuild value={view}>{(current) => <AttentionList view={current} onRetry={onRetry} retrying={retrying} />}</Rebuild>
       </div>
     </DashCard>
   );
 }
 
-function AttentionRow({ item }: { item: WorkspaceAttentionItem }): JSX.Element {
+function AttentionList({ view, onRetry, retrying }: { view: ReturnType<typeof attentionView> | null; onRetry: () => void; retrying: ReadonlySignal<boolean> }): Child {
+  if (view === null) return <p class="cms-dash__placeholder">Reading the workspace…</p>;
+  return (
+    <>
+      {view.unavailable.length > 0 ? (
+        <SourcesUnavailable
+          sources={view.unavailable.map(({ source }) => source)}
+          sentence={(listed) => `${listed} could not be checked.`}
+          onRetry={onRetry}
+          retrying={retrying}
+        />
+      ) : null}
+      {view.rows.map((item) => (
+        <AttentionRow key={`${item.kind}:${item.href}:${item.id}`} item={item} />
+      ))}
+      {view.hidden > 0 ? (
+        <p class="cms-dash__placeholder">{`${view.hidden} more ${view.hidden === 1 ? "needs" : "need"} attention.`}</p>
+      ) : null}
+      {view.total === 0 && view.unavailable.length === 0 ? (
+        <EmptyState inline title="Nothing needs attention" description="Blocked Mappings, unassigned pages and incomplete Entries appear here." />
+      ) : null}
+    </>
+  );
+}
+
+function AttentionRow({ item }: { item: WorkspaceAttentionItem }): Child {
   const { icon: RowIcon, action } = attentionPresentation(item.kind);
   return (
     <div class="cms-dash-attention__row">
@@ -353,12 +385,12 @@ function SourcesUnavailable({
   /** Receives the sources as one English list, e.g. "Mappings and Content". */
   sentence: (listed: string) => string;
   onRetry: () => void;
-  retrying: boolean;
-}): JSX.Element {
+  retrying: ReadonlySignal<boolean>;
+}): Child {
   const names = sources.map((source) => SOURCE_LABELS[source]);
   const listed = names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
   return (
-    <Banner tone="warn" action={<Button size="sm" onClick={onRetry} busy={retrying}>Retry</Button>}>
+    <Banner tone="warn" action={<Button size="sm" on:click={() => onRetry()} busy={retrying}>Retry</Button>}>
       {sentence(listed)}
     </Banner>
   );
@@ -379,7 +411,7 @@ function StorageCard({
   hostedDemo: boolean;
   assetStatus: AssetStorageStatus;
   recentLastWrite: LastWrite | null;
-}): JSX.Element {
+}): Child {
   return (
     <DashCard title="Storage" titleId="cms-dash-storage">
       <div class="cms-dash-card__pad cms-dash-storage">
@@ -395,7 +427,7 @@ function StorageCard({
           ) : recentLastWrite.status === "none" ? (
             <span class="cms-dash-storage__value">No records yet</span>
           ) : (
-            <time class="cms-dash-storage__value" dateTime={recentLastWrite.at} title={formatLibraryTimestampFull(recentLastWrite.at)}>
+            <time class="cms-dash-storage__value" datetime={recentLastWrite.at} title={formatLibraryTimestampFull(recentLastWrite.at)}>
               {formatLibraryTimestamp(recentLastWrite.at)}
             </time>
           )}
@@ -405,7 +437,7 @@ function StorageCard({
   );
 }
 
-function StorageRow({ icon: RowIcon, label, children }: { icon: IconComponent; label: string; children: ComponentChildren }): JSX.Element {
+function StorageRow({ icon: RowIcon, label, children }: { icon: IconComponent; label: string; children: Child }): Child {
   return (
     <div class="cms-dash-storage__row">
       <RowIcon size="sm" class="cms-dash-storage__icon" />
@@ -425,14 +457,17 @@ function DashCard({
   title: string;
   titleId: string;
   note?: string;
-  count?: number;
-  children: ComponentChildren;
-}): JSX.Element {
+  /** Follows the card's records; the badge shows while it has a number. */
+  count?: ReadonlySignal<number | undefined>;
+  children: Child;
+}): Child {
   return (
     <section class="cms-dash-card" aria-labelledby={`${titleId}-title`}>
       <div class="cms-dash-card__head">
         <h2 id={`${titleId}-title`}>{title}</h2>
-        {count === undefined ? null : <CountBadge count={count} />}
+        {count === undefined ? null : (
+          <Show when={computed(() => count.value !== undefined)}>{() => <CountBadge count={computed(() => count.value ?? 0)} />}</Show>
+        )}
         {note ? <span class="cms-dash-card__note">{note}</span> : null}
       </div>
       {children}
