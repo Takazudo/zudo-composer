@@ -1,5 +1,6 @@
 // Visitor entry for static site builds; separate from the authoring application.
-import { render } from "preact";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { mountOwned } from "../../../src/runtime";
 import { build, project } from "virtual:site-static-project";
 import { activeComponentProvider } from "../../../src/features/composer/active-pack";
 import { SiteDelivery } from "../../../src/features/delivery/site-delivery";
@@ -13,9 +14,10 @@ if (!root) throw new Error("Missing #app mount point");
 
 const source: DeliverySourceContract = { kind: "static", componentProvider: activeComponentProvider, project, build };
 
-function mount(): void {
-  render(<SiteDelivery source={source} pathname={window.location.pathname} />, root!);
-}
+// One root for the document's life: in-place navigation moves the address
+// signal instead of re-rendering the page from scratch.
+const pathname = signal(window.location.pathname);
+const delivery = mountOwned(SiteDelivery, { source, pathname }, { parent: root, name: "SiteDelivery" });
+if (!delivery.handle) throw new Error(`Site delivery could not mount (${delivery.diagnostics.map(({ code }) => code).join(", ") || "no diagnostic"}).`);
 
-installVisitorNavigation({ routes: build.routes.map(({ pathname }) => pathname), basePath: "/", mount });
-mount();
+installVisitorNavigation({ routes: build.routes.map(({ pathname: route }) => route), basePath: "/", mount: () => { pathname.value = window.location.pathname; } });
