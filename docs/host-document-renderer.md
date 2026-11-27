@@ -66,7 +66,7 @@ shared Composition bytes retain their existing mutation guards.
 
 ### Host JSX runtime
 
-Set `hostDocument.jsxImportSource` to the host framework’s public JSX runtime prefix when its renderer imports TSX (for example, `@takazudo/zfb/zudo-react`). The default is `preact`. Composer evaluates this trusted server renderer in a separate module graph with the declared runtime, so the editor’s Preact preset and previously loaded component pack cannot rewrite or cache its component output. The configured runtime is covered by the attested configuration file in renderer identity. This does not change Composer’s own UI or component-pack runtime.
+Set `hostDocument.jsxImportSource` to the host framework’s public JSX runtime prefix when its renderer imports TSX. The default is `@takazudo/zfb/zudo-react`, the runtime Composer itself uses. Composer evaluates this trusted server renderer in a separate module graph with the declared runtime, so the editor’s graph and previously loaded component pack cannot rewrite or cache its component output. The configured runtime is covered by the attested configuration file in renderer identity. This does not change Composer’s own UI or component-pack runtime.
 
 ### Component hierarchy
 

@@ -16,6 +16,7 @@ import { devPrebundleIncludes } from "../../plugins/dev-prebundle.mjs";
 import { resolveImageEditorAliases } from "../../plugins/image-editor-aliases.mjs";
 import { resolveFsAllow } from "../../plugins/roots.mjs";
 import { resolveComponentPack } from "../../plugins/component-pack.mjs";
+import { zudoReactOxc } from "../../plugins/module-resolution.mjs";
 
 const FIXTURE_HOST = resolve(APP_ROOT, "fixtures/host");
 const BIN = resolve(APP_ROOT, "bin/zudo-composer.mjs");
@@ -141,19 +142,21 @@ describe("resolveComposerDevConfig", () => {
     const pack = resolveComponentPack(FIXTURE_HOST, "@zudo-composer/ui/composer-pack");
     expect(inlineConfig.optimizeDeps?.exclude).toEqual([pack.packageName, ...OPTIMIZE_DEPS_EXCLUDE]);
     expect(inlineConfig.optimizeDeps?.entries).toEqual([resolve(APP_ROOT, APP_ENTRY_MODULE)]);
-    // Pre-bundled at startup so the pack's own runtime deps and preact's
-    // dev-only injections don't trigger a runtime re-optimization (#703).
+    // Pre-bundled at startup so the pack's own runtime deps and every
+    // zudo-react entry don't trigger a runtime re-optimization (#703).
     expect(inlineConfig.optimizeDeps?.include).toEqual(
       devPrebundleIncludes({ workspaceRoot: FIXTURE_HOST, pack: "@zudo-composer/ui/composer-pack", exclude: OPTIMIZE_DEPS_EXCLUDE }),
     );
     // The pack's own directory is allowed too: it is outside the host root.
     expect(inlineConfig.server?.fs?.allow).toEqual([...resolveFsAllow(FIXTURE_HOST), pack.packageRoot]);
     expect(inlineConfig.resolve?.alias).toEqual(resolveImageEditorAliases());
-    expect(inlineConfig.resolve?.dedupe).toEqual(["preact"]);
+    expect(inlineConfig.resolve?.dedupe).toEqual(["@takazudo/zfb"]);
+    expect(inlineConfig.oxc).toEqual(zudoReactOxc());
     const names = inlineConfig.plugins?.flat().map((plugin) => (plugin as { name?: string } | undefined)?.name);
     expect(names).toContain("zudo-composer-app-html");
     expect(names).toContain("zudo-component-pack");
     expect(names).toContain("zudo-composer-host-styles");
+    expect(names).toContain("zudo-react-runtime-identity");
   });
 
   it("refuses a host whose configured pack cannot be resolved", async () => {
@@ -163,87 +166,80 @@ describe("resolveComposerDevConfig", () => {
   });
 });
 
-describe("the host Preact peer", () => {
-  it("shares one runtime and every public subpath across an external app graph and a host pack", async () => {
-    const directory = realpathSync(await mkdtemp(join(tmpdir(), "zudo-composer-preact-peer-")));
+describe("the host zudo-react peer", () => {
+  it("shares one runtime and every public zudo-react subpath across an external app graph and a host pack", async () => {
+    const directory = realpathSync(await mkdtemp(join(tmpdir(), "zudo-composer-zfb-peer-")));
     try {
       const hostRoot = join(directory, "host");
       const toolRoot = join(directory, "tool");
       const packRoot = join(directory, "pack");
-      const hostPreact = join(hostRoot, "node_modules/preact");
+      const hostZfb = join(hostRoot, "node_modules/@takazudo/zfb");
       const appEntry = join(toolRoot, "entry.js");
       const packEntry = join(packRoot, "pack.js");
-      const installedPreact = realpathSync(join(APP_ROOT, "node_modules/preact"));
-      const preactPackage = JSON.parse(await readFile(join(installedPreact, "package.json"), "utf8")) as {
-        exports: Record<string, string | { browser?: string }>;
-      };
+      const installedZfb = realpathSync(join(APP_ROOT, "node_modules/@takazudo/zfb"));
+      const zfbPackage = JSON.parse(await readFile(join(installedZfb, "package.json"), "utf8")) as { exports: Record<string, unknown> };
+      const subpaths = Object.keys(zfbPackage.exports).filter((subpath) => subpath === "./zudo-react" || subpath.startsWith("./zudo-react/"));
+      expect(subpaths.length).toBeGreaterThanOrEqual(6);
       await Promise.all([
-        mkdir(join(hostRoot, "node_modules"), { recursive: true }),
+        mkdir(join(hostRoot, "node_modules/@takazudo"), { recursive: true }),
         mkdir(toolRoot),
-        mkdir(join(packRoot, "node_modules"), { recursive: true }),
+        mkdir(join(packRoot, "node_modules/@takazudo"), { recursive: true }),
       ]);
       // These are two PHYSICAL copies, not two symlinks to one workspace
       // install. Without dedupe the app and pack really do load different
-      // Preact options/hooks singletons, even though their versions match.
-      await cp(installedPreact, hostPreact, { recursive: true });
+      // schedulers and scopes, even though their versions and brands match.
+      await cp(installedZfb, hostZfb, { recursive: true });
       await Promise.all([
         symlink(join(APP_ROOT, "node_modules"), join(toolRoot, "node_modules"), "dir"),
-        symlink(hostPreact, join(packRoot, "node_modules/preact"), "dir"),
+        symlink(hostZfb, join(packRoot, "node_modules/@takazudo/zfb"), "dir"),
         symlink(packRoot, join(hostRoot, "node_modules/peer-fixture-pack"), "dir"),
-        writeFile(join(hostRoot, "package.json"), JSON.stringify({ name: "peer-fixture-host", type: "module", dependencies: { preact: "^10.29.8" } })),
+        writeFile(join(hostRoot, "package.json"), JSON.stringify({ name: "peer-fixture-host", type: "module", dependencies: { "@takazudo/zfb": "7.2.0" } })),
         writeFile(join(toolRoot, "package.json"), JSON.stringify({ name: "peer-fixture-tool", type: "module" })),
-        writeFile(join(packRoot, "package.json"), JSON.stringify({ name: "peer-fixture-pack", type: "module", exports: { "./composer-pack": "./pack.js" }, peerDependencies: { preact: "^10.29.8" } })),
+        writeFile(join(packRoot, "package.json"), JSON.stringify({ name: "peer-fixture-pack", type: "module", exports: { "./composer-pack": "./pack.js" }, peerDependencies: { "@takazudo/zfb": "7.2.0" } })),
         writeFile(join(hostRoot, "zudo-composer.config.ts"), 'export default { pack: "peer-fixture-pack/composer-pack" };\n'),
         cp(join(APP_ROOT, "fixtures/self-host/components/components.tsx"), join(packRoot, "components.tsx")),
         writeFile(packEntry, `
-          import { h } from "preact";
-          import { useContext, useState } from "preact/hooks";
-          export { options } from "preact";
-          export { useState } from "preact/hooks";
+          import { getScope, h } from "@takazudo/zfb/zudo-react";
+          export { getScope, signal } from "@takazudo/zfb/zudo-react";
           export { Banner } from "./components.tsx";
-          export function HostConsumer({ context }) {
-            const [suffix] = useState("hooks");
-            return h("span", null, useContext(context) + ": " + suffix);
+          export function HostConsumer({ services }) {
+            getScope();
+            return h("span", null, services.label + ": scoped");
           }
         `),
         // Production virtual modules also re-export a host pack by absolute
         // path, crossing from the tool's graph into host-owned source.
         writeFile(appEntry, `
-          import { createContext, h, options } from "preact";
-          import { useState } from "preact/hooks";
-          import { renderToString } from "preact-render-to-string";
-          import { Banner, HostConsumer, options as packOptions, useState as packUseState } from ${JSON.stringify(packEntry)};
-          const context = createContext("unprovided default");
-          export const sharedRuntime = options === packOptions && useState === packUseState;
-          export const markup = renderToString(h(context.Provider, { value: "host peer" }, h(HostConsumer, { context })));
-          export const banner = renderToString(h(Banner, { headline: "Hook fixture" }));
+          import { getScope, h, signal } from "@takazudo/zfb/zudo-react";
+          import { renderToString } from "@takazudo/zfb/zudo-react/server";
+          import { Banner, HostConsumer, getScope as packGetScope, signal as packSignal } from ${JSON.stringify(packEntry)};
+          export const sharedRuntime = getScope === packGetScope && signal === packSignal;
+          export const markup = renderToString(h(HostConsumer, { services: { label: "host peer" } }));
+          export const banner = renderToString(h(Banner, { headline: "Scope fixture" }));
         `),
       ]);
-      expect(createRequire(appEntry).resolve("preact")).not.toBe(createRequire(packEntry).resolve("preact"));
+      expect(createRequire(appEntry).resolve("@takazudo/zfb/zudo-react")).not.toBe(createRequire(packEntry).resolve("@takazudo/zfb/zudo-react"));
       const { inlineConfig } = await resolveComposerDevConfig({ workspaceRoot: hostRoot });
-      // A tiny client bundle exercises Vite's real resolver and the actual
-      // Preact runtime without listening on a port or starting a browser.
+      // A tiny bundle exercises Vite's real resolver and the actual runtime
+      // without listening on a port or starting a browser.
       const result = await build({
         configFile: false,
         root: hostRoot,
         logLevel: "silent",
         resolve: inlineConfig.resolve,
-        oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
+        oxc: inlineConfig.oxc,
         plugins: [{
-          name: "preact-peer-resolution-proof",
+          name: "zudo-react-peer-resolution-proof",
           async buildStart() {
-            for (const [subpath, target] of Object.entries(preactPackage.exports)) {
-              const specifier = subpath === "." ? "preact" : `preact${subpath.slice(1)}`;
+            for (const subpath of subpaths) {
+              const specifier = `@takazudo/zfb${subpath.slice(1)}`;
               const appResolution = await this.resolve(specifier, appEntry);
               const packResolution = await this.resolve(specifier, packEntry);
               expect(appResolution?.id, specifier).toBe(packResolution?.id);
-              expect(appResolution?.id.startsWith(`${hostPreact}/`), specifier).toBe(true);
-              if (typeof target !== "string" && target.browser) {
-                expect(appResolution?.id, specifier).toBe(resolve(hostPreact, target.browser));
-              }
+              expect(appResolution?.id.startsWith(`${hostZfb}/`), specifier).toBe(true);
             }
-            // A real private file must stay behind Preact's export boundary.
-            await expect(this.resolve("preact/src/index.js", appEntry)).rejects.toThrow(/preact\/src\/index\.js/);
+            // A real private file must stay behind the package's export boundary.
+            await expect(this.resolve("@takazudo/zfb/dist/zudo-react/scope.js", appEntry)).rejects.toThrow(/scope\.js/);
           },
         }],
         build: {
@@ -256,10 +252,10 @@ describe("the host Preact peer", () => {
       const chunk = outputs.flatMap((output) => "output" in output ? output.output : []).find((output) => output.type === "chunk");
       expect(chunk).toBeDefined();
       const rendered: { sharedRuntime?: boolean; markup?: string; banner?: string } = {};
-      runInNewContext(chunk!.code, { exports: rendered });
+      runInNewContext(chunk!.code, { exports: rendered, AbortController, queueMicrotask, setTimeout, clearTimeout, console });
       expect(rendered.sharedRuntime).toBe(true);
-      expect(rendered.markup).toBe("<span>host peer: hooks</span>");
-      expect(rendered.banner).toMatch(/^<h1 id="[^"]+" class="self-host-banner">Hook fixture<\/h1>$/);
+      expect(rendered.markup).toBe("<span>host peer: scoped</span>");
+      expect(rendered.banner).toBe('<h1 class="self-host-banner">Scope fixture</h1>');
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

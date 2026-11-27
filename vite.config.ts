@@ -1,7 +1,6 @@
 import { resolveImageEditorAliases } from './plugins/image-editor-aliases.mjs';
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
-import preact from '@preact/preset-vite';
 import tailwindPlugin from './plugins/tailwind-plugin.mjs';
 import composerFileProviderPlugin from './plugins/composer-file-provider-plugin.mjs';
 import siteProjectSourcePlugin from './plugins/site-project-source-plugin.mjs';
@@ -13,6 +12,8 @@ import sitemapperDomainProvider from './plugins/sitemapper-domain-provider.mjs';
 import workspaceDomainProvider, { resolveWorkspaceRegistryRoot } from './plugins/workspace-domain-provider.mjs';
 import componentPackPlugin from './plugins/component-pack-plugin.mjs';
 import { devPrebundleIncludes } from './plugins/dev-prebundle.mjs';
+import { ZUDO_REACT_PACKAGE, zudoReactOxc } from './plugins/module-resolution.mjs';
+import zudoReactIdentityPlugin from './plugins/zudo-react-identity-plugin.mjs';
 import hostStylesPlugin from './plugins/host-styles-plugin.mjs';
 import entryGraphPlugin, { COMPOSER_PREVIEW_ENTRY_MODULE, SITE_PREVIEW_ENTRY_MODULE } from './plugins/entry-graph-plugin.mjs';
 import { APP_ROOT, readRootEnvironment, resolveAppWarmupFiles, resolveFsAllow, resolvePublicDir, resolveSiteProjectLocalRoot, resolveWatchIgnored } from './plugins/roots.mjs';
@@ -58,7 +59,10 @@ const assetsStoreRoot = readRootEnvironment(process.env.ZUDO_ASSETS_STORE_ROOT, 
   ?? domainRoot('assets');
 
 export default defineConfig({
-  resolve: { alias: resolveImageEditorAliases() },
+  resolve: { alias: resolveImageEditorAliases(), dedupe: [ZUDO_REACT_PACKAGE] },
+  oxc: zudoReactOxc(),
+  // zudo-react derives a root's identity from the mounted component's function name.
+  build: { rollupOptions: { output: { keepNames: true } } },
   publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicAssets),
   // The configured pack and zfb-md-wasm import their glue/wasm files with
   // Vite's `?url` query. Keep both dependency packages in Vite's normal module
@@ -67,8 +71,8 @@ export default defineConfig({
   // them on demand. The pack's name is derived, never spelled out — that is
   // what makes the themeset swap one config edit.
   // `include` pre-bundles at startup what the scanner otherwise only finds at
-  // runtime -- @preact/preset-vite's dev-only injections, compiled JSX's
-  // preact/jsx-runtime, and the excluded pack's own runtime dependencies (the
+  // runtime -- every zudo-react entry compiled JSX and the client mount reach
+  // (all of them, never a subset), and the excluded pack's own runtime dependencies (the
   // pack is linked workspace source, not scanned node_modules) -- so a cold
   // dev server doesn't pay for a "new dependencies found" reload (#703).
   optimizeDeps: {
@@ -97,6 +101,7 @@ export default defineConfig({
     warmup: { clientFiles: resolveAppWarmupFiles() },
   },
   plugins: [
+    zudoReactIdentityPlugin(),
     componentPack,
     hostStylesPlugin({
       stylesPath: composerConfig.paths.styles,
@@ -128,7 +133,6 @@ export default defineConfig({
       ],
     }),
     tailwindPlugin(),
-    preact(),
     // Records what the composer canvas preview and the site-preview document
     // each reach, so `pnpm styles:isolation` can prove editor CSS never lands
     // in either — see #724.

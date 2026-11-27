@@ -1,6 +1,6 @@
 import { configDefaults, defineConfig } from 'vitest/config';
-import preact from '@preact/preset-vite';
 import { fileURLToPath } from 'node:url';
+import { ZUDO_REACT_PACKAGE, zudoReactOxc } from './plugins/module-resolution.mjs';
 
 export default defineConfig({
   test: {
@@ -10,7 +10,7 @@ export default defineConfig({
         // `.tsx`. Without this the default JSX runtime would be React's — the
         // same statement `server/module-evaluator.mjs` has to make for the
         // installed lane.
-        oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } },
+        oxc: zudoReactOxc(),
         test: {
           name: 'server',
           // Must stay as wide as the app project's `server/**` exclusion, or a server spec
@@ -32,8 +32,9 @@ export default defineConfig({
         },
       },
       {
-        plugins: [preact()],
+        oxc: zudoReactOxc(),
         resolve: {
+          dedupe: [ZUDO_REACT_PACKAGE],
           alias: {
             'virtual:zudo-composer-pack': fileURLToPath(new URL('./src/test/composer-pack.ts', import.meta.url)),
             'virtual:zudo-composer-host-styles': fileURLToPath(new URL('./src/test/host-styles.css', import.meta.url)),
@@ -76,7 +77,7 @@ export default defineConfig({
         // which a pack must never depend on. Their specs spawn installed
         // `zudo-composer` commands and import the packs' `.tsx` sidecars, hence
         // the server project's JSX runtime and timeout.
-        oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } },
+        oxc: zudoReactOxc(),
         test: {
           name: 'demos',
           include: ['packages/demo-*/**/*.test.?(c|m)[jt]s?(x)'],
@@ -86,9 +87,9 @@ export default defineConfig({
         },
       },
       {
-        // R0 prototype (#1003): zudo-react runtime proofs. JSX compiles to the
-        // owned runtime only here; no Preact plugin and no app aliases.
-        oxc: { jsx: { runtime: 'automatic', importSource: '@takazudo/zfb/zudo-react' } },
+        // R0 (#1003): zudo-react runtime proofs, kept as executable evidence
+        // for the migration; none of the app project's setup or aliases.
+        oxc: zudoReactOxc(),
         test: {
           name: 'zudo-react-proof',
           include: ['tests/zudo-react-proof/**/*.test.?(c|m)[jt]s?(x)'],
@@ -102,7 +103,7 @@ export default defineConfig({
         // outside it under tests/ui-pack/ (#799) rather than colocated, with
         // none of the app project's `virtual:*` aliases, which a pack must
         // never depend on.
-        oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } },
+        oxc: zudoReactOxc(),
         test: {
           name: 'ui',
           // Must stay as wide as the app project's `tests/ui-pack/**` exclusion, or a

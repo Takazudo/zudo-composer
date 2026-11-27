@@ -31,8 +31,9 @@ const dependency = {
   "node_modules/dep/style.css": ".dep {}\n",
   "node_modules/@scope/lib/package.json": JSON.stringify({ name: "@scope/lib", version: "0.4.0", exports: "./index.js" }),
   "node_modules/@scope/lib/index.js": "export const lib = 1;\n",
-  "node_modules/preact/package.json": JSON.stringify({ name: "preact", version: "10.0.0", exports: { "./jsx-runtime": "./jsx-runtime.js" } }),
-  "node_modules/preact/jsx-runtime.js": "export const jsx = () => null;\n",
+  "node_modules/@takazudo/zfb/package.json": JSON.stringify({ name: "@takazudo/zfb", version: "7.2.0", exports: { "./zudo-react": "./zudo-react.js", "./zudo-react/jsx-runtime": "./jsx-runtime.js" } }),
+  "node_modules/@takazudo/zfb/zudo-react.js": "export const getScope = () => null;\n",
+  "node_modules/@takazudo/zfb/jsx-runtime.js": "export const jsx = () => null;\n",
 };
 
 describe("collectPackSourceGraph", () => {
@@ -104,9 +105,9 @@ describe("collectPackSourceGraph", () => {
     ]);
     expect(graph.dependencies).toEqual([
       { name: "@scope/lib", version: "0.4.0" },
-      { name: "dep", version: "1.2.3" },
       // The automatic JSX runtime import is part of the loaded graph.
-      { name: "preact", version: "10.0.0" },
+      { name: "@takazudo/zfb", version: "7.2.0" },
+      { name: "dep", version: "1.2.3" },
     ]);
   });
 
@@ -293,6 +294,6 @@ describe("collectPackSourceGraph", () => {
       extraRoots: [join(root, "styles/base.css")],
     });
     expect(graph.files).toEqual(["components/components.tsx", "components/pack.ts", "styles/base.css"]);
-    expect(graph.dependencies.map((entry) => entry.name)).toEqual(["@zudo-composer/component-contract", "preact", "tailwindcss"]);
+    expect(graph.dependencies.map((entry) => entry.name)).toEqual(["@takazudo/zfb", "@zudo-composer/component-contract", "tailwindcss"]);
   });
 });

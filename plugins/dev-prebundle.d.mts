@@ -1,4 +1,4 @@
-export declare const PREACT_DEV_ENTRIES: readonly string[];
+export declare const ZUDO_REACT_DEV_ENTRIES: readonly string[];
 
 export declare function componentPackNestedIncludes(options: {
   workspaceRoot: string;

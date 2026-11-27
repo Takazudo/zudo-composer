@@ -26,7 +26,7 @@ export async function buildDemoEditor(hostDir, deps = {}) {
       // Pin production explicitly: an editor artifact is only ever a
       // production build, so an operator shell (or any caller) that already
       // exports NODE_ENV must not reach the child through ...process.env and
-      // silently ship development Preact and dev-JSX source metadata.
+      // silently ship the dev JSX runtime and its source metadata.
       env: { ...process.env, NODE_ENV: "production", ZUDO_DEMO_EDITOR_HOST: host },
       encoding: "utf8",
       maxBuffer: 16 * 1024 * 1024,

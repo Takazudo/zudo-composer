@@ -2,7 +2,6 @@ import { defineConfig, normalizePath, type InlineConfig, type Plugin } from "vit
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
-import preact from "@preact/preset-vite";
 import tailwindPlugin from "./plugins/tailwind-plugin.mjs";
 import componentPackPlugin from "./plugins/component-pack-plugin.mjs";
 import { loadComponentPack } from "./plugins/component-pack.mjs";
@@ -11,7 +10,8 @@ import hostStylesPlugin from "./plugins/host-styles-plugin.mjs";
 import entryGraphPlugin, { COMPOSER_PREVIEW_ENTRY_MODULE, SITE_PREVIEW_ENTRY_MODULE } from "./plugins/entry-graph-plugin.mjs";
 import { APP_HTML_PATH, rewriteAppEntry } from "./plugins/composer-app-html.mjs";
 import { APP_ROOT, resolveFsAllow, resolveWorkspaceRoot } from "./plugins/roots.mjs";
-import { resolveComposerModules } from "./plugins/module-resolution.mjs";
+import { resolveComposerModules, zudoReactOxc } from "./plugins/module-resolution.mjs";
+import zudoReactIdentityPlugin from "./plugins/zudo-react-identity-plugin.mjs";
 import { loadHostConfig } from "./server/host-context.mjs";
 import { createModuleEvaluator } from "./server/module-evaluator.mjs";
 import { validateSiteProject } from "./src/site-project/model/validation";
@@ -48,8 +48,8 @@ export async function resolveDemoEditorConfig(hostDir: string): Promise<InlineCo
     name: "explicit-demo-editor",
     enforce: "pre",
     configResolved(resolved) {
-      // A leaked development NODE_ENV ships development-mode Preact (via its
-      // NODE_ENV define) as well as dev-mode JSX __source metadata, so guard
+      // A leaked development NODE_ENV ships dev-mode JSX (jsxDEV from
+      // jsx-dev-runtime) with __source metadata, so guard
       // on Vite's own isProduction rather than trusting the caller's env
       // directly. `mode: "production"` would not catch this: isProduction
       // derives from NODE_ENV only.
@@ -91,6 +91,7 @@ export async function resolveDemoEditorConfig(hostDir: string): Promise<InlineCo
     base: "/",
     publicDir: false,
     resolve: resolveComposerModules(),
+    oxc: zudoReactOxc(),
     // Pre-bundles at startup what the scanner would otherwise only find at
     // runtime, forcing a reload — see vite.config.ts for the full rationale.
     optimizeDeps: {
@@ -99,13 +100,13 @@ export async function resolveDemoEditorConfig(hostDir: string): Promise<InlineCo
       entries: [resolve(APP_ROOT, DEMO_EDITOR_ENTRY)],
     },
     server: { fs: { allow: [...resolveFsAllow(hostRoot), componentPack.identity.packageRoot] } },
-    build: { outDir, emptyOutDir: true, rollupOptions: { input: APP_HTML_PATH } },
+    build: { outDir, emptyOutDir: true, rollupOptions: { input: APP_HTML_PATH, output: { keepNames: true } } },
     plugins: [
       demo,
+      zudoReactIdentityPlugin(),
       componentPack,
       hostStylesPlugin({ stylesPath: paths.styles, styles: settings.styles, configPath }),
       tailwindPlugin(),
-      preact(),
       // See vite.config.ts: the same isolation-gate record, built from this
       // host's own component pack and stylesheet.
       entryGraphPlugin({ startModules: [COMPOSER_PREVIEW_ENTRY_MODULE, SITE_PREVIEW_ENTRY_MODULE] }),
