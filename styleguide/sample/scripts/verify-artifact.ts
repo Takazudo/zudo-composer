@@ -7,11 +7,11 @@ assert(preview.includes("/_sample-preview/preview.js"));
 assert(preview.includes("/_sample-preview/main.css"));
 assert(
   !preview.includes("/assets/"),
-  "The Preact document must not receive zfb shell CSS/islands",
+  "The zudo-react preview document must not receive zfb shell CSS/islands",
 );
 assert(
   !preview.includes("data-zfb-"),
-  "The static Preact document must not contain shell hydration markers",
+  "The static zudo-react preview document must not contain shell hydration markers",
 );
 assert.equal(storyDescriptors.length, 12);
 assert.deepEqual(
@@ -51,10 +51,10 @@ assert.deepEqual(
   await readFile(
     "node_modules/@takazudo/zfb-md-wasm/dist/wasm-render/zfb_md_wasm_render_bg.wasm",
   ),
-  "The emitted Preact renderer WASM must be exactly the installed 6.0.1 binary",
+  "The emitted preview renderer WASM must be exactly the installed 6.0.1 binary",
 );
 const tokens = await readFile("dist/tokens/index.html", "utf8");
 assert(tokens.includes("color-bg"), "Token dashboard is not populated");
 console.log(
-  "Artifact boundary passed: 12 components, 71 variants, source/workbench, real thumbnails, tokens, isolated Preact document, Git UI md-wasm6.0.1.",
+  "Artifact boundary passed: 12 components, 71 variants, source/workbench, real thumbnails, tokens, isolated zudo-react preview document, Git UI md-wasm6.0.1.",
 );

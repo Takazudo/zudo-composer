@@ -64,7 +64,7 @@ try {
     });
   }
   assert.deepEqual(errors, [], "Thumbnails must be actual successful browser renders");
-  console.log(`Captured ${storyDescriptors.length} actual settled Preact WithContent iframe thumbnails.`);
+  console.log(`Captured ${storyDescriptors.length} actual settled zudo-react WithContent iframe thumbnails.`);
 } finally {
   await browser?.close();
   await server.close();

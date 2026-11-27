@@ -132,7 +132,7 @@ JSON.stringify({ validated, sourceBySlug }, (_key, value) => {
 await mkdir("src/styleguide", { recursive: true });
 await writeFile(
   "src/styleguide/descriptors.ts",
-  `// Generated from the actual Preact story corpus.
+  `// Generated from the actual zudo-react story corpus.
 import type { StoryDescriptor } from "@takazudo/zudo-sg/registry";
 export const storyDescriptors = ${JSON.stringify(validated, null, 2)} satisfies StoryDescriptor[];
 `,
@@ -146,7 +146,7 @@ export const sourceBySlug: Record<string, CodePanelVariant[]> = ${JSON.stringify
 );
 await writeFile(
   "preview/loaders.ts",
-  `// Generated identity map; only the Preact pipeline imports story modules.
+  `// Generated identity map; only the zudo-react preview pipeline imports story modules.
 export const loaders = {${loaders.join(",\n")}};
 `,
 );

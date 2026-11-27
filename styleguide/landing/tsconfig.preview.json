@@ -9,7 +9,7 @@
     "noEmit": true,
     "strict": true,
     "jsx": "react-jsx",
-    "jsxImportSource": "preact",
+    "jsxImportSource": "@takazudo/zfb/zudo-react",
     "skipLibCheck": false,
     "types": [
       "vite/client",
@@ -19,7 +19,15 @@
     "verbatimModuleSyntax": true,
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "paths": {
+      "@takazudo/zfb/zudo-react": [
+        "./node_modules/@takazudo/zfb/dist/zudo-react/index"
+      ],
+      "@takazudo/zfb/zudo-react/*": [
+        "./node_modules/@takazudo/zfb/dist/zudo-react/*"
+      ]
+    }
   },
   "include": [
     "preview",

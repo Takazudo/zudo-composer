@@ -8,8 +8,8 @@ const preview = await readFile(`dist/${previewDocumentPath}`, "utf8");
 assert(preview.includes("/_landing-preview/preview.js"));
 assert(preview.includes("/_landing-preview/main.css"));
 assert(preview.includes("data-sg-preview-doc"));
-assert(!preview.includes("/assets/"), "Preact document must not receive shell assets");
-assert(!preview.includes("data-zfb-"), "Preact document must not receive shell hydration");
+assert(!preview.includes("/assets/"), "The zudo-react preview document must not receive shell assets");
+assert(!preview.includes("data-zfb-"), "The zudo-react preview document must not receive shell hydration");
 assert.equal(storyDescriptors.length, 30);
 assert.equal(storyDescriptors.reduce((n, item) => n + item.variants.length, 0), 90);
 assert.deepEqual(
@@ -36,4 +36,4 @@ const previewCss = await readFile("dist/_landing-preview/main.css", "utf8");
 assert(previewCss.includes("--color-land-bg"), "Real pack CSS must ship separately");
 const manifest = JSON.parse(await readFile("package.json", "utf8"));
 assert(!manifest.dependencies?.["@zudo-composer/ui"], "Demo catalog must not depend on Sample UI");
-console.log("Artifact boundary passed: 30 components, 90 variants, source/workbench, actual thumbnails, tokens and isolated Preact pack CSS.");
+console.log("Artifact boundary passed: 30 components, 90 variants, source/workbench, actual thumbnails, tokens and isolated zudo-react pack CSS.");
