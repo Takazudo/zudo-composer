@@ -1,32 +1,36 @@
 import "./cleanup";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/preact";
-import { ChromeContext, createChromeStore, useChrome } from "../../../app/chrome-context";
-import type { EditorStatus } from "../../../app/chrome-context";
+import { computed, getScope, Show, signal } from "@takazudo/zfb/zudo-react";
+import { fireEvent, render, screen, settle } from "../../../test/render";
+import { chromeSnapshot, createChromeStore } from "../../../app/chrome-context";
+import type { ChromeStore, EditorStatus } from "../../../app/chrome-context";
 import { Button } from "../../ui/button";
 import { EditorBody } from "../editor-body";
 import { EditorChrome } from "../editor-chrome";
+import { createEditorChrome } from "../editor-chrome-controller";
 import { RecordTitle } from "../record-title";
 
-function ChromeProbe() {
-  const { editorStatus } = useChrome();
+function ChromeProbe({ store }: { store: ChromeStore }) {
+  const snapshot = chromeSnapshot(getScope(), store);
+  const hasRetry = computed(() => snapshot.value.editorStatus?.onRetry !== undefined);
   return (
     <div>
-      <p data-testid="status">{editorStatus ? editorStatus.state : "none"}</p>
-      {editorStatus?.onRetry ? <button type="button" onClick={editorStatus.onRetry}>Retry</button> : null}
+      <p data-testid="status">{computed(() => snapshot.value.editorStatus?.state ?? "none")}</p>
+      <Show when={hasRetry}>{() => <button type="button" on:click={() => snapshot.value.editorStatus?.onRetry?.()}>Retry</button>}</Show>
     </div>
   );
 }
 
 function withChrome(status: EditorStatus | null, dirty = false) {
   const store = createChromeStore();
+  const chrome = createEditorChrome({ editorKey: "composer" });
   return render(
-    <ChromeContext.Provider value={store}>
-      <ChromeProbe />
-      <EditorChrome editorKey="composer" status={status} dirty={dirty}>
-        <EditorBody nav={<p>Structure</p>} main={<p>Canvas</p>} inspector={<p>Inspect</p>} />
+    <>
+      <ChromeProbe store={store} />
+      <EditorChrome chrome={chrome} appChrome={store} status={status} dirty={dirty}>
+        <EditorBody chrome={chrome} nav={<p>Structure</p>} main={<p>Canvas</p>} inspector={<p>Inspect</p>} />
       </EditorChrome>
-    </ChromeContext.Provider>,
+    </>,
   );
 }
 
@@ -40,7 +44,7 @@ beforeEach(() => {
 });
 
 describe("EditorChrome toolbar", () => {
-  it("renders the back link, the record name, and the two action slots", () => {
+  it("renders the back link, the record name, and the two action slots", async () => {
     render(
       <EditorChrome
         editorKey="composer"
@@ -59,7 +63,7 @@ describe("EditorChrome toolbar", () => {
     expect(screen.getByRole("button", { name: "Export JSX" })).toBeInTheDocument();
   });
 
-  it("omits every optional slot when the editor has nothing to put in it", () => {
+  it("omits every optional slot when the editor has nothing to put in it", async () => {
     render(<EditorChrome editorKey="composer"><p>body</p></EditorChrome>);
 
     expect(screen.queryByRole("link")).toBeNull();
@@ -69,7 +73,7 @@ describe("EditorChrome toolbar", () => {
 });
 
 describe("EditorChrome pane switch", () => {
-  it("names the three panes as the editor calls them and starts on the main one", () => {
+  it("names the three panes as the editor calls them and starts on the main one", async () => {
     render(
       <EditorChrome editorKey="composer" paneLabels={{ nav: "Structure", main: "Canvas", insp: "Inspect" }}>
         <p>body</p>
@@ -81,20 +85,22 @@ describe("EditorChrome pane switch", () => {
     expect(screen.getByRole("radio", { name: "Canvas", checked: true })).toBeInTheDocument();
   });
 
-  it("switches which region the narrow layout shows", () => {
+  it("switches which region the narrow layout shows", async () => {
+    const chrome = createEditorChrome({ editorKey: "composer" });
     render(
-      <EditorChrome editorKey="composer" paneLabels={{ nav: "Structure", main: "Canvas", insp: "Inspect" }}>
-        <EditorBody nav={<p>Structure</p>} main={<p>Canvas</p>} inspector={<p>Inspect</p>} />
+      <EditorChrome chrome={chrome} paneLabels={{ nav: "Structure", main: "Canvas", insp: "Inspect" }}>
+        <EditorBody chrome={chrome} nav={<p>Structure</p>} main={<p>Canvas</p>} inspector={<p>Inspect</p>} />
       </EditorChrome>,
     );
 
     fireEvent.click(screen.getByRole("radio", { name: "Structure" }));
+    await settle();
 
     expect(document.querySelector('[data-pane="nav"]')).toHaveAttribute("data-pane-active", "true");
     expect(document.querySelector('[data-pane="main"]')).toHaveAttribute("data-pane-active", "false");
   });
 
-  it("has nothing to switch when the editor is a single pane", () => {
+  it("has nothing to switch when the editor is a single pane", async () => {
     render(
       <EditorChrome editorKey="content" paneLabels={{ main: "Fields" }}>
         <p>body</p>
@@ -104,20 +110,20 @@ describe("EditorChrome pane switch", () => {
     expect(screen.queryByRole("radiogroup")).toBeNull();
   });
 
-  it("lets the owning route drive the selection", () => {
+  it("lets the owning route drive the selection", async () => {
     const onActivePaneChange = vi.fn();
+    const chrome = createEditorChrome({ editorKey: "composer", activePane: "main", onActivePaneChange });
     render(
       <EditorChrome
-        editorKey="composer"
-        activePane="main"
-        onActivePaneChange={onActivePaneChange}
+        chrome={chrome}
         paneLabels={{ nav: "Structure", main: "Canvas", insp: "Inspect" }}
       >
-        <EditorBody nav={<p>Structure</p>} main={<p>Canvas</p>} inspector={<p>Inspect</p>} />
+        <EditorBody chrome={chrome} nav={<p>Structure</p>} main={<p>Canvas</p>} inspector={<p>Inspect</p>} />
       </EditorChrome>,
     );
 
     fireEvent.click(screen.getByRole("radio", { name: "Structure" }));
+    await settle();
 
     expect(onActivePaneChange).toHaveBeenCalledExactlyOnceWith("nav");
     expect(document.querySelector('[data-pane="main"]')).toHaveAttribute("data-pane-active", "true");
@@ -125,16 +131,19 @@ describe("EditorChrome pane switch", () => {
 });
 
 describe("EditorChrome save state", () => {
-  function StatusHarness({ status, open = true }: { status: EditorStatus | null; open?: boolean }) {
+  function StatusHarness({ status, open = true }: { status: EditorStatus | null | ReturnType<typeof signal<EditorStatus | null>>; open?: boolean | ReturnType<typeof signal<boolean>> }) {
+    const shown = typeof open === "boolean" ? signal(open) : open;
     return (
-      <ChromeContext.Provider value={store}>
-        <ChromeProbe />
-        {open ? (
-          <EditorChrome editorKey="composer" status={status}>
-            <p>body</p>
-          </EditorChrome>
-        ) : null}
-      </ChromeContext.Provider>
+      <>
+        <ChromeProbe store={store} />
+        <Show when={shown}>
+          {() => (
+            <EditorChrome editorKey="composer" appChrome={store} status={status}>
+              <p>body</p>
+            </EditorChrome>
+          )}
+        </Show>
+      </>
     );
   }
 
@@ -143,47 +152,59 @@ describe("EditorChrome save state", () => {
     store = createChromeStore();
   });
 
-  it("publishes the editor's save state to the app chrome, and follows it", () => {
-    const { rerender } = render(<StatusHarness status={{ state: "unsaved" }} />);
+  it("publishes the editor's save state to the app chrome, and follows it", async () => {
+    const status = signal<EditorStatus | null>({ state: "unsaved" });
+    render(<StatusHarness status={status} />);
+    await settle();
     expect(screen.getByTestId("status")).toHaveTextContent("unsaved");
 
-    rerender(<StatusHarness status={{ state: "saving" }} />);
+    status.value = { state: "saving" };
+    await settle();
     expect(screen.getByTestId("status")).toHaveTextContent("saving");
 
-    rerender(<StatusHarness status={{ state: "saved" }} />);
+    status.value = { state: "saved" };
+    await settle();
     expect(screen.getByTestId("status")).toHaveTextContent("saved");
   });
 
-  it("publishes nothing for an editor that has no save state to report", () => {
+  it("publishes nothing for an editor that has no save state to report", async () => {
     render(<StatusHarness status={null} />);
+    await settle();
     expect(screen.getByTestId("status")).toHaveTextContent("none");
   });
 
-  it("hands the chrome a retry the failed editor can act on", () => {
+  it("hands the chrome a retry the failed editor can act on", async () => {
     const onRetry = vi.fn();
     render(<StatusHarness status={{ state: "failed", detail: "Network error", onRetry }} />);
+    await settle();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await settle();
 
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
-  it("withdraws the status when the editor unmounts", () => {
-    const { rerender } = render(<StatusHarness status={{ state: "unsaved" }} />);
+  it("withdraws the status when the editor unmounts", async () => {
+    const open = signal(true);
+    render(<StatusHarness status={{ state: "unsaved" }} open={open} />);
+    await settle();
     expect(screen.getByTestId("status")).toHaveTextContent("unsaved");
 
-    rerender(<StatusHarness status={{ state: "unsaved" }} open={false} />);
+    open.value = false;
+    await settle();
     expect(screen.getByTestId("status")).toHaveTextContent("none");
   });
 });
 
 describe("EditorChrome unload guard", () => {
-  it("guards the unload only while the record is dirty", () => {
+  it("guards the unload only while the record is dirty", async () => {
     const { unmount } = withChrome({ state: "saved" });
+    await settle();
     expect(unload()).toBe(false);
     unmount();
 
     withChrome({ state: "unsaved" }, true);
+    await settle();
     expect(unload()).toBe(true);
   });
 });

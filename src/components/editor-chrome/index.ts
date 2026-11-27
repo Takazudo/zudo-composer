@@ -8,16 +8,18 @@
  * Typical shape:
  *
  * ```tsx
+ * const chrome = createEditorChrome({ editorKey: "composer" });
  * <EditorChrome
- *   editorKey="composer"
+ *   chrome={chrome}
+ *   appChrome={services.chrome}
  *   back={{ href: "/composer", label: "Back to Compositions" }}
  *   title={<RecordTitle value={name} onCommit={rename} label="Composition name" />}
- *   status={{ state: "unsaved" }}
- *   dirty={dirty}
+ *   status={status}            // a signal of EditorStatus | null
+ *   dirty={dirty}              // a signal of boolean
  *   paneLabels={{ nav: "Structure", main: "Canvas", insp: "Inspect" }}
  *   right={<Button variant="primary">Save</Button>}
  * >
- *   <EditorBody nav={<StructurePane />} main={<Canvas />} inspector={<Inspector />} />
+ *   <EditorBody chrome={chrome} nav={<StructurePane />} main={<Canvas />} inspector={<Inspector />} />
  * </EditorChrome>
  * ```
  */
@@ -32,10 +34,16 @@ export type { EditorBodyProps, RailCollapseButtonProps } from "./editor-body";
 export { RecordTitle } from "./record-title";
 export type { RecordTitleProps } from "./record-title";
 
-export { useBeforeUnloadGuard } from "./use-before-unload-guard";
+export { guardBeforeUnload } from "./use-before-unload-guard";
 
-export { EDITOR_PANES, EditorChromeContext, EditorRailsContext, useEditorChrome, useEditorRails } from "./editor-chrome-context";
-export type { EditorChromeContextValue, EditorPane, EditorRailsContextValue } from "./editor-chrome-context";
+export { createEditorChrome, createEditorRails, EDITOR_PANES } from "./editor-chrome-controller";
+export type {
+  EditorChromeController,
+  EditorChromeOptions,
+  EditorPane,
+  EditorRailsController,
+  EditorRailsOptions,
+} from "./editor-chrome-controller";
 
 export {
   CSS_VAR_INSP_W,

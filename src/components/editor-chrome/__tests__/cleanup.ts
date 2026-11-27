@@ -1,6 +1,3 @@
-// The shared vitest config does not enable globals, so @testing-library/preact
-// cannot register its own auto-cleanup. Every suite in this folder imports this.
-import { cleanup } from "@testing-library/preact";
-import { afterEach } from "vitest";
-
-afterEach(cleanup);
+// Every suite in this folder imports this; the shared render helper registers
+// its own cleanup, so importing it is enough.
+import "../../../test/render";
