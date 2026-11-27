@@ -1,7 +1,8 @@
-// Deterministic Preact JSX generator.
+// Deterministic zudo-react JSX generator.
 //
 // Turns a Composition document + serializable manifest into a single, stable
-// Preact JSX module. Determinism guarantees:
+// JSX module for the `@takazudo/zfb/zudo-react` runtime: HTML attribute
+// spelling and `on:<event>` native listeners. Determinism guarantees:
 //
 //  - imports are collected across the whole tree and emitted in a stable
 //    (module, export-name) order, with collision-safe local aliases — including
@@ -221,7 +222,7 @@ function toIdentifier(name: string, fallback: string): string {
 }
 
 /**
- * Generate a deterministic Preact JSX module. See the file header for the full
+ * Generate a deterministic zudo-react JSX module. See the file header for the full
  * determinism/escaping contract.
  */
 export function generateJsx(
@@ -292,7 +293,7 @@ export function generateJsx(
         if ("markdown" in part) return part.markdown.trim() ? renderNode({ ...node, props: { ...node.props, [markdownProp]: part.markdown } }, true) : [];
         if (!part.block.resolved) return ['<span role="status">Download unavailable</span>'];
         hasDownloads = true;
-        return [`<a onClick={(event) => { void ${downloadHandlerName}(event, ${ASSET_MAX_BYTE_LENGTH}); }} ${renderScalarAttr("aria-label", assetDownloadLabel(part.block))} ${renderScalarAttr("href", part.block.resolved.url)} ${renderScalarAttr("download", part.block.resolved.fileName)}>{${JSON.stringify(assetDownloadLabel(part.block))}}</a>`];
+        return [`<a on:click={(event) => { void ${downloadHandlerName}(event, ${ASSET_MAX_BYTE_LENGTH}); }} ${renderScalarAttr("aria-label", assetDownloadLabel(part.block))} ${renderScalarAttr("href", part.block.resolved.url)} ${renderScalarAttr("download", part.block.resolved.fileName)}>{${JSON.stringify(assetDownloadLabel(part.block))}}</a>`];
       }), 2), "</>"];
     }
 
@@ -412,7 +413,7 @@ export function generateJsx(
     ...(linkedOutlet
       ? [
           "export type CompositionOutlets = {",
-          `  ${JSON.stringify(linkedOutlet.id)}?: import("preact").ComponentChildren;`,
+          `  ${JSON.stringify(linkedOutlet.id)}?: import("@takazudo/zfb/zudo-react").Child;`,
           "};",
           "",
         ]

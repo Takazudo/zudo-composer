@@ -4,14 +4,14 @@ import { createComponentCatalog } from "../../model/types";
 import { assetDownloadMarkdown } from "../../../assets/integration/download";
 import { assetVersionUrl } from "../../../assets/model";
 // Proves the JSX generator emits code that PARSES and TYPECHECKS as real
-// Preact JSX with its emitted imports — including the required multiline +
+// zudo-react JSX with its emitted imports — including the required multiline +
 // quote-bearing string prop (the bug class the escaping contract prevents).
 //
 // The generated module and a set of stub component modules (derived from the
 // fixture manifest) are typechecked in-memory via the TypeScript compiler API:
 // virtual files for the generated code + stubs, real on-disk resolution for
-// `preact` / `preact/jsx-runtime`. Zero pre-emit diagnostics == the generated
-// JSX is well-formed Preact JSX whose imports resolve and whose props match the
+// `@takazudo/zfb/zudo-react` and its `/jsx-runtime`. Zero pre-emit diagnostics == the generated
+// JSX is well-formed zudo-react JSX whose imports resolve and whose props match the
 // component signatures.
 
 import { describe, expect, it } from "vitest";
@@ -33,12 +33,12 @@ function sanitize(spec: string): string {
 function stubFor(entry: ComponentDefinition): string {
   const props = new Map<string, string>();
   for (const f of entry.fields) {
-    if (f.prop === "children") props.set("children", "ComponentChildren");
+    if (f.prop === "children") props.set("children", "Child");
     else props.set(f.prop, f.schema.type === "number" ? "number" : f.schema.type === "boolean" ? "boolean" : "string");
   }
   for (const slot of entry.slots) {
-    if (slot.prop === "children") props.set("children", "ComponentChildren");
-    else props.set(slot.prop, "ComponentChildren");
+    if (slot.prop === "children") props.set("children", "Child");
+    else props.set(slot.prop, "Child");
   }
   const propLines = [...props.entries()].map(([k, t]) => `${k}?: ${t};`).join(" ");
   const exportName = entry.source.exportName;
@@ -46,14 +46,14 @@ function stubFor(entry: ComponentDefinition): string {
     entry.source.exportKind === "default"
       ? `export default function ${exportName}(props: Props): any { return props ? null : null; }`
       : `export function ${exportName}(props: Props): any { return props ? null : null; }`;
-  return `import type { ComponentChildren } from "preact";\ntype Props = { ${propLines} };\n${decl}\n`;
+  return `import type { Child } from "@takazudo/zfb/zudo-react";\ntype Props = { ${propLines} };\n${decl}\n`;
 }
 
 /** Typecheck the generated code + stubs in-memory; return diagnostic messages. */
 function typecheckGenerated(generatedCode: string, entries: readonly ComponentDefinition[]): string[] {
   const options: ts.CompilerOptions = {
     jsx: ts.JsxEmit.ReactJSX,
-    jsxImportSource: "preact",
+    jsxImportSource: "@takazudo/zfb/zudo-react",
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     target: ts.ScriptTarget.ESNext,
@@ -157,14 +157,17 @@ function comprehensiveDocument() {
   };
 }
 
-describe("generated fixture parses + typechecks as Preact JSX", () => {
-  it("typechecks the emitted native download handler under strict DOM and Preact types", async () => {
+describe("generated fixture parses + typechecks as zudo-react JSX", () => {
+  it("typechecks the emitted native download handler under strict DOM and zudo-react types", async () => {
     const definition: ComponentDefinition = { ...fixtureEntries[0]!, id: "download-prose", defaults: { markdown: "" }, fields: [{ prop: "markdown", label: "Markdown", schema: { type: "string" }, editor: { kind: "text", mode: "markdown-source" } }], slots: [] };
     const manifest = createComponentCatalog({ kind: "zudo-composer/component-pack", contractVersion: 2, packId: "download-test", packVersion: "1", components: [definition] });
     const markdown = assetDownloadMarkdown({ kind: "download", asset: { providerId: "asset-files", assetId: "bundle" }, label: "Download", showSize: false, showType: false }, { url: assetVersionUrl("a".repeat(64), "application/zip"), fileName: "Release.v2.zip", mimeType: "application/zip", byteLength: 22 });
     const document = { schemaVersion: COMPOSITION_SCHEMA_VERSION, id: "download", name: "Download", root: [node(definition.id, { markdown }, {}, "download-node")] };
     const result = generateJsx(document, manifest);
     expect(result.ok).toBe(true);
+    // zudo-react spelling: a native listener, never a React/Preact `onClick`.
+    expect(result.code).toContain("<a on:click={(event) => {");
+    expect(result.code).not.toContain("onClick");
     expect(typecheckGenerated(result.code, [definition])).toEqual([]);
     const minified = await minify("download.js", `globalThis.handler = ${downloadAsset.toString()};`, { compress: true, mangle: true });
     const isolated: { handler?: typeof downloadAsset } = {};
