@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { computed, For, Show, signal, type ReadonlySignal, type Signal } from "@takazudo/zfb/zudo-react";
-import { mountOwned, type OwnedRoot } from "./support/root";
+import { mountOwned, type OwnedRoot } from "../../src/runtime/root";
 
 // Context replacement: one typed services object created per root and threaded
 // as an explicit prop. Nothing is ambient, so nothing can leak between roots.

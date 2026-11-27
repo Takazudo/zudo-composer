@@ -1,9 +1,6 @@
-import { afterEach, expect, it } from "vitest";
-import { fireEvent } from "@testing-library/dom";
+import { expect, it } from "vitest";
 import { computed, signal, type Signal } from "@takazudo/zfb/zudo-react";
-import { cleanup, render, settle } from "./support/render";
-
-afterEach(cleanup);
+import { fireEvent, render, settle } from "../../src/test/render";
 
 it("@testing-library/dom queries and events drive a zudo-react root", async () => {
   function Rename(props: { name: Signal<string> }) {
@@ -16,7 +13,7 @@ it("@testing-library/dom queries and events drive a zudo-react root", async () =
     );
   }
   const name = signal("Home");
-  const view = render(Rename, { name });
+  const view = render(<Rename name={name} />);
   const input = view.getByLabelText("Name") as HTMLInputElement;
   const button = view.getByRole("button", { name: "Rename" }) as HTMLButtonElement;
   expect(input.value).toBe("Home");

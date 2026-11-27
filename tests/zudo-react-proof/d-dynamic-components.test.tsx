@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { computed, flush, For, signal, type Child, type Component, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
-import { mountOwned, type OwnedRoot } from "./support/root";
+import { mountOwned, type OwnedRoot } from "../../src/runtime/root";
 
 const roots: OwnedRoot[] = [];
 afterEach(() => { for (const root of roots.splice(0)) root.stop(); });

@@ -6,7 +6,7 @@ import * as tool from "@takazudo/zfb/zudo-react";
 import { flush, h, signal } from "@takazudo/zfb/zudo-react";
 import * as jsxRuntime from "@takazudo/zfb/zudo-react/jsx-runtime";
 import { PackCard, packCount, packEvents, packRuntime } from "./fixtures/pack/pack-card";
-import { mountOwned, type OwnedRoot } from "./support/root";
+import { mountOwned, type OwnedRoot } from "../../src/runtime/root";
 
 const repo = resolve(import.meta.dirname, "../..");
 const roots: OwnedRoot[] = [];

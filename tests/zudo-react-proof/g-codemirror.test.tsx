@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { flush, getScope, Show, signal, type Ref, type Signal } from "@takazudo/zfb/zudo-react";
 import type { MarkdownEditorController } from "../../src/features/content/markdown-source";
-import { mountOwned, type OwnedRoot } from "./support/root";
+import { mountOwned, type OwnedRoot } from "../../src/runtime/root";
 
 const roots: OwnedRoot[] = [];
 afterEach(() => { for (const root of roots.splice(0)) root.stop(); });

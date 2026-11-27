@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { flush, getScope, Show, signal, type Ref, type Signal } from "@takazudo/zfb/zudo-react";
-import { mountOwned, type OwnedRoot } from "./support/root";
-import { ownLayer } from "./support/layer";
+import { mountOwned, type OwnedRoot } from "../../src/runtime/root";
+import { ownLayer } from "../../src/runtime/layer";
 
 const roots: OwnedRoot[] = [];
 afterEach(() => { for (const root of roots.splice(0)) root.stop(); document.body.replaceChildren(); });
