@@ -1,43 +1,45 @@
-import { cleanup, render, screen } from "@testing-library/preact";
-import type { ComponentChildren } from "preact";
-import { useState } from "preact/hooks";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { computed, getScope, Show, signal, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
+import { describe, expect, it, vi } from "vitest";
+import { render, screen, settle } from "../../test/render";
 import {
-  ChromeContext,
+  bindBreadcrumb,
+  bindEditorStatus,
+  chromeSnapshot,
   createChromeStore,
   EMPTY_CHROME_SNAPSHOT,
-  useBreadcrumb,
-  useChrome,
-  useEditorStatus,
   type BreadcrumbItem,
+  type ChromeStore,
   type EditorStatus,
 } from "../chrome-context";
 
-afterEach(cleanup);
-
-function ChromeProbe() {
-  const { breadcrumb, editorStatus } = useChrome();
+function ChromeProbe({ store, onRender }: { store: ChromeStore | null; onRender?: () => void }) {
+  const snapshot = chromeSnapshot(getScope(), store);
+  const crumbs = computed(() => {
+    onRender?.();
+    return snapshot.value.breadcrumb.map((item) => `${item.label}${item.href ? `@${item.href}` : ""}`).join(" / ");
+  });
+  const status = computed(() => {
+    const editorStatus = snapshot.value.editorStatus;
+    return editorStatus ? `${editorStatus.state}${editorStatus.detail ? `: ${editorStatus.detail}` : ""}` : "none";
+  });
+  const hasRetry = computed(() => snapshot.value.editorStatus?.onRetry !== undefined);
   return (
     <div>
-      <p data-testid="crumbs">{breadcrumb.map((item) => `${item.label}${item.href ? `@${item.href}` : ""}`).join(" / ")}</p>
-      <p data-testid="status">{editorStatus ? `${editorStatus.state}${editorStatus.detail ? `: ${editorStatus.detail}` : ""}` : "none"}</p>
-      {editorStatus?.onRetry ? <button onClick={editorStatus.onRetry}>Retry</button> : null}
+      <p data-testid="crumbs">{crumbs}</p>
+      <p data-testid="status">{status}</p>
+      <Show when={hasRetry}>{() => <button on:click={() => snapshot.value.editorStatus?.onRetry?.()}>Retry</button>}</Show>
     </div>
   );
 }
 
-function BreadcrumbRoute({ items }: { items: readonly BreadcrumbItem[] }) {
-  useBreadcrumb(items);
+function BreadcrumbRoute({ store, items }: { store: ChromeStore | null; items: readonly BreadcrumbItem[] | ReadonlySignal<readonly BreadcrumbItem[]> }) {
+  bindBreadcrumb(getScope(), store, items);
   return null;
 }
 
-function StatusRoute({ status }: { status: EditorStatus | null }) {
-  useEditorStatus(status);
+function StatusRoute({ store, status }: { store: ChromeStore | null; status: EditorStatus | null | ReadonlySignal<EditorStatus | null> }) {
+  bindEditorStatus(getScope(), store, status);
   return null;
-}
-
-function withStore(children: ComponentChildren, store = createChromeStore()) {
-  return { store, ui: <ChromeContext.Provider value={store}>{children}</ChromeContext.Provider> };
 }
 
 describe("chrome store", () => {
@@ -107,59 +109,77 @@ describe("chrome store", () => {
   });
 });
 
-describe("chrome hooks", () => {
-  it("renders what a route publishes and clears it when the route unmounts", () => {
-    function Harness({ mounted }: { mounted: boolean }) {
-      return (
-        <>
-          <ChromeProbe />
-          {mounted ? <BreadcrumbRoute items={[{ label: "Content", href: "/content" }, { label: "Journal articles" }]} /> : null}
-        </>
-      );
-    }
-    const { store, ui } = withStore(<Harness mounted />);
-    const { rerender } = render(ui);
+describe("chrome bindings", () => {
+  it("renders what a route publishes and clears it when the route unmounts", async () => {
+    const store = createChromeStore();
+    const mounted = signal(true);
+    render(
+      <>
+        <ChromeProbe store={store} />
+        <Show when={mounted}>{() => <BreadcrumbRoute store={store} items={[{ label: "Content", href: "/content" }, { label: "Journal articles" }]} />}</Show>
+      </>,
+    );
+    await settle();
     expect(screen.getByTestId("crumbs")).toHaveTextContent("Content@/content / Journal articles");
 
-    rerender(<ChromeContext.Provider value={store}><Harness mounted={false} /></ChromeContext.Provider>);
+    mounted.value = false;
+    await settle();
     expect(screen.getByTestId("crumbs")).toHaveTextContent("");
   });
 
-  it("republishes an inline literal on every render without looping the chrome", () => {
+  it("republishes an equal trail on every change without re-rendering the chrome", async () => {
     let renders = 0;
-    function CountingProbe() {
-      renders += 1;
-      return <ChromeProbe />;
-    }
+    const store = createChromeStore();
     function Route() {
-      const [, setTick] = useState(0);
-      useBreadcrumb([{ label: "Composer" }]);
-      return <button onClick={() => setTick((value) => value + 1)}>tick</button>;
+      const tick = signal(0);
+      // A fresh but equal literal for every tick, as an inline trail produces.
+      bindBreadcrumb(getScope(), store, computed(() => (tick.value, [{ label: "Composer" }])));
+      return (
+        <button
+          on:click={() => {
+            tick.value += 1;
+          }}
+        >
+          tick
+        </button>
+      );
     }
-    const { ui } = withStore(<><CountingProbe /><Route /></>);
-    render(ui);
+    render(<><ChromeProbe
+          store={store}
+          onRender={() => {
+            renders += 1;
+          }}
+        /><Route /></>);
+    await settle();
     expect(screen.getByTestId("crumbs")).toHaveTextContent("Composer");
     const afterFirstPublish = renders;
     screen.getByRole("button", { name: "tick" }).click();
+    await settle();
     expect(renders).toBe(afterFirstPublish);
   });
 
-  it("publishes editor status and wires the retry affordance to the newest callback", () => {
+  it("publishes editor status and wires the retry affordance to the newest callback", async () => {
     const retry = vi.fn();
-    const { store, ui } = withStore(<><ChromeProbe /><StatusRoute status={{ state: "failed", detail: "Saving failed.", onRetry: retry }} /></>);
-    const { rerender } = render(ui);
+    const store = createChromeStore();
+    const status = signal<EditorStatus | null>({ state: "failed", detail: "Saving failed.", onRetry: retry });
+    render(<><ChromeProbe store={store} /><StatusRoute store={store} status={status} /></>);
+    await settle();
     expect(screen.getByTestId("status")).toHaveTextContent("failed: Saving failed.");
     screen.getByRole("button", { name: "Retry" }).click();
     expect(retry).toHaveBeenCalledTimes(1);
 
-    rerender(<ChromeContext.Provider value={store}><ChromeProbe /><StatusRoute status={{ state: "saved" }} /></ChromeContext.Provider>);
+    status.value = { state: "saved" };
+    await settle();
     expect(screen.getByTestId("status")).toHaveTextContent("saved");
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   });
 
-  it("stays inert without a provider", () => {
-    render(<><ChromeProbe /><BreadcrumbRoute items={[{ label: "Content" }]} /><StatusRoute status={{ state: "saving" }} /></>);
+  it("stays inert without a store", async () => {
+    render(<><ChromeProbe store={null} /><BreadcrumbRoute store={null} items={[{ label: "Content" }]} /><StatusRoute store={null} status={{ state: "saving" }} /></>);
+    await settle();
     expect(screen.getByTestId("crumbs")).toHaveTextContent("");
     expect(screen.getByTestId("status")).toHaveTextContent("none");
   });
 });
+
+

@@ -1,5 +1,5 @@
-import { createContext } from "preact";
-import { useContext, useEffect } from "preact/hooks";
+import type { Scope } from "@takazudo/zfb/zudo-react";
+import { read, type MaybeSignal } from "../../components/reactive";
 
 const PENDING_ATTRIBUTE = "data-cms-nav-pending";
 
@@ -72,10 +72,12 @@ export function createPageLoading(activity: PageActivity, { quietMs = 150, maxSe
   };
 }
 
-export const PageLoadingContext = createContext<PageLoading | null>(null);
-
-/** Holds the page-loading overlay while `active`; for loads that do not go through `authoringFetch`. */
-export function usePageLoadingWhile(active: boolean): void {
-  const loading = useContext(PageLoadingContext);
-  useEffect(() => (active && loading ? loading.begin() : undefined), [active, loading]);
+/**
+ * Holds the page-loading overlay while `active` is true, for loads that do not
+ * go through `authoringFetch`. The hold follows a signal and ends with `scope`;
+ * a `null` loading service (no shell) makes it a no-op.
+ */
+export function holdPageLoadingWhile(scope: Scope, loading: PageLoading | null, active: MaybeSignal<boolean>): void {
+  if (!loading) return;
+  scope.effect(() => (read(active) ? loading.begin() : undefined));
 }
