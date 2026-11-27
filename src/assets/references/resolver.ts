@@ -1,4 +1,4 @@
-import { ASSET_CHECKSUM_URL_PATTERN, assetAuthoringUrl, assetPinKey, assetVersionUrl, isValidAssetFileName, validateAssetAssetRef, validateAssetVersionRef, validateAssetVersionPin, validateAssetSnapshot, isValidAssetChecksum, type AssetAssetRef, type AssetVersionRef, type AssetVersionPin, type AssetSnapshot } from "../model";
+import { ASSET_CHECKSUM_URL_PATTERN, assetAuthoringUrl, assetPinKey, assetVersionUrl, isValidAssetFileName, validateAssetAssetRef, validateAssetVersionRef, validateAssetVersionPin, validateAssetPinManifest, validateAssetSnapshot, isValidAssetChecksum, type AssetAssetRef, type AssetVersionRef, type AssetVersionPin, type AssetSnapshot } from "../model";
 import type { VersionedAssetStore } from "../library";
 import { subscribePersistenceChanges } from "../../shared/persistence-generation";
 
@@ -42,6 +42,7 @@ export async function createAssetReferenceLock(store: VersionedAssetStore | unde
     const snapshot = structuredClone(suppliedSnapshot ?? await store.snapshot());
     if (!validateAssetSnapshot(snapshot)) return { status: "blocked", diagnostics: [{ code: "corrupt", message: "Assets snapshot is invalid." }] };
     const diagnostics: AssetReferenceDiagnostic[] = [], pins = new Map<string, LockedAssetPin>();
+    const pending = new Map<string, { exact: AssetVersionRef; ref: ManagedAssetReference; record: AssetSnapshot["records"][number]; version: AssetSnapshot["records"][number]["document"]["versions"][number] }>();
     for (const ref of refs) {
       if ((!validateAssetAssetRef(ref) && !validateAssetVersionRef(ref)) || ref.providerId !== store.provider.id) { diagnostics.push({ code: "missing", ref, message: "Assets reference provider or identity is unavailable." }); continue; }
       const record = snapshot.records.find(({ id }) => id === ref.assetId);
@@ -51,12 +52,22 @@ export async function createAssetReferenceLock(store: VersionedAssetStore | unde
       const version = record.document.versions.find(({ id }) => id === versionId);
       if (!version) { diagnostics.push({ code: "missing", ref, message: "Required immutable version is missing." }); continue; }
       const exact = { providerId: ref.providerId, assetId: ref.assetId, versionId };
-      if (pins.has(assetPinKey(exact))) continue;
+      if (!pending.has(assetPinKey(exact))) pending.set(assetPinKey(exact), { exact, ref, record, version });
+    }
+    // One bulk provider verification for every distinct exact version (#995).
+    // A failed batch blocks the lock; it never falls back to per-asset reads.
+    if (pending.size) {
+      const exacts = [...pending.values()].map(({ exact }) => exact);
       try {
-        const pin = await store.resolveVersion(exact);
-        if (!validateAssetVersionPin(pin, exact) || pin.checksum !== version.checksum || pin.mimeType !== version.mimeType || pin.byteLength !== version.byteLength || pin.url !== assetVersionUrl(versionId, version.mimeType)) throw new Error("Immutable Assets metadata disagrees with the captured snapshot.");
-        pins.set(assetPinKey(pin), { ...pin, fileName: record.document.fileName, metadataRevision: record.revision, headVersionId: record.document.currentVersionId });
-      } catch (error) { diagnostics.push({ code: "corrupt", ref, message: error instanceof Error ? error.message : "Assets bytes could not be verified." }); }
+        const manifest = await store.pinManifest(exacts);
+        if (!validateAssetPinManifest(manifest, exacts)) throw new Error("Assets pin manifest is malformed, incomplete, duplicated or unsorted.");
+        const verified = new Map(manifest.pins.map((pin) => [assetPinKey(pin), pin]));
+        for (const [key, { exact, ref, record, version }] of pending) {
+          const pin = verified.get(key);
+          if (!pin || !validateAssetVersionPin(pin, exact) || pin.checksum !== version.checksum || pin.mimeType !== version.mimeType || pin.byteLength !== version.byteLength || pin.url !== assetVersionUrl(exact.versionId, version.mimeType)) { diagnostics.push({ code: "corrupt", ref, message: "Immutable Assets metadata disagrees with the captured snapshot." }); continue; }
+          pins.set(key, { ...pinValue(pin), fileName: record.document.fileName, metadataRevision: record.revision, headVersionId: record.document.currentVersionId });
+        }
+      } catch (error) { diagnostics.push({ code: "corrupt", message: `Assets bytes could not be verified for ${pending.size} exact version(s): ${error instanceof Error ? error.message : "pin manifest failed."}` }); }
     }
     if (await store.mutationToken() !== snapshot.mutationToken) diagnostics.push({ code: "changed", message: "Assets metadata changed while exact versions were being captured." });
     return diagnostics.length ? { status: "blocked", diagnostics } : { status: "ready", lock: { schemaVersion: 1, providerId: store.provider.id, mutationToken: snapshot.mutationToken, pins: [...pins].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, pin]) => pin) } };
@@ -74,14 +85,28 @@ export function serializeAssetReferenceLock(lock: AssetReferenceLock): string {
   const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(",")}]` : value && typeof value === "object" ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(",")}}` : JSON.stringify(value);
   return `${canonical(lock)}\n`;
 }
-/** Historical verification never asks for a mutable head or metadata snapshot. */
-export async function verifyAssetLockIntegrity(lock: AssetReferenceLock, store: Pick<VersionedAssetStore, "resolveVersion">): Promise<boolean> {
+/** Historical verification never asks for a mutable head or metadata snapshot.
+ * A store offering pinManifest verifies every pin in one bulk request; a
+ * narrower resolveVersion-only store is checked pin by pin. A failed bulk
+ * verification is a failure, never a cue to retry per asset. */
+export async function verifyAssetLockIntegrity(lock: AssetReferenceLock, store: Pick<VersionedAssetStore, "resolveVersion"> & Partial<Pick<VersionedAssetStore, "pinManifest">>): Promise<boolean> {
   if (!validateAssetReferenceLock(lock)) return false;
-  try { for (const entry of lock.pins) {
-    const pin = pinValue(entry);
-    const verified = await store.resolveVersion({ providerId: pin.providerId, assetId: pin.assetId, versionId: pin.versionId });
-    if (!validateAssetVersionPin(verified, { providerId: pin.providerId, assetId: pin.assetId, versionId: pin.versionId }) || verified.url !== pin.url || verified.mimeType !== pin.mimeType || verified.byteLength !== pin.byteLength) return false;
-  } return true; } catch { return false; }
+  const matches = (verified: AssetVersionPin, pin: AssetVersionPin) => validateAssetVersionPin(verified, { providerId: pin.providerId, assetId: pin.assetId, versionId: pin.versionId }) && verified.url === pin.url && verified.mimeType === pin.mimeType && verified.byteLength === pin.byteLength;
+  try {
+    if (store.pinManifest) {
+      if (!lock.pins.length) return true;
+      const exacts = lock.pins.map(({ providerId, assetId, versionId }) => ({ providerId, assetId, versionId }));
+      const manifest = await store.pinManifest(exacts);
+      if (!validateAssetPinManifest(manifest, exacts)) return false;
+      const verified = new Map(manifest.pins.map((pin) => [assetPinKey(pin), pin]));
+      return lock.pins.every((entry) => { const pin = pinValue(entry), result = verified.get(assetPinKey(pin)); return !!result && matches(result, pin); });
+    }
+    for (const entry of lock.pins) {
+      const pin = pinValue(entry);
+      if (!matches(await store.resolveVersion({ providerId: pin.providerId, assetId: pin.assetId, versionId: pin.versionId }), pin)) return false;
+    }
+    return true;
+  } catch { return false; }
 }
 export class LiveAssetReferenceResolver {
   private listeners = new Set<() => void>(); private stop?: () => void;

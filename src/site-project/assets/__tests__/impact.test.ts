@@ -6,7 +6,7 @@ import { createComponentCatalog } from "../../../composer/model/types";
 import { componentCatalog, project, entry } from "../../compiler/__tests__/fixtures";
 import { resolveSiteProjectAsset } from "../impact";
 import { compileSiteProject } from "../../compiler";
-import { createAssetRecord, assetVersionUrl } from "../../../assets";
+import { createAssetRecord, assetVersionUrl, type AssetVersionRef } from "../../../assets";
 import type { AssetReferenceLock } from "../../../assets/references";
 const checksum = "a".repeat(64);
 const catalog = createComponentCatalog({ kind: "zudo-composer/component-pack", contractVersion: 2, packId: "test", packVersion: "1", components: [{ ...componentCatalog.get("leaf")!, fields: [
@@ -35,7 +35,7 @@ describe("provider-qualified assets impact", () => {
     const snapshot = { schemaVersion: 1 as const, mutationToken: "b".repeat(64), folders: [], records: [record] };
     const pin = { ...lock.pins[0]!, providerId: "custom-assets" };
     const resolveVersion = vi.fn(async (ref) => { expect(ref.providerId).toBe("custom-assets"); const { metadataRevision, headVersionId, ...exact } = pin; expect(metadataRevision).toBe(1); expect(headVersionId).toBe(checksum); return exact; });
-    const store = { provider: { id: "custom-assets" }, snapshot: async () => structuredClone(snapshot), mutationToken: async () => snapshot.mutationToken, resolveVersion } as unknown as VersionedAssetStore;
+    const store = { provider: { id: "custom-assets" }, snapshot: async () => structuredClone(snapshot), mutationToken: async () => snapshot.mutationToken, resolveVersion, pinManifest: async (refs: readonly AssetVersionRef[]) => ({ schemaVersion: 1 as const, pins: await Promise.all(refs.map((ref) => resolveVersion(ref))) }) } as unknown as VersionedAssetStore;
     const result = await compileWithCapturedAsset(value, { catalog, assetStore: store });
     expect(result.status).toBe("ready");
     expect(result.consistency).toBe("detached");
