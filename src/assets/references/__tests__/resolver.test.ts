@@ -89,7 +89,8 @@ describe("bulk exact-version verification (#995)", () => {
     expect(await createAssetReferenceLock(store, [ref])).toMatchObject({ status: "blocked", diagnostics: [{ code: "corrupt" }] });
     pinManifest.mockRejectedValueOnce(new Error("bytes missing"));
     expect(await verifyAssetLockIntegrity(locked.lock, store)).toBe(false);
-    pinManifest.mockResolvedValueOnce({ schemaVersion: 1, pins: [{ ...locked.lock.pins[0]!, byteLength: 1 }].map(({ fileName: _f, metadataRevision: _m, headVersionId: _h, ...pin }) => pin) });
+    const { providerId, assetId, versionId, checksum, mimeType, url } = locked.lock.pins[0]!;
+    pinManifest.mockResolvedValueOnce({ schemaVersion: 1, pins: [{ providerId, assetId, versionId, checksum, mimeType, url, byteLength: 1 }] });
     expect(await createAssetReferenceLock(store, [ref])).toMatchObject({ status: "blocked", diagnostics: [{ code: "corrupt", ref }] });
     pinManifest.mockResolvedValueOnce({ schemaVersion: 1, pins: [] });
     expect(await verifyAssetLockIntegrity(locked.lock, store)).toBe(false);

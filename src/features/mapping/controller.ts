@@ -118,6 +118,9 @@ export class MappingEditorController {
   private pendingFlush: Promise<void> | null = null;
   private attachmentListRequestRevision = 0;
   private attachmentPreviewRequestRevision = 0;
+  /** Advances on every persisted attachment-relevant change (#994). */
+  private attachmentGeneration = 0;
+  private attachmentRefresh: { generation: number; promise: Promise<void> } | null = null;
 
   constructor(
     readonly provider: MappingProvider,
@@ -437,8 +440,36 @@ export class MappingEditorController {
     return this.attachmentCallbacks;
   }
 
-  async refreshAttachments(): Promise<void> {
+  /**
+   * A persisted change that can affect attachments. Work already in flight was
+   * read before it, so the next refresh must be a fresh pass (#994).
+   */
+  attachmentsChanged(): Promise<void> {
+    this.attachmentGeneration += 1;
+    return this.refreshAttachments();
+  }
+
+  /**
+   * One attachment pass per invalidation generation: concurrent callers share
+   * the pass in flight. A pass superseded by a newer generation never publishes.
+   */
+  refreshAttachments(): Promise<void> {
+    const generation = this.attachmentGeneration;
+    if (this.attachmentRefresh?.generation === generation) return this.attachmentRefresh.promise;
+    const promise = this.runAttachmentRefresh(generation).finally(() => { if (this.attachmentRefresh?.promise === promise) this.attachmentRefresh = null; });
+    this.attachmentRefresh = { generation, promise };
+    return promise;
+  }
+
+  /** Resolves once no attachment pass, including one started meanwhile, can still flush sessions. */
+  private async settleAttachments(): Promise<void> {
+    await this.refreshAttachments();
+    while (this.attachmentRefresh) await this.attachmentRefresh.promise;
+  }
+
+  private async runAttachmentRefresh(generation: number): Promise<void> {
     const requestRevision = ++this.attachmentListRequestRevision;
+    const current = () => requestRevision === this.attachmentListRequestRevision && generation === this.attachmentGeneration;
     if (!this.attachmentCallbacks) {
       this.attachmentPreviewRequestRevision += 1;
       this.set({ ...this.current, attachments: { ...emptyMappingAttachmentState, phase: "unavailable", message: "Collection attachment service is unavailable." } });
@@ -447,11 +478,11 @@ export class MappingEditorController {
     this.set({ ...this.current, attachments: { ...this.current.attachments, phase: "loading", message: null } });
     try {
       const snapshot = await this.attachmentCallbacks.list();
-      if (requestRevision !== this.attachmentListRequestRevision) return;
+      if (!current()) return;
       this.attachmentPreviewRequestRevision += 1;
       this.set({ ...this.current, attachments: { phase: "ready", snapshot, preview: null, message: null } });
     } catch (reason) {
-      if (requestRevision !== this.attachmentListRequestRevision) return;
+      if (!current()) return;
       this.attachmentPreviewRequestRevision += 1;
       const message = reason instanceof Error ? reason.message : "Collection attachments could not be loaded.";
       this.set({ ...this.current, attachments: { phase: "error", snapshot: null, preview: null, message } });
@@ -461,9 +492,10 @@ export class MappingEditorController {
   async attachCollection(request: Parameters<NonNullable<MappingAttachmentCallbacks>["attach"]>[0]): Promise<void> {
     if (!this.attachmentCallbacks) throw new Error("Collection attachment service is unavailable.");
     await this.flush();
+    const generation = this.attachmentGeneration;
     await this.attachmentCallbacks.attach(request);
     await this.attachmentCallbacks.flush?.();
-    await this.refreshAttachments();
+    await this.refreshAfterOwnWrite(generation);
   }
 
   async detachCollection(attachmentId: string): Promise<void> {
@@ -471,9 +503,16 @@ export class MappingEditorController {
     const attachment = this.current.attachments.snapshot?.attachments.find((item) => item.attachment.id === attachmentId)?.attachment;
     if (!attachment) throw new Error("This collection attachment is no longer available.");
     await this.flush();
+    const generation = this.attachmentGeneration;
     await this.attachmentCallbacks.detach(attachment);
     await this.attachmentCallbacks.flush?.();
-    await this.refreshAttachments();
+    await this.refreshAfterOwnWrite(generation);
+  }
+
+  /** After this controller's own write, refresh with a pass that began after it. */
+  private refreshAfterOwnWrite(generationBeforeWrite: number): Promise<void> {
+    // A store change notification during the write already started a fresh pass.
+    return this.attachmentGeneration === generationBeforeWrite ? this.attachmentsChanged() : this.refreshAttachments();
   }
 
   async previewCollectionAttachment(attachmentId: string): Promise<void> {
@@ -504,7 +543,7 @@ export class MappingEditorController {
         if (deepLink) {
           // The attachments capture flushes workspace sessions; finish it before
           // the editor opens so it cannot silently save the first edits.
-          await this.refreshAttachments();
+          await this.settleAttachments();
           const opened = await this.openDeepLink(deepLink);
           if (opened.status !== "ready") await this.refreshLibraryDetails();
         } else {

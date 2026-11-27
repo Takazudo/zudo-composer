@@ -74,10 +74,18 @@ export function MappingApp(props: MappingRouteContentProps): JSX.Element {
   useEffect(() => {
     if (!integration) return;
     const session = integration.sessions.register({ feature: "Mapping", providerId: props.provider.descriptor.id, workspaceId: integration.workspace.id }, { flush: async () => { await controller.flush(); await props.attachmentCallbacks?.flush?.(); } });
+    // Only an accepted draft is a session change. Loading a record or a fresh
+    // attachments snapshot is read bookkeeping; reporting it bumped the
+    // session generation and sent captures in flight into retry rounds (#994).
     let draft = controller.state.mapping;
-    let attachments = controller.state.attachments.snapshot;
-    const unsubscribe = controller.subscribe((next) => { if (draft !== next.mapping || attachments !== next.attachments.snapshot) { draft = next.mapping; attachments = next.attachments.snapshot; session.changed(); } });
-    const unsubscribeAttachments = props.attachmentCallbacks?.subscribe?.(() => { session.changed(); void controller.refreshAttachments(); });
+    let dirty = controller.state.saveStatus === "dirty";
+    const unsubscribe = controller.subscribe((next) => {
+      const accepted = next.saveStatus === "dirty" && (next.mapping !== draft || !dirty);
+      draft = next.mapping; dirty = next.saveStatus === "dirty";
+      if (accepted) session.changed();
+    });
+    // Persisted changes are caught by capture tokens; they only need a fresh pass.
+    const unsubscribeAttachments = props.attachmentCallbacks?.subscribe?.(() => { void controller.attachmentsChanged().catch(() => undefined); });
     return () => { unsubscribe(); unsubscribeAttachments?.(); session.detach(); };
   }, [controller, integration, props.provider, props.attachmentCallbacks]);
   useEffect(() => {
