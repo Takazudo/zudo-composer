@@ -26,7 +26,7 @@ corepack pnpm build:site
 ```
 
 `components/pack.ts` is the single component registry. It uses this package's
-`./components` export. Preact is a direct dependency; Tailwind comes from the
+`./components` export. `@takazudo/zfb` (its zudo-react runtime) is a direct dependency; Tailwind comes from the
 tool. `styles/base.css` scans your component sources.
 
 `site-project.ts` is the authored build source. After editing it, run

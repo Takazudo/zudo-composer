@@ -1,17 +1,17 @@
-import type { ComponentChildren } from "preact";
-import { useId } from "preact/hooks";
+import type { Child } from "@takazudo/zfb/zudo-react";
 
-export interface PageFrameProps { content?: ComponentChildren }
+// The component contract types a slot prop framework-neutrally (any object);
+// Composer passes it rendered zudo-react children.
+export interface PageFrameProps { content?: Child | object }
 export function PageFrame({ content }: PageFrameProps) {
-  return <main class="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-6 py-16 font-sans text-slate-900">{content}</main>;
+  return <main class="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-6 py-16 font-sans text-slate-900">{content as Child}</main>;
 }
 
 export interface WelcomeProps { heading: string; description: string }
 export function Welcome({ heading, description }: WelcomeProps) {
-  const headingId = useId();
   return (
-    <section aria-labelledby={headingId} class="flex flex-col gap-4">
-      <h1 id={headingId} class="text-4xl font-semibold tracking-tight">{heading}</h1>
+    <section aria-label={heading} class="flex flex-col gap-4">
+      <h1 class="text-4xl font-semibold tracking-tight">{heading}</h1>
       <p class="max-w-prose text-lg leading-relaxed text-slate-600">{description}</p>
     </section>
   );

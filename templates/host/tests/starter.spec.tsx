@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { render } from "preact-render-to-string";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { describe, expect, it } from "vitest";
 import type { SiteProject } from "zudo-composer/site-project";
 import { compileStaticSite } from "zudo-composer/site-build";
@@ -10,13 +10,10 @@ import { componentPack, Welcome } from "../components/pack";
 const root = resolve(import.meta.dirname, "..");
 
 describe("starter site", () => {
-  it("renders the host's Preact component with accessible heading ownership", () => {
-    const html = render(<Welcome heading="A fresh start" description="This is your page." />);
-    expect(html).toContain("A fresh start");
+  it("renders the host's zudo-react component as a region named by its heading", () => {
+    const html = renderToString(<Welcome heading="A fresh start" description="This is your page." />);
     expect(html).toContain("This is your page.");
-    const id = html.match(/<h1 id="([^"]+)"/)?.[1];
-    expect(id).toBeTruthy();
-    expect(html).toContain(`aria-labelledby="${id}"`);
+    expect(html).toMatch(/<section aria-label="A fresh start"[^>]*>\s*<h1[^>]*>A fresh start<\/h1>/);
   });
 
   it("keeps the committed aggregate tied to the host's own component exports", async () => {
