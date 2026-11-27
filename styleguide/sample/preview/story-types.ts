@@ -1,10 +1,10 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import type { Story as EngineStory } from "@takazudo/zudo-sg/stories";
 export type { StoryMeta, StoryControl } from "@takazudo/zudo-sg/stories";
-// The authored component pack is Preact; only declarative controls cross to SG.
+// The authored component pack is zudo-react; only declarative controls cross to SG.
 export type Story<P = Record<string, unknown>> = Omit<
   EngineStory<P>,
   "render"
 > & {
-  render: (args?: Partial<P>) => ComponentChildren;
+  render: (args?: Partial<P>) => Child;
 };
