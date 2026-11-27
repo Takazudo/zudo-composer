@@ -1,7 +1,7 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import { useId } from "preact/hooks";
+import { Show, computed } from "@takazudo/zfb/zudo-react";
 import { DemoNote } from "./demo-note";
-import { FormField, formValues, isEmail, useMockSubmit, type FieldErrors } from "./form-field";
+import { FormField, fieldError, formId, formValues, isEmail, mockSubmit, type FieldErrors } from "./form-field";
 import { DISABLED_CTA, PRIMARY_CTA } from "./tone";
 
 export interface ContactFormProps {
@@ -22,22 +22,27 @@ export function validateContact(values: Record<ContactField, string>): FieldErro
 }
 
 export function ContactForm({ heading = "Write to us", successText = "Thanks — in a real shop we would reply within two days." }: ContactFormProps) {
-  const id = useId();
-  const { status, errors, onSubmit } = useMockSubmit<ContactField>((form) => validateContact(formValues(form, CONTACT_FIELDS)));
-  const pending = status === "pending";
+  const id = formId();
+  const { status, errors, onSubmit } = mockSubmit<ContactField>((form) => validateContact(formValues(form, CONTACT_FIELDS)));
+  const pending = computed(() => status.value === "pending");
   return (
     <div class="flex max-w-shop-prose flex-col gap-shop-vsp-md">
       <h2 class="text-shop-h2 font-shop-semibold text-shop-fg-strong">{heading}</h2>
-      {status === "done" ? (
-        <p role="status" class="whitespace-pre-line text-shop-body text-shop-success">{successText}</p>
-      ) : (
-        <form noValidate onSubmit={onSubmit} class="flex flex-col gap-shop-vsp-md">
-          <FormField id={id} name="name" label="Name" autoComplete="name" error={errors.name} />
-          <FormField id={id} name="email" label="Email" type="email" autoComplete="email" error={errors.email} />
-          <FormField id={id} name="message" label="Message" multiline error={errors.message} />
-          <button type="submit" disabled={pending} class={`self-start ${pending ? DISABLED_CTA : PRIMARY_CTA}`}>{pending ? "Sending…" : "Send message"}</button>
-        </form>
-      )}
+      <Show
+        when={computed(() => status.value === "done")}
+        fallback={() => (
+          <form novalidate on:submit={onSubmit} class="flex flex-col gap-shop-vsp-md">
+            <FormField id={id} name="name" label="Name" autocomplete="name" error={fieldError(errors, "name")} />
+            <FormField id={id} name="email" label="Email" type="email" autocomplete="email" error={fieldError(errors, "email")} />
+            <FormField id={id} name="message" label="Message" multiline error={fieldError(errors, "message")} />
+            <button type="submit" disabled={pending} class={computed(() => `self-start ${pending.value ? DISABLED_CTA : PRIMARY_CTA}`)}>
+              {computed(() => (pending.value ? "Sending…" : "Send message"))}
+            </button>
+          </form>
+        )}
+      >
+        {() => <p role="status" class="whitespace-pre-line text-shop-body text-shop-success">{successText}</p>}
+      </Show>
       <DemoNote text="Demo — no data is sent." />
     </div>
   );

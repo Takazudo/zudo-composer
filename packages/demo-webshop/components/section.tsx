@@ -1,15 +1,15 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 
 export interface SectionProps {
   tone: "bg" | "surface";
-  children?: ComponentChildren;
+  children?: Child | object;
 }
 
 const TONE = { bg: "bg-shop-bg", surface: "bg-shop-surface" } as const;
 
 export function Section({ tone = "bg", children }: SectionProps) {
-  return <section class={`flex flex-col gap-shop-vsp-lg py-shop-vsp-xl ${TONE[tone] ?? TONE.bg}`}>{children}</section>;
+  return <section class={`flex flex-col gap-shop-vsp-lg py-shop-vsp-xl ${TONE[tone] ?? TONE.bg}`}>{children as Child}</section>;
 }
 
 export const sectionComponent = defineComponent<SectionProps>()(Section, {

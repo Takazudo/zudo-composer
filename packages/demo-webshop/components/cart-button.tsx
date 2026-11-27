@@ -1,5 +1,6 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import { useCart } from "./cart-store";
+import { Show, computed } from "@takazudo/zfb/zudo-react";
+import { cartCount, cartSignal } from "./cart-store";
 import { HOVER_INVERT } from "./tone";
 
 export interface CartButtonProps {
@@ -8,20 +9,23 @@ export interface CartButtonProps {
 }
 
 export function CartButton({ label = "Cart", href = "/cart" }: CartButtonProps) {
-  const { count } = useCart();
+  const cart = cartSignal();
+  const count = computed(() => cartCount(cart.value));
   return (
     <a
       href={href}
-      aria-label={count > 0 ? `${label}, ${count} ${count === 1 ? "item" : "items"}` : label}
+      aria-label={computed(() => (count.value > 0 ? `${label}, ${count.value} ${count.value === 1 ? "item" : "items"}` : label))}
       class={`inline-flex items-center gap-shop-hsp-xs h-shop-control-h px-shop-hsp-xs text-shop-body text-shop-fg-strong ${HOVER_INVERT}`}
     >
       {label}
-      {count > 0 && (
-        // The one filled-accent element per viewport (§ 2.1) and the only radius (§ 2.4).
-        <span class="inline-flex items-center justify-center min-w-[1.25rem] h-[1.25rem] px-[0.3rem] rounded-shop-dot bg-shop-accent text-shop-accent-fg text-shop-caption font-shop-mono tabular-nums">
-          {count}
-        </span>
-      )}
+      <Show when={computed(() => count.value > 0)}>
+        {() => (
+          // The one filled-accent element per viewport (§ 2.1) and the only radius (§ 2.4).
+          <span class="inline-flex items-center justify-center min-w-[1.25rem] h-[1.25rem] px-[0.3rem] rounded-shop-dot bg-shop-accent text-shop-accent-fg text-shop-caption font-shop-mono tabular-nums">
+            {computed(() => String(count.value))}
+          </span>
+        )}
+      </Show>
     </a>
   );
 }

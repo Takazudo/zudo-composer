@@ -1,5 +1,5 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { Show, computed, getScope, signal } from "@takazudo/zfb/zudo-react";
 import { cartStore } from "./cart-store";
 import { Stepper } from "./stepper";
 import type { Availability } from "./status-badge";
@@ -18,35 +18,40 @@ export interface AddToCartProps {
 export const ADDED_MS = 2000;
 
 export function AddToCart({ slug = "", name = "Product", price = 0, currency = "USD", src = "", availability = "in-stock", maxQuantity = 10 }: AddToCartProps) {
-  const [qty, setQty] = useState(1);
-  const [added, setAdded] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const qty = signal(1);
+  const added = signal(false);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  getScope().onCleanup(() => clearTimeout(timer));
   const soldOut = availability === "sold-out";
   const max = Math.max(1, Math.floor(maxQuantity) || 1);
+  const shownQty = computed(() => Math.min(qty.value, max));
 
   const add = () => {
     if (soldOut) return;
-    cartStore.add({ slug: slug || name, name, price, currency, src }, qty);
-    setAdded(true);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setAdded(false), ADDED_MS);
+    cartStore.add({ slug: slug || name, name, price, currency, src }, qty.value);
+    added.value = true;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      added.value = false;
+    }, ADDED_MS);
   };
 
   return (
     <div class="flex flex-col gap-shop-vsp-sm">
       <div class="flex flex-wrap items-center gap-shop-hsp-sm">
-        {!soldOut && <Stepper value={Math.min(qty, max)} min={1} max={max} label="Quantity" onChange={setQty} />}
-        <button type="button" disabled={soldOut} onClick={add} class={soldOut ? DISABLED_CTA : `${PRIMARY_CTA} justify-center`}>
+        {!soldOut && <Stepper value={shownQty} min={1} max={max} label="Quantity" onChange={(next) => (qty.value = next)} />}
+        <button type="button" disabled={soldOut} on:click={add} class={soldOut ? DISABLED_CTA : `${PRIMARY_CTA} justify-center`}>
           {soldOut ? "Sold out" : "Add to cart"}
         </button>
       </div>
       <p role="status" class="min-h-[1.5em] text-shop-body text-shop-success">
-        {added && (
-          <>
-            Added — <a href="/cart" class="underline decoration-shop-border underline-offset-4 hover:bg-shop-inverse-bg hover:text-shop-inverse-fg">view cart</a>
-          </>
-        )}
+        <Show when={added}>
+          {() => (
+            <>
+              Added — <a href="/cart" class="underline decoration-shop-border underline-offset-4 hover:bg-shop-inverse-bg hover:text-shop-inverse-fg">view cart</a>
+            </>
+          )}
+        </Show>
       </p>
     </div>
   );

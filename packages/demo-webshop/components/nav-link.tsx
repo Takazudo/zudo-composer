@@ -1,5 +1,5 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import { useEffect, useState } from "preact/hooks";
+import { computed, getScope, signal } from "@takazudo/zfb/zudo-react";
 import { HOVER_INVERT } from "./tone";
 
 export interface NavLinkProps {
@@ -16,13 +16,15 @@ export function isActivePath(pathname: string, href: string, exact: boolean): bo
 }
 
 export function NavLink({ label = "Link", href = "/", exact = false }: NavLinkProps) {
-  const [active, setActive] = useState(false);
-  useEffect(() => setActive(isActivePath(location.pathname, href, exact)), [href, exact]);
+  const active = signal(false);
+  getScope().onActivate(() => {
+    active.value = isActivePath(location.pathname, href, exact);
+  });
   return (
     <a
       href={href}
-      aria-current={active ? "page" : undefined}
-      class={`inline-flex items-center h-shop-control-h px-shop-hsp-xs text-shop-body text-shop-fg-strong ${active ? "underline decoration-shop-border underline-offset-4" : ""} ${HOVER_INVERT}`}
+      aria-current={computed(() => (active.value ? "page" : null))}
+      class={computed(() => `inline-flex items-center h-shop-control-h px-shop-hsp-xs text-shop-body text-shop-fg-strong ${active.value ? "underline decoration-shop-border underline-offset-4" : ""} ${HOVER_INVERT}`)}
     >
       {label}
     </a>

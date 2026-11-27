@@ -1,12 +1,12 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import { HOVER_INVERT } from "./tone";
 
 export interface FooterProps {
   smallPrint: string;
   creditLabel: string;
   creditHref: string;
-  nav?: ComponentChildren;
+  nav?: Child | object;
 }
 
 export function Footer({
@@ -18,7 +18,7 @@ export function Footer({
   return (
     <footer class="mt-shop-vsp-2xl border-t border-shop-border bg-shop-bg">
       <div class="mx-auto grid max-w-shop-page grid-cols-1 gap-shop-vsp-md px-shop-hsp-md py-shop-vsp-lg shop-md:grid-cols-3 shop-md:gap-shop-hsp-xl shop-md:px-shop-hsp-lg shop-xl:px-shop-hsp-2xl">
-        <nav aria-label="Footer" class="flex flex-col items-start gap-shop-vsp-xs">{nav}</nav>
+        <nav aria-label="Footer" class="flex flex-col items-start gap-shop-vsp-xs">{nav as Child}</nav>
         <p class="whitespace-pre-line text-shop-caption text-shop-muted">{smallPrint}</p>
         <p class="text-shop-caption text-shop-muted shop-md:text-right">
           <a href={creditHref} class={`text-shop-link underline decoration-shop-border underline-offset-4 ${HOVER_INVERT}`}>

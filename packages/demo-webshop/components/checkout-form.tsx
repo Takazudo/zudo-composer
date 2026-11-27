@@ -1,8 +1,8 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import { useId, useState } from "preact/hooks";
+import { Show, computed, signal } from "@takazudo/zfb/zudo-react";
 import { cartStore } from "./cart-store";
 import { DemoNote } from "./demo-note";
-import { FormField, formValues, isEmail, useMockSubmit, type FieldErrors } from "./form-field";
+import { FormField, fieldError, formId, formValues, isEmail, mockSubmit, type FieldErrors } from "./form-field";
 import { CONTROL, DISABLED_CTA, PRIMARY_CTA } from "./tone";
 
 export interface CheckoutFormProps {
@@ -46,69 +46,74 @@ export function CheckoutForm({
   successHeading = "Order placed",
   successText = "Thank you. Nothing was charged and nothing will ship — this is a demo.",
 }: CheckoutFormProps) {
-  const id = useId();
-  const [orderNumber, setOrderNumber] = useState("");
-  const { status, errors, onSubmit } = useMockSubmit<CheckoutField>(
+  const id = formId();
+  const orderNumber = signal("");
+  const { status, errors, onSubmit } = mockSubmit<CheckoutField>(
     (form) => validateCheckout(formValues(form, CHECKOUT_FIELDS)),
     () => {
-      setOrderNumber(fakeOrderNumber());
+      orderNumber.value = fakeOrderNumber();
       cartStore.clear();
     },
   );
+  const error = (field: CheckoutField) => fieldError(errors, field);
+  const pending = computed(() => status.value === "pending");
+  const countryError = error("country");
 
-  if (status === "done") {
-    return (
-      <div role="status" class="flex flex-col gap-shop-vsp-sm border border-shop-success p-shop-hsp-md">
-        <h2 class="text-shop-h2 font-shop-semibold text-shop-success">{successHeading}</h2>
-        <p class="text-shop-body text-shop-fg">
-          Order number <span class="font-shop-mono tabular-nums text-shop-fg-strong">{orderNumber}</span>
-        </p>
-        <p class="whitespace-pre-line text-shop-body text-shop-fg">{successText}</p>
-        <DemoNote text="Demo — no data is sent." />
-      </div>
-    );
-  }
-
-  const pending = status === "pending";
   return (
-    <form noValidate onSubmit={onSubmit} aria-busy={pending} class="flex flex-col gap-shop-vsp-md">
-      <h2 class="text-shop-h2 font-shop-semibold text-shop-fg-strong">{heading}</h2>
-      <fieldset class="grid grid-cols-1 gap-shop-vsp-md shop-sm:grid-cols-2 shop-sm:gap-x-shop-hsp-md">
-        <legend class="sr-only">Shipping</legend>
-        <FormField id={id} name="name" label="Full name" autoComplete="name" error={errors.name} />
-        <FormField id={id} name="email" label="Email" type="email" autoComplete="email" error={errors.email} />
-        <div class="shop-sm:col-span-2">
-          <FormField id={id} name="address" label="Address" autoComplete="street-address" error={errors.address} />
+    <Show
+      when={computed(() => status.value === "done")}
+      fallback={() => (
+        <form novalidate on:submit={onSubmit} aria-busy={pending} class="flex flex-col gap-shop-vsp-md">
+          <h2 class="text-shop-h2 font-shop-semibold text-shop-fg-strong">{heading}</h2>
+          <fieldset class="grid grid-cols-1 gap-shop-vsp-md shop-sm:grid-cols-2 shop-sm:gap-x-shop-hsp-md">
+            <legend class="sr-only">Shipping</legend>
+            <FormField id={id} name="name" label="Full name" autocomplete="name" error={error("name")} />
+            <FormField id={id} name="email" label="Email" type="email" autocomplete="email" error={error("email")} />
+            <div class="shop-sm:col-span-2">
+              <FormField id={id} name="address" label="Address" autocomplete="street-address" error={error("address")} />
+            </div>
+            <FormField id={id} name="city" label="City" autocomplete="address-level2" error={error("city")} />
+            <FormField id={id} name="postcode" label="Postcode" autocomplete="postal-code" error={error("postcode")} />
+            <FormField id={id} name="country" label="Country" error={countryError}>
+              <select
+                id={`${id}-country`}
+                name="country"
+                autocomplete="country-name"
+                aria-invalid={computed(() => (countryError.value ? true : null))}
+                aria-describedby={computed(() => (countryError.value ? `${id}-country-error` : null))}
+                class={`w-full ${CONTROL}`}
+              >
+                <option value="">Choose a country</option>
+                {COUNTRIES.map((country) => <option value={country}>{country}</option>)}
+              </select>
+            </FormField>
+          </fieldset>
+          <fieldset class="grid grid-cols-2 gap-shop-vsp-md gap-x-shop-hsp-md border-t border-shop-border pt-shop-vsp-md">
+            <legend class="sr-only">Payment</legend>
+            <div class="col-span-2">
+              <FormField id={id} name="card" label="Card number (any 16 digits)" inputmode="numeric" autocomplete="off" placeholder="0000 0000 0000 0000" error={error("card")} />
+            </div>
+            <FormField id={id} name="expiry" label="Expiry" autocomplete="off" placeholder="MM/YY" error={error("expiry")} />
+            <FormField id={id} name="cvc" label="CVC" inputmode="numeric" autocomplete="off" error={error("cvc")} />
+          </fieldset>
+          <button type="submit" disabled={pending} class={computed(() => (pending.value ? DISABLED_CTA : `${PRIMARY_CTA} justify-center`))}>
+            {computed(() => (pending.value ? "Placing order…" : "Place order"))}
+          </button>
+          <DemoNote text="Demo — no data is sent." />
+        </form>
+      )}
+    >
+      {() => (
+        <div role="status" class="flex flex-col gap-shop-vsp-sm border border-shop-success p-shop-hsp-md">
+          <h2 class="text-shop-h2 font-shop-semibold text-shop-success">{successHeading}</h2>
+          <p class="text-shop-body text-shop-fg">
+            Order number <span class="font-shop-mono tabular-nums text-shop-fg-strong">{orderNumber}</span>
+          </p>
+          <p class="whitespace-pre-line text-shop-body text-shop-fg">{successText}</p>
+          <DemoNote text="Demo — no data is sent." />
         </div>
-        <FormField id={id} name="city" label="City" autoComplete="address-level2" error={errors.city} />
-        <FormField id={id} name="postcode" label="Postcode" autoComplete="postal-code" error={errors.postcode} />
-        <FormField id={id} name="country" label="Country" error={errors.country}>
-          <select
-            id={`${id}-country`}
-            name="country"
-            autoComplete="country-name"
-            aria-invalid={errors.country ? true : undefined}
-            aria-describedby={errors.country ? `${id}-country-error` : undefined}
-            class={`w-full ${CONTROL}`}
-          >
-            <option value="">Choose a country</option>
-            {COUNTRIES.map((country) => <option key={country} value={country}>{country}</option>)}
-          </select>
-        </FormField>
-      </fieldset>
-      <fieldset class="grid grid-cols-2 gap-shop-vsp-md gap-x-shop-hsp-md border-t border-shop-border pt-shop-vsp-md">
-        <legend class="sr-only">Payment</legend>
-        <div class="col-span-2">
-          <FormField id={id} name="card" label="Card number (any 16 digits)" inputMode="numeric" autoComplete="off" placeholder="0000 0000 0000 0000" error={errors.card} />
-        </div>
-        <FormField id={id} name="expiry" label="Expiry" autoComplete="off" placeholder="MM/YY" error={errors.expiry} />
-        <FormField id={id} name="cvc" label="CVC" inputMode="numeric" autoComplete="off" error={errors.cvc} />
-      </fieldset>
-      <button type="submit" disabled={pending} class={pending ? DISABLED_CTA : `${PRIMARY_CTA} justify-center`}>
-        {pending ? "Placing order…" : "Place order"}
-      </button>
-      <DemoNote text="Demo — no data is sent." />
-    </form>
+      )}
+    </Show>
   );
 }
 

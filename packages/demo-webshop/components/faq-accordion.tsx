@@ -1,21 +1,28 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import { createContext, type ComponentChildren } from "preact";
-import { useId } from "preact/hooks";
+import { flattenChildren, h, isDescription, type Child } from "@takazudo/zfb/zudo-react";
+import { FAQ_GROUP_LINK } from "./faq-group";
+import { FaqItem } from "./faq-item";
+import { answerLink } from "./slot-link";
 
 export interface FaqAccordionProps {
   allowMultiple: boolean;
-  items?: ComponentChildren;
+  items?: Child | object;
 }
 
-/** The exclusive-accordion group name for `<details name>`; null when several rows may be open. */
-export const FaqGroupContext = createContext<string | null>(null);
+let nextGroup = 0;
+
+/** Question rows given directly get the group as a prop; opaque rows (Composer's keyed nodes) ask for it on activation. */
+function withGroup(items: Child, group: string | null): Child {
+  if (group === null) return items;
+  return flattenChildren(items).map((item) => (isDescription(item) && item.type === FaqItem ? h(FaqItem, { ...item.props, group }) : item));
+}
 
 export function FaqAccordion({ allowMultiple = false, items }: FaqAccordionProps) {
-  const group = useId();
+  const group = allowMultiple ? null : `shop-faq-${nextGroup++}`;
   return (
-    <FaqGroupContext.Provider value={allowMultiple ? null : `shop-faq-${group}`}>
-      <div class="flex max-w-shop-prose flex-col border-t border-shop-border">{items}</div>
-    </FaqGroupContext.Provider>
+    <div class="flex max-w-shop-prose flex-col border-t border-shop-border" on:shop-faq-group={answerLink(FAQ_GROUP_LINK, group)}>
+      {withGroup(items as Child, group)}
+    </div>
   );
 }
 
