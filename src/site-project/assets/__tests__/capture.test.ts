@@ -5,7 +5,7 @@ import { captureAuthoringProjectAssetLock, captureSiteProjectAssetLock, inspectS
 import { compileWithCapturedAsset } from "../compile";
 import { createProjectAssetUsageInspection } from "../usage";
 import type { VersionedAssetStore } from "../../../assets/library";
-import { createAssetRecord, assetVersionUrl } from "../../../assets";
+import { createAssetRecord, assetVersionUrl, assetPinKey, type AssetVersionRef } from "../../../assets";
 import { createComponentCatalog } from "../../../composer/model/types";
 
 const assetChecksum = "a".repeat(64);
@@ -48,6 +48,8 @@ function assetStore(ids = ["hero"]): VersionedAssetStore {
     snapshot: async () => structuredClone(snapshot),
     mutationToken: async () => snapshot.mutationToken,
     resolveVersion: async (ref: { assetId: string }) => ({ ...pin, assetId: ref.assetId }),
+    // Bulk verification delegates to the (possibly overridden) exact resolver.
+    async pinManifest(this: VersionedAssetStore, refs: readonly AssetVersionRef[]) { return { schemaVersion: 1 as const, pins: (await Promise.all(refs.map((ref) => this.resolveVersion(ref)))).sort((a, b) => assetPinKey(a) < assetPinKey(b) ? -1 : 1) }; },
   } as unknown as VersionedAssetStore;
 }
 

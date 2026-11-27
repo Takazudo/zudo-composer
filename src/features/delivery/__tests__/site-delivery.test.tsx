@@ -150,7 +150,7 @@ describe("SiteDelivery", () => {
     expect(providers.getCurrentSiteProject).not.toHaveBeenCalled();
     if (result.status === "ready") expect(result.build.routes.find(({ pathname }) => pathname === "/")!.composition.document.root.find(({ id }) => id === "download")!.props.href).toBe(asset.document.versions[0]!.url);
     expect((await loadWorkingPreviewSnapshot(fixture(project))).status).toBe("compiler-error");
-    vi.spyOn(provider.store, "resolveVersion").mockRejectedValue(new Error("Corrupt bytes"));
+    vi.spyOn(provider.store, "pinManifest").mockRejectedValue(new Error("Corrupt bytes"));
     expect((await loadWorkingPreviewSnapshot(providers)).status).toBe("compiler-error");
   });
   it("renders a blocked compile's root cause before the asset-capture wrapper text", async () => {

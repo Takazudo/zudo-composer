@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFilesystemAssetStore } from "../../storage/filesystem";
 import { createAssetReferenceLock, resolvePinnedAsset, checkAssetLockPreconditions, verifyAssetLockIntegrity, LiveAssetReferenceResolver, parseManagedAssetUrl, validateAssetReferenceLock, serializeAssetReferenceLock } from "../resolver";
 const roots: string[] = [];
@@ -60,5 +60,55 @@ describe("managed reference locking", () => {
     const invalid = structuredClone(first.lock); invalid.pins[1]!.metadataRevision++;
     expect(validateAssetReferenceLock(invalid)).toBe(false);
     expect(validateAssetReferenceLock({ ...first.lock, extra: true })).toBe(false);
+  });
+});
+describe("bulk exact-version verification (#995)", () => {
+  it("verifies every distinct exact version in one pinManifest call and none for an empty set", async () => {
+    const { store, bytes } = await setup();
+    const second = await store.upload({ fileName: "second.png", declaredMimeType: "image/png", bytes: new Uint8Array([...bytes, 5]) });
+    const first = (await store.snapshot()).records.find(({ id }) => id !== second.id)!;
+    const pinManifest = vi.spyOn(store, "pinManifest"), resolveVersion = vi.spyOn(store, "resolveVersion");
+    const refs = [{ providerId: store.provider.id, assetId: first.id }, { providerId: store.provider.id, assetId: second.id }];
+    const locked = await createAssetReferenceLock(store, [...refs, ...refs]);
+    expect(locked.status).toBe("ready"); if (locked.status !== "ready") return;
+    expect(pinManifest).toHaveBeenCalledTimes(1);
+    expect(pinManifest.mock.calls[0]![0]).toHaveLength(2);
+    expect(await verifyAssetLockIntegrity(locked.lock, store)).toBe(true);
+    expect(pinManifest).toHaveBeenCalledTimes(2);
+    expect(resolveVersion).not.toHaveBeenCalled();
+    pinManifest.mockClear();
+    expect(await createAssetReferenceLock(store, [])).toMatchObject({ status: "ready" });
+    expect(await verifyAssetLockIntegrity({ ...locked.lock, pins: [] }, store)).toBe(true);
+    expect(pinManifest).not.toHaveBeenCalled();
+  });
+  it("refuses a failed or disagreeing bulk manifest without per-asset fallback", async () => {
+    const { store, ref } = await setup();
+    const locked = await createAssetReferenceLock(store, [ref]); expect(locked.status).toBe("ready"); if (locked.status !== "ready") return;
+    const resolveVersion = vi.spyOn(store, "resolveVersion");
+    const pinManifest = vi.spyOn(store, "pinManifest").mockRejectedValueOnce(new Error("bytes missing"));
+    expect(await createAssetReferenceLock(store, [ref])).toMatchObject({ status: "blocked", diagnostics: [{ code: "corrupt" }] });
+    pinManifest.mockRejectedValueOnce(new Error("bytes missing"));
+    expect(await verifyAssetLockIntegrity(locked.lock, store)).toBe(false);
+    const { providerId, assetId, versionId, checksum, mimeType, url } = locked.lock.pins[0]!;
+    pinManifest.mockResolvedValueOnce({ schemaVersion: 1, pins: [{ providerId, assetId, versionId, checksum, mimeType, url, byteLength: 1 }] });
+    expect(await createAssetReferenceLock(store, [ref])).toMatchObject({ status: "blocked", diagnostics: [{ code: "corrupt", ref }] });
+    pinManifest.mockResolvedValueOnce({ schemaVersion: 1, pins: [] });
+    expect(await verifyAssetLockIntegrity(locked.lock, store)).toBe(false);
+    expect(resolveVersion).not.toHaveBeenCalled();
+  });
+  it("attributes a real corrupt-bytes bulk refusal to the failing reference", async () => {
+    const { store, bytes, root, ref } = await setup();
+    const other = await store.upload({ fileName: "other.png", declaredMimeType: "image/png", bytes: new Uint8Array([...bytes, 3]) });
+    const otherRef = { providerId: store.provider.id, assetId: other.id };
+    const locked = await createAssetReferenceLock(store, [ref, otherRef]); expect(locked.status).toBe("ready"); if (locked.status !== "ready") return;
+    await writeFile(join(root, "versions", locked.lock.pins.find(({ assetId }) => assetId === other.id)!.url.split("/").at(-1)!), "corrupt");
+    expect(await createAssetReferenceLock(store, [ref, otherRef])).toMatchObject({ status: "blocked", diagnostics: [{ code: "corrupt", ref: otherRef }] });
+  });
+  it("keeps the narrower resolveVersion-only integrity interface working", async () => {
+    const { store, ref } = await setup();
+    const locked = await createAssetReferenceLock(store, [ref]); expect(locked.status).toBe("ready"); if (locked.status !== "ready") return;
+    const resolveVersion = vi.fn((exact: Parameters<typeof store.resolveVersion>[0]) => store.resolveVersion(exact));
+    expect(await verifyAssetLockIntegrity(locked.lock, { resolveVersion })).toBe(true);
+    expect(resolveVersion).toHaveBeenCalledTimes(1);
   });
 });

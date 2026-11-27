@@ -106,6 +106,9 @@ export function compatibleTransforms(sourceKind: ContentModelRecord["document"][
   return candidates.filter((transform) => isMappingCompatible(sourceKind, target.kind, transform)).map((transform) => transform.kind);
 }
 
+/** Extra attachment passes a deep link waits for after its own (#994). */
+const SETTLE_ATTACHMENT_ROUNDS = 3;
+
 export class MappingEditorController {
   private current: MappingEditorState = initialState;
   private readonly listeners = new Set<(state: MappingEditorState) => void>();
@@ -118,6 +121,10 @@ export class MappingEditorController {
   private pendingFlush: Promise<void> | null = null;
   private attachmentListRequestRevision = 0;
   private attachmentPreviewRequestRevision = 0;
+  /** Advances on every persisted attachment-relevant change (#994). */
+  private attachmentGeneration = 0;
+  private attachmentRefresh: { generation: number; promise: Promise<void> } | null = null;
+  private attachmentTrailing: Promise<void> | null = null;
 
   constructor(
     readonly provider: MappingProvider,
@@ -437,8 +444,47 @@ export class MappingEditorController {
     return this.attachmentCallbacks;
   }
 
-  async refreshAttachments(): Promise<void> {
+  /**
+   * A persisted change that can affect attachments. Work already in flight was
+   * read before it, so the next refresh must be a fresh pass (#994).
+   */
+  attachmentsChanged(): Promise<void> {
+    this.attachmentGeneration += 1;
+    return this.refreshAttachments();
+  }
+
+  /**
+   * Single-flight attachment refresh. Callers of the generation in flight share
+   * its pass; a newer generation queues exactly one trailing pass, which starts
+   * when the current one finishes and reads the then-latest generation. A pass
+   * superseded by a newer generation never publishes.
+   */
+  refreshAttachments(): Promise<void> {
+    const generation = this.attachmentGeneration;
+    const running = this.attachmentRefresh;
+    if (running?.generation === generation) return running.promise;
+    if (running) return this.attachmentTrailing ??= running.promise.then(() => { this.attachmentTrailing = null; return this.refreshAttachments(); });
+    const promise = this.runAttachmentRefresh(generation).finally(() => { if (this.attachmentRefresh?.promise === promise) this.attachmentRefresh = null; });
+    this.attachmentRefresh = { generation, promise };
+    return promise;
+  }
+
+  /**
+   * Resolves once no attachment pass can still flush a draft. Bounded: hints
+   * arriving faster than a pass completes cannot starve a deep link forever.
+   */
+  private async settleAttachments(): Promise<void> {
+    await this.refreshAttachments();
+    for (let round = 0; round < SETTLE_ATTACHMENT_ROUNDS; round += 1) {
+      const pending = this.attachmentTrailing ?? this.attachmentRefresh?.promise;
+      if (!pending) return;
+      await pending;
+    }
+  }
+
+  private async runAttachmentRefresh(generation: number): Promise<void> {
     const requestRevision = ++this.attachmentListRequestRevision;
+    const current = () => requestRevision === this.attachmentListRequestRevision && generation === this.attachmentGeneration;
     if (!this.attachmentCallbacks) {
       this.attachmentPreviewRequestRevision += 1;
       this.set({ ...this.current, attachments: { ...emptyMappingAttachmentState, phase: "unavailable", message: "Collection attachment service is unavailable." } });
@@ -447,11 +493,11 @@ export class MappingEditorController {
     this.set({ ...this.current, attachments: { ...this.current.attachments, phase: "loading", message: null } });
     try {
       const snapshot = await this.attachmentCallbacks.list();
-      if (requestRevision !== this.attachmentListRequestRevision) return;
+      if (!current()) return;
       this.attachmentPreviewRequestRevision += 1;
       this.set({ ...this.current, attachments: { phase: "ready", snapshot, preview: null, message: null } });
     } catch (reason) {
-      if (requestRevision !== this.attachmentListRequestRevision) return;
+      if (!current()) return;
       this.attachmentPreviewRequestRevision += 1;
       const message = reason instanceof Error ? reason.message : "Collection attachments could not be loaded.";
       this.set({ ...this.current, attachments: { phase: "error", snapshot: null, preview: null, message } });
@@ -461,9 +507,10 @@ export class MappingEditorController {
   async attachCollection(request: Parameters<NonNullable<MappingAttachmentCallbacks>["attach"]>[0]): Promise<void> {
     if (!this.attachmentCallbacks) throw new Error("Collection attachment service is unavailable.");
     await this.flush();
+    const generation = this.attachmentGeneration;
     await this.attachmentCallbacks.attach(request);
     await this.attachmentCallbacks.flush?.();
-    await this.refreshAttachments();
+    await this.refreshAfterOwnWrite(generation);
   }
 
   async detachCollection(attachmentId: string): Promise<void> {
@@ -471,9 +518,18 @@ export class MappingEditorController {
     const attachment = this.current.attachments.snapshot?.attachments.find((item) => item.attachment.id === attachmentId)?.attachment;
     if (!attachment) throw new Error("This collection attachment is no longer available.");
     await this.flush();
+    const generation = this.attachmentGeneration;
     await this.attachmentCallbacks.detach(attachment);
     await this.attachmentCallbacks.flush?.();
-    await this.refreshAttachments();
+    await this.refreshAfterOwnWrite(generation);
+  }
+
+  /** After this controller's own write, refresh with a pass that began after it. */
+  private refreshAfterOwnWrite(generationBeforeWrite: number): Promise<void> {
+    // Only a pass queued after the write began may serve; otherwise force one.
+    const running = this.attachmentRefresh;
+    const fresh = this.attachmentGeneration !== generationBeforeWrite && (!running || running.generation > generationBeforeWrite || this.attachmentTrailing);
+    return fresh ? this.refreshAttachments() : this.attachmentsChanged();
   }
 
   async previewCollectionAttachment(attachmentId: string): Promise<void> {
@@ -504,7 +560,7 @@ export class MappingEditorController {
         if (deepLink) {
           // The attachments capture flushes workspace sessions; finish it before
           // the editor opens so it cannot silently save the first edits.
-          await this.refreshAttachments();
+          await this.settleAttachments();
           const opened = await this.openDeepLink(deepLink);
           if (opened.status !== "ready") await this.refreshLibraryDetails();
         } else {

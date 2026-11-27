@@ -64,9 +64,13 @@ function devRequest(url: string, init: RequestInit): DevRequest {
   };
 }
 
-function routedFetch(routes: ReadonlyMap<string, Handler>): typeof fetch {
+/** One observed provider request: the endpoint and its operation header. */
+export interface ObservedProviderRequest { endpoint: string; operation: string }
+
+function routedFetch(routes: ReadonlyMap<string, Handler>, observe?: (request: ObservedProviderRequest) => void): typeof fetch {
   return (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input), ORIGIN);
+    observe?.({ endpoint: url.pathname, operation: new Headers(init.headers).get(FILE_PROVIDER_OPERATION_HEADER) ?? "" });
     const handler = routes.get(url.pathname);
     if (!handler) throw new TypeError(`No development endpoint is mounted at ${url.pathname}.`);
     const response = await handler(devRequest(url.pathname, init));
@@ -116,7 +120,7 @@ export interface TemporaryWorkspaceProviders {
  * the directories and the registry are shared across every set it builds — one
  * host project, many views of it.
  */
-export async function createTemporaryWorkspaceProviders(): Promise<TemporaryWorkspaceProviders> {
+export async function createTemporaryWorkspaceProviders(options: { observe?: (request: ObservedProviderRequest) => void } = {}): Promise<TemporaryWorkspaceProviders> {
   const root = await mkdtemp(join(tmpdir(), "zudo-composer-workspace-"));
   const paths = {
     data: resolve(root, "cms"),
@@ -147,7 +151,7 @@ export async function createTemporaryWorkspaceProviders(): Promise<TemporaryWork
     mountDomain(mappingDomainProvider({ mappingsRoot: paths.mappings }), mappingEntry, paths.mappings),
     mountDomain(sitemapperDomainProvider({ sitemapsRoot: paths.sitemaps }), sitemapperEntry, paths.sitemaps),
   ]);
-  const fetchImpl = routedFetch(routes);
+  const fetchImpl = routedFetch(routes, options.observe);
 
   const composerConfig: ComposerFileProviderConfig = {
     endpoint: COMPOSER_FILE_PROVIDER_ENDPOINT,

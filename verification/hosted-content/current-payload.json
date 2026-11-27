@@ -1,7 +1,7 @@
 {
-  "packageOutputSha": "623c292e3215d7a846721a82781f68ad1424bb3c",
-  "payloadSha256": "52fe12b1e82a409651d09a90912ab763a3724047e18a598ab1d4b4478865379a",
-  "rawPackageJsonSha256": "46fb6d30346708cbd3aa89750738c476527dd5988079a24288f4ce49b9640ada",
+  "packageOutputSha": "346b0d68de3447f179e90b1f0463ed7ab82d8608",
+  "payloadSha256": "ad05c86c120bf6a3b7a2f679d7eb363e4a5cc8ea3d56838d520f0647a6619714",
+  "rawPackageJsonSha256": "77abf1260f28239003c36b305401b7b6175594bf9517ea9b1c164c8697ea21e2",
   "normalization": "Only package.json object-key order/whitespace; all metadata keys, values, dependency specs, exports and arrays retained. Every other file uses exact raw bytes and full permission mode.",
   "files": [
     {
@@ -590,7 +590,7 @@
       "path": "server/authoring.mjs",
       "bytes": 29210,
       "mode": 420,
-      "sha256": "e8bf34a6915acf6eada02cc665e9e2c883baefe2e3430f6fda92a0ede88b5ed9"
+      "sha256": "e395ef5af211a546564dc10c3d925590e8195354f313bf82cb5c6ebd064a502b"
     },
     {
       "path": "server/cli/assets-import-entry.mjs",
@@ -899,10 +899,10 @@
       "sha256": "1ef6cd64e795617aeb0784582e3004ccb13635401774c56c56eb0b17a675c6d0"
     },
     {
-      "path": "server/generated/capture-CRfPeARV.mjs",
-      "bytes": 498660,
+      "path": "server/generated/capture-B9Y3hgJv.mjs",
+      "bytes": 500333,
       "mode": 420,
-      "sha256": "0cf4de94d78b344ebbdfc1f7ac5775ab29ee60af2dd193ca09649eab2c04403e"
+      "sha256": "522ff716591014f364be135389f7e741a2429057abcf9da27f585787985db604"
     },
     {
       "path": "server/host-context.d.mts",
@@ -1142,7 +1142,7 @@
       "path": "server/site-build.mjs",
       "bytes": 11813,
       "mode": 420,
-      "sha256": "3e8b81dd4ee2dde0447a68d40e02a4ede97759fc4f1ba1f534faa1859ab4265b"
+      "sha256": "88d836f034e1cceb1e516aae99caee6be023896e676de1c57365cf229d4a005e"
     },
     {
       "path": "server/site-build/artifact.mjs",
@@ -1614,9 +1614,9 @@
     },
     {
       "path": "src/assets/references/resolver.ts",
-      "bytes": 10735,
+      "bytes": 13152,
       "mode": 420,
-      "sha256": "71b1fa40996bdadda1d6df6eb702e6ed0e2e866cd8c102bfabc0401b6f34380c"
+      "sha256": "20aba9a48a0f926f10cdfd2ec718975b6767885cf7e1b0ea70f9620dc3704d78"
     },
     {
       "path": "src/assets/storage/file-provider/dev-server-entry.ts",
@@ -1650,9 +1650,9 @@
     },
     {
       "path": "src/assets/storage/filesystem/store.ts",
-      "bytes": 33843,
+      "bytes": 33892,
       "mode": 420,
-      "sha256": "cb3694d06d96ec272ceb4bdec35c70c92c763bbd2111a75f8c65cfdbe139c92a"
+      "sha256": "e4f0fbfe09eb23d48c456a50e8b4db2ef62dd39590e36dc4986eb1f2cee15c5d"
     },
     {
       "path": "src/assets/storage/filesystem/types.ts",
@@ -3450,9 +3450,9 @@
     },
     {
       "path": "src/features/mapping/controller.ts",
-      "bytes": 42225,
+      "bytes": 44961,
       "mode": 420,
-      "sha256": "85e278a527148b69b5e22fbffe876fa23e0a3677639a9aa8dd01f638658f55dd"
+      "sha256": "cf34ce73bf658da6d63f340de1867efd9789c7929831d66ecc11030adaebcf14"
     },
     {
       "path": "src/features/mapping/deep-link.ts",
@@ -3498,9 +3498,9 @@
     },
     {
       "path": "src/features/mapping/mapping-app.tsx",
-      "bytes": 7155,
+      "bytes": 7510,
       "mode": 420,
-      "sha256": "00629ff645b0b334d44d929ada66e4952415ebf4f8523b3f7d87744e4e0d8f22"
+      "sha256": "d479c285be8ee21a2b9147436c7695c6352dccf663be4498e60cc2a929a9a101"
     },
     {
       "path": "src/features/mapping/new-mapping-dialog.tsx",

@@ -385,9 +385,9 @@ export class FilesystemAssetStore implements VersionedAssetStore {
     if (!ref || ref.providerId !== this.provider.id || !isSafeRecordId(ref.assetId) || !/^[a-f0-9]{64}$/.test(ref.versionId)) throw operationError("pin", "validation", "Invalid provider-qualified Assets version reference.");
     const record = snapshot.records.find(({ id }) => id === ref.assetId);
     const version = record?.document.versions.find(({ id }) => id === ref.versionId);
-    if (!version) throw operationError("pin", "not-found", "Exact Assets version is not retained.");
+    if (!version) throw operationError("pin", "not-found", `Exact Assets version is not retained (asset "${ref.assetId}").`);
     const integrity = await this.verifyBytes("pin", this.versionPath(version.url), version.byteLength, version.checksum);
-    if (integrity) throw operationError("pin", "bytes-missing", "Exact Assets version bytes are missing or corrupted.");
+    if (integrity) throw operationError("pin", "bytes-missing", `Exact Assets version bytes are missing or corrupted (asset "${record!.id}").`);
     return { providerId: this.provider.id, assetId: record!.id, versionId: version.id, checksum: version.checksum,
       byteLength: version.byteLength, mimeType: version.mimeType, url: version.url };
   }

@@ -57,6 +57,10 @@ const NON_COMPILING_CONSUMERS = [
   // Rejected by pack-mismatch validation before `resolveDemoEditorConfig` ever compiles.
   "server/__tests__/demo-editor-config.test.ts",
   "src/app/__tests__/mapping-attachment-service.test.ts",
+  // Request-budget evidence (#994/#995): like the attachment-service test, each
+  // captures against a copy of the committed sample Assets store.
+  "src/app/__tests__/mapping-asset-request-budget.test.ts",
+  "src/features/mapping/__tests__/mapping-load-budget.test.tsx",
   "src/app/__tests__/provider-integration-source.test.ts",
   "src/app/__tests__/provider-integration.test.ts",
   "src/app/__tests__/workspace-state.test.ts",

@@ -631,6 +631,15 @@ function validateAssetVersionPin(value, expected) {
 	};
 	return validateAssetVersionRef(ref) && value.checksum === ref.versionId && isValidAssetType(value.mimeType) && isValidAssetByteLength(value.byteLength) && value.byteLength > 0 && value.url === assetVersionUrl(ref.versionId, value.mimeType) && (expected === void 0 || validateAssetVersionRef(expected) && assetPinKey(ref) === assetPinKey(expected));
 }
+function validateAssetPinManifest(value, expected) {
+	if (!isPlainObject(value) || !exactKeys$2(value, ["schemaVersion", "pins"]) || value.schemaVersion !== 1 || !Array.isArray(value.pins) || !value.pins.every((pin) => validateAssetVersionPin(pin))) return false;
+	const keys = value.pins.map(assetPinKey);
+	if (keys.some((key, index) => index > 0 && keys[index - 1] >= key)) return false;
+	if (expected === void 0) return true;
+	if (!Array.isArray(expected) || !expected.every(validateAssetVersionRef)) return false;
+	const requested = [...new Set(expected.map(assetPinKey))].sort();
+	return keys.length === requested.length && keys.every((key, index) => key === requested[index]);
+}
 function validateAssetFolder(value) {
 	return isPlainObject(value) && exactKeys$2(value, [
 		"id",
@@ -1916,8 +1925,8 @@ var FilesystemAssetStore = class FilesystemAssetStore {
 		if (!ref || ref.providerId !== this.provider.id || !isSafeRecordId(ref.assetId) || !/^[a-f0-9]{64}$/.test(ref.versionId)) throw operationError$1("pin", "validation", "Invalid provider-qualified Assets version reference.");
 		const record = snapshot.records.find(({ id }) => id === ref.assetId);
 		const version = record?.document.versions.find(({ id }) => id === ref.versionId);
-		if (!version) throw operationError$1("pin", "not-found", "Exact Assets version is not retained.");
-		if (await this.verifyBytes("pin", this.versionPath(version.url), version.byteLength, version.checksum)) throw operationError$1("pin", "bytes-missing", "Exact Assets version bytes are missing or corrupted.");
+		if (!version) throw operationError$1("pin", "not-found", `Exact Assets version is not retained (asset "${ref.assetId}").`);
+		if (await this.verifyBytes("pin", this.versionPath(version.url), version.byteLength, version.checksum)) throw operationError$1("pin", "bytes-missing", `Exact Assets version bytes are missing or corrupted (asset "${record.id}").`);
 		return {
 			providerId: this.provider.id,
 			assetId: record.id,
@@ -9406,6 +9415,7 @@ async function createAssetReferenceLock(store, refs, suppliedSnapshot) {
 			}]
 		};
 		const diagnostics = [], pins = /* @__PURE__ */ new Map();
+		const pending = /* @__PURE__ */ new Map();
 		for (const ref of refs) {
 			if (!validateAssetAssetRef(ref) && !validateAssetVersionRef(ref) || ref.providerId !== store.provider.id) {
 				diagnostics.push({
@@ -9447,21 +9457,44 @@ async function createAssetReferenceLock(store, refs, suppliedSnapshot) {
 				assetId: ref.assetId,
 				versionId
 			};
-			if (pins.has(assetPinKey(exact))) continue;
+			if (!pending.has(assetPinKey(exact))) pending.set(assetPinKey(exact), {
+				exact,
+				ref,
+				record,
+				version
+			});
+		}
+		if (pending.size) {
+			const exacts = [...pending.values()].map(({ exact }) => exact);
 			try {
-				const pin = await store.resolveVersion(exact);
-				if (!validateAssetVersionPin(pin, exact) || pin.checksum !== version.checksum || pin.mimeType !== version.mimeType || pin.byteLength !== version.byteLength || pin.url !== assetVersionUrl(versionId, version.mimeType)) throw new Error("Immutable Assets metadata disagrees with the captured snapshot.");
-				pins.set(assetPinKey(pin), {
-					...pin,
-					fileName: record.document.fileName,
-					metadataRevision: record.revision,
-					headVersionId: record.document.currentVersionId
-				});
+				const manifest = await store.pinManifest(exacts);
+				if (!validateAssetPinManifest(manifest, exacts)) throw new Error("Assets pin manifest is malformed, incomplete, duplicated or unsorted.");
+				const verified = new Map(manifest.pins.map((pin) => [assetPinKey(pin), pin]));
+				for (const [key, { exact, ref, record, version }] of pending) {
+					const pin = verified.get(key);
+					if (!pin || !validateAssetVersionPin(pin, exact) || pin.checksum !== version.checksum || pin.mimeType !== version.mimeType || pin.byteLength !== version.byteLength || pin.url !== assetVersionUrl(exact.versionId, version.mimeType)) {
+						diagnostics.push({
+							code: "corrupt",
+							ref,
+							message: "Immutable Assets metadata disagrees with the captured snapshot."
+						});
+						continue;
+					}
+					pins.set(key, {
+						...pinValue(pin),
+						fileName: record.document.fileName,
+						metadataRevision: record.revision,
+						headVersionId: record.document.currentVersionId
+					});
+				}
 			} catch (error) {
+				const message = error instanceof Error ? error.message : "pin manifest failed.";
+				const named = /\(asset "([^"]+)"\)/.exec(message)?.[1];
+				const failed = [...pending.values()].find(({ exact }) => exact.assetId === named);
 				diagnostics.push({
 					code: "corrupt",
-					ref,
-					message: error instanceof Error ? error.message : "Assets bytes could not be verified."
+					...failed ? { ref: failed.ref } : {},
+					message: `Assets bytes could not be verified for ${pending.size} exact version(s): ${message}`
 				});
 			}
 		}
