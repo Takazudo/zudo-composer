@@ -1,4 +1,4 @@
-import type { ComponentChildren, JSX } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 
 // A tiny in-pack markdown renderer (no WASM, no HTML passthrough): headings,
 // paragraphs, lists, blockquotes, fenced code, hr, block images with captions
@@ -76,8 +76,8 @@ export function safeHref(href: string): string | undefined {
 
 const INLINE = /(`[^`]+`)|(\[([^\]]+)\]\(\s*(\S+?)\s*\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*|_([^_]+)_)/;
 
-export function renderInline(text: string): ComponentChildren[] {
-  const output: ComponentChildren[] = [];
+export function renderInline(text: string): Child[] {
+  const output: Child[] = [];
   let rest = text;
   while (rest) {
     const match = INLINE.exec(rest);
@@ -99,7 +99,7 @@ export function renderInline(text: string): ComponentChildren[] {
 
 const DROP_CAP = "first-letter:float-left first-letter:mr-blog-hsp-xs first-letter:font-blog-semibold first-letter:text-blog-drop-cap first-letter:text-blog-fg-strong blog-lg:first-letter:text-blog-accent";
 
-function renderBlock(block: Block, key: number, dropCap: boolean): JSX.Element {
+function renderBlock(block: Block, key: number, dropCap: boolean): Child {
   switch (block.kind) {
     case "heading":
       return block.level === 2

@@ -2,8 +2,8 @@
 // (release policy, exact Assets lock from cms/assets), then every route's
 // evaluated documents rendered through the pack's own components.
 import { resolve } from "node:path";
-import { h, type ComponentChildren, type ComponentType } from "preact";
-import { renderToString } from "preact-render-to-string";
+import { h, type Child, type Component } from "@takazudo/zfb/zudo-react";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { CompositionNode } from "zudo-composer/site-project";
 import { compileStaticSite, type StaticSiteCompilation } from "zudo-composer/site-build";
@@ -40,17 +40,17 @@ const H1_BY_ROUTE: Record<string, string> = {
 
 const manifestById = new Map(componentPack.manifest.components.map((component) => [component.id, component]));
 
-function renderNodes(nodes: readonly CompositionNode[], outlet?: { parentId: string; slotId: string; nodes: readonly CompositionNode[] }): ComponentChildren[] {
+function renderNodes(nodes: readonly CompositionNode[], outlet?: { parentId: string; slotId: string; nodes: readonly CompositionNode[] }): Child[] {
   return nodes.map((node) => {
     const manifest = manifestById.get(node.componentId);
     const runtime = componentPack.runtime.components[node.componentId];
     if (!manifest || !runtime) throw new Error(`Unknown component ${node.componentId}`);
-    const props: Record<string, unknown> = { ...node.props, key: node.id };
+    const props: Record<string, unknown> = { ...node.props };
     for (const slot of manifest.slots ?? []) {
       const children = [...(node.slots[slot.id] ?? []), ...(outlet && outlet.parentId === node.id && outlet.slotId === slot.id ? outlet.nodes : [])];
       props[slot.prop] = renderNodes(children, outlet);
     }
-    return h(runtime.component as ComponentType, props);
+    return h(runtime.component as Component, props);
   });
 }
 
