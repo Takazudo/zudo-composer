@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/preact";
+import { render, screen } from "../../../../src/test/render";
 import { describe, expect, it } from "vitest";
 import { Callout, Note } from "../../../../packages/ui/src/cards/callout/callout";
 

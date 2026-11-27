@@ -1,6 +1,8 @@
-import { render, screen } from "@testing-library/preact";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { Keyed } from "../../../../src/runtime";
+import { render, screen, settleTasks } from "../../../../src/test/render";
 import { describe, expect, it } from "vitest";
-import { PlaceholderBox } from "../../../../packages/ui/src/media/placeholder-box/placeholder-box";
+import { PlaceholderBox, type PlaceholderBoxProps } from "../../../../packages/ui/src/media/placeholder-box/placeholder-box";
 
 describe("PlaceholderBox", () => {
   it("renders the label as its accessible name", () => {
@@ -8,14 +10,22 @@ describe("PlaceholderBox", () => {
     expect(screen.getByRole("img", { name: "hero-image.png" })).toBeInTheDocument();
   });
 
-  it("falls back to alt, then src, then 'image'", () => {
-    const { rerender } = render(<PlaceholderBox alt="Product photo" src="/img/product.png" />);
+  it("falls back to alt, then src, then 'image'", async () => {
+    // A prop change remounts the node, as the Composer preview renderer does.
+    const props = signal<PlaceholderBoxProps>({ alt: "Product photo", src: "/img/product.png" });
+    render(
+      <Keyed value={props} by={(value) => JSON.stringify(value)}>
+        {(value) => <PlaceholderBox {...value.value} />}
+      </Keyed>,
+    );
     expect(screen.getByRole("img", { name: "Product photo" })).toBeInTheDocument();
 
-    rerender(<PlaceholderBox src="/img/diagram.svg" />);
+    props.value = { src: "/img/diagram.svg" };
+    await settleTasks();
     expect(screen.getByRole("img", { name: "/img/diagram.svg" })).toBeInTheDocument();
 
-    rerender(<PlaceholderBox />);
+    props.value = {};
+    await settleTasks();
     expect(screen.getByRole("img", { name: "image" })).toBeInTheDocument();
   });
 

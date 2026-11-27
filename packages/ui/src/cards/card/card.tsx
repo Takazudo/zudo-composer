@@ -1,5 +1,6 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import { cx } from "../../lib/cx";
+import { slotChild, type SlotChildren } from "../../lib/slot";
 
 export type CardVariant = "default" | "accent" | "muted";
 export type CardPadding = "sm" | "md" | "lg";
@@ -10,7 +11,7 @@ export type CardProps = {
   variant?: CardVariant;
   padding?: CardPadding;
   class?: string;
-  children?: ComponentChildren;
+  children?: SlotChildren;
 };
 
 const PADDING_CLASS: Record<CardPadding, string> = {
@@ -43,14 +44,14 @@ export function Card({
   return (
     <div class={cx("rounded-md", VARIANT_CLASS[variant], PADDING_CLASS[padding], cls)}>
       {title && <CardTitle>{title}</CardTitle>}
-      <div class="text-small text-fg">{children}</div>
+      <div class="text-small text-fg">{slotChild(children)}</div>
     </div>
   );
 }
 
 export type CardTitleProps = {
   class?: string;
-  children?: ComponentChildren;
+  children?: Child;
 };
 
 /** Heading row inside a Card. Also what the `title` prop renders through. */
