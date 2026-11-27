@@ -1,6 +1,7 @@
 /// <reference path="../composer/pack-config.d.ts" />
 import { attachNativeAuthoringState } from "../native-editing/session";
-import { h, render } from "preact";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { mountOwned } from "../../runtime";
 import type { SiteBuildPlan } from "../../site-project/compiler";
 import { SiteDelivery } from "./site-delivery";
 import { deliveryBasePath, type DeliverySourceContract } from "./source";
@@ -19,15 +20,19 @@ export interface SitePreviewOptions {
  * like the published site this document follows the OS through the pack's own
  * `light-dark()`.
  */
-export function mountSitePreview(root: Element, source: DeliverySourceContract, { hostedDemo = false }: SitePreviewOptions = {}): void {
+export function mountSitePreview(container: Element, source: DeliverySourceContract, { hostedDemo = false }: SitePreviewOptions = {}): void {
   if (source.kind === "working-preview") attachNativeAuthoringState(() => source.providers.sessions.hasPending, async () => (await source.providers.sessions.flush()).status === "ready");
   document.documentElement.setAttribute("data-site-preview-doc", "");
   const basePath = deliveryBasePath(source);
   let uninstall: (() => void) | undefined;
-  const mount = (): void => { render(h(SiteDelivery, { source, pathname: window.location.pathname, hostedDemo, onReady }), root); };
+  // One root for the document's life: in-place navigation moves the address
+  // signal, so the delivery snapshot is never reloaded for a page change.
+  const pathname = signal(window.location.pathname);
+  const mount = (): void => { pathname.value = window.location.pathname; };
   const onReady = (build: SiteBuildPlan): void => {
     uninstall?.();
-    uninstall = installVisitorNavigation({ routes: build.routes.map(({ pathname }) => pathname), basePath, mount });
+    uninstall = installVisitorNavigation({ routes: build.routes.map(({ pathname: route }) => route), basePath, mount });
   };
-  mount();
+  const root = mountOwned(SiteDelivery, { source, pathname, hostedDemo, onReady }, { parent: container, name: "SiteDelivery" });
+  if (!root.handle) throw new Error(`Site delivery could not mount (${root.diagnostics.map(({ code }) => code).join(", ") || "no diagnostic"}).`);
 }
