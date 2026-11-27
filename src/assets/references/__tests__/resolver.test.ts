@@ -96,6 +96,14 @@ describe("bulk exact-version verification (#995)", () => {
     expect(await verifyAssetLockIntegrity(locked.lock, store)).toBe(false);
     expect(resolveVersion).not.toHaveBeenCalled();
   });
+  it("attributes a real corrupt-bytes bulk refusal to the failing reference", async () => {
+    const { store, bytes, root, ref } = await setup();
+    const other = await store.upload({ fileName: "other.png", declaredMimeType: "image/png", bytes: new Uint8Array([...bytes, 3]) });
+    const otherRef = { providerId: store.provider.id, assetId: other.id };
+    const locked = await createAssetReferenceLock(store, [ref, otherRef]); expect(locked.status).toBe("ready"); if (locked.status !== "ready") return;
+    await writeFile(join(root, "versions", locked.lock.pins.find(({ assetId }) => assetId === other.id)!.url.split("/").at(-1)!), "corrupt");
+    expect(await createAssetReferenceLock(store, [ref, otherRef])).toMatchObject({ status: "blocked", diagnostics: [{ code: "corrupt", ref: otherRef }] });
+  });
   it("keeps the narrower resolveVersion-only integrity interface working", async () => {
     const { store, ref } = await setup();
     const locked = await createAssetReferenceLock(store, [ref]); expect(locked.status).toBe("ready"); if (locked.status !== "ready") return;

@@ -67,7 +67,14 @@ export async function createAssetReferenceLock(store: VersionedAssetStore | unde
           if (!pin || !validateAssetVersionPin(pin, exact) || pin.checksum !== version.checksum || pin.mimeType !== version.mimeType || pin.byteLength !== version.byteLength || pin.url !== assetVersionUrl(exact.versionId, version.mimeType)) { diagnostics.push({ code: "corrupt", ref, message: "Immutable Assets metadata disagrees with the captured snapshot." }); continue; }
           pins.set(key, { ...pinValue(pin), fileName: record.document.fileName, metadataRevision: record.revision, headVersionId: record.document.currentVersionId });
         }
-      } catch (error) { diagnostics.push({ code: "corrupt", message: `Assets bytes could not be verified for ${pending.size} exact version(s): ${error instanceof Error ? error.message : "pin manifest failed."}` }); }
+      } catch (error) {
+        // Providers name the failing asset as `(asset "<id>")`; attribute the
+        // refusal to that reference so the author can find it.
+        const message = error instanceof Error ? error.message : "pin manifest failed.";
+        const named = /\(asset "([^"]+)"\)/.exec(message)?.[1];
+        const failed = [...pending.values()].find(({ exact }) => exact.assetId === named);
+        diagnostics.push({ code: "corrupt", ...(failed ? { ref: failed.ref } : {}), message: `Assets bytes could not be verified for ${pending.size} exact version(s): ${message}` });
+      }
     }
     if (await store.mutationToken() !== snapshot.mutationToken) diagnostics.push({ code: "changed", message: "Assets metadata changed while exact versions were being captured." });
     return diagnostics.length ? { status: "blocked", diagnostics } : { status: "ready", lock: { schemaVersion: 1, providerId: store.provider.id, mutationToken: snapshot.mutationToken, pins: [...pins].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, pin]) => pin) } };
@@ -87,7 +94,8 @@ export function serializeAssetReferenceLock(lock: AssetReferenceLock): string {
 }
 /** Historical verification never asks for a mutable head or metadata snapshot.
  * A store offering pinManifest verifies every pin in one bulk request; a
- * narrower resolveVersion-only store is checked pin by pin. A failed bulk
+ * narrower resolveVersion-only store is checked pin by pin. Lock pins are
+ * already unique (validateAssetReferenceLock), so no extra dedupe is needed. A failed bulk
  * verification is a failure, never a cue to retry per asset. */
 export async function verifyAssetLockIntegrity(lock: AssetReferenceLock, store: Pick<VersionedAssetStore, "resolveVersion"> & Partial<Pick<VersionedAssetStore, "pinManifest">>): Promise<boolean> {
   if (!validateAssetReferenceLock(lock)) return false;

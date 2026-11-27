@@ -106,6 +106,9 @@ export function compatibleTransforms(sourceKind: ContentModelRecord["document"][
   return candidates.filter((transform) => isMappingCompatible(sourceKind, target.kind, transform)).map((transform) => transform.kind);
 }
 
+/** Extra attachment passes a deep link waits for after its own (#994). */
+const SETTLE_ATTACHMENT_ROUNDS = 3;
+
 export class MappingEditorController {
   private current: MappingEditorState = initialState;
   private readonly listeners = new Set<(state: MappingEditorState) => void>();
@@ -121,6 +124,7 @@ export class MappingEditorController {
   /** Advances on every persisted attachment-relevant change (#994). */
   private attachmentGeneration = 0;
   private attachmentRefresh: { generation: number; promise: Promise<void> } | null = null;
+  private attachmentTrailing: Promise<void> | null = null;
 
   constructor(
     readonly provider: MappingProvider,
@@ -450,21 +454,32 @@ export class MappingEditorController {
   }
 
   /**
-   * One attachment pass per invalidation generation: concurrent callers share
-   * the pass in flight. A pass superseded by a newer generation never publishes.
+   * Single-flight attachment refresh. Callers of the generation in flight share
+   * its pass; a newer generation queues exactly one trailing pass, which starts
+   * when the current one finishes and reads the then-latest generation. A pass
+   * superseded by a newer generation never publishes.
    */
   refreshAttachments(): Promise<void> {
     const generation = this.attachmentGeneration;
-    if (this.attachmentRefresh?.generation === generation) return this.attachmentRefresh.promise;
+    const running = this.attachmentRefresh;
+    if (running?.generation === generation) return running.promise;
+    if (running) return this.attachmentTrailing ??= running.promise.then(() => { this.attachmentTrailing = null; return this.refreshAttachments(); });
     const promise = this.runAttachmentRefresh(generation).finally(() => { if (this.attachmentRefresh?.promise === promise) this.attachmentRefresh = null; });
     this.attachmentRefresh = { generation, promise };
     return promise;
   }
 
-  /** Resolves once no attachment pass, including one started meanwhile, can still flush sessions. */
+  /**
+   * Resolves once no attachment pass can still flush a draft. Bounded: hints
+   * arriving faster than a pass completes cannot starve a deep link forever.
+   */
   private async settleAttachments(): Promise<void> {
     await this.refreshAttachments();
-    while (this.attachmentRefresh) await this.attachmentRefresh.promise;
+    for (let round = 0; round < SETTLE_ATTACHMENT_ROUNDS; round += 1) {
+      const pending = this.attachmentTrailing ?? this.attachmentRefresh?.promise;
+      if (!pending) return;
+      await pending;
+    }
   }
 
   private async runAttachmentRefresh(generation: number): Promise<void> {
@@ -511,8 +526,10 @@ export class MappingEditorController {
 
   /** After this controller's own write, refresh with a pass that began after it. */
   private refreshAfterOwnWrite(generationBeforeWrite: number): Promise<void> {
-    // A store change notification during the write already started a fresh pass.
-    return this.attachmentGeneration === generationBeforeWrite ? this.attachmentsChanged() : this.refreshAttachments();
+    // Only a pass queued after the write began may serve; otherwise force one.
+    const running = this.attachmentRefresh;
+    const fresh = this.attachmentGeneration !== generationBeforeWrite && (!running || running.generation > generationBeforeWrite || this.attachmentTrailing);
+    return fresh ? this.refreshAttachments() : this.attachmentsChanged();
   }
 
   async previewCollectionAttachment(attachmentId: string): Promise<void> {
