@@ -10,10 +10,11 @@
     "./styles/themeset.css": "./styles/themeset.css"
   },
   "peerDependencies": {
-    "@zudo-composer/component-contract": "1.0.0",
-    "preact": "^10.29.8"
+    "@takazudo/zfb": "7.2.0",
+    "@zudo-composer/component-contract": "1.0.0"
   },
   "devDependencies": {
+    "@takazudo/zfb": "7.2.0",
     "@zudo-composer/component-contract": "workspace:*",
     "preact": "^10.29.8"
   }

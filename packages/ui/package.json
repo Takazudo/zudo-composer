@@ -21,8 +21,8 @@
     "dompurify": "^3.4.16"
   },
   "peerDependencies": {
+    "@takazudo/zfb": "7.2.0",
     "@zudo-composer/component-contract": "^1.0.0",
-    "preact": "^10.29.8",
     "tailwindcss": "^4.0.0"
   }
 }

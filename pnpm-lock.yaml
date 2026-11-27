@@ -157,6 +157,9 @@ importers:
 
   fixtures/host:
     devDependencies:
+      '@takazudo/zfb':
+        specifier: 7.2.0
+        version: 7.2.0
       '@zudo-composer/component-contract':
         specifier: workspace:*
         version: link:../../packages/component-contract
@@ -172,6 +175,9 @@ importers:
 
   fixtures/themeset-host:
     devDependencies:
+      '@takazudo/zfb':
+        specifier: 7.2.0
+        version: 7.2.0
       '@zudo-composer/component-contract':
         specifier: workspace:*
         version: link:../../packages/component-contract
@@ -196,6 +202,9 @@ importers:
 
   packages/demo-blog:
     devDependencies:
+      '@takazudo/zfb':
+        specifier: 7.2.0
+        version: 7.2.0
       '@testing-library/preact':
         specifier: ^3.2.4
         version: 3.2.4(preact@10.29.8)
@@ -223,6 +232,9 @@ importers:
 
   packages/demo-landing:
     devDependencies:
+      '@takazudo/zfb':
+        specifier: 7.2.0
+        version: 7.2.0
       '@testing-library/preact':
         specifier: ^3.2.4
         version: 3.2.4(preact@10.29.8)
@@ -250,6 +262,9 @@ importers:
 
   packages/demo-sample:
     devDependencies:
+      '@takazudo/zfb':
+        specifier: 7.2.0
+        version: 7.2.0
       '@types/node':
         specifier: ^26.4.0
         version: 26.4.0
@@ -274,6 +289,9 @@ importers:
 
   packages/demo-webshop:
     devDependencies:
+      '@takazudo/zfb':
+        specifier: 7.2.0
+        version: 7.2.0
       '@testing-library/preact':
         specifier: ^3.2.4
         version: 3.2.4(preact@10.29.8)
@@ -301,6 +319,9 @@ importers:
 
   packages/fixture-themeset:
     devDependencies:
+      '@takazudo/zfb':
+        specifier: 7.2.0
+        version: 7.2.0
       '@zudo-composer/component-contract':
         specifier: workspace:*
         version: link:../component-contract

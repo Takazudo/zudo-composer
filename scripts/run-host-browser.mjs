@@ -57,7 +57,7 @@ function run(command, args, { input, ...options } = {}) {
  * copied from `fixtures/host` so the two hosts cannot drift apart.
  *
  * The symlinks are what an install produces. `zudo-composer` is the package
- * itself; the component pack and Preact peer are resolved from the HOST root.
+ * itself; the component pack and zudo-react runtime peer are resolved from the HOST root.
  */
 /** @param {string} parent */
 function createHostFixture(parent) {
@@ -69,7 +69,8 @@ function createHostFixture(parent) {
   mkdirSync(join(hostRoot, "node_modules", UI_PACK.packageName, ".."), { recursive: true });
   symlinkSync(root, join(hostRoot, "node_modules/zudo-composer"), "dir");
   symlinkSync(join(root, "node_modules", UI_PACK.packageName), join(hostRoot, "node_modules", UI_PACK.packageName), "dir");
-  symlinkSync(join(root, "node_modules/preact"), join(hostRoot, "node_modules/preact"), "dir");
+  mkdirSync(join(hostRoot, "node_modules/@takazudo"), { recursive: true });
+  symlinkSync(join(root, "node_modules/@takazudo/zfb"), join(hostRoot, "node_modules/@takazudo/zfb"), "dir");
   for (const file of ["zudo-composer.config.ts", "styles/base.css"]) {
     cpSync(join(root, "fixtures/host", file), join(hostRoot, file));
   }
@@ -92,7 +93,7 @@ function createHostFixture(parent) {
     devDependencies: {
       "zudo-composer": "workspace:*",
       [packPackage]: manifest.devDependencies[packPackage],
-      preact: manifest.peerDependencies.preact,
+      "@takazudo/zfb": manifest.peerDependencies["@takazudo/zfb"],
     },
   }, null, 2)}\n`);
   return hostRoot;

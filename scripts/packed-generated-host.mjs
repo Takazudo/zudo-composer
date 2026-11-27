@@ -43,7 +43,7 @@ export async function createPackedGeneratedHost({ root, workspace, roots, tarbal
   await assertExternalWorkspace(roots, launcher);
   await writeFile(join(launcher, "package.json"), `${JSON.stringify({
     name: "packed-creator-launcher", private: true, type: "module",
-    dependencies: { "zudo-composer": tool.version, "@zudo-composer/component-contract": contract.version, preact: tool.peerDependencies.preact },
+    dependencies: { "zudo-composer": tool.version, "@zudo-composer/component-contract": contract.version, "@takazudo/zfb": tool.peerDependencies["@takazudo/zfb"] },
   }, null, 2)}\n`);
   await configurePackedHost(launcher, tarballs, tool.packageManager);
   await run(pnpm, ["install", "--no-frozen-lockfile"], launcher, { env });

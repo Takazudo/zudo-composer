@@ -32,11 +32,14 @@ files.push(path.join(repositoryRoot, 'package.json'), path.join(repositoryRoot, 
 
 /** @type {Array<[string, RegExp]>} */
 const forbidden = [
-  ['provider application coupling', /@zudo-composer\/ui|zudo-doc|@takazudo\/zfb|\bzfb\b/i],
+  // The zudo-react runtime is the tool's own UI runtime, so naming exactly
+  // `@takazudo/zfb` or a `@takazudo/zfb/zudo-react*` subpath is not zfb
+  // application coupling; every other zfb package, subpath or `zfb` name is.
+  ['provider application coupling', /@zudo-composer\/ui|zudo-doc|@takazudo\/zfb(?!(?:\/zudo-react(?:\/[a-z-]+)?)?["'`])|(?<!@takazudo\/)\bzfb\b/i],
   ['application alias', /(?:from|import\()\s*["']@\//],
   ['removed source adapter', /sourceAdapters?|JsxSourceAdapter/],
   ['removed schema compatibility', /COMPOSITION_SCHEMA_V1|decodedFromSchemaVersion|MigrationMeta|CleanupMeta|\blocalStorage\b/i],
-  ['headless Preact dependency', /(?:^|\n)\s*import\s+(?:type\s+)?(?:[^;\n]+?\s+from\s+)?["']preact(?:\/|["'])/],
+  ['headless UI runtime dependency', /(?:^|\n)\s*import\s+(?:type\s+)?(?:[^;\n]+?\s+from\s+)?["'](?:preact|@takazudo\/zfb)(?:\/|["'])/],
   ['application-layer dependency', /(?:from|import\()\s*["'][^"']*(?:features|src\/app|\/app\/)[^"']*["']/],
 ];
 
@@ -49,7 +52,7 @@ for (const file of files) {
     const applicablePattern = rule === 'provider application coupling' && isRootConfig
       // The standalone application intentionally installs its injected UI pack;
       // headless isolation is enforced against the production-domain roots above.
-      ? /zudo-doc|@takazudo\/zfb(?!-md-wasm)|\bzfb\b(?!-md-wasm)/i
+      ? /zudo-doc|@takazudo\/zfb(?!-md-wasm|(?:\/zudo-react(?:\/[a-z-]+)?)?["'`])|(?<!@takazudo\/)\bzfb\b(?!-md-wasm)/i
       : pattern;
     if (applicablePattern.test(['removed source adapter', 'removed schema compatibility'].includes(rule) ? code : content)) violations.push(`${path.relative(repositoryRoot, file)}: ${rule}`);
   }

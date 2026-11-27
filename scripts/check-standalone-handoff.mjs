@@ -184,7 +184,10 @@ for (const path of markdownFiles(root)) {
 }
 
 const directDependencies = Object.keys({ ...packageJson.dependencies, ...packageJson.devDependencies });
-const forbiddenHostModule = /zudo-doc|(?:^|[/@-])zfb(?:[/@-]|$)|virtual-zfb|styleguide.*registry/i;
+const forbiddenZfbModule = /zudo-doc|(?:^|[/@-])zfb(?:[/@-]|$)|virtual-zfb|styleguide.*registry/i;
+// The zudo-react runtime is the tool's own UI runtime, not a zfb application module.
+const zudoReactRuntime = /^@takazudo\/zfb(?:\/zudo-react(?:\/[a-z-]+)?)?$/;
+const forbiddenHostModule = { test: (/** @type {string} */ name) => forbiddenZfbModule.test(name) && !zudoReactRuntime.test(name) };
 assert.deepEqual(directDependencies.filter((name) => forbiddenHostModule.test(name)), []);
 
 const forbiddenImports = [];

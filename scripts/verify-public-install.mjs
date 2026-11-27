@@ -47,7 +47,7 @@ try {
   await writeFile(join(host, "package.json"), JSON.stringify({
     name: "public-entry-host", private: true, version: "0.0.0", type: "module", packageManager: toolPackage.packageManager,
     exports: { "./components": "./components/pack.mjs" },
-    dependencies: { ...tarballs, preact: toolPackage.peerDependencies.preact ?? toolPackage.devDependencies.preact ?? toolPackage.dependencies.preact },
+    dependencies: { ...tarballs, "@takazudo/zfb": toolPackage.peerDependencies["@takazudo/zfb"] },
     // Public plugin/server type identity is compared with the host's Vite import.
     devDependencies: { typescript: toolPackage.devDependencies.typescript, "@types/node": toolPackage.devDependencies["@types/node"], vite: toolPackage.dependencies.vite },
   }, null, 2));

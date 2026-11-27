@@ -4,7 +4,7 @@ packages:
   - fixtures/themeset-host
   - doc
 
-# packages/ui declares @zudo-composer/component-contract, preact and
+# packages/ui declares @zudo-composer/component-contract, @takazudo/zfb and
 # tailwindcss as peers only (#686 C0: no devDependencies/workspace: spec in
 # that package, unlike packages/fixture-themeset's precedent). With
 # autoInstallPeers on, pnpm tries to fetch the unpublished workspace-only

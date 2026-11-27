@@ -29,7 +29,8 @@ export async function prepareAssistantHost({ kind, dir, baseUrl, apiKeyEnv = "ZU
     await writeFile(join(target, "zudo-composer.config.ts"), config.replace(/\}\s*;?\s*$/u, `, assistant: ${JSON.stringify(assistant)} };\n`).replace(/,\s*,/u, ","));
     await mkdir(join(target, "node_modules/@zudo-composer"), { recursive: true });
     await symlink(repo, join(target, "node_modules/zudo-composer"), "dir");
-    await symlink(join(repo, "node_modules/preact"), join(target, "node_modules/preact"), "dir");
+    await mkdir(join(target, "node_modules/@takazudo"), { recursive: true });
+    await symlink(join(repo, "node_modules/@takazudo/zfb"), join(target, "node_modules/@takazudo/zfb"), "dir");
     await symlink(join(repo, "packages/component-contract"), join(target, "node_modules/@zudo-composer/component-contract"), "dir");
     const run = spawnSync(process.execPath, ["initialize.mjs"], { cwd: target, encoding: "utf8" });
     if (run.status !== 0) throw new Error(`edit-host initialization failed: ${run.stderr}`);
