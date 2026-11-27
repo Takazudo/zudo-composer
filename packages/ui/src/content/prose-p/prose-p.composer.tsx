@@ -2,9 +2,9 @@ import { defineComponent } from "@zudo-composer/component-contract";
 import { ProseP, type ProsePProps } from "./prose-p";
 
 // Composer edits plain text. The runtime component still accepts the broader
-// MDX ComponentChildren type, but the authoring contract intentionally narrows
-// this persisted field to JSON strings.
-type ProsePComposerProps = Omit<ProsePProps, "children"> & { children?: string };
+// MDX children and paragraph attributes, but the authoring contract
+// intentionally narrows this persisted surface to a JSON string.
+type ProsePComposerProps = Pick<ProsePProps, "class"> & { children?: string };
 
 export const prosePDisplay = {
   title: "ProseP",

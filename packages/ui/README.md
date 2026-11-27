@@ -1,6 +1,6 @@
 # `@zudo-composer/ui`
 
-Preact components and the typed component provider pack for zudo-composer.
+zudo-react components (`@takazudo/zfb/zudo-react`) and the typed component provider pack for zudo-composer.
 This package owns the 12 Composer building-block components, their Composer
 sidecars, the generated component pack, and the CSS needed to render that
 pack. The Composer authoring tool itself lives in
@@ -19,7 +19,7 @@ import "@zudo-composer/ui/styles/composer.css";
 ```
 
 `componentPackManifest` is JSON-safe provider data. The runtime registry keeps
-the trusted Preact components and optional render/inline-editor adapters. Both
+the trusted zudo-react components and optional render/inline-editor adapters. Both
 are generated from co-located `src/**/*.composer.tsx` sidecars.
 
 ## Stylesheet cascade
