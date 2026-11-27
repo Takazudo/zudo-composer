@@ -1,7 +1,8 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, settle, settleTasks, waitFor } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../App";
 import type { ProductionProviderIntegration } from "../provider-integration";
+import type { AppServices } from "../services";
 import { createWorkspaceSaveRegistry } from "../workspace-sessions";
 import { harness, mappingRecord } from "../../features/mapping/__tests__/harness";
 import { activeComponentProvider } from "../../features/composer/active-pack";
@@ -17,10 +18,9 @@ vi.mock("../provider-integration", async (importOriginal) => ({
   ...await importOriginal<typeof import("../provider-integration")>(),
   createProductionProviderIntegration: () => { throw new Error("Inject the test workspace."); },
 }));
-vi.mock("../dashboard", async () => {
-  const { useWorkspace } = await import("../workspace-context");
-  return { Dashboard: () => { const workspace = useWorkspace()!; return <main><h1>Workspace {workspace.integration.workspace.id}</h1><input aria-label="Draft" defaultValue="draft" /><button onClick={() => void workspace.reset()}>Reset workspace</button></main>; } };
-});
+vi.mock("../dashboard", () => ({
+  Dashboard: ({ services }: { services: AppServices }) => <main><h1>Workspace {services.workspace.integration.workspace.id}</h1><input aria-label="Draft" value="draft" /><button type="button" on:click={() => void services.workspace.reset()}>Reset workspace</button></main>,
+}));
 vi.mock("../workspace-summary", () => ({ createWorkspaceSummary: () => ({ counts: async () => ({ content: { status: "unavailable" }, compositions: { status: "unavailable" }, mappings: { status: "unavailable" }, sitemaps: { status: "unavailable" }, assets: { status: "absent" } }), dispose: () => undefined }) }));
 vi.mock("../../features/composer/chrome/composer-app", () => ({ default: () => <h1>Composition editor</h1> }));
 vi.mock("../../features/content", () => ({ ContentRouteContent: vi.fn(() => <h1>Content editor</h1>) }));
@@ -72,7 +72,7 @@ describe("application workspace lifetime", () => {
     await screen.findByRole("heading", { name: "Workspace one" }); expect(warns()).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Reset workspace" }));
     await waitFor(() => expect(integration.workspace.reset).toHaveBeenCalledTimes(1)); expect(warns()).toBe(true);
-    await act(async () => finish(workspace("replacement") as unknown as ProductionProviderIntegration));
+    finish(workspace("replacement") as unknown as ProductionProviderIntegration); await settleTasks();
     await screen.findByRole("heading", { name: "Workspace replacement" });
     expect(warns()).toBe(false);
   });
@@ -87,9 +87,9 @@ describe("application workspace lifetime", () => {
       render(<App integration={integration as unknown as ProductionProviderIntegration} />); await screen.findByRole("heading", { name: "Workspace one" });
       fireEvent.click(screen.getByRole("button", { name: "Reset workspace" }));
       expect(controller.getSnapshot().gateBlocked).toBe(true); await controller.review(); expect(integration.captureWorkspace).not.toHaveBeenCalled();
-      await act(async () => finishSave()); await waitFor(() => expect(integration.workspace.reset).toHaveBeenCalledTimes(1));
+      finishSave(); await settleTasks(); await waitFor(() => expect(integration.workspace.reset).toHaveBeenCalledTimes(1));
       await controller.review(); expect(integration.captureWorkspace).not.toHaveBeenCalled(); expect(controller.getSnapshot().gateBlocked).toBe(true);
-      await act(async () => finishOpen(workspace("two"))); await screen.findByRole("heading", { name: "Workspace two" });
+      finishOpen(workspace("two")); await settleTasks(); await screen.findByRole("heading", { name: "Workspace two" });
       expect(controller.getSnapshot().gateBlocked).toBe(false);
     } finally { spy.mockRestore(); }
   });
@@ -142,7 +142,7 @@ describe("application workspace lifetime", () => {
     window.history.replaceState(null, "", `/mapping?provider=${h.provider.descriptor.id}&mapping=${record.id}`);
     render(<App integration={integration as unknown as ProductionProviderIntegration} />);
     const name = await screen.findByRole("textbox", { name: "Mapping name" });
-    await act(async () => undefined);
+    await settleTasks();
     fireEvent.input(name, { target: { value: "Accepted real draft" } }); fireEvent.keyDown(name, { key: "Enter" });
     await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
     const put = vi.spyOn(h.provider.store, "put").mockRejectedValueOnce(new Error("save denied"));
@@ -171,12 +171,12 @@ describe("application workspace lifetime", () => {
     let fail = true;
     integration.sessions.register({ feature: "Asset", providerId: "asset-files" }, { flush: async () => { if (fail) throw new Error("pending upload failed"); } });
     const length = history.length;
-    act(() => history.back());
+    history.back(); await settle();
     expect(await screen.findByRole("alert")).toHaveTextContent("pending upload failed");
     expect(location.pathname).toBe("/assets"); expect(history.length).toBe(length);
     fail = false;
-    act(() => history.back()); await screen.findByRole("heading", { name: "Workspace one" }); expect(location.pathname).toBe("/");
-    act(() => history.forward()); await screen.findByRole("heading", { name: "Asset editor" }); expect(location.pathname).toBe("/assets");
+    history.back(); await settle(); await screen.findByRole("heading", { name: "Workspace one" }); expect(location.pathname).toBe("/");
+    history.forward(); await settle(); await screen.findByRole("heading", { name: "Asset editor" }); expect(location.pathname).toBe("/assets");
   });
   it("waits for registered saves before navigation and keeps the editor mounted while waiting", async () => {
     const integration = workspace(); let finish!: () => void;
@@ -186,7 +186,7 @@ describe("application workspace lifetime", () => {
     const input = screen.getByRole("textbox");
     fireEvent.click(screen.getByRole("link", { name: "Content" }));
     expect(window.location.pathname).toBe("/"); expect(screen.getByRole("textbox")).toBe(input);
-    await act(async () => finish());
+    finish(); await settleTasks();
     await screen.findByRole("heading", { name: "Content editor" }); expect(window.location.pathname).toBe("/content");
   });
   it("keeps navigation/review on the current route and surfaces provider/record save failure", async () => {
@@ -206,7 +206,7 @@ describe("application workspace lifetime", () => {
     fireEvent.click(link);
     await waitFor(() => expect(overlay).toHaveAttribute("data-visible"));
     expect(overlay).toHaveAttribute("aria-hidden", "false"); expect(link).toHaveAttribute("data-cms-nav-pending");
-    await act(async () => finish());
+    finish(); await settleTasks();
     await screen.findByRole("heading", { name: "Content editor" });
     await waitFor(() => expect(screen.getByTestId("page-loading-overlay")).not.toHaveAttribute("data-visible")); expect(link).not.toHaveAttribute("data-cms-nav-pending");
   });
@@ -223,7 +223,7 @@ describe("application workspace lifetime", () => {
       const read = authoringFetch("/__zudo-read");
       await waitFor(() => expect(screen.getByTestId("page-loading-overlay")).toHaveAttribute("data-visible"));
       expect(link).toHaveAttribute("data-cms-nav-pending");
-      await act(async () => { finishRead(new Response("{}")); await read; });
+      finishRead(new Response("{}")); await read; await settleTasks();
       await waitFor(() => expect(screen.getByTestId("page-loading-overlay")).not.toHaveAttribute("data-visible"));
       expect(link).not.toHaveAttribute("data-cms-nav-pending");
     } finally { reset(); }
@@ -237,9 +237,9 @@ describe("application workspace lifetime", () => {
     try {
       render(<App integration={integration as unknown as ProductionProviderIntegration} />);
       expect(await screen.findByRole("status")).toHaveTextContent("Opening the selected workspace…");
-      await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+      await vi.advanceTimersByTimeAsync(1100); await settle();
       expect(screen.queryByRole("button", { name: "Retry opening" })).toBeNull();
-      await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+      await vi.advanceTimersByTimeAsync(1100); await settle();
       await screen.findByRole("heading", { name: "Workspace one" });
       expect(integration.initialization.retry).toHaveBeenCalledTimes(2);
     } finally { vi.useRealTimers(); }
@@ -254,7 +254,7 @@ describe("application workspace lifetime", () => {
     fireEvent.click(link);
     expect(await screen.findByRole("alert")).toHaveTextContent("pending upload failed");
     await waitFor(() => expect(screen.getByTestId("page-loading-overlay")).not.toHaveAttribute("data-visible")); expect(link).not.toHaveAttribute("data-cms-nav-pending");
-    act(() => history.back());
+    history.back(); await settle();
     await waitFor(() => expect(location.pathname).toBe("/assets"));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("pending upload failed"));
     await waitFor(() => expect(screen.getByTestId("page-loading-overlay")).not.toHaveAttribute("data-visible"));
@@ -281,7 +281,7 @@ describe("application workspace lifetime", () => {
     render(<App integration={integration as unknown as ProductionProviderIntegration} />);
     expect(await screen.findByRole("status")).toHaveTextContent("Opening the selected workspace…");
     expect(screen.queryByRole("button", { name: "Retry opening" })).toBeNull(); expect(screen.queryByRole("button", { name: "Create fresh workspace" })).toBeNull();
-    await act(async () => open());
+    open(); await settleTasks();
     await screen.findByRole("heading", { name: "Workspace one" });
   });
   it("retries opening without reseeding and exposes explicit reset recovery", async () => {
@@ -316,7 +316,7 @@ describe("application workspace lifetime", () => {
     // `CHANNEL_NAME` in src/shared/pending-broadcast.ts.
     await waitFor(() => expect(channels).toEqual(["zudo-workspace-pending-v1"]));
     expect(posted).toEqual([]);
-    await act(async () => session.changed());
+    session.changed(); await settleTasks();
     expect(posted).toEqual([expect.objectContaining({ type: "pending", workspaceId: "late-one", value: true })]);
   });
 });
