@@ -9,6 +9,8 @@ import { rollup } from "rollup";
 import { dts } from "rollup-plugin-dts";
 import { build } from "vite";
 import ts from "typescript";
+import { zudoReactOxc } from "../plugins/module-resolution.mjs";
+import { assertNoInlinedRuntime } from "./zudo-react-boundary.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const check = process.argv.includes("--check");
@@ -43,6 +45,7 @@ try {
     configFile: false,
     root,
     logLevel: "error",
+    oxc: zudoReactOxc(),
     build: {
       target: "node24",
       ssr: true,
@@ -101,6 +104,7 @@ try {
     await writeFile(outputPath, (await readFile(outputPath, "utf8")).replace(/[\t ]+$/gm, ""));
   }
   const outputs = await filesUnder(generated);
+  for (const output of outputs) if (output.endsWith(".mjs")) assertNoInlinedRuntime(relative(generated, output), await readFile(output, "utf8"));
   for (const name of Object.keys(declarationEntries)) {
     const extensions = Object.hasOwn(entries, name) ? ["mjs", "d.mts"] : ["d.mts"];
     for (const extension of extensions) assert.ok(outputs.includes(join(generated, `${name}.${extension}`)), `Missing public output: ${name}.${extension}`);
