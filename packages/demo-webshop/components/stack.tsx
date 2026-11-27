@@ -1,17 +1,17 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 
 export interface StackProps {
   gap: "xs" | "sm" | "md" | "lg";
   align: "start" | "center" | "stretch";
-  children?: ComponentChildren;
+  children?: Child | object;
 }
 
 const GAP = { xs: "gap-shop-vsp-xs", sm: "gap-shop-vsp-sm", md: "gap-shop-vsp-md", lg: "gap-shop-vsp-lg" } as const;
 const ALIGN = { start: "items-start", center: "items-center", stretch: "items-stretch" } as const;
 
 export function Stack({ gap = "md", align = "stretch", children }: StackProps) {
-  return <div class={`flex flex-col ${GAP[gap] ?? GAP.md} ${ALIGN[align] ?? ALIGN.stretch}`}>{children}</div>;
+  return <div class={`flex flex-col ${GAP[gap] ?? GAP.md} ${ALIGN[align] ?? ALIGN.stretch}`}>{children as Child}</div>;
 }
 
 export const stackComponent = defineComponent<StackProps>()(Stack, {

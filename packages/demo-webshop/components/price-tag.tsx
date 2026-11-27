@@ -1,4 +1,5 @@
 import { defineComponent } from "@zudo-composer/component-contract";
+import { computed, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 
 export interface PriceTagProps {
   price: number;
@@ -14,12 +15,15 @@ export function formatPrice(price: number, currency: string): string {
   }
 }
 
+const priceClass = (size: PriceTagProps["size"]) => `font-shop-mono tabular-nums text-shop-price ${size === "h2" ? "text-shop-h2" : "text-shop-body"}`;
+
 export function PriceTag({ price = 0, currency = "USD", size = "body" }: PriceTagProps) {
-  return (
-    <span class={`font-shop-mono tabular-nums text-shop-price ${size === "h2" ? "text-shop-h2" : "text-shop-body"}`}>
-      {formatPrice(price, currency)}
-    </span>
-  );
+  return <span class={priceClass(size)}>{formatPrice(price, currency)}</span>;
+}
+
+/** The cart's running totals: same markup as `PriceTag`, with a live amount. */
+export function LivePrice({ price, currency, size }: Omit<PriceTagProps, "price"> & { price: ReadonlySignal<number> }) {
+  return <span class={priceClass(size)}>{computed(() => formatPrice(price.value, currency))}</span>;
 }
 
 export const priceTagComponent = defineComponent<PriceTagProps>()(PriceTag, {

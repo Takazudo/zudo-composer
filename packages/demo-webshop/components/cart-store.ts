@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { getScope, signal, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 
 export interface CartLine {
   readonly slug: string;
@@ -108,19 +108,14 @@ export type CartStore = ReturnType<typeof createCartStore>;
 
 export const cartStore = createCartStore();
 
-export function useCart(store: CartStore = cartStore) {
-  const [state, setState] = useState(store.get);
-  useEffect(() => {
-    setState(store.get());
-    return store.subscribe(setState);
-  }, [store]);
-  return {
-    lines: state.lines,
-    count: cartCount(state),
-    subtotal: cartSubtotal(state),
-    add: store.add,
-    remove: store.remove,
-    setQuantity: store.setQuantity,
-    clear: store.clear,
-  };
+/** The cart as a signal for one component scope: seeded at setup, resynced and subscribed on activation. */
+export function cartSignal(store: CartStore = cartStore): ReadonlySignal<CartState> {
+  const state = signal(store.get());
+  getScope().onActivate(() => {
+    state.value = store.get();
+    return store.subscribe((next) => {
+      state.value = next;
+    });
+  });
+  return state;
 }

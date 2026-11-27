@@ -1,4 +1,4 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 
 /** Text links: never accent; the underline darkens and thickens on hover. */
 export const textLinkClass = "text-land-link underline decoration-land-border underline-offset-2 hover:decoration-land-fg-strong hover:decoration-2";
@@ -61,8 +61,8 @@ export function parseMarkdown(source: string): MarkdownBlock[] {
 const INLINE = /\*\*([^*]+)\*\*|\*([^*]+)\*|_([^_]+)_|\[([^\]]+)\]\(([^)\s]+)\)/g;
 const SAFE_HREF = /^(https?:|mailto:|\/|#)/i;
 
-export function renderInline(text: string): ComponentChildren[] {
-  const out: ComponentChildren[] = [];
+export function renderInline(text: string): Child[] {
+  const out: Child[] = [];
   let last = 0;
   for (const match of text.matchAll(INLINE)) {
     if (match.index > last) out.push(text.slice(last, match.index));

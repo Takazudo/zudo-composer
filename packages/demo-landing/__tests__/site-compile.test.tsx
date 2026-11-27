@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { render as renderToString } from "preact-render-to-string";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { CompositionNode } from "zudo-composer/site-project";
 import { compileStaticSite, type StaticSiteCompilation } from "zudo-composer/site-build";

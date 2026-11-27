@@ -13,7 +13,7 @@ const ICON_PATHS: Record<IconName | "check" | "plus", readonly string[]> = {
 
 export function Icon({ name, class: className }: { name: keyof typeof ICON_PATHS; class?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" class={className}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class={className}>
       {ICON_PATHS[name].map((d) => <path key={d} d={d} />)}
     </svg>
   );
@@ -22,7 +22,7 @@ export function Icon({ name, class: className }: { name: keyof typeof ICON_PATHS
 /** The Orrery brand mark: an orbit ring with a centre and one planet. */
 export function OrreryMark({ class: className }: { class?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true" class={className}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" class={className}>
       <circle cx="12" cy="12" r="8.5" />
       <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
       <circle cx="18" cy="6" r="2" fill="currentColor" stroke="none" />
@@ -44,7 +44,7 @@ export function Wordmark({ name, emblem }: { name: string; emblem: string }) {
   return (
     <svg viewBox="0 0 176 32" role="img" aria-label={name} class="h-land-wordmark w-auto text-land-muted">
       <path d={emblem} fill="currentColor" fill-rule="evenodd" />
-      <text x="36" y="22" fill="currentColor" font-size="17" font-weight="600" font-family="inherit">{name}</text>
+      <text x="36" y="22" fill="currentColor" style={{ "font-size": "17px", "font-weight": 600, "font-family": "inherit" }}>{name}</text>
     </svg>
   );
 }

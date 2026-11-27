@@ -1,5 +1,4 @@
-import type { ComponentChildren } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { computed, getScope, signal, type Child } from "@takazudo/zfb/zudo-react";
 import { OrreryMark } from "./icons";
 import { textLinkClass } from "./prose";
 
@@ -49,14 +48,14 @@ export interface NavLinkProps {
 }
 
 export function NavLink({ label, href }: NavLinkProps) {
-  const [current, setCurrent] = useState(false);
-  useEffect(() => {
-    setCurrent(isCurrentPath(href, window.location.pathname));
-  }, [href]);
+  const current = signal(false);
+  getScope().onActivate(() => {
+    current.value = isCurrentPath(href, window.location.pathname);
+  });
   return (
     <a
       href={href}
-      aria-current={current ? "page" : undefined}
+      aria-current={computed(() => (current.value ? "page" : null))}
       class="inline-flex min-h-land-control-h items-center text-land-body text-land-fg-strong decoration-land-border underline-offset-4 hover:underline aria-[current=page]:underline aria-[current=page]:decoration-land-fg-strong"
     >
       {label}
@@ -67,8 +66,9 @@ export function NavLink({ label, href }: NavLinkProps) {
 export interface HeaderProps {
   brand: string;
   brandHref: string;
-  nav?: ComponentChildren;
-  action?: ComponentChildren;
+  nav?: Child | object;
+  // A single slot: the contract types it framework-neutrally, bigint included.
+  action?: Child | object | bigint;
 }
 
 export function Header({ brand, brandHref, nav, action }: HeaderProps) {
@@ -79,8 +79,8 @@ export function Header({ brand, brandHref, nav, action }: HeaderProps) {
           <OrreryMark class="size-land-icon" />
           <span>{brand}</span>
         </a>
-        <nav aria-label="Primary" class="order-last flex w-full items-center gap-x-land-hsp-md land-md:order-none land-md:w-auto land-md:flex-1">{nav}</nav>
-        <div class="ml-auto flex items-center land-md:ml-[0]">{action}</div>
+        <nav aria-label="Primary" class="order-last flex w-full items-center gap-x-land-hsp-md land-md:order-none land-md:w-auto land-md:flex-1">{nav as Child}</nav>
+        <div class="ml-auto flex items-center land-md:ml-[0]">{action as Child}</div>
       </div>
     </header>
   );
@@ -90,14 +90,14 @@ export interface FooterProps {
   smallPrint: string;
   creditLabel: string;
   creditHref: string;
-  nav?: ComponentChildren;
+  nav?: Child | object;
 }
 
 export function Footer({ smallPrint, creditLabel, creditHref, nav }: FooterProps) {
   return (
     <footer class="mt-land-vsp-xl border-t border-land-border bg-land-bg">
       <div class="mx-auto flex w-full max-w-land-page flex-col gap-land-vsp-md px-land-hsp-md py-land-vsp-lg land-lg:px-land-hsp-xl">
-        <nav aria-label="Footer" class="flex flex-wrap gap-x-land-hsp-md gap-y-land-vsp-xs [&_a]:text-land-muted">{nav}</nav>
+        <nav aria-label="Footer" class="flex flex-wrap gap-x-land-hsp-md gap-y-land-vsp-xs [&_a]:text-land-muted">{nav as Child}</nav>
         <div class="flex flex-wrap justify-between gap-x-land-hsp-md gap-y-land-vsp-xs text-land-caption text-land-muted">
           <p>{smallPrint}</p>
           {creditLabel && <p><a href={creditHref || undefined} class={textLinkClass}>{creditLabel}</a></p>}

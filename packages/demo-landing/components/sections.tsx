@@ -1,4 +1,4 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import { buttonClass } from "./chrome";
 import { Icon, type IconName } from "./icons";
 import { Picture } from "./layout";
@@ -7,12 +7,12 @@ const cardClass = "rounded-land-md border border-land-border bg-land-surface p-l
 
 export interface FeatureGridProps {
   columns: "2" | "3";
-  items?: ComponentChildren;
+  items?: Child | object;
 }
 
 export function FeatureGrid({ columns, items }: FeatureGridProps) {
   const cols = columns === "3" ? "land-sm:grid-cols-2 land-lg:grid-cols-3" : "land-sm:grid-cols-2";
-  return <div class={`grid gap-land-hsp-md ${cols}`}>{items}</div>;
+  return <div class={`grid gap-land-hsp-md ${cols}`}>{items as Child}</div>;
 }
 
 export interface FeatureItemProps {
@@ -36,11 +36,11 @@ export function FeatureItem({ icon, title, body, emphasis }: FeatureItemProps) {
 }
 
 export interface StepsRowProps {
-  steps?: ComponentChildren;
+  steps?: Child | object;
 }
 
 export function StepsRow({ steps }: StepsRowProps) {
-  return <ol class="grid gap-land-vsp-md land-md:grid-cols-3 land-md:gap-land-hsp-md">{steps}</ol>;
+  return <ol class="grid gap-land-vsp-md land-md:grid-cols-3 land-md:gap-land-hsp-md">{steps as Child}</ol>;
 }
 
 export interface StepProps {
@@ -106,11 +106,11 @@ export function CtaBand({ heading, lead, buttonLabel, buttonHref }: CtaBandProps
 }
 
 export interface TestimonialsProps {
-  testimonials?: ComponentChildren;
+  testimonials?: Child | object;
 }
 
 export function Testimonials({ testimonials }: TestimonialsProps) {
-  return <div class="grid gap-land-hsp-md land-md:grid-cols-3">{testimonials}</div>;
+  return <div class="grid gap-land-hsp-md land-md:grid-cols-3">{testimonials as Child}</div>;
 }
 
 export interface TestimonialProps {

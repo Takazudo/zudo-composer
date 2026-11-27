@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { h, type ComponentType, type VNode } from "preact";
-import { render as renderToString } from "preact-render-to-string";
+import { h, type Component, type Description } from "@takazudo/zfb/zudo-react";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { componentPack } from "@zudo-composer/ui/composer-pack";
 import { beforeAll, describe, expect, it } from "vitest";
 import { canonicalStringifyJson, validateSiteProject } from "zudo-composer/authoring";
@@ -40,16 +40,16 @@ const route = (pathname: string) => {
 
 // Render the installed pack's components, projecting the declared slots onto
 // their runtime props. This exercises the provider's real h1 markup in Node.
-function renderNode(node: CompositionNode): VNode {
+function renderNode(node: CompositionNode): Description {
   const manifest = componentPack.manifest.components.find((component) => component.id === node.componentId);
   if (!manifest) throw new Error(`Missing provider component ${node.componentId}`);
-  const Component = componentPack.runtime.components[node.componentId]!.component as ComponentType<Record<string, unknown>>;
+  const Component = componentPack.runtime.components[node.componentId]!.component as Component<Record<string, unknown>>;
   const props: Record<string, unknown> = { ...manifest.defaults, ...node.props };
   for (const slot of manifest.slots) {
     const children = (node.slots[slot.id] ?? []).map(renderNode);
     props[slot.prop] = slot.cardinality === "single" ? children[0] : children;
   }
-  return h(Component, { ...props, key: node.id });
+  return h(Component, props);
 }
 
 const countPages = (nodes: readonly SitemapNode[]): number => nodes.reduce((count, node) => count + 1 + countPages(node.children), 0);

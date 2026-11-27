@@ -1,13 +1,13 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 
 export interface ContainerProps {
   width: "page" | "narrow";
-  content?: ComponentChildren;
+  content?: Child | object;
 }
 
 export function Container({ width, content }: ContainerProps) {
   const max = width === "narrow" ? "max-w-land-narrow" : "max-w-land-page";
-  return <div class={`mx-auto w-full px-land-hsp-md land-lg:px-land-hsp-xl ${max}`}>{content}</div>;
+  return <div class={`mx-auto w-full px-land-hsp-md land-lg:px-land-hsp-xl ${max}`}>{content as Child}</div>;
 }
 
 const STACK_GAP = { xs: "gap-land-vsp-xs", sm: "gap-land-vsp-sm", md: "gap-land-vsp-md", lg: "gap-land-vsp-lg" } as const;
@@ -15,39 +15,40 @@ const STACK_GAP = { xs: "gap-land-vsp-xs", sm: "gap-land-vsp-sm", md: "gap-land-
 export interface StackProps {
   gap: keyof typeof STACK_GAP;
   align: "start" | "center";
-  content?: ComponentChildren;
+  content?: Child | object;
 }
 
 export function Stack({ gap, align, content }: StackProps) {
   const alignment = align === "center" ? "items-center text-center" : "items-stretch";
-  return <div class={`flex flex-col ${STACK_GAP[gap]} ${alignment}`}>{content}</div>;
+  return <div class={`flex flex-col ${STACK_GAP[gap]} ${alignment}`}>{content as Child}</div>;
 }
 
 export interface GridProps {
   columns: "2" | "3";
   gap: "md" | "lg";
-  items?: ComponentChildren;
+  items?: Child | object;
 }
 
 export function Grid({ columns, gap, items }: GridProps) {
   const cols = columns === "3" ? "land-sm:grid-cols-2 land-lg:grid-cols-3" : "land-sm:grid-cols-2";
   const spacing = gap === "lg" ? "gap-land-hsp-lg" : "gap-land-hsp-md";
-  return <div class={`grid ${spacing} ${cols}`}>{items}</div>;
+  return <div class={`grid ${spacing} ${cols}`}>{items as Child}</div>;
 }
 
 export interface SplitProps {
   ratio: "1/1" | "2/3";
   reverse: boolean;
-  media?: ComponentChildren;
-  copy?: ComponentChildren;
+  // A single slot: the contract types it framework-neutrally, bigint included.
+  media?: Child | object | bigint;
+  copy?: Child | object;
 }
 
 export function Split({ ratio, reverse, media, copy }: SplitProps) {
   const cols = ratio === "2/3" ? "land-md:grid-cols-[2fr_3fr]" : "land-md:grid-cols-2";
   return (
     <div class={`grid items-center gap-land-vsp-md land-md:gap-land-hsp-lg land-lg:gap-land-hsp-xl ${cols}`}>
-      <div class={reverse ? "land-md:order-last" : undefined}>{media}</div>
-      <div class="flex flex-col gap-land-vsp-sm">{copy}</div>
+      <div class={reverse ? "land-md:order-last" : undefined}>{media as Child}</div>
+      <div class="flex flex-col gap-land-vsp-sm">{copy as Child}</div>
     </div>
   );
 }
@@ -55,7 +56,7 @@ export function Split({ ratio, reverse, media, copy }: SplitProps) {
 export interface SectionProps {
   anchor: string;
   band: boolean;
-  content?: ComponentChildren;
+  content?: Child | object;
 }
 
 /**
@@ -64,7 +65,7 @@ export interface SectionProps {
  */
 export function Section({ anchor, band, content }: SectionProps) {
   const spacing = band ? "mt-land-vsp-xl bg-land-surface-2 px-land-hsp-md py-land-vsp-xl land-lg:px-land-hsp-xl" : "pt-land-vsp-xl";
-  return <section id={anchor || undefined} class={`flex scroll-mt-land-nav-h flex-col gap-land-vsp-lg ${spacing}`}>{content}</section>;
+  return <section id={anchor || undefined} class={`flex scroll-mt-land-nav-h flex-col gap-land-vsp-lg ${spacing}`}>{content as Child}</section>;
 }
 
 export interface SectionHeadingProps {

@@ -1,20 +1,23 @@
-import { createContext, type ComponentChildren } from "preact";
-import { useContext, useState } from "preact/hooks";
-import { currentRouteSegment, nonEmpty, readingMinutes, useRegisteredVisibility, useVisibilityRegistry, type VisibilityRegistry } from "./runtime";
+import { Show, computed, getScope, signal, type Child, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
+import { createItemRegistry, linkItem, type ItemHost } from "./item-registry";
+import { currentRouteSegment, nonEmpty, readingMinutes, visibilityView } from "./runtime";
+import { answerLink, slotLink } from "./slot-link";
 
 const CAPTION = "font-blog-sans text-blog-caption font-blog-medium";
 const CAPS = `${CAPTION} uppercase tracking-blog-caps`;
 
 export type ArticleListMode = "all" | "by-route-author" | "exclude-route";
 
-interface ArticleListState {
+export interface ArticleFilter {
   activeTag: string;
   mode: ArticleListMode;
   routeSegment: string;
-  registry: VisibilityRegistry;
 }
 
-const ArticleListContext = createContext<ArticleListState | null>(null);
+export type ArticleCardData = Pick<ArticleCardProps, "tag1" | "tag2" | "tag3" | "authorSlug" | "slug">;
+
+/** Answered by `blog.article-list` and `blog.related-articles`; the view is whether the card shows. */
+export const ARTICLE_CARD_LINK = slotLink<ItemHost<ArticleCardData, boolean>>("blog-article-card");
 
 function readTagParam(): string {
   if (typeof location === "undefined") return "";
@@ -40,43 +43,55 @@ export interface ArticleListProps {
   mode?: ArticleListMode;
   emptyText?: string;
   tagOptions?: string[];
-  articles?: ComponentChildren[];
+  articles?: Child | object;
 }
 
 export function ArticleList({ chips = false, columns = "2", mode = "all", emptyText = "No articles here yet.", tagOptions = ["craft", "attention", "tools"], articles }: ArticleListProps) {
-  const [activeTag, setActiveTag] = useState(() => (chips ? readTagParam() : ""));
-  const registry = useVisibilityRegistry();
+  const activeTag = signal(chips ? readTagParam() : "");
+  const measured = signal(false);
   const routeSegment = currentRouteSegment();
-  const choose = (tag: string) => { setActiveTag(tag); writeTagParam(tag); };
+  const { ordered, host } = createItemRegistry<ArticleCardData, boolean>(() => view.value.visible);
+  const view: ReadonlySignal<ReturnType<typeof visibilityView<ArticleCardData>>> = computed(() => {
+    const filter: ArticleFilter = { activeTag: chips ? activeTag.value : "", mode, routeSegment };
+    return visibilityView(ordered.value, (card) => articleCardVisible(filter, card));
+  });
+  getScope().onActivate(() => {
+    measured.value = true;
+  });
+  const choose = (tag: string) => {
+    activeTag.value = tag;
+    writeTagParam(tag);
+  };
   const chipOptions = [{ value: "", label: "All" }, ...tagOptions.map((tag) => ({ value: tag, label: tag }))];
   return (
-    <ArticleListContext.Provider value={{ activeTag: chips ? activeTag : "", mode, routeSegment, registry }}>
-      <div class="mx-auto max-w-blog-page">
-        {chips ? (
-          <div class="mb-blog-vsp-md flex flex-wrap items-center gap-blog-hsp-xs" role="group" aria-label="Filter by tag">
-            {chipOptions.map(({ value, label }) => {
-              const active = value === activeTag;
-              // The header's current-nav underline already spends this viewport's one accent.
-              const activeClass = "bg-blog-surface-2 text-blog-fg-strong";
-              return (
-                <button
-                  key={value || "all"}
-                  type="button"
-                  aria-pressed={active}
-                  class={`px-blog-hsp-sm py-blog-vsp-xs ${CAPS} ${active ? activeClass : "text-blog-muted hover:underline"}`}
-                  onClick={() => choose(value)}
-                >
-                  {label}
-                </button>
-              );
-            })}
-            {registry.measured ? <span class={`ml-auto ${CAPTION} text-blog-muted`} aria-live="polite">{registry.visibleCount === 1 ? "1 article" : `${registry.visibleCount} articles`}</span> : null}
-          </div>
-        ) : null}
-        <div class={`grid gap-x-blog-hsp-md gap-y-blog-vsp-lg blog-lg:gap-x-blog-hsp-lg ${GRID_COLUMNS[columns]}`}>{articles}</div>
-        {registry.measured && registry.visibleCount === 0 ? <p class={`${CAPTION} text-blog-muted`}>{emptyText}</p> : null}
-      </div>
-    </ArticleListContext.Provider>
+    <div class="mx-auto max-w-blog-page" on:blog-article-card={answerLink(ARTICLE_CARD_LINK, host)}>
+      {chips ? (
+        <div class="mb-blog-vsp-md flex flex-wrap items-center gap-blog-hsp-xs" role="group" aria-label="Filter by tag">
+          {chipOptions.map(({ value, label }) => {
+            const active = computed(() => value === activeTag.value);
+            // The header's current-nav underline already spends this viewport's one accent.
+            const activeClass = "bg-blog-surface-2 text-blog-fg-strong";
+            return (
+              <button
+                type="button"
+                aria-pressed={active}
+                class={computed(() => `px-blog-hsp-sm py-blog-vsp-xs ${CAPS} ${active.value ? activeClass : "text-blog-muted hover:underline"}`)}
+                on:click={() => choose(value)}
+              >
+                {label}
+              </button>
+            );
+          })}
+          <Show when={measured}>
+            {() => <span class={`ml-auto ${CAPTION} text-blog-muted`} aria-live="polite">{computed(() => (view.value.count === 1 ? "1 article" : `${view.value.count} articles`))}</span>}
+          </Show>
+        </div>
+      ) : null}
+      <div class={`grid gap-x-blog-hsp-md gap-y-blog-vsp-lg blog-lg:gap-x-blog-hsp-lg ${GRID_COLUMNS[columns]}`}>{articles as Child}</div>
+      <Show when={computed(() => measured.value && view.value.count === 0)}>
+        {() => <p class={`${CAPTION} text-blog-muted`}>{emptyText}</p>}
+      </Show>
+    </div>
   );
 }
 
@@ -95,7 +110,7 @@ export interface ArticleCardProps {
 }
 
 /** The card's own filter rule against its host list; no host means always shown. */
-export function articleCardVisible(list: Pick<ArticleListState, "activeTag" | "mode" | "routeSegment"> | null, card: Pick<ArticleCardProps, "tag1" | "tag2" | "tag3" | "authorSlug" | "slug">): boolean {
+export function articleCardVisible(list: ArticleFilter | null, card: ArticleCardData): boolean {
   if (!list) return true;
   if (list.activeTag && !nonEmpty([card.tag1, card.tag2, card.tag3]).includes(list.activeTag)) return false;
   if (list.mode === "by-route-author" && card.authorSlug !== list.routeSegment) return false;
@@ -104,11 +119,11 @@ export function articleCardVisible(list: Pick<ArticleListState, "activeTag" | "m
 }
 
 export function ArticleCard({ title = "Untitled article", href = "#", intro = "", date = "", src = "", alt = "", tag1 = "", tag2 = "", tag3 = "", authorSlug = "", slug = "" }: ArticleCardProps) {
-  const list = useContext(ArticleListContext);
-  const visible = useRegisteredVisibility(list?.registry ?? null, articleCardVisible(list, { tag1, tag2, tag3, authorSlug, slug }));
+  const element: Ref<HTMLElement> = { current: null };
+  const visible = linkItem(ARTICLE_CARD_LINK, { tag1, tag2, tag3, authorSlug, slug }, element);
   const meta = nonEmpty([date, tag1]).join(" · ");
   return (
-    <article class="border-t border-blog-border pt-blog-vsp-sm" hidden={!visible} data-slug={slug || undefined}>
+    <article ref={element} class="border-t border-blog-border pt-blog-vsp-sm" hidden={computed(() => visible.value === false)} data-slug={slug || undefined}>
       {src ? <img class="mb-blog-vsp-sm block aspect-blog-cover w-full object-cover" src={src} alt={alt} loading="lazy" /> : null}
       {meta ? <p class={`${CAPS} text-blog-muted`}>{meta}</p> : null}
       <h3 class="mt-blog-vsp-xs font-blog-serif text-blog-h3 font-blog-semibold text-blog-fg-strong">
@@ -131,7 +146,8 @@ export interface ArticleHeaderProps {
   alt?: string;
   caption?: string;
   /** Byline avatar slot. A slot, not `authorAvatarSrc`, because the release asset pass pins managed URLs only in props named src/href/poster/url. */
-  avatar?: ComponentChildren;
+  // A single slot: the contract types it framework-neutrally, bigint included.
+  avatar?: Child | object | bigint;
 }
 
 export interface AvatarProps {
@@ -154,7 +170,7 @@ export function ArticleHeader({ eyebrow = "", title = "Article title", intro = "
         {intro ? <p class="mt-blog-vsp-sm font-blog-serif text-blog-lead text-blog-fg">{intro}</p> : null}
         {authorName || meta.length ? (
           <div class="mt-blog-vsp-md flex items-center gap-blog-hsp-sm">
-            {avatar}
+            {avatar as Child}
             <p class={`${CAPTION} text-blog-muted`}>
               {authorName ? (authorHref ? <a class="text-blog-fg-strong hover:underline" href={authorHref}>{authorName}</a> : <span class="text-blog-fg-strong">{authorName}</span>) : null}
               {meta.map((part) => <span key={part}><span aria-hidden="true" class="px-blog-hsp-xs">·</span>{part}</span>)}
@@ -230,27 +246,27 @@ export function AuthorCard({ name = "Author", href = "", bio = "", src = "", alt
 }
 
 export interface AuthorGridProps {
-  authors?: ComponentChildren[];
+  authors?: Child | object;
 }
 
 export function AuthorGrid({ authors }: AuthorGridProps) {
-  return <div class="mx-auto grid max-w-blog-page grid-cols-1 gap-x-blog-hsp-lg blog-md:grid-cols-2 [&>aside]:mt-[0]">{authors}</div>;
+  return <div class="mx-auto grid max-w-blog-page grid-cols-1 gap-x-blog-hsp-lg blog-md:grid-cols-2 [&>aside]:mt-[0]">{authors as Child}</div>;
 }
 
 export interface RelatedArticlesProps {
   heading?: string;
   limit?: number;
-  articles?: ComponentChildren[];
+  articles?: Child | object;
 }
 
 export function RelatedArticles({ heading = "", limit = 3, articles }: RelatedArticlesProps) {
-  const registry = useVisibilityRegistry(limit);
+  const filter: ArticleFilter = { activeTag: "", mode: "exclude-route", routeSegment: currentRouteSegment() };
+  const { ordered, host } = createItemRegistry<ArticleCardData, boolean>(() => view.value.visible);
+  const view: ReadonlySignal<ReturnType<typeof visibilityView<ArticleCardData>>> = computed(() => visibilityView(ordered.value, (card) => articleCardVisible(filter, card), limit));
   return (
-    <ArticleListContext.Provider value={{ activeTag: "", mode: "exclude-route", routeSegment: currentRouteSegment(), registry }}>
-      <div class="mx-auto max-w-blog-page">
-        {heading ? <h2 class="mb-blog-vsp-md font-blog-serif text-blog-h2 font-blog-semibold text-blog-fg-strong">{heading}</h2> : null}
-        <div class="grid grid-cols-1 gap-x-blog-hsp-md gap-y-blog-vsp-lg blog-sm:grid-cols-2 blog-lg:grid-cols-3 blog-lg:gap-x-blog-hsp-lg">{articles}</div>
-      </div>
-    </ArticleListContext.Provider>
+    <div class="mx-auto max-w-blog-page" on:blog-article-card={answerLink(ARTICLE_CARD_LINK, host)}>
+      {heading ? <h2 class="mb-blog-vsp-md font-blog-serif text-blog-h2 font-blog-semibold text-blog-fg-strong">{heading}</h2> : null}
+      <div class="grid grid-cols-1 gap-x-blog-hsp-md gap-y-blog-vsp-lg blog-sm:grid-cols-2 blog-lg:grid-cols-3 blog-lg:gap-x-blog-hsp-lg">{articles as Child}</div>
+    </div>
   );
 }

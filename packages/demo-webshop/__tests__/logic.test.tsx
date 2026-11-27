@@ -1,4 +1,4 @@
-import { render } from "preact-render-to-string";
+import { renderToString as render } from "@takazudo/zfb/zudo-react/server";
 import { describe, expect, it } from "vitest";
 import { computeGridView, type GridItemData } from "../components/grid-view";
 import { Markdown, parseBlocks } from "../components/markdown";
@@ -44,7 +44,7 @@ describe("markdown", () => {
   });
 
   it("escapes raw HTML as text", () => {
-    expect(render(<Markdown source="<script>bad()</script>" />)).toContain("&lt;script>");
+    expect(render(<Markdown source="<script>bad()</script>" />)).toContain("&lt;script&gt;bad()&lt;/script&gt;");
   });
 });
 

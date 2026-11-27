@@ -1,5 +1,7 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import { useGridItem } from "./grid-context";
+import { computed, type Ref } from "@takazudo/zfb/zudo-react";
+import { GRID_ITEM_LINK } from "./grid-link";
+import { linkItem } from "./item-registry";
 import { PriceTag } from "./price-tag";
 import { StatusBadge, type Availability } from "./status-badge";
 import { CAPS } from "./tone";
@@ -37,12 +39,14 @@ export function ProductCard({
   tag2 = "",
   tag3 = "",
 }: ProductCardProps) {
-  const view = useGridItem({ slug, name, price, category, featured, tags: [tag1, tag2, tag3].filter((tag) => tag !== "") });
+  const element: Ref<HTMLAnchorElement> = { current: null };
+  const view = linkItem(GRID_ITEM_LINK, { slug, name, price, category, featured, tags: [tag1, tag2, tag3].filter((tag) => tag !== "") }, element);
   return (
     <a
+      ref={element}
       href={href}
-      hidden={view.hidden}
-      style={view.managed ? { order: view.order } : undefined}
+      hidden={computed(() => view.value?.hidden ?? false)}
+      style={computed(() => (view.value ? { order: view.value.order } : null))}
       data-slug={slug || undefined}
       class="group flex flex-col gap-shop-vsp-sm bg-shop-bg text-shop-fg hover:bg-shop-inverse-bg hover:text-shop-inverse-fg"
     >

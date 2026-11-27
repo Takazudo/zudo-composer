@@ -1,34 +1,27 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import { createContext } from "preact";
-import { useContext, useId, useLayoutEffect } from "preact/hooks";
-import type { GridRegistry } from "./grid-context";
+import { computed, type Ref } from "@takazudo/zfb/zudo-react";
+import { linkItem, type ItemHost } from "./item-registry";
+import { slotLink } from "./slot-link";
 
 export interface GalleryImageData {
   src: string;
   alt: string;
 }
 
-export const GalleryRegistryContext = createContext<GridRegistry<GalleryImageData> | null>(null);
-/** The registered id of the image the gallery shows; null until the gallery has registrations. */
-export const GallerySelectionContext = createContext<string | null>(null);
+/** Answered by `shop.product-gallery`; the view is whether the gallery hides this image. */
+export const GALLERY_IMAGE_LINK = slotLink<ItemHost<GalleryImageData, boolean>>("shop-gallery-image");
 
 export interface GalleryImageProps {
   src: string;
   alt: string;
 }
 
-/** Outside a gallery (Composer canvas, static authoring) the image is always shown. */
+/** Outside a gallery (Composer canvas, static authoring) the image is always shown. An empty URL never registers. */
 export function GalleryImage({ src = "", alt = "" }: GalleryImageProps) {
-  const registry = useContext(GalleryRegistryContext);
-  const selectedId = useContext(GallerySelectionContext);
-  const id = useId();
-  useLayoutEffect(() => {
-    if (src === "") registry?.unregister(id);
-    else registry?.register(id, { src, alt });
-  }, [registry, id, src, alt]);
-  useLayoutEffect(() => () => registry?.unregister(id), [registry, id]);
   if (src === "") return null;
-  return <img src={src} alt={alt} hidden={selectedId !== null && selectedId !== id} class="block aspect-square w-full bg-shop-surface object-cover" />;
+  const element: Ref<HTMLImageElement> = { current: null };
+  const hidden = linkItem(GALLERY_IMAGE_LINK, { src, alt }, element);
+  return <img ref={element} src={src} alt={alt} hidden={computed(() => hidden.value ?? false)} class="block aspect-square w-full bg-shop-surface object-cover" />;
 }
 
 export const galleryImageComponent = defineComponent<GalleryImageProps>()(GalleryImage, {
