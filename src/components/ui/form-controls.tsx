@@ -194,7 +194,7 @@ export function Checkbox(props: CheckboxProps) {
   scope.onActivate(apply);
   scope.effect(() => {
     read(indeterminate);
-    model.value;
+    void model.value;
     apply();
   });
 

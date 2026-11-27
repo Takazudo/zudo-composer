@@ -1,50 +1,39 @@
-import { Fragment, render, type ComponentChildren } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { getScope, type Child } from "@takazudo/zfb/zudo-react";
+import { ownLayer } from "../../runtime";
 
-// Body-level portal for the CMS overlays (issue #159). Menus open from row
+// Body-level layer for the CMS overlays (issue #159). Menus open from row
 // action cells inside scrolling, `overflow`-clipped tables; painting them from
 // their trigger's own subtree makes them hostage to that subtree's stacking
 // context. Rendering into a host appended to `<body>` — combined with fixed
 // positioning and `computeMenuPosition`'s clamping — takes them out of it.
 //
-// Preact's own `createPortal` ships only in `preact/compat`, and importing that
-// anywhere rewires option hooks for the WHOLE bundle (React-flavoured
-// `onChange` among them, which this app uses in ~80 places with native
-// semantics). So the portal is a second Preact root over a host element
-// instead: these overlays take no context from their ancestors, which is the
-// only thing a separate root gives up.
+// zudo-react has no portals: this is `ownLayer`, a second root owned by the
+// component's scope. There is one runtime, so signals in `children` stay live
+// across both roots; nothing ambient crosses, so what the layer needs travels
+// in its props.
 
 export interface OverlayPortalProps {
   /** Keep native-modal descendants in their owning top-layer subtree. */
   container?: Element | null;
-  /** Class applied to the host element, so the portal is identifiable in the DOM. */
+  /** Class applied to the host element, so the layer is identifiable in the DOM. */
   hostClass: string;
-  children: ComponentChildren;
+  children: Child;
 }
 
+function OverlayLayer(props: { content: Child }): Child {
+  return props.content;
+}
+
+/**
+ * Mounts `children` in a layer root at `container` (default `document.body`)
+ * while this component's scope is active; render it inside a `Show` to tie the
+ * layer to a condition. It renders nothing in place.
+ */
 export function OverlayPortal({ hostClass, children, container }: OverlayPortalProps): null {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  // Overlays are client-only; without a document there is nothing to portal to.
-  if (hostRef.current === null && typeof document !== "undefined") {
-    hostRef.current = document.createElement("div");
-    hostRef.current.className = hostClass;
-  }
-
-  useLayoutEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    (container ?? document.body).appendChild(host);
-    return () => {
-      render(null, host);
-      host.remove();
-    };
-  }, [container]);
-
-  // No dependency array: the host mirrors whatever this render produced.
-  useLayoutEffect(() => {
-    const host = hostRef.current;
-    if (host) render(<Fragment>{children}</Fragment>, host);
+  const scope = getScope();
+  const layer = ownLayer(scope, OverlayLayer, { content: children }, { name: "OverlayLayer", ...(container ? { parent: container } : {}) });
+  scope.onActivate(() => {
+    layer.root()?.host.classList.add(hostClass);
   });
-
   return null;
 }
