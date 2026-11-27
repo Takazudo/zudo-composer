@@ -1,7 +1,7 @@
-import { Fragment, type ComponentChildren } from "preact";
-import { useRef } from "preact/hooks";
+import { computed, type Child, type Ref } from "@takazudo/zfb/zudo-react";
 import { ChevronDownIcon, FilterIcon, GridIcon, ListIcon, SearchIcon, SortIcon, type IconComponent } from "../icons";
-import { Menu, MenuRadioItem, useMenu } from "../overlay";
+import { createMenu, Menu, MenuRadioItem } from "../overlay";
+import { read, type MaybeSignal } from "../reactive";
 import { cx, Input, SegmentedControl } from "../ui";
 import type { LibraryFacet, LibraryQueryController, LibrarySort } from "./library-query";
 
@@ -20,55 +20,55 @@ interface ChoiceMenuProps {
   label: string;
   icon?: IconComponent;
   options: readonly ChoiceOption[];
-  value: string | null;
+  value: MaybeSignal<string | null>;
   onChange: (id: string) => void;
   /** `Kind: All` for a facet; a bare `Updated` for sort. */
   prefixTrigger?: boolean;
 }
 
-function ChoiceMenu({ label, icon: Icon, options, value, onChange, prefixTrigger = false }: ChoiceMenuProps) {
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menu = useMenu(triggerRef);
-  const selected = options.find((option) => option.id === value) ?? options[0];
-  const selectedLabel = selected?.label ?? "";
+function ChoiceMenu({ label, icon: Icon, options, value, onChange, prefixTrigger = false }: ChoiceMenuProps): Child {
+  const triggerRef: Ref<HTMLButtonElement> = { current: null };
+  const menu = createMenu(triggerRef);
+  const selected = computed(() => {
+    const current = read(value);
+    return options.find((option) => option.id === current) ?? options[0];
+  });
+  const selectedLabel = computed(() => selected.value?.label ?? "");
 
   return (
-    <Fragment>
-      {/* Raw button: the menu measures its trigger through a ref, which Preact
-       * does not forward to a function component.
-       *
-       * A facet trigger already reads `Kind: All`. An unprefixed one shows only
-       * its value, and its icon is decorative, so its accessible name has to
-       * say what that value belongs to. */}
+    <>
+      {/* A facet trigger already reads `Kind: All`. An unprefixed one shows
+       * only its value, and its icon is decorative, so its accessible name has
+       * to say what that value belongs to. */}
       <button
         type="button"
         ref={triggerRef}
         class="cms-btn cms-btn--sm"
-        aria-label={prefixTrigger ? undefined : `${label}: ${selectedLabel}`}
+        aria-label={prefixTrigger ? undefined : computed(() => `${label}: ${selectedLabel.value}`)}
         {...menu.triggerProps}
       >
         {Icon ? <Icon size="sm" /> : null}
-        <span>{prefixTrigger ? `${label}: ${selectedLabel}` : selectedLabel}</span>
+        <span>{prefixTrigger ? computed(() => `${label}: ${selectedLabel.value}`) : selectedLabel}</span>
         <ChevronDownIcon size="xs" class="cms-library-toolbar__caret" />
       </button>
       <Menu controller={menu} label={label}>
         {options.map((option) => (
-          <MenuRadioItem key={option.id} checked={option.id === selected?.id} onSelect={() => onChange(option.id)}>
+          <MenuRadioItem checked={computed(() => option.id === selected.value?.id)} onSelect={() => onChange(option.id)}>
             {option.label}
           </MenuRadioItem>
         ))}
       </Menu>
-    </Fragment>
+    </>
   );
 }
 
 export interface LibraryFacetMenuProps<Row> {
   facet: LibraryFacet<Row>;
-  value: string;
+  value: MaybeSignal<string>;
   onChange: (optionId: string) => void;
 }
 
-export function LibraryFacetMenu<Row>({ facet, value, onChange }: LibraryFacetMenuProps<Row>) {
+export function LibraryFacetMenu<Row>({ facet, value, onChange }: LibraryFacetMenuProps<Row>): Child {
   return (
     <ChoiceMenu
       label={facet.label}
@@ -83,19 +83,19 @@ export function LibraryFacetMenu<Row>({ facet, value, onChange }: LibraryFacetMe
 
 export interface LibrarySortMenuProps<Row> {
   sorts: readonly LibrarySort<Row>[];
-  value: string | null;
+  value: MaybeSignal<string | null>;
   onChange: (sortId: string) => void;
   label?: string;
 }
 
-export function LibrarySortMenu<Row>({ sorts, value, onChange, label = "Sort" }: LibrarySortMenuProps<Row>) {
+export function LibrarySortMenu<Row>({ sorts, value, onChange, label = "Sort" }: LibrarySortMenuProps<Row>): Child {
   return <ChoiceMenu label={label} icon={SortIcon} options={sorts} value={value} onChange={onChange} />;
 }
 
 export type LibraryView = "table" | "cards";
 
 export interface LibraryViewToggleProps {
-  value: LibraryView;
+  value: MaybeSignal<LibraryView>;
   onChange: (view: LibraryView) => void;
   label?: string;
   tableLabel?: string;
@@ -108,7 +108,7 @@ export function LibraryViewToggle({
   label = "View",
   tableLabel = "Table",
   cardsLabel = "Cards",
-}: LibraryViewToggleProps) {
+}: LibraryViewToggleProps): Child {
   return (
     <SegmentedControl<LibraryView>
       label={label}
@@ -130,9 +130,9 @@ export interface LibraryToolbarProps<Row> {
   searchLabel?: string;
   searchPlaceholder?: string;
   /** Extra controls, after the generated menus. */
-  children?: ComponentChildren;
+  children?: Child;
   /** Trailing controls, pushed to the inline end — the view toggle. */
-  end?: ComponentChildren;
+  end?: Child;
   class?: string;
 }
 
@@ -143,7 +143,7 @@ export function LibraryToolbar<Row>({
   children,
   end,
   class: className,
-}: LibraryToolbarProps<Row>) {
+}: LibraryToolbarProps<Row>): Child {
   return (
     <div class={cx("cms-library-toolbar", className)}>
       {query ? (
@@ -152,17 +152,15 @@ export function LibraryToolbar<Row>({
           size="sm"
           type="search"
           icon={SearchIcon}
-          value={query.search}
+          modelValue={query.search}
           aria-label={searchLabel}
           placeholder={searchPlaceholder}
-          onInput={(event) => query.setSearch(event.currentTarget.value)}
         />
       ) : null}
       {query?.facets.map((facet) => (
         <LibraryFacetMenu
-          key={facet.id}
           facet={facet}
-          value={query.facetValue(facet.id)}
+          value={computed(() => query.facetValue(facet.id))}
           onChange={(optionId) => query.setFacetValue(facet.id, optionId)}
         />
       ))}
@@ -171,10 +169,10 @@ export function LibraryToolbar<Row>({
       ) : null}
       {children}
       {end === undefined ? null : (
-        <Fragment>
+        <>
           <span class="cms-library-toolbar__spacer" />
           {end}
-        </Fragment>
+        </>
       )}
     </div>
   );

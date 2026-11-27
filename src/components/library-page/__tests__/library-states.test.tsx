@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/preact";
+import { fireEvent, render, screen } from "../../../test/render";
 import "./library-test-environment";
 import { ComposerIcon } from "../../icons";
 import { Button } from "../../ui";
@@ -31,7 +31,7 @@ describe("LibraryEmpty", () => {
         icon={ComposerIcon}
         title="No compositions yet"
         description="Reusable page structures built from the 12 provider components."
-        action={<Button variant="primary" onClick={onCreate}>New composition</Button>}
+        action={<Button variant="primary" on:click={onCreate}>New composition</Button>}
       />,
     );
     expect(screen.getByText("No compositions yet")).toBeInTheDocument();

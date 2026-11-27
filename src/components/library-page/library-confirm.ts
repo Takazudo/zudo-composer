@@ -1,5 +1,4 @@
-import { useState } from "preact/hooks";
-import type { ComponentChildren } from "preact";
+import { computed, signal, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import type { ConfirmDialogProps } from "../overlay";
 
 // One confirmation queue per library route (issue #164).
@@ -11,7 +10,7 @@ import type { ConfirmDialogProps } from "../overlay";
 
 export interface LibraryConfirmRequest {
   readonly title: string;
-  readonly message: ComponentChildren;
+  readonly message: Child;
   readonly confirmLabel?: string;
   readonly cancelLabel?: string;
   readonly tone?: "default" | "danger";
@@ -25,29 +24,33 @@ export interface LibraryConfirmRequest {
 
 export interface LibraryConfirmController {
   request: (request: LibraryConfirmRequest) => void;
-  readonly pending: LibraryConfirmRequest | null;
-  /** Spread onto the route's single `<ConfirmDialog />`. */
+  readonly pending: ReadonlySignal<LibraryConfirmRequest | null>;
+  /** Spread onto the route's single `<ConfirmDialog />`; every field follows `pending`. */
   readonly dialogProps: ConfirmDialogProps;
 }
 
-export function useLibraryConfirm(): LibraryConfirmController {
-  const [pending, setPending] = useState<LibraryConfirmRequest | null>(null);
+export function createLibraryConfirm(): LibraryConfirmController {
+  const pending = signal<LibraryConfirmRequest | null>(null);
 
   return {
-    request: setPending,
+    request: (request) => {
+      pending.value = request;
+    },
     pending,
     dialogProps: {
-      open: pending !== null,
-      title: pending?.title ?? "",
-      message: pending?.message ?? null,
-      confirmLabel: pending?.confirmLabel,
-      cancelLabel: pending?.cancelLabel,
-      tone: pending?.tone,
+      open: computed(() => pending.value !== null),
+      title: computed(() => pending.value?.title ?? ""),
+      message: computed(() => pending.value?.message ?? null),
+      confirmLabel: computed(() => pending.value?.confirmLabel),
+      cancelLabel: computed(() => pending.value?.cancelLabel),
+      tone: computed(() => pending.value?.tone),
       onConfirm: () => {
-        pending?.onConfirm();
-        setPending(null);
+        pending.value?.onConfirm();
+        pending.value = null;
       },
-      onClose: () => setPending(null),
+      onClose: () => {
+        pending.value = null;
+      },
     },
   };
 }

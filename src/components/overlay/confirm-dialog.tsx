@@ -12,8 +12,8 @@ export interface ConfirmDialogProps {
   message: LiveChild;
   confirmLabel?: MaybeSignal<string | undefined>;
   cancelLabel?: MaybeSignal<string | undefined>;
-  /** `danger` styles the confirm button as destructive and opens on Cancel. Static per dialog. */
-  tone?: "default" | "danger";
+  /** `danger` styles the confirm button as destructive and opens on Cancel. Read again on every open. */
+  tone?: MaybeSignal<"default" | "danger" | undefined>;
   /** Overrides the tone's default landing spot. */
   initialFocus?: "confirm" | "cancel";
   /** Keeps the dialog up and the buttons inert while the action runs. */
@@ -28,7 +28,7 @@ export function ConfirmDialog({
   message,
   confirmLabel,
   cancelLabel,
-  tone = "default",
+  tone,
   initialFocus,
   busy = false,
   onConfirm,
@@ -36,8 +36,16 @@ export function ConfirmDialog({
 }: ConfirmDialogProps): Child {
   const confirmRef: Ref<HTMLButtonElement> = { current: null };
   const cancelRef: Ref<HTMLButtonElement> = { current: null };
-  // A destructive answer is never the one a stray Enter should land on.
-  const landing = initialFocus ?? (tone === "danger" ? "cancel" : "confirm");
+  const danger = computed(() => read(tone) === "danger");
+  // A destructive answer is never the one a stray Enter should land on. The
+  // landing ref resolves when the dialog opens, so a tone that follows the
+  // question being asked still picks the right button.
+  const landingRef = {
+    get current(): HTMLElement | null {
+      const landing = initialFocus ?? (danger.value ? "cancel" : "confirm");
+      return (landing === "cancel" ? cancelRef : confirmRef).current;
+    },
+  };
   const isBusy = computed(() => read(busy));
 
   return (
@@ -46,7 +54,7 @@ export function ConfirmDialog({
       title={title}
       role="alertdialog"
       class="cms-dialog--confirm"
-      initialFocusRef={landing === "cancel" ? cancelRef : confirmRef}
+      initialFocusRef={landingRef}
       dismissOnBackdrop={computed(() => !isBusy.value)}
       hideCloseButton
       onClose={() => {
@@ -60,7 +68,7 @@ export function ConfirmDialog({
           <button
             type="button"
             ref={confirmRef}
-            class={`cms-dialog__action cms-dialog__action--${tone === "danger" ? "danger" : "primary"}`}
+            class={computed(() => `cms-dialog__action cms-dialog__action--${danger.value ? "danger" : "primary"}`)}
             disabled={isBusy}
             on:click={() => onConfirm()}
           >
