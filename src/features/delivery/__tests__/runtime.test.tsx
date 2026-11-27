@@ -1,12 +1,11 @@
-import { cleanup, render, screen } from "@testing-library/preact";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "../../../test/render";
 import { activeComponentProvider } from "../../composer/active-pack";
 import type { CompositionNode } from "../../../composer/model/types";
 import { compileSiteProject } from "../../../site-project/compiler";
 import { loadSampleSiteProjectWithAssetLock } from "../../../test/sample-asset-lock";
 import { DeliveryRuntime, projectTrustedProps } from "../runtime";
 
-afterEach(cleanup);
 const manifest = activeComponentProvider.manifest;
 const definition = (id: string) => manifest.components.find((item) => item.id === id)!;
 const node = (componentId: string, props: CompositionNode["props"], slots: CompositionNode["slots"] = {}): CompositionNode => ({ id: "node", componentId, componentVersion: 1, props, slots });

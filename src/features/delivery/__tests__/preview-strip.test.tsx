@@ -1,9 +1,8 @@
-import { cleanup, fireEvent, render } from "@testing-library/preact";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render } from "../../../test/render";
 import type { SiteCompiledRoute } from "../../../site-project/compiler";
 import { PreviewStrip, PREVIEW_PENDING_COPY, PREVIEW_REFRESHING_COPY, type PreviewStripProps } from "../preview-strip";
 
-afterEach(cleanup);
 
 /** The picker reads only `pathname` and `displayTitle`; the rest of a compiled route is irrelevant here. */
 const route = (pathname: string, displayTitle: string): SiteCompiledRoute =>
