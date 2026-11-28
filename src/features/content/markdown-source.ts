@@ -63,7 +63,7 @@ export interface CreateMarkdownEditorOptions {
   onChange(value: string): void;
 }
 
-/** Imperative lifecycle boundary used by the Preact wrapper and focused tests. */
+/** Imperative lifecycle boundary used by the editor wrappers and focused tests. */
 export function createMarkdownEditor(options: CreateMarkdownEditorOptions): MarkdownEditorController {
   const themeCompartment = new Compartment();
   const validityCompartment = new Compartment();
