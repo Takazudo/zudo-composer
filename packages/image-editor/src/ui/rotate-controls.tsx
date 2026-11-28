@@ -9,5 +9,5 @@ export function RotateControls({ editor }: { editor: EditorState }) {
     const d = editor.current.current;
     editor.update({ ...d, crop: flipCropRect(d.crop, horizontal), ...(horizontal ? { flipH: !d.flipH } : { flipV: !d.flipV }) });
   }
-  return <div class="zie-controls"><button type="button" onClick={() => rotate(90)}>Rotate 90° clockwise</button><button type="button" onClick={() => rotate(270)}>Rotate 90° counterclockwise</button><button type="button" onClick={() => flip(true)}>Flip horizontal</button><button type="button" onClick={() => flip(false)}>Flip vertical</button></div>;
+  return <div class="zie-controls"><button type="button" on:click={() => rotate(90)}>Rotate 90° clockwise</button><button type="button" on:click={() => rotate(270)}>Rotate 90° counterclockwise</button><button type="button" on:click={() => flip(true)}>Flip horizontal</button><button type="button" on:click={() => flip(false)}>Flip vertical</button></div>;
 }

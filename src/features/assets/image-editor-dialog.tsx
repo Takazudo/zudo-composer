@@ -1,5 +1,4 @@
-import type { JSX } from "preact";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { batch, computed, For, getScope, Show, signal, type Child } from "@takazudo/zfb/zudo-react";
 import { MAX_DECODED_PIXELS, MAX_ENCODED_BYTES, type EditableMime } from "@zudo-composer/image-editor";
 import { ImageEditor } from "@zudo-composer/image-editor/ui";
 import type { AssetRecord, AssetSummary } from "../../assets";
@@ -171,133 +170,124 @@ function EditorSurface({ source, mimeType, canSaveCopy, onSave, onCancel, onSavi
   onCancel(): void;
   onSavingChange(saving: boolean): void;
   onUnmounted(source: ImageBitmap): void;
-}): JSX.Element {
+}): Child {
   // Let the host know when this subtree has left the tree. disposeBitmap()
   // defers the actual close until the complete unmount stack has unwound, so
-  // this remains safe even if Preact changes parent/child cleanup ordering.
-  useLayoutEffect(() => () => onUnmounted(source), [onUnmounted, source]);
+  // this stays safe whatever order the editor's own cleanups run in.
+  getScope().onCleanup(() => onUnmounted(source));
   return <ImageEditor source={source} mimeType={mimeType} canSaveCopy={canSaveCopy} onSave={onSave} onCancel={onCancel} onSavingChange={onSavingChange} />;
 }
 
-export function ImageEditorDialog({ record, dimensions, previewUrl, canSaveCopy = false, onSave, onSaved, onClose }: ImageEditorDialogProps): JSX.Element {
+/**
+ * One editing visit for one captured record. The record is fixed for the
+ * dialog's lifetime: the owner remounts it (keyed by id, revision and version)
+ * for another record, which aborts this visit's load.
+ */
+export function ImageEditorDialog({ record, dimensions, previewUrl, canSaveCopy = false, onSave, onSaved, onClose }: ImageEditorDialogProps): Child {
+  const scope = getScope();
   const mimeType = editableMime(record.mimeType) ? record.mimeType : null;
-  const sourceUrl = useMemo(() => mimeType ? previewUrl?.(record.url) ?? record.url : record.url, [mimeType, previewUrl, record.url]);
-  const dimensionsRef = useRef(dimensions);
-  dimensionsRef.current = dimensions;
-  const [phase, setPhase] = useState<EditorPhase>(mimeType ? "loading" : "error");
-  const [bitmap, setBitmap] = useState<ImageBitmap | null>(null);
-  const bitmapRef = useRef<ImageBitmap | null>(null);
-  const [error, setError] = useState(mimeType ? "" : record.mimeType === "image/gif" ? "GIF editing is not supported" : "This file type cannot be edited.");
-  const [saving, setSaving] = useState(false);
-  const savingRef = useRef(false);
-  const [closing, setClosing] = useState(false);
-  const closeRequested = useRef(false);
-  const closeNotified = useRef(false);
-  const abortRef = useRef<AbortController | null>(null);
-  const generation = useRef(0);
+  const sourceUrl = mimeType ? previewUrl?.(record.url) ?? record.url : record.url;
+  const phase = signal<EditorPhase>(mimeType ? "loading" : "error");
+  const bitmap = signal<ImageBitmap | null>(null);
+  let bitmapNow: ImageBitmap | null = null;
+  const error = signal(mimeType ? "" : record.mimeType === "image/gif" ? "GIF editing is not supported" : "This file type cannot be edited.");
+  const saving = signal(false);
+  let savingNow = false;
+  const closing = signal(false);
+  let closeRequested = false;
+  let closeNotified = false;
+  let abort: AbortController | null = null;
 
-  const disposedBitmaps = useRef(new WeakSet<ImageBitmap>());
-  const disposeBitmap = useCallback((source: ImageBitmap, defer = true) => {
-    if (disposedBitmaps.current.has(source)) return;
-    disposedBitmaps.current.add(source);
-    if (bitmapRef.current === source) bitmapRef.current = null;
+  const disposedBitmaps = new WeakSet<ImageBitmap>();
+  const disposeBitmap = (source: ImageBitmap, defer = true) => {
+    if (disposedBitmaps.has(source)) return;
+    disposedBitmaps.add(source);
+    if (bitmapNow === source) bitmapNow = null;
     // Defer past the complete unmount stack. The package owns worker/client
     // cleanup, and the host must not close its source while that subtree is
-    // still unwinding, regardless of parent/child hook cleanup ordering.
+    // still unwinding, regardless of parent/child cleanup ordering.
     if (defer) queueMicrotask(() => source.close());
     else source.close();
-  }, []);
+  };
 
-  const close = useCallback((afterSave = false) => {
-    if ((!afterSave && savingRef.current) || closeRequested.current) return;
-    closeRequested.current = true;
-    abortRef.current?.abort();
-    setClosing(true);
-    setBitmap(null);
-  }, []);
+  const close = (afterSave = false) => {
+    if ((!afterSave && savingNow) || closeRequested) return;
+    closeRequested = true;
+    abort?.abort();
+    batch(() => { closing.value = true; bitmap.value = null; });
+  };
 
-  const handleSavingChange = useCallback((value: boolean) => {
-    savingRef.current = value;
-    setSaving(value);
-  }, []);
+  const handleSavingChange = (value: boolean) => {
+    savingNow = value;
+    saving.value = value;
+  };
 
-  const handleSave = useCallback(async (blob: Blob, mode: SaveMode): Promise<void> => {
+  const handleSave = async (blob: Blob, mode: SaveMode): Promise<void> => {
     const saved = await onSave(blob, mode);
+    if (scope.abortSignal.aborted) return;
     onSaved?.(saved, mode);
     close(true);
-  }, [close, onSave, onSaved]);
+  };
 
-  const handleBitmapUnmounted = useCallback((source: ImageBitmap) => {
-    disposeBitmap(source);
-  }, [disposeBitmap]);
-
-  useEffect(() => {
-    const request = ++generation.current;
-    const abort = new AbortController();
-    abortRef.current = abort;
-    closeRequested.current = false;
-    closeNotified.current = false;
-    setClosing(false);
-    setBitmap(null);
-    setPhase(mimeType ? "loading" : "error");
-    setError(mimeType ? "" : record.mimeType === "image/gif" ? "GIF editing is not supported" : "This file type cannot be edited.");
-    setSaving(false);
-    savingRef.current = false;
-    if (!mimeType) return () => { abort.abort(); };
-    const cached = dimensionsRef.current.get(record.versionId);
+  scope.onActivate(() => {
+    const request = new AbortController();
+    abort = request;
+    if (!mimeType) return () => { request.abort(); };
+    const cached = dimensions.get(record.versionId);
     if (cached && cached.width * cached.height > MAX_DECODED_PIXELS) {
-      setPhase("error");
-      setError(pixelLimitMessage(cached));
-      return () => { abort.abort(); };
+      batch(() => { phase.value = "error"; error.value = pixelLimitMessage(cached); });
+      return () => { request.abort(); };
     }
     let active = true;
     let ownedBitmap: ImageBitmap | null = null;
-    void loadBitmap(sourceUrl, mimeType, cached, abort.signal).then((next) => {
-      if (!active || abort.signal.aborted || request !== generation.current || closeRequested.current) {
+    void loadBitmap(sourceUrl, mimeType, cached, request.signal).then((next) => {
+      if (!active || request.signal.aborted || closeRequested) {
         // This result was never handed to the editor subtree, so it can be
         // released synchronously instead of waiting for an unmount boundary.
         disposeBitmap(next, false);
         return;
       }
       ownedBitmap = next;
-      bitmapRef.current = next;
-      setBitmap(next);
-      setPhase("ready");
+      bitmapNow = next;
+      batch(() => { bitmap.value = next; phase.value = "ready"; });
     }).catch((reason) => {
-      if (!active || abort.signal.aborted || request !== generation.current || closeRequested.current) return;
-      setPhase("error");
-      setError(reason instanceof Error ? reason.message : "Unable to load the source image.");
+      if (!active || request.signal.aborted || closeRequested) return;
+      batch(() => { phase.value = "error"; error.value = reason instanceof Error ? reason.message : "Unable to load the source image."; });
     });
     return () => {
       active = false;
-      abort.abort();
+      request.abort();
       if (ownedBitmap) disposeBitmap(ownedBitmap);
-      if (abortRef.current === abort) abortRef.current = null;
+      if (abort === request) abort = null;
     };
-  }, [disposeBitmap, mimeType, record.id, record.mimeType, record.revision, record.versionId, sourceUrl]);
+  });
 
-  useLayoutEffect(() => {
-    if (!closing || closeNotified.current) return;
-    // EditorSurface's layout cleanup has scheduled bitmap disposal by this
-    // point. Notify the owner only after the editor subtree is gone.
-    closeNotified.current = true;
+  // The effect phase follows the commit that removed the editor subtree, so
+  // EditorSurface's cleanup has scheduled bitmap disposal by this point.
+  // Notify the owner only after the editor subtree is gone.
+  scope.effect(() => {
+    if (!closing.value || closeNotified) return;
+    closeNotified = true;
     onClose();
-  }, [closing, onClose]);
+  });
 
-  const unsupported = !mimeType;
-  const status = phase === "loading" ? "Loading image…" : phase === "ready" ? "Ready" : "Unable to edit this image.";
+  const status = computed(() => (phase.value === "loading" ? "Loading image…" : phase.value === "ready" ? "Ready" : "Unable to edit this image."));
+  const editorSource = computed(() => (phase.value === "ready" && bitmap.value && mimeType ? [bitmap.value] : []));
+  const ids = new WeakMap<ImageBitmap, number>();
+  let nextId = 0;
+  const identity = (value: ImageBitmap) => { let id = ids.get(value); if (id === undefined) { id = ++nextId; ids.set(value, id); } return id; };
   return <Dialog
     open
     size="full"
     class="sg-assets-image-editor-dialog"
     title={`Edit image: ${record.fileName}`}
-    dismissOnBackdrop={!saving}
+    dismissOnBackdrop={computed(() => !saving.value)}
     onClose={() => close()}
     closeLabel="Close image editor"
-    footer={unsupported || phase === "error" ? <Button onClick={() => close()}>Close</Button> : undefined}
+    footer={<Show when={computed(() => phase.value === "error")}>{() => <Button on:click={() => close()}>Close</Button>}</Show>}
   >
-    {phase === "loading" ? <div class="sg-assets-image-editor-loading" role="status" aria-live="polite"><p>{status}</p></div> : null}
-    {phase === "error" ? <div class="sg-assets-image-editor-error"><p role="alert">{error || status}</p></div> : null}
-    {phase === "ready" && bitmap && mimeType ? <EditorSurface source={bitmap} mimeType={mimeType} canSaveCopy={canSaveCopy} onSave={handleSave} onCancel={() => close()} onSavingChange={handleSavingChange} onUnmounted={handleBitmapUnmounted} /> : null}
+    <Show when={computed(() => phase.value === "loading")}>{() => <div class="sg-assets-image-editor-loading" role="status" aria-live="polite"><p>{status}</p></div>}</Show>
+    <Show when={computed(() => phase.value === "error")}>{() => <div class="sg-assets-image-editor-error"><p role="alert">{computed(() => error.value || status.value)}</p></div>}</Show>
+    <For each={editorSource} by={identity}>{(source) => <EditorSurface source={source.value} mimeType={mimeType!} canSaveCopy={canSaveCopy} onSave={handleSave} onCancel={() => close()} onSavingChange={handleSavingChange} onUnmounted={disposeBitmap} />}</For>
   </Dialog>;
 }

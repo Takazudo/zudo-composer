@@ -1,6 +1,5 @@
-import type { JSX, RefObject, TargetedEvent } from "preact";
-import { useCallback, useEffect, useReducer, useRef, useState } from "preact/hooks";
-import { useWorkspace } from "../../app/workspace-context";
+import { batch, computed, For, getScope, Show, signal, type Child, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
+import type { WorkspaceServices } from "../../app/services";
 import { ASSET_MAX_BYTE_LENGTH, ASSET_ACCEPT, ASSET_UPLOAD_HINT, type AssetRecord } from "../../assets";
 import { UploadIcon, XMarkIcon } from "../../components/icons";
 import { Button, Chip, type ChipTone } from "../../components/ui";
@@ -11,6 +10,8 @@ import {
   ASSET_UPLOAD_BUSY_REJECTION,
   assetUploadItemId,
   reduceAssetUploadDrop,
+  type AssetUploadEvent,
+  type AssetUploadItem,
   type AssetUploadSource,
   type AssetUploadState,
   type AssetUploadStatus,
@@ -23,11 +24,15 @@ export interface AssetUploadStore {
   upload(file: Blob & { name: string }): Promise<AssetRecord>;
 }
 
-export interface UseAssetUploadOptions {
+export interface AssetUploadOptions {
   store: AssetUploadStore;
   refresh(): void | Promise<void>;
   now?: () => number;
+  /** The route's workspace; the queue registers as a save-barrier session on it. */
+  workspace?: WorkspaceServices;
 }
+
+type DragEventOn = DragEvent & { currentTarget: HTMLElement };
 
 /**
  * The uploader, split from its presentation so the page header's primary
@@ -36,18 +41,19 @@ export interface UseAssetUploadOptions {
  * picker.
  */
 export interface AssetUploadController {
-  readonly state: AssetUploadState;
-  readonly dragActive: boolean;
-  readonly inputRef: RefObject<HTMLInputElement>;
+  readonly state: ReadonlySignal<AssetUploadState>;
+  readonly dragActive: ReadonlySignal<boolean>;
+  readonly inputRef: Ref<HTMLInputElement>;
   openPicker(): void;
   dismiss(id: string): void;
   retry(id: string): void;
+  /** Tracked when read in a computed. */
   canRetry(id: string): boolean;
-  onInput(event: TargetedEvent<HTMLInputElement, Event>): void;
-  onDragOver(event: JSX.TargetedDragEvent<HTMLElement>): void;
-  onDragLeave(event: JSX.TargetedDragEvent<HTMLElement>): void;
-  onDrop(event: JSX.TargetedDragEvent<HTMLElement>): void;
-  onPaste(event: JSX.TargetedClipboardEvent<HTMLElement>): void;
+  onInput(event: Event & { currentTarget: HTMLInputElement }): void;
+  onDragOver(event: DragEventOn): void;
+  onDragLeave(event: DragEventOn): void;
+  onDrop(event: DragEventOn): void;
+  onPaste(event: ClipboardEvent & { currentTarget: HTMLElement }): void;
 }
 
 const STATUS_LABEL: Readonly<Record<AssetUploadStatus, string>> = {
@@ -68,38 +74,42 @@ function messageForError(reason: unknown): string {
   return reason instanceof Error ? reason.message : "Upload failed.";
 }
 
-export function useAssetUpload({ store, refresh, now = Date.now }: UseAssetUploadOptions): AssetUploadController {
-  const integration = useWorkspace()?.integration;
-  const pending = useRef<Promise<void>>(Promise.resolve());
-  const sessionRef = useRef<ReturnType<NonNullable<typeof integration>["sessions"]["register"]> | null>(null);
-  const [state, dispatch] = useReducer(reduceAssetUploadDrop, initialAssetUploadState);
-  const [dragActive, setDragActive] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const alive = useRef(true);
-  const ingestGuard = useRef({ busy: false });
-  // Batch numbers must never repeat, so they come from a ref rather than the
-  // reducer: a rejected claim leaves the reducer's state untouched, and the two
-  // counters would drift apart the first time a drop landed on a busy queue.
-  const batch = useRef(0);
-  const retryFiles = useRef(new Map<string, File>());
-  useEffect(() => {
+/** Call once in a component's setup; the session and in-flight work end with that scope. */
+export function createAssetUpload({ store, refresh, now = Date.now, workspace }: AssetUploadOptions): AssetUploadController {
+  const scope = getScope();
+  const integration = workspace?.integration;
+  let pending: Promise<void> = Promise.resolve();
+  let session: ReturnType<NonNullable<typeof integration>["sessions"]["register"]> | null = null;
+  const state = signal<AssetUploadState>(initialAssetUploadState);
+  const dispatch = (event: AssetUploadEvent) => { state.value = reduceAssetUploadDrop(state.value, event); };
+  const dragActive = signal(false);
+  const inputRef: Ref<HTMLInputElement> = { current: null };
+  const alive = () => !scope.abortSignal.aborted;
+  const ingestGuard = { busy: false };
+  // Batch numbers must never repeat, so they come from a counter rather than
+  // the reducer: a rejected claim leaves the reducer's state untouched, and the
+  // two counters would drift apart the first time a drop landed on a busy queue.
+  let batchNumber = 0;
+  const retryFiles = new Map<string, File>();
+  // `retryFiles` is a plain map; this revision makes `canRetry` reactive.
+  const retryRevision = signal(0);
+  const setRetry = (change: () => void) => { change(); retryRevision.value++; };
+  scope.onActivate(() => {
     if (!integration) return;
-    const session = integration.sessions.register({ feature: "Asset upload", providerId: integration.assetProvider?.descriptor.id ?? "asset-unavailable", workspaceId: integration.workspace.id }, { flush: () => pending.current });
-    sessionRef.current = session;
-    return () => { session.detach(); sessionRef.current = null; };
-  }, [integration]);
+    const registered = integration.sessions.register({ feature: "Asset upload", providerId: integration.assetProvider?.descriptor.id ?? "asset-unavailable", workspaceId: integration.workspace.id }, { flush: () => pending });
+    session = registered;
+    return () => { registered.detach(); session = null; };
+  });
 
-  useEffect(() => () => { alive.current = false; }, []);
-
-  const ingestFiles = useCallback((incoming: readonly File[], source: AssetUploadSource): boolean => {
+  const ingestFiles = (incoming: readonly File[], source: AssetUploadSource): boolean => {
     if (incoming.length === 0) return false;
-    if (ingestGuard.current.busy) {
+    if (ingestGuard.busy) {
       dispatch({ type: "reject", message: ASSET_UPLOAD_BUSY_REJECTION });
       return false;
     }
 
-    ingestGuard.current.busy = true;
-    const claimed = (batch.current += 1);
+    ingestGuard.busy = true;
+    const claimed = (batchNumber += 1);
     let fallbackTimestamp: number | undefined;
     const files = incoming.map((file, index) => {
       if (file.name) return file;
@@ -110,49 +120,49 @@ export function useAssetUpload({ store, refresh, now = Date.now }: UseAssetUploa
       });
     });
     dispatch({ type: "claim", source, batch: claimed, files });
-    sessionRef.current?.changed();
+    session?.changed();
 
-    pending.current = (async () => {
+    pending = (async () => {
       const failures: string[] = [];
       try {
         for (const [index, file] of files.entries()) {
           const id = assetUploadItemId(source, claimed, index);
-          if (alive.current) dispatch({ type: "uploading", id });
+          if (alive()) dispatch({ type: "uploading", id });
           try {
             const record = await store.upload(file);
-            retryFiles.current.delete(id);
-            if (alive.current) dispatch({ type: "stored", id, fileName: record.document.fileName });
+            setRetry(() => retryFiles.delete(id));
+            if (alive()) dispatch({ type: "stored", id, fileName: record.document.fileName });
           } catch (reason) {
             // Uncertain commits require exact-state inspection, not duplicate uploads.
-            if (!(reason && typeof reason === "object" && "code" in reason && (reason.code === "commit-uncertain" || reason.code === "committed-stale"))) retryFiles.current.set(id, file);
+            if (!(reason && typeof reason === "object" && "code" in reason && (reason.code === "commit-uncertain" || reason.code === "committed-stale"))) setRetry(() => retryFiles.set(id, file));
             failures.push(messageForError(reason));
-            if (alive.current) dispatch({ type: "failed", id, message: messageForError(reason) });
+            if (alive()) dispatch({ type: "failed", id, message: messageForError(reason) });
           }
         }
         try {
           await refresh();
         } catch (reason) {
           failures.push(messageForError(reason));
-          if (alive.current) dispatch({ type: "reject", message: messageForError(reason) });
+          if (alive()) dispatch({ type: "reject", message: messageForError(reason) });
         }
         if (failures.length) throw new Error(failures.join("; "));
       } finally {
-        ingestGuard.current.busy = false;
-        if (alive.current) dispatch({ type: "settled" });
+        ingestGuard.busy = false;
+        if (alive()) dispatch({ type: "settled" });
       }
     })();
-    void pending.current.catch(() => undefined); // The panel and shared save barrier both retain the failure.
+    void pending.catch(() => undefined); // The panel and shared save barrier both retain the failure.
     return true;
-  }, [now, refresh, store]);
+  };
 
   return {
     state,
     dragActive,
     inputRef,
     openPicker: () => inputRef.current?.click(),
-    dismiss: (id) => { retryFiles.current.delete(id); dispatch({ type: "dismiss", id }); },
-    retry: (id) => { const file = retryFiles.current.get(id); if (file && ingestFiles([file], "picker")) { retryFiles.current.delete(id); dispatch({ type: "dismiss", id }); } },
-    canRetry: (id) => retryFiles.current.has(id),
+    dismiss: (id) => { batch(() => { setRetry(() => retryFiles.delete(id)); dispatch({ type: "dismiss", id }); }); },
+    retry: (id) => { const file = retryFiles.get(id); if (file && ingestFiles([file], "picker")) { batch(() => { setRetry(() => retryFiles.delete(id)); dispatch({ type: "dismiss", id }); }); } },
+    canRetry: (id) => { void retryRevision.value; return retryFiles.has(id); },
     onInput: (event) => {
       const input = event.currentTarget;
       const files = Array.from(input.files ?? []);
@@ -162,15 +172,15 @@ export function useAssetUpload({ store, refresh, now = Date.now }: UseAssetUploa
     onDragOver: (event) => {
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-      setDragActive(true);
+      dragActive.value = true;
     },
     onDragLeave: (event) => {
       if (event.relatedTarget && event.currentTarget.contains(event.relatedTarget as Node)) return;
-      setDragActive(false);
+      dragActive.value = false;
     },
     onDrop: (event) => {
       event.preventDefault();
-      setDragActive(false);
+      dragActive.value = false;
       if (event.dataTransfer) ingestFiles(normalizedFilesFromTransfer(event.dataTransfer), "drop");
     },
     onPaste: (event) => {
@@ -190,16 +200,19 @@ export interface AssetUploadPanelProps {
  * the hero-sized box this route used to open with: uploading is one of the
  * things an author does here, not the point of the page.
  */
-export function AssetUploadPanel({ controller }: AssetUploadPanelProps): JSX.Element {
+export function AssetUploadPanel({ controller }: AssetUploadPanelProps): Child {
   const { state } = controller;
+  const busy = computed(() => state.value.busy);
+  const rejection = computed(() => state.value.rejection);
+  const items = computed(() => state.value.items);
   return (
     <section
-      class={`sg-assets-upload${controller.dragActive ? " sg-assets-upload--drag-active" : ""}`}
+      class={computed(() => `sg-assets-upload${controller.dragActive.value ? " sg-assets-upload--drag-active" : ""}`)}
       aria-label="Upload asset"
-      onDragOver={controller.onDragOver}
-      onDragLeave={controller.onDragLeave}
-      onDrop={controller.onDrop}
-      onPaste={controller.onPaste}
+      on:dragover={controller.onDragOver}
+      on:dragleave={controller.onDragLeave}
+      on:drop={controller.onDrop}
+      on:paste={controller.onPaste}
     >
       <input
         ref={controller.inputRef}
@@ -207,49 +220,60 @@ export function AssetUploadPanel({ controller }: AssetUploadPanelProps): JSX.Ele
         type="file"
         multiple
         accept={ASSET_UPLOAD_ACCEPT}
-        onChange={controller.onInput}
+        on:change={controller.onInput}
       />
       <div class="sg-assets-drop">
         <UploadIcon size="sm" class="sg-assets-drop__icon" />
         <span class="sg-assets-drop__text">
           Drop files here, paste from the clipboard, or{" "}
-          <Button size="xs" variant="ghost" class="sg-assets-drop__choose" disabled={state.busy} onClick={controller.openPicker}>
+          <Button size="xs" variant="ghost" class="sg-assets-drop__choose" disabled={busy} on:click={controller.openPicker}>
             Choose files
           </Button>
         </span>
         <span class="sg-assets-drop__hint">{`${ASSET_UPLOAD_HINT} · up to ${formatBytes(ASSET_MAX_BYTE_LENGTH)}`}</span>
       </div>
-      {state.rejection ? <p class="sg-assets-upload__rejection" role="status">{state.rejection}</p> : null}
+      <Show when={computed(() => Boolean(rejection.value))}>{() => <p class="sg-assets-upload__rejection" role="status">{rejection}</p>}</Show>
       <div aria-live="polite">
-        {state.items.length > 0 ? (
+        <Show when={computed(() => items.value.length > 0)}>{() => (
           <ul class="sg-assets-uploads" aria-label="Upload status">
-            {state.items.map((item) => (
-              <li key={item.id} class="sg-assets-uploads__row">
-                <span class="sg-assets-uploads__name" title={item.fileName}>{item.fileName}</span>
-                <Chip tone={STATUS_TONE[item.status]} dot>{STATUS_LABEL[item.status]}</Chip>
-                {item.status === "failed" ? (
-                  <Button size="xs" disabled={state.busy || !controller.canRetry(item.id)} onClick={() => controller.retry(item.id)}>Retry upload</Button>
-                ) : null}
-                {item.status === "failed" ? (
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    iconOnly
-                    aria-label={`Dismiss ${item.fileName}`}
-                    onClick={() => controller.dismiss(item.id)}
-                  >
-                    <XMarkIcon size="sm" />
-                  </Button>
-                ) : null}
-                {item.storedFileName && item.storedFileName !== item.fileName ? (
-                  <span class="sg-assets-uploads__detail">Stored as {item.storedFileName}</span>
-                ) : null}
-                {item.error ? <span class="sg-assets-uploads__detail">{item.error}</span> : null}
-              </li>
-            ))}
+            <For each={items} by={(item) => item.id}>{(item) => <UploadRow item={item} busy={busy} controller={controller} />}</For>
           </ul>
-        ) : null}
+        )}</Show>
       </div>
     </section>
   );
+}
+
+function UploadRow({ item, busy, controller }: { item: ReadonlySignal<AssetUploadItem>; busy: ReadonlySignal<boolean>; controller: AssetUploadController }): Child {
+  const { id, fileName } = item.value;
+  const failed = computed(() => item.value.status === "failed");
+  const storedAs = computed(() => { const stored = item.value.storedFileName; return stored && stored !== fileName ? `Stored as ${stored}` : ""; });
+  const error = computed(() => item.value.error ?? "");
+  return (
+    <li class="sg-assets-uploads__row">
+      <span class="sg-assets-uploads__name" title={fileName}>{fileName}</span>
+      <UploadStatusChip status={computed(() => item.value.status)} />
+      <Show when={failed}>{() => (
+        <>
+          <Button size="xs" disabled={computed(() => busy.value || !controller.canRetry(id))} on:click={() => controller.retry(id)}>Retry upload</Button>
+          <Button
+            size="xs"
+            variant="ghost"
+            iconOnly
+            aria-label={`Dismiss ${fileName}`}
+            on:click={() => controller.dismiss(id)}
+          >
+            <XMarkIcon size="sm" />
+          </Button>
+        </>
+      )}</Show>
+      <Show when={computed(() => Boolean(storedAs.value))}>{() => <span class="sg-assets-uploads__detail">{storedAs}</span>}</Show>
+      <Show when={computed(() => Boolean(error.value))}>{() => <span class="sg-assets-uploads__detail">{error}</span>}</Show>
+    </li>
+  );
+}
+
+/** The status chip; its tone is a static prop, so it remounts per status. */
+function UploadStatusChip({ status }: { status: ReadonlySignal<AssetUploadStatus> }): Child {
+  return <For each={computed(() => [status.value])} by={(value) => value}>{(value) => <Chip tone={STATUS_TONE[value.value]} dot>{STATUS_LABEL[value.value]}</Chip>}</For>;
 }
