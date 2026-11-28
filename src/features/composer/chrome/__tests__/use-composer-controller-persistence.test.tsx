@@ -1,5 +1,5 @@
 import "../../test-support/cleanup";
-import { act, renderHook } from "@testing-library/preact";
+import { act, renderController, type ControllerView as ComposerController } from "./controller-harness";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createSaveQueue,
@@ -20,7 +20,6 @@ import {
 } from "../../../../composer/__tests__/fixtures";
 import {
   INSPECTOR_COMMIT_DEBOUNCE_MS,
-  useComposerController,
 } from "../use-composer-controller";
 
 const ref = { providerId: "files", recordId: "record-a" } as const;
@@ -67,8 +66,7 @@ function setup() {
   const initialRecord = record();
   const harness = controlledQueue(initialRecord);
   const idFactory = createSequentialIdFactory("n");
-  const hook = renderHook(() =>
-    useComposerController({
+  const hook = renderController(() => ({
       manifest: fixtureManifest,
       record: initialRecord,
       saveQueue: harness.queue,
@@ -98,7 +96,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("useComposerController — record persistence", () => {
+describe("createComposerController — record persistence", () => {
   it("queues exactly one revision for one accepted atomic Pattern forest insertion", async () => {
     const { result, attempts } = setup();
     const sourceRoots = [node(F.box, { label: "Pattern A" }, {}, "source-a"), node(F.box, { label: "Pattern B" }, {}, "source-b")];
@@ -251,7 +249,7 @@ describe("useComposerController — record persistence", () => {
         },
       }),
     });
-    const hook = renderHook(() => useComposerController({
+    const hook = renderController(() => ({
       manifest: fixtureManifest,
       record: initialRecord,
       saveQueue: queue,
