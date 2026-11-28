@@ -5,7 +5,9 @@ export default defineConfig({
   root: resolve(import.meta.dirname),
   base: "/_shop-preview/",
   plugins: [tailwind()],
-  esbuild: { jsx: "automatic", jsxImportSource: "preact" },
+  // A second zudo-react copy would split signals and roots silently.
+  resolve: { dedupe: ["@takazudo/zfb"] },
+  esbuild: { jsx: "automatic", jsxImportSource: "@takazudo/zfb/zudo-react" },
   build: {
     outDir: resolve(import.meta.dirname, "../public/_shop-preview"),
     emptyOutDir: true,

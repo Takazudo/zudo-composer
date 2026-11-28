@@ -1,9 +1,14 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, settle, settleTasks, waitFor, within } from "../../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ASSET_MAX_BYTE_LENGTH, summarizeAsset, type AssetProvider } from "../../../assets";
 import { AssetPickerDialog } from "../asset-picker-dialog";
 import { nextEscapeAction } from "../asset-picker-panes";
 import { PDF, PNG, providerFixture } from "./versioned-fixture";
+
+/** `fireEvent`, then a settle so zudo-react commits before the next synchronous assertion. */
+const fire = new Proxy(fireEvent, {
+  get: (target, key) => async (...args: unknown[]) => { (target[key as keyof typeof fireEvent] as (...rest: unknown[]) => boolean)(...args); await settle(); },
+}) as unknown as { [Key in keyof typeof fireEvent]: (...args: Parameters<(typeof fireEvent)[Key]>) => Promise<void> };
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -37,7 +42,7 @@ function stubTier(initial: { sideOverlay: boolean; detailDrawer: boolean }) {
     unobserve = vi.fn();
     disconnect = disconnect;
   });
-  return { observe, disconnect, resize: (next: typeof tier) => act(() => { tier = next; notify(); }) };
+  return { observe, disconnect, resize: async (next: typeof tier) => { tier = next; notify(); await settle(); } };
 }
 
 describe("Asset picker dialog", () => {
@@ -45,13 +50,14 @@ describe("Asset picker dialog", () => {
     const { provider } = await libraryFixture();
     const props = { provider, kind: "image" as const, onSelect: vi.fn(), onClose: vi.fn() };
     const first = render(<AssetPickerDialog {...props} />);
+    await settle();
     await screen.findByRole("button", { name: "hero.png" });
     const library = screen.getByRole("complementary", { name: "Library" });
     const details = screen.getByRole("complementary", { name: "Asset details" });
     within(library).getByRole("button", { name: /^All assets/ }).focus();
     const sideTab = screen.getByRole("button", { name: "Hide library" });
     expect(sideTab).toHaveAttribute("aria-controls", library.id);
-    fireEvent.click(sideTab);
+    await fire.click(sideTab);
     expect(sideTab).toHaveFocus();
     expect(sideTab).toHaveAttribute("aria-expanded", "false");
     expect(library).toHaveAttribute("inert");
@@ -59,17 +65,18 @@ describe("Asset picker dialog", () => {
     details.focus();
     const detailTab = screen.getByRole("button", { name: "Hide asset details" });
     expect(detailTab).toHaveAttribute("aria-controls", details.id);
-    fireEvent.click(detailTab);
+    await fire.click(detailTab);
     expect(detailTab).toHaveFocus();
     expect(details).toHaveAttribute("inert");
     expect(details).toHaveAttribute("aria-hidden", "true");
     expect(JSON.parse(localStorage.getItem("sg-assets-picker:panes")!)).toEqual({ side: false, detail: false, sideWidth: 176 });
     first.unmount();
     render(<AssetPickerDialog {...props} />);
+    await settle();
     expect(screen.getByRole("button", { name: "Show library" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("button", { name: "Show asset details" })).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(screen.getByRole("button", { name: "Show library" }));
-    fireEvent.click(screen.getByRole("button", { name: "Show asset details" }));
+    await fire.click(screen.getByRole("button", { name: "Show library" }));
+    await fire.click(screen.getByRole("button", { name: "Show asset details" }));
     expect(screen.getByRole("complementary", { name: "Library" })).not.toHaveAttribute("inert");
     expect(screen.getByRole("complementary", { name: "Asset details" })).not.toHaveAttribute("inert");
   });
@@ -77,21 +84,22 @@ describe("Asset picker dialog", () => {
   it("searches names and notes, clears an empty search, filters type, and switches to a list", async () => {
     const { provider } = await libraryFixture();
     render(<AssetPickerDialog provider={provider} kind="link" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     await screen.findByRole("button", { name: "hero.png" });
     const search = screen.getByRole("searchbox", { name: "Search assets" });
-    fireEvent.input(search, { target: { value: "SUNRISE" } });
+    await fire.input(search, { target: { value: "SUNRISE" } });
     expect(renderedNames()).toEqual(["hero.png"]);
-    fireEvent.input(search, { target: { value: "guide" } });
+    await fire.input(search, { target: { value: "guide" } });
     expect(renderedNames()).toEqual(["guide.pdf"]);
-    fireEvent.input(search, { target: { value: "missing" } });
+    await fire.input(search, { target: { value: "missing" } });
     expect(screen.queryByRole("list", { name: "Assets" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    await fire.click(screen.getByRole("button", { name: "Clear search" }));
     expect(search).toHaveValue("");
     expect(search).toHaveFocus();
     expect(renderedNames()).toEqual(["guide.pdf", "hero.png"]);
-    fireEvent.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "image" } });
+    await fire.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "image" } });
     expect(renderedNames()).toEqual(["hero.png"]);
-    fireEvent.click(screen.getByRole("radio", { name: "List view" }));
+    await fire.click(screen.getByRole("radio", { name: "List view" }));
     expect(screen.getByRole("radio", { name: "List view" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("list", { name: "Assets" })).toHaveAttribute("data-view", "list");
   });
@@ -105,12 +113,13 @@ describe("Asset picker dialog", () => {
       { ...summarizeAsset(alpha), updatedAt: "2026-01-01T00:00:00.000Z", byteLength: 200 },
     ]);
     render(<AssetPickerDialog provider={provider} kind="link" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     await screen.findByRole("button", { name: "hero.png" });
     expect(renderedNames()).toEqual(["alpha.png", "guide.pdf", "hero.png"]);
     const sort = screen.getByRole("combobox", { name: "Sort assets" });
-    fireEvent.change(sort, { target: { value: "newest" } });
+    await fire.change(sort, { target: { value: "newest" } });
     expect(renderedNames()).toEqual(["hero.png", "guide.pdf", "alpha.png"]);
-    fireEvent.change(sort, { target: { value: "size" } });
+    await fire.change(sort, { target: { value: "size" } });
     expect(renderedNames()).toEqual(["guide.pdf", "alpha.png", "hero.png"]);
   });
 
@@ -119,12 +128,13 @@ describe("Asset picker dialog", () => {
     const choose = vi.fn();
     const close = vi.fn();
     render(<AssetPickerDialog provider={provider} kind="image" onSelect={choose} onClose={close} />);
+    await settle();
     const input = await screen.findByLabelText("Upload new file") as HTMLInputElement;
     expect(input).toHaveAttribute("accept", "image/png,image/jpeg,image/gif,image/webp");
-    fireEvent.change(input, { target: { files: [new File([PNG], "uploaded.png", { type: "image/png" })] } });
+    await fire.change(input, { target: { files: [new File([PNG], "uploaded.png", { type: "image/png" })] } });
     const uploaded = await screen.findByRole("button", { name: "uploaded.png" });
     await waitFor(() => expect(uploaded).toHaveAttribute("aria-pressed", "true"));
-    fireEvent.click(screen.getByRole("button", { name: "Use this image" }));
+    await fire.click(screen.getByRole("button", { name: "Use this image" }));
     await waitFor(() => expect(choose).toHaveBeenCalledExactlyOnceWith({
       kind: "image", asset: { providerId: provider.descriptor.id, assetId: expect.any(String) }, alt: "", decorative: false, caption: "",
     }));
@@ -135,20 +145,22 @@ describe("Asset picker dialog", () => {
     const { provider } = await providerFixture();
     const click = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => undefined);
     render(<AssetPickerDialog provider={provider} kind="image" intent="upload" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     await waitFor(() => expect(click).toHaveBeenCalledOnce());
   });
 
   it("surfaces invalid image and oversized upload errors without changing the selection", async () => {
     const { provider } = await libraryFixture();
     render(<AssetPickerDialog provider={provider} kind="image" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     const hero = await screen.findByRole("button", { name: "hero.png" });
-    fireEvent.click(hero);
+    await fire.click(hero);
     const input = screen.getByLabelText("Upload new file") as HTMLInputElement;
-    fireEvent.change(input, { target: { files: [new File([PDF], "guide.pdf", { type: "application/pdf" })] } });
+    await fire.change(input, { target: { files: [new File([PDF], "guide.pdf", { type: "application/pdf" })] } });
     expect(await screen.findByText("Choose an image file for this picker.")).toBeVisible();
     expect(hero).toHaveAttribute("aria-pressed", "true");
     const oversized = new File([new Uint8Array(ASSET_MAX_BYTE_LENGTH + 1)], "oversized.png", { type: "image/png" });
-    fireEvent.change(input, { target: { files: [oversized] } });
+    await fire.change(input, { target: { files: [oversized] } });
     expect(await screen.findByText("Upload exceeds the 25 MB limit. Choose a smaller file.")).toBeVisible();
     expect(hero).toHaveAttribute("aria-pressed", "true");
   });
@@ -157,6 +169,7 @@ describe("Asset picker dialog", () => {
     const { provider, filesystem } = await libraryFixture();
     const plain: AssetProvider = { ...provider, store: { provider: provider.descriptor, list: () => filesystem.list(), get: (id) => filesystem.get(id), put: provider.store.put, delete: provider.store.delete, clear: provider.store.clear } };
     render(<AssetPickerDialog provider={plain} kind="image" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     await screen.findByRole("button", { name: "hero.png" });
     expect(screen.queryByText("Drop a file here to upload and use it")).toBeNull();
     expect(screen.queryByRole("button", { name: "Upload new file…" })).toBeNull();
@@ -167,8 +180,9 @@ describe("Asset picker dialog", () => {
     const { provider, guide } = await libraryFixture();
     const choose = vi.fn(); const close = vi.fn();
     render(<AssetPickerDialog provider={provider} kind={kind} onSelect={choose} onClose={close} />);
+    await settle();
     expect(screen.getByRole("button", { name: "Use this asset" })).toBeDisabled();
-    fireEvent.dblClick(await screen.findByRole("button", { name: "guide.pdf" }));
+    await fire.dblClick(await screen.findByRole("button", { name: "guide.pdf" }));
     const asset = { providerId: provider.descriptor.id, assetId: guide.id };
     const value = kind === "link" ? { kind, asset, label: "guide.pdf" }
       : kind === "download" ? { kind, asset, label: "guide.pdf", showSize: true, showType: true }
@@ -183,20 +197,21 @@ describe("Asset picker dialog", () => {
     const choose = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
     const close = vi.fn();
     render(<AssetPickerDialog provider={provider} kind="image" onSelect={choose} onClose={close} />);
+    await settle();
     const item = await screen.findByRole("button", { name: "hero.png" });
-    fireEvent.click(item);
-    fireEvent.keyDown(item, { key: "Enter" });
-    fireEvent.keyDown(screen.getByRole("combobox", { name: "Sort assets" }), { key: "Enter" });
+    await fire.click(item);
+    await fire.keyDown(item, { key: "Enter" });
+    await fire.keyDown(screen.getByRole("combobox", { name: "Sort assets" }), { key: "Enter" });
     expect(choose).not.toHaveBeenCalled();
     const search = screen.getByRole("searchbox", { name: "Search assets" });
-    fireEvent.keyDown(search, { key: "Enter", isComposing: true });
+    await fire.keyDown(search, { key: "Enter", isComposing: true });
     expect(choose).not.toHaveBeenCalled();
-    fireEvent.keyDown(search, { key: "Enter" });
-    fireEvent.keyDown(search, { key: "Enter" });
+    await fire.keyDown(search, { key: "Enter" });
+    await fire.keyDown(search, { key: "Enter" });
     await waitFor(() => expect(choose).toHaveBeenCalledTimes(1));
     expect(screen.getByRole("button", { name: "Use this image" })).toBeDisabled();
     expect(close).not.toHaveBeenCalled();
-    await act(async () => finish());
+    finish(); await settleTasks();
     expect(close).toHaveBeenCalledTimes(1);
   });
 
@@ -205,6 +220,7 @@ describe("Asset picker dialog", () => {
     const trashed = await filesystem.trash(hero.id, { expectedRevision: hero.revision });
     vi.spyOn(filesystem, "list").mockResolvedValue([summarizeAsset(trashed), summarizeAsset(guide)]);
     render(<AssetPickerDialog provider={provider} kind="link" current={{ providerId: provider.descriptor.id, assetId: hero.id }} onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     await screen.findByRole("button", { name: "guide.pdf" });
     expect(screen.queryByRole("button", { name: "hero.png" })).toBeNull();
     expect(screen.queryByText("Current")).toBeNull();
@@ -216,10 +232,11 @@ describe("Asset picker dialog", () => {
     const { provider, filesystem, hero, guide } = await libraryFixture();
     const choose = vi.fn(); const close = vi.fn();
     render(<AssetPickerDialog provider={provider} kind="image" onSelect={choose} onClose={close} />);
-    fireEvent.click(await screen.findByRole("button", { name: "hero.png" }));
+    await settle();
+    await fire.click(await screen.findByRole("button", { name: "hero.png" }));
     if (change === "trashed") await filesystem.trash(hero.id, { expectedRevision: hero.revision });
     else vi.spyOn(filesystem, "get").mockResolvedValue({ status: "loaded", record: { ...guide, id: hero.id, document: { ...guide.document, id: hero.id } } });
-    fireEvent.click(screen.getByRole("button", { name: "Use this image" }));
+    await fire.click(screen.getByRole("button", { name: "Use this image" }));
     await screen.findByText(change === "trashed" ? "This asset is no longer available. Choose another asset." : "The selected asset is no longer an image.");
     expect(choose).not.toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
@@ -231,9 +248,10 @@ describe("Asset picker dialog", () => {
     const choose = vi.fn().mockRejectedValueOnce(new Error("Content changed; retry selection."));
     const close = vi.fn();
     render(<AssetPickerDialog provider={provider} kind="link" onSelect={choose} onClose={close} />);
-    fireEvent.click(await screen.findByRole("button", { name: "guide.pdf" }));
+    await settle();
+    await fire.click(await screen.findByRole("button", { name: "guide.pdf" }));
     await filesystem.updateMetadata(guide.id, { fileName: "renamed.pdf" }, { expectedRevision: guide.revision });
-    fireEvent.click(screen.getByRole("button", { name: "Use this asset" }));
+    await fire.click(screen.getByRole("button", { name: "Use this asset" }));
     await screen.findByText("Content changed; retry selection.");
     expect(choose).toHaveBeenCalledWith({ kind: "link", asset: { providerId: provider.descriptor.id, assetId: guide.id }, label: "renamed.pdf" });
     expect(close).not.toHaveBeenCalled();
@@ -246,14 +264,15 @@ describe("Asset picker dialog", () => {
     const child = await filesystem.createFolder({ name: "Summer", parentId: a.id }, await filesystem.mutationToken());
     await filesystem.upload({ fileName: "folder.png", folderId: child.id, declaredMimeType: "image/png", bytes: PNG });
     render(<AssetPickerDialog provider={provider} kind="image" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     await screen.findByRole("button", { name: "folder.png" });
     const folders = screen.getByRole("region", { name: "Folders" });
     expect(within(folders).getAllByRole("button").map((item) => item.textContent)).toEqual(["Alpine 0", "Summer 1", "Zebra 0"]);
     expect(within(folders).getByTitle("Alpine / Summer")).toHaveStyle({ "--sg-assets-picker-folder-depth": "1" });
-    fireEvent.click(within(folders).getByTitle("Alpine / Summer"));
+    await fire.click(within(folders).getByTitle("Alpine / Summer"));
     expect(renderedNames()).toEqual(["folder.png"]);
     expect(screen.getByText("Alpine / Summer · 1 shown")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Unfiled 1" }));
+    await fire.click(screen.getByRole("button", { name: "Unfiled 1" }));
     expect(renderedNames()).toEqual(["hero.png"]);
     expect(screen.queryByRole("button", { name: /Trash/ })).toBeNull();
   });
@@ -262,10 +281,12 @@ describe("Asset picker dialog", () => {
     const { provider, filesystem } = await libraryFixture();
     const plain: AssetProvider = { ...provider, store: { provider: provider.descriptor, list: () => filesystem.list(), get: (id) => filesystem.get(id), put: provider.store.put, delete: provider.store.delete, clear: provider.store.clear } };
     const rendered = render(<AssetPickerDialog provider={plain} kind="image" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     await screen.findByRole("button", { name: "hero.png" });
     expect(screen.queryByRole("region", { name: "Folders" })).toBeNull();
     rendered.unmount();
     render(<AssetPickerDialog kind="image" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     expect(screen.getByText(/The Assets library and upload authoring are available only/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Use this image" })).toBeDisabled();
   });
@@ -274,13 +295,14 @@ describe("Asset picker dialog", () => {
     const { provider, hero } = await libraryFixture();
     const previewUrl = vi.fn((url: string) => `https://example.test${url}`);
     render(<AssetPickerDialog provider={{ ...provider, previewUrl }} kind="image" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     const item = await screen.findByRole("button", { name: "hero.png" });
     const img = item.querySelector("img")!;
     expect(img).toHaveAttribute("src", previewUrl(hero.document.versions[0]!.url));
     Object.defineProperties(img, { complete: { value: true }, naturalWidth: { value: 400 }, naturalHeight: { value: 300 } });
-    fireEvent.load(img);
+    await fire.load(img);
     expect(item).toHaveTextContent("PNG · 12 B · 400×300");
-    fireEvent.click(item);
+    await fire.click(item);
     const details = screen.getByRole("complementary", { name: "Asset details" });
     expect(details).toHaveTextContent("400×300");
     expect(details).toHaveTextContent("Mountain sunrise");
@@ -294,20 +316,22 @@ describe("Asset picker dialog", () => {
     const { provider } = await libraryFixture();
     const close = vi.fn();
     render(<AssetPickerDialog provider={provider} kind="image" onSelect={vi.fn()} onClose={close} />);
+    await settle();
     await screen.findByRole("button", { name: "hero.png" });
     expect(screen.getByRole("button", { name: "Show library" })).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(screen.getByRole("button", { name: "Show library" }));
+    await fire.click(screen.getByRole("button", { name: "Show library" }));
     const search = screen.getByRole("searchbox", { name: "Search assets" });
     const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
     fireEvent(search, escape);
+    await settle();
     expect(escape.defaultPrevented).toBe(true);
     expect(screen.getByRole("button", { name: "Show asset details" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("button", { name: "Hide library" })).toHaveAttribute("aria-expanded", "true");
     expect(close).not.toHaveBeenCalled();
-    fireEvent.keyDown(search, { key: "Escape" });
+    await fire.keyDown(search, { key: "Escape" });
     expect(screen.getByRole("button", { name: "Show library" })).toHaveAttribute("aria-expanded", "false");
     expect(close).not.toHaveBeenCalled();
-    fireEvent.keyDown(search, { key: "Escape" });
+    await fire.keyDown(search, { key: "Escape" });
     expect(close).toHaveBeenCalledTimes(1);
   });
 
@@ -315,16 +339,17 @@ describe("Asset picker dialog", () => {
     const observer = stubTier({ sideOverlay: false, detailDrawer: true });
     const { provider } = await libraryFixture();
     const first = render(<AssetPickerDialog provider={provider} kind="image" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     await screen.findByRole("button", { name: "hero.png" });
     expect(observer.observe).toHaveBeenCalledWith(screen.getByRole("dialog", { name: "Choose an image" }));
     expect(screen.getByRole("button", { name: "Hide library" })).toHaveAttribute("aria-expanded", "true");
     screen.getByRole("separator", { name: "Resize library" }).focus();
-    observer.resize({ sideOverlay: true, detailDrawer: true });
+    await observer.resize({ sideOverlay: true, detailDrawer: true });
     expect(screen.getByRole("button", { name: "Show library" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("button", { name: "Show library" })).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "Show library" }));
+    await fire.click(screen.getByRole("button", { name: "Show library" }));
     const facet = screen.getByRole("button", { name: "Unfiled 1" });
-    facet.focus(); fireEvent.click(facet);
+    facet.focus(); await fire.click(facet);
     expect(screen.getByRole("button", { name: "Show library" })).toHaveFocus();
     expect(screen.getByText("Unfiled · 1 shown")).toBeInTheDocument();
     first.unmount();
@@ -334,25 +359,27 @@ describe("Asset picker dialog", () => {
   it("resizes by pointer and keyboard within 150–300px and persists the width", async () => {
     const { provider } = await libraryFixture();
     render(<AssetPickerDialog provider={provider} kind="image" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     const separator = screen.getByRole("separator", { name: "Resize library" });
     expect(separator).toHaveAttribute("aria-valuenow", "176");
-    const pointer = (type: string, x: number) => {
+    const pointer = async (type: string, x: number) => {
       const event = new Event(type, { bubbles: true, cancelable: true });
       Object.defineProperties(event, { pointerId: { value: 1 }, button: { value: 0 }, clientX: { value: x } });
       fireEvent(separator, event);
+      await settle();
     };
-    pointer("pointerdown", 200);
-    pointer("pointermove", 260);
+    await pointer("pointerdown", 200);
+    await pointer("pointermove", 260);
     expect(separator).toHaveAttribute("aria-valuenow", "236");
-    pointer("pointermove", 800);
+    await pointer("pointermove", 800);
     expect(separator).toHaveAttribute("aria-valuenow", "300");
-    pointer("pointerup", 800);
-    pointer("pointermove", 200);
+    await pointer("pointerup", 800);
+    await pointer("pointermove", 200);
     expect(separator).toHaveAttribute("aria-valuenow", "300");
-    fireEvent.keyDown(separator, { key: "Home" });
-    fireEvent.keyDown(separator, { key: "ArrowLeft" });
+    await fire.keyDown(separator, { key: "Home" });
+    await fire.keyDown(separator, { key: "ArrowLeft" });
     expect(separator).toHaveAttribute("aria-valuenow", "150");
-    fireEvent.keyDown(separator, { key: "ArrowRight" });
+    await fire.keyDown(separator, { key: "ArrowRight" });
     expect(separator).toHaveAttribute("aria-valuenow", "160");
     expect(document.querySelector(".sg-assets-picker")).toHaveStyle({ "--sg-assets-picker-side-w": "160px" });
     await waitFor(() => expect(JSON.parse(localStorage.getItem("sg-assets-picker:panes")!)).toMatchObject({ sideWidth: 160 }));
@@ -362,6 +389,7 @@ describe("Asset picker dialog", () => {
     localStorage.setItem("sg-assets-picker:panes", saved);
     const { provider } = await libraryFixture();
     render(<AssetPickerDialog provider={provider} kind="image" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     expect(screen.getByRole("separator", { name: "Resize library" })).toHaveAttribute("aria-valuenow", saved === "broken" ? "176" : "300");
     await screen.findByRole("button", { name: "hero.png" });
   });
@@ -371,8 +399,9 @@ describe("Asset picker dialog", () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Blocked storage"); });
     const { provider } = await libraryFixture();
     render(<AssetPickerDialog provider={provider} kind="image" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await settle();
     await screen.findByRole("button", { name: "hero.png" });
-    fireEvent.click(screen.getByRole("button", { name: "Hide library" }));
+    await fire.click(screen.getByRole("button", { name: "Hide library" }));
     expect(screen.getByRole("button", { name: "Show library" })).toHaveAttribute("aria-expanded", "false");
   });
 });

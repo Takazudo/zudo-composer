@@ -1,11 +1,9 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { computed, getScope, Show, signal, type Child, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
+import type { VersionedAssetStore } from "../../../assets/library";
 import type { CompositionRecordRef, CompositionSummary } from "../../../composer/browser";
 import { ExpandIcon } from "../../../components/icons";
 import { Dialog } from "../../../components/overlay";
+import { read, toSignal, type MaybeSignal } from "../../../components/reactive";
 import { Banner, Button, SegmentedControl } from "../../../components/ui";
 import type { ComposerComponentProvider } from "../active-pack";
 import { CompositionPreviewHost } from "../preview";
@@ -21,24 +19,22 @@ const VIEWPORTS = {
 /** Deterministic ceiling when IntersectionObserver is unavailable. */
 export const COMPOSITION_PREVIEW_FALLBACK_LIMIT = 4;
 
-function useNearVisible(fallbackNear: boolean): { ref: (node: HTMLDivElement | null) => void; near: boolean } {
-  const [node, setNode] = useState<HTMLDivElement | null>(null);
-  const [near, setNear] = useState(false);
+/** Whether `ref`'s element is near the viewport, owned by the caller's scope. */
+function nearVisible(fallbackNear: ReadonlySignal<boolean>): { ref: Ref<HTMLDivElement>; near: ReadonlySignal<boolean> } {
+  const scope = getScope();
+  const ref: Ref<HTMLDivElement> = { current: null };
+  const observed = signal(false);
   const observerAvailable = typeof IntersectionObserver !== "undefined";
-  useEffect(() => {
-    if (!node) return;
-    if (!observerAvailable) return;
+  scope.onActivate(() => {
+    const node = ref.current;
+    if (!node || !observerAvailable) return undefined;
     const observer = new IntersectionObserver((entries) => {
-      setNear(entries.some((entry) => entry.isIntersecting));
+      observed.value = entries.some((entry) => entry.isIntersecting);
     }, { rootMargin: "320px 0px" });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [node, observerAvailable]);
-  return { ref: setNode, near: observerAvailable ? near : fallbackNear };
-}
-
-function message(outcome: Exclude<CompositionLibraryPreviewOutcome, { status: "ready" }>): string {
-  return outcome.message;
+  });
+  return { ref, near: observerAvailable ? observed : fallbackNear };
 }
 
 function FixedViewportPreview({
@@ -49,55 +45,80 @@ function FixedViewportPreview({
   loading,
   onCurrent,
   onError,
+  assetStore,
   expanded = false,
 }: {
   componentProvider: ComposerComponentProvider;
-  outcome: CompositionLibraryPreviewOutcome | null;
-  device: CompositionThumbnailDevice;
+  outcome: ReadonlySignal<CompositionLibraryPreviewOutcome | null>;
+  device: ReadonlySignal<CompositionThumbnailDevice>;
   title: string;
-  loading: boolean;
+  loading: ReadonlySignal<boolean>;
   onCurrent: () => void;
   onError: (message: string) => void;
+  assetStore?: VersionedAssetStore;
   expanded?: boolean;
-}): JSX.Element {
-  const viewport = VIEWPORTS[device];
-  const [frame, setFrame] = useState<HTMLDivElement | null>(null);
-  const [scale, setScale] = useState(1);
-  useEffect(() => {
-    if (!frame || typeof ResizeObserver === "undefined") return;
-    const update = () => setScale(Math.min(1, frame.clientWidth / viewport.width));
+}): Child {
+  const scope = getScope();
+  const frame: Ref<HTMLDivElement> = { current: null };
+  const scale = signal(1);
+  const viewport = computed(() => VIEWPORTS[device.value]);
+  scope.effect(() => {
+    const width = viewport.value.width;
+    const element = frame.current;
+    if (!element || typeof ResizeObserver === "undefined") return undefined;
+    const update = () => { scale.value = Math.min(1, element.clientWidth / width); };
     update();
     const observer = new ResizeObserver(update);
-    observer.observe(frame);
+    observer.observe(element);
     return () => observer.disconnect();
-  }, [frame, viewport.width]);
+  });
   return (
     <div
-      ref={setFrame}
-      class={`cms-composition-viewport cms-composition-viewport--${device}${expanded ? " cms-composition-viewport--expanded" : ""}`}
-      style={{
-        "--composition-viewport-width": `${viewport.width}px`,
-        "--composition-viewport-height": `${viewport.height}px`,
-        "--composition-viewport-scale": scale,
-        height: `${viewport.height * scale}px`,
-      }}
+      ref={frame}
+      class={computed(() => `cms-composition-viewport cms-composition-viewport--${device.value}${expanded ? " cms-composition-viewport--expanded" : ""}`)}
+      style={computed(() => ({
+        "--composition-viewport-width": `${viewport.value.width}px`,
+        "--composition-viewport-height": `${viewport.value.height}px`,
+        "--composition-viewport-scale": String(scale.value),
+        height: `${viewport.value.height * scale.value}px`,
+      }))}
     >
       <div class="cms-composition-viewport__logical">
         <CompositionPreviewHost
           componentProvider={componentProvider}
           document={null}
-          snapshot={outcome?.status === "ready" ? outcome.snapshot : null}
+          snapshot={computed(() => {
+            const current = outcome.value;
+            return current?.status === "ready" ? current.snapshot : null;
+          })}
           title={title}
           loading={loading}
           enlargeable={false}
-          emptyTitle={loading ? "Loading preview" : "Preview unavailable"}
-          emptyMessage={outcome && outcome.status !== "ready" ? message(outcome) : "The provider preview is loading."}
+          emptyTitle={computed(() => (loading.value ? "Loading preview" : "Preview unavailable"))}
+          emptyMessage={computed(() => {
+            const current = outcome.value;
+            return current && current.status !== "ready" ? current.message : "The provider preview is loading.";
+          })}
           onCurrent={onCurrent}
           onError={onError}
+          assetStore={assetStore}
         />
       </div>
     </div>
   );
+}
+
+export interface CompositionLibraryPreviewProps {
+  /** Static: the library keys each card by provider, id and `updatedAt`. */
+  row: CompositionSummary;
+  providerId: CompositionRecordRef["providerId"];
+  componentProvider: ComposerComponentProvider;
+  intents: CompositionLibraryIntents;
+  device: MaybeSignal<CompositionThumbnailDevice>;
+  fallbackNear: MaybeSignal<boolean>;
+  dialogOpen: MaybeSignal<boolean>;
+  onDialogOpenChange: (open: boolean) => void;
+  assetStore?: VersionedAssetStore;
 }
 
 export function CompositionLibraryPreview({
@@ -105,86 +126,99 @@ export function CompositionLibraryPreview({
   providerId,
   componentProvider,
   intents,
-  device,
+  device: deviceProp,
   fallbackNear,
-  dialogOpen,
+  dialogOpen: dialogOpenProp,
   onDialogOpenChange,
-}: {
-  row: CompositionSummary;
-  providerId: CompositionRecordRef["providerId"];
-  componentProvider: ComposerComponentProvider;
-  intents: CompositionLibraryIntents;
-  device: CompositionThumbnailDevice;
-  fallbackNear: boolean;
-  dialogOpen: boolean;
-  onDialogOpenChange: (open: boolean) => void;
-}): JSX.Element {
-  const visibility = useNearVisible(fallbackNear);
-  const [outcome, setOutcome] = useState<CompositionLibraryPreviewOutcome | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [rendered, setRendered] = useState(false);
-  const [runtimeError, setRuntimeError] = useState<string | null>(null);
-  const [dialogDevice, setDialogDevice] = useState<CompositionThumbnailDevice>(device);
-  const generation = useRef(0);
-  const shouldLoad = visibility.near || dialogOpen;
-  const cardMounted = visibility.near && !dialogOpen;
-  const ref = useMemo<CompositionRecordRef>(
-    () => ({ providerId, recordId: row.id }),
-    [providerId, row.id],
-  );
+  assetStore,
+}: CompositionLibraryPreviewProps): Child {
+  const scope = getScope();
+  const device = toSignal(deviceProp);
+  const dialogOpen = toSignal(dialogOpenProp);
+  const visibility = nearVisible(toSignal(fallbackNear));
+  const outcome = signal<CompositionLibraryPreviewOutcome | null>(null);
+  const loading = signal(false);
+  const rendered = signal(false);
+  const runtimeError = signal<string | null>(null);
+  const dialogDevice = signal<CompositionThumbnailDevice>(read(deviceProp));
+  let generation = 0;
+  const shouldLoad = computed(() => visibility.near.value || dialogOpen.value);
+  const cardMounted = computed(() => visibility.near.value && !dialogOpen.value);
+  const ref: CompositionRecordRef = { providerId, recordId: row.id };
 
-  useEffect(() => {
-    if (!shouldLoad) return;
-    const request = ++generation.current;
-    setLoading(true);
-    setRendered(false);
-    setRuntimeError(null);
-    setOutcome(null);
+  let loadingFor = false;
+  scope.onCleanup(() => { generation += 1; });
+  scope.effect(() => {
+    const next = shouldLoad.value;
+    if (next === loadingFor) return;
+    loadingFor = next;
+    if (!next) { generation += 1; return; }
+    const request = ++generation;
+    loading.value = true;
+    rendered.value = false;
+    runtimeError.value = null;
+    outcome.value = null;
     void intents.resolvePreview(ref).then(
-      (next) => {
-        if (request !== generation.current) return;
-        if (next.ref.providerId !== ref.providerId || next.ref.recordId !== ref.recordId) {
-          setOutcome({ status: "blocked", ref, message: "The provider returned a preview for a different Composition." });
+      (result) => {
+        if (request !== generation || scope.abortSignal.aborted) return;
+        if (result.ref.providerId !== ref.providerId || result.ref.recordId !== ref.recordId) {
+          outcome.value = { status: "blocked", ref, message: "The provider returned a preview for a different Composition." };
         } else {
-          setOutcome(next);
+          outcome.value = result;
         }
-        setLoading(false);
+        loading.value = false;
       },
       (reason) => {
-        if (request !== generation.current) return;
-        setOutcome({
+        if (request !== generation || scope.abortSignal.aborted) return;
+        outcome.value = {
           status: "blocked",
           ref,
           message: reason instanceof Error ? reason.message : "The preview could not be loaded.",
-        });
-        setLoading(false);
+        };
+        loading.value = false;
       },
     );
-    return () => { generation.current += 1; };
-  }, [intents, ref, row.updatedAt, shouldLoad]);
+  });
 
-  const preview = cardMounted ? (
-    <FixedViewportPreview
-      componentProvider={componentProvider}
-      outcome={outcome}
-      device={device}
-      title={`${row.name} preview`}
-      loading={loading || (outcome?.status === "ready" && !rendered)}
-      onCurrent={() => setRendered(true)}
-      onError={(error) => { setRuntimeError(error); setRendered(false); }}
-    />
-  ) : <div class="cms-composition-card__deferred">{dialogOpen ? "Preview shown in dialog" : "Preview loads when nearby"}</div>;
+  const onCurrent = () => { rendered.value = true; };
+  const onError = (error: string) => { runtimeError.value = error; rendered.value = false; };
+  const blocked = computed(() => {
+    const current = outcome.value;
+    return current && current.status !== "ready" ? current.message : null;
+  });
+  const hasBlocked = computed(() => blocked.value !== null);
+  const hasRuntimeError = computed(() => runtimeError.value !== null);
+  const runtimeMessage = computed(() => runtimeError.value ?? "");
 
   return (
     <div ref={visibility.ref} class="cms-composition-card__preview">
-      {preview}
-      {runtimeError ? <div role="alert" class="cms-composition-card__preview-error">{runtimeError}</div> : null}
-      <Button size="xs" class="cms-composition-card__preview-button" onClick={() => { setDialogDevice(device); onDialogOpenChange(true); }}>
+      <Show
+        when={cardMounted}
+        fallback={() => <div class="cms-composition-card__deferred">{computed(() => (dialogOpen.value ? "Preview shown in dialog" : "Preview loads when nearby"))}</div>}
+      >
+        {() => (
+          <FixedViewportPreview
+            componentProvider={componentProvider}
+            outcome={outcome}
+            device={device}
+            title={`${row.name} preview`}
+            loading={computed(() => loading.value || (outcome.value?.status === "ready" && !rendered.value))}
+            onCurrent={onCurrent}
+            onError={onError}
+            assetStore={assetStore}
+          />
+        )}
+      </Show>
+      <Show when={hasRuntimeError}>{() => <div role="alert" class="cms-composition-card__preview-error">{runtimeMessage}</div>}</Show>
+      <Button size="xs" class="cms-composition-card__preview-button" on:click={() => { dialogDevice.value = device.value; onDialogOpenChange(true); }}>
         <ExpandIcon size="xs" /> Preview
       </Button>
       <div class="cms-composition-card__caption">
-        <span>{VIEWPORTS[device].label} · {VIEWPORTS[device].width} × {VIEWPORTS[device].height}</span>
-        <span>{runtimeError ? "Preview error" : outcome?.status === "ready" && rendered ? "Rendered preview" : loading ? "Loading…" : "Provider preview"}</span>
+        <span>{computed(() => {
+          const viewport = VIEWPORTS[device.value];
+          return `${viewport.label} · ${viewport.width} × ${viewport.height}`;
+        })}</span>
+        <span>{computed(() => runtimeError.value ? "Preview error" : outcome.value?.status === "ready" && rendered.value ? "Rendered preview" : loading.value ? "Loading…" : "Provider preview")}</span>
       </div>
       <Dialog
         open={dialogOpen}
@@ -192,17 +226,17 @@ export function CompositionLibraryPreview({
         class="cms-composition-preview-dialog"
         title={`Preview — ${row.name}`}
         onClose={() => onDialogOpenChange(false)}
-        footer={<button type="button" class="cms-dialog__action" onClick={() => onDialogOpenChange(false)}>Close</button>}
+        footer={<button type="button" class="cms-dialog__action" on:click={() => onDialogOpenChange(false)}>Close</button>}
       >
         <SegmentedControl<CompositionThumbnailDevice>
           label="Preview device"
           size="sm"
           value={dialogDevice}
-          onChange={setDialogDevice}
+          onChange={(next) => { dialogDevice.value = next; }}
           options={[{ value: "desktop", label: "Desktop" }, { value: "phone", label: "Phone" }]}
         />
-        {outcome && outcome.status !== "ready" ? <Banner tone="err">{outcome.message}</Banner> : null}
-        {runtimeError ? <Banner tone="err">{runtimeError}</Banner> : null}
+        <Show when={hasBlocked}>{() => <Banner tone="err">{computed(() => blocked.value ?? "")}</Banner>}</Show>
+        <Show when={hasRuntimeError}>{() => <Banner tone="err">{runtimeMessage}</Banner>}</Show>
         <FixedViewportPreview
           componentProvider={componentProvider}
           outcome={outcome}
@@ -210,8 +244,9 @@ export function CompositionLibraryPreview({
           title={`${row.name} large preview`}
           loading={loading}
           expanded
-          onCurrent={() => setRendered(true)}
-          onError={(error) => { setRuntimeError(error); setRendered(false); }}
+          onCurrent={onCurrent}
+          onError={onError}
+          assetStore={assetStore}
         />
       </Dialog>
     </div>

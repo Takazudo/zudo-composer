@@ -62,7 +62,7 @@ try {
     "Thumbnails must be actual successful browser renders",
   );
   console.log(
-    `Captured ${storyDescriptors.length} actual settled Preact thumbnails.`,
+    `Captured ${storyDescriptors.length} actual settled zudo-react thumbnails.`,
   );
 } finally {
   await browser?.close();
