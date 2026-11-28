@@ -25,12 +25,21 @@ const TYPEAHEAD_RESET_MS = 500;
 
 interface MenuSurfaceHandle {
   close: (options?: CloseMenuOptions) => void;
-  /** Focus the outermost menu's trigger without closing anything yet. */
-  focusRoot: () => void;
   register: (panel: HTMLElement) => () => void;
 }
 
 const surfaces = new WeakMap<Element, MenuSurfaceHandle>();
+
+/** An item's action, handed to its panel's click handler to run after the menu closes. */
+const deferredSelections = new WeakMap<Event, () => void>();
+
+function select(event: Event, onSelect: (() => void) | undefined): void {
+  if (!onSelect) return;
+  const item = event.currentTarget as Element;
+  const panel = item.closest('[role="menu"]');
+  if (panel && surfaces.has(panel) && !item.hasAttribute("data-menu-keep-open")) deferredSelections.set(event, onSelect);
+  else onSelect();
+}
 
 function owningSurface(trigger: HTMLElement | null): MenuSurfaceHandle | null {
   const panel = trigger?.closest('[role="menu"]');
@@ -118,7 +127,6 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
 
   const handle: MenuSurfaceHandle = {
     close: (options) => { closeMenu(options); parent?.close(options); },
-    focusRoot: () => { if (parent) parent.focusRoot(); else triggerRef.current?.focus(); },
     register: (panel) => {
       descendants.add(panel);
       const unregisterParent = parent?.register(panel);
@@ -264,16 +272,15 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
     return item;
   }
 
-  // A browser drains microtasks between a real click's listeners, so whatever
-  // the item's own handler opens (a confirm dialog, say) mounts before the
-  // bubbling close below. Handing focus back first makes that dialog capture
-  // the trigger, not the item about to unmount, as the place to return to.
-  function onClickCapture(event: MouseEvent): void {
-    if (closingItem(event)) handle.focusRoot();
-  }
-
+  // A browser drains microtasks between a real click's listeners, so an item
+  // acting from its own listener (opening a confirm dialog, say) would mount
+  // that dialog before this close, and it would take the unmounting item as
+  // the place to return focus to. The panel closes first, then runs the item.
   function onClick(event: MouseEvent): void {
     if (closingItem(event)) handle.close();
+    const selection = deferredSelections.get(event);
+    deferredSelections.delete(event);
+    selection?.();
   }
 
   function onKeyDown(event: KeyboardEvent): void {
@@ -344,7 +351,6 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
       tabindex={-1}
       class={className ? `cms-menu ${className}` : "cms-menu"}
       on:keydown={onKeyDown}
-      {...{ "on:click:capture": onClickCapture }}
       on:click={onClick}
     >
       {children}
@@ -433,7 +439,7 @@ export function MenuItem({ children, onSelect, icon, kbd, tone, disabled, closeO
             event.preventDefault();
             return;
           }
-          onSelect?.();
+          select(event, onSelect);
         }}
       >
         <MenuRowContent icon={icon} kbd={kbd}>{children}</MenuRowContent>
@@ -441,7 +447,7 @@ export function MenuItem({ children, onSelect, icon, kbd, tone, disabled, closeO
     );
   }
   return (
-    <button type="button" role="menuitem" tabindex={-1} class={rowClass(tone, className)} disabled={disabled} {...keepOpen(closeOnSelect)} on:click={() => onSelect?.()}>
+    <button type="button" role="menuitem" tabindex={-1} class={rowClass(tone, className)} disabled={disabled} {...keepOpen(closeOnSelect)} on:click={(event) => select(event, onSelect)}>
       <MenuRowContent icon={icon} kbd={kbd}>{children}</MenuRowContent>
     </button>
   );
@@ -463,7 +469,7 @@ function CheckedItem({ role, checked, children, onSelect, kbd, tone, disabled, c
       class={rowClass(tone, className)}
       disabled={disabled}
       {...keepOpen(closeOnSelect)}
-      on:click={() => onSelect?.()}
+      on:click={(event) => select(event, onSelect)}
     >
       <span class="cms-menu__icon" aria-hidden="true"><Show when={on}>{() => <CheckIcon size="sm" />}</Show></span>
       <span class="cms-menu__label">{children}</span>
