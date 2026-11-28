@@ -48,6 +48,8 @@ describe("Asset workspace", () => {
     expect(within(picker).getByLabelText("Download label")).toHaveValue("bundle.zip");
     await fire.click(within(picker).getByLabelText("Show file type"));
     await waitFor(() => expect(within(picker).getByRole("button", { name: "Use in content" })).toBeEnabled());
+    // The destination select is rebuilt when its options change; each rebuild keeps the Field's label.
+    expect(within(picker).getByRole("combobox", { name: "Content destination" }).tagName).toBe("SELECT");
     await fire.click(within(picker).getByRole("button", { name: "Use in content" }));
     await waitFor(() => expect(insert).toHaveBeenCalledWith(expect.objectContaining({ kind: "download" }), { kind: "download", asset: { providerId: provider.descriptor.id, assetId: archive.id }, label: "bundle.zip", showSize: true, showType: false }));
   });

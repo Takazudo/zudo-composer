@@ -32,13 +32,13 @@ export function AssetUsePicker({ record, controller, onClose }: { record: AssetS
   const optionSets = computed(() => [eligible.value.map((item) => ({ key: targetKey(item), label: targetLabel(item) }))]);
   const destination = () => (
     <Field label="Content destination" help={computed(() => (target.value?.append ? "Append to this asset list." : "Replace this single asset field."))}>
-      <For each={optionSets} by={(options) => JSON.stringify(options)}>{(options) => {
+      {(field) => <For each={optionSets} by={(options) => JSON.stringify(options)}>{(options) => {
         const model = signal(target.value ? targetKey(target.value) : "");
-        return <Select modelValue={model} on:change={(event) => { selected.value = event.currentTarget.value; }}>
+        return <Select field={field} modelValue={model} on:change={(event) => { selected.value = event.currentTarget.value; }}>
           <option value="" disabled>Choose model / entry / field</option>
           {options.value.map((option) => <option value={option.key}>{option.label}</option>)}
         </Select>;
-      }}</For>
+      }}</For>}
     </Field>
   );
   return <Dialog open title="Use this asset" onClose={onClose} dismissOnBackdrop={false}>
