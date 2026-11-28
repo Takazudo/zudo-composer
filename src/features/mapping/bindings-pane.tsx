@@ -200,7 +200,9 @@ export function BindingsPane({
   onMove,
   onRemove,
 }: BindingsPaneProps): Child {
-  const fields = computed(() => state.value.definition?.contentModel?.document.fields ?? []);
+  // Re-resolving the definition (after every edit) yields equal fields in a new
+  // array; rebuilding the table for that would close an open row menu.
+  const fields = keyedBy(() => state.value.definition?.contentModel?.document.fields ?? [], (current) => JSON.stringify(current));
   const tableRows = keyedBy(() => rows.value, structureKey);
   const liveRow = (row: MappingBindingRow) => computed(() => rows.value.find((candidate) => candidate.binding.id === row.binding.id) ?? row);
 
