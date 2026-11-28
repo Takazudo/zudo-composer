@@ -1,7 +1,4 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { fireEvent, render, screen, settle, waitFor, within } from "../../../test/render";
 import { describe, expect, it, vi } from "vitest";
 import "../../composer/test-support/cleanup";
 import { activeComponentProvider } from "../../composer/active-pack";
@@ -13,8 +10,8 @@ import { READY_BINDING, harness, mappingRecord, openedHarness } from "./harness"
 // rules belong to `PaneTabs`, `Menu` and `Dialog`; what is proved here is that
 // the Mapping route wires them up rather than hand-rolling its own.
 
-function renderApp(workspace: MappingHarness) {
-  return render(
+async function renderApp(workspace: MappingHarness) {
+  const view = render(
     <MappingApp
       provider={workspace.provider}
       contentCatalog={workspace.content}
@@ -26,27 +23,31 @@ function renderApp(workspace: MappingHarness) {
       navigate={vi.fn()}
     />,
   );
+  await settle();
+  return view;
 }
 
 describe("Mapping keyboard and dialog behavior", () => {
   it("moves between the inspector tabs with the arrow keys", async () => {
-    renderApp(await openedHarness(mappingRecord([READY_BINDING])));
+    await renderApp(await openedHarness(mappingRecord([READY_BINDING])));
 
     const preview = screen.getByRole("tab", { name: "Preview" });
     const diagnostics = screen.getByRole("tab", { name: /^Diagnostics/ });
     preview.focus();
 
     fireEvent.keyDown(preview, { key: "ArrowRight" });
+    await settle();
     expect(diagnostics).toHaveFocus();
     expect(diagnostics).toHaveAttribute("aria-selected", "true");
 
     fireEvent.keyDown(diagnostics, { key: "ArrowLeft" });
+    await settle();
     expect(preview).toHaveFocus();
     expect(preview).toHaveAttribute("aria-selected", "true");
   });
 
   it("returns focus to the control that opened a picker", async () => {
-    renderApp(await openedHarness(mappingRecord([READY_BINDING])));
+    await renderApp(await openedHarness(mappingRecord([READY_BINDING])));
 
     const opener = screen.getByRole("button", { name: "Content model: Articles" });
     opener.focus();
@@ -59,7 +60,7 @@ describe("Mapping keyboard and dialog behavior", () => {
 
   it("dismisses a picker on Escape without changing the record", async () => {
     const workspace = await openedHarness(mappingRecord([READY_BINDING]));
-    renderApp(workspace);
+    await renderApp(workspace);
 
     fireEvent.click(screen.getByRole("button", { name: "Composition: Article page" }));
     const dialog = await screen.findByRole("dialog", { name: "Choose a Composition" });
@@ -72,7 +73,7 @@ describe("Mapping keyboard and dialog behavior", () => {
   it("returns focus to New mapping after the create dialog closes", async () => {
     const workspace = harness();
     await workspace.controller.initialize();
-    renderApp(workspace);
+    await renderApp(workspace);
 
     const opener = screen.getByRole("button", { name: "New mapping" });
     opener.focus();

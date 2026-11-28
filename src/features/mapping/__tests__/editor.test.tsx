@@ -1,7 +1,4 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { fireEvent, render, screen, settle, waitFor, within } from "../../../test/render";
 import { describe, expect, it, vi } from "vitest";
 import "../../composer/test-support/cleanup";
 import { activeComponentProvider } from "../../composer/active-pack";
@@ -13,6 +10,7 @@ async function editor(bindings = [READY_BINDING, INCOMPATIBLE_BINDING]) {
   const workspace = await openedHarness(mappingRecord(bindings));
   const navigate = vi.fn();
   const view = renderApp(workspace, navigate);
+  await settle();
   return { ...view, workspace, navigate };
 }
 
@@ -187,10 +185,12 @@ describe("Mapping editor", () => {
     record.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 10 } };
     const workspace = await openedHarness(record);
     const view = renderApp(workspace, vi.fn());
+    await settle();
 
     expect(screen.getByRole("combobox", { name: "Mapping mode" })).toHaveValue("collection");
     fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
     await waitFor(() => expect(workspace.controller.state.mapping?.document.mode.kind === "collection" && workspace.controller.state.mapping.document.mode.query.conditions).toHaveLength(1));
+    await settle();
     expect(screen.getByRole("combobox", { name: "Filter 1 field" })).toHaveValue("field-title");
     fireEvent.input(screen.getByRole("spinbutton", { name: "Result limit" }), { target: { value: "2" } });
     await waitFor(() => expect(workspace.controller.state.mapping?.document.mode.kind === "collection" && workspace.controller.state.mapping.document.mode.query.limit).toBe(2));

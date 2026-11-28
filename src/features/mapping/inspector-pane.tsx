@@ -1,8 +1,7 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
-import { RailCollapseButton } from "../../components/editor-chrome";
+import { computed, Show, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
+import { createEditorRails, RailCollapseButton, type EditorRailsController } from "../../components/editor-chrome";
+import { toSignal, type MaybeSignal } from "../../components/reactive";
+import { Rebuild } from "../../components/rebuild";
 import { CheckCircleIcon, ComposerIcon, EntryIcon } from "../../components/icons";
 import { Banner, EmptyState, Pane, PaneBody, PaneHeader, PaneSection, PaneTabs, StatusChip } from "../../components/ui";
 import type { MappingDefinitionDiagnostic, MappingEntryDiagnostic } from "../../mapping";
@@ -12,6 +11,7 @@ import type { MappingEditorController } from "./controller";
 import { MappingPreviewHost } from "./preview-host";
 import { diagnosticPath, entryLabel } from "./presentation";
 import { MappingAttachmentPane } from "./attachment-pane";
+import { memo } from "./signals";
 
 // The inspector: what the current sample Entry renders as, and everything the
 // resolver has to say about the Mapping. Diagnostics used to be drawn in three
@@ -21,9 +21,11 @@ import { MappingAttachmentPane } from "./attachment-pane";
 export type MappingInspectorTab = "preview" | "diagnostics";
 
 export interface InspectorPaneProps {
-  state: MappingEditorState;
+  state: ReadonlySignal<MappingEditorState>;
   componentProvider: ComposerComponentProvider;
-  tab: MappingInspectorTab;
+  /** The editor body's rails controller, for the collapse control. */
+  rails?: EditorRailsController;
+  tab: MaybeSignal<MappingInspectorTab>;
   onTabChange: (tab: MappingInspectorTab) => void;
   onPreviewCurrent: () => void;
   onPreviewError: (message: string) => void;
@@ -50,38 +52,38 @@ function previewStatus(state: MappingEditorState): { label: string; tone: "ok" |
 export function InspectorPane({
   state,
   componentProvider,
+  rails = createEditorRails(),
   tab,
   onTabChange,
   onPreviewCurrent,
   onPreviewError,
   controller,
   run,
-}: InspectorPaneProps): JSX.Element {
-  const mapping = state.mapping!;
-  const model = state.definition?.contentModel ?? null;
-  const compositionEntry = state.compositions.find(
-    (entry) => entry.ref.providerId === mapping.document.composition.providerId
-      && entry.ref.recordId === mapping.document.composition.recordId,
-  );
-  const compositionName = state.definition?.composition?.document.name
-    ?? compositionEntry?.summary.name
-    ?? mapping.document.composition.recordId;
-  const compositionProvider = compositionEntry?.providerLabel ?? mapping.document.composition.providerId;
-
-  const diagnostics: readonly AnyDiagnostic[] = [
-    ...(state.definition?.diagnostics ?? []),
-    ...(state.evaluation?.entryDiagnostics ?? []),
-  ];
-  const previewFailure = state.previewStatus === "error" && state.message ? state.message : null;
-  const count = diagnostics.length + (state.collectionEvaluation?.diagnostics.length ?? 0) + (state.entryFailure ? 1 : 0) + (previewFailure ? 1 : 0);
-  const status = previewStatus(state);
+}: InspectorPaneProps): Child {
+  const activeTab = toSignal(tab);
+  const mapping = computed(() => state.value.mapping!);
+  const model = computed(() => state.value.definition?.contentModel ?? null);
+  const composition = computed(() => {
+    const current = state.value;
+    const ref = mapping.value.document.composition;
+    const entry = current.compositions.find((candidate) => candidate.ref.providerId === ref.providerId && candidate.ref.recordId === ref.recordId);
+    return {
+      name: current.definition?.composition?.document.name ?? entry?.summary.name ?? ref.recordId,
+      provider: entry?.providerLabel ?? ref.providerId,
+      recordId: ref.recordId,
+    };
+  });
+  const diagnostics = memo(() => [...(state.value.definition?.diagnostics ?? []), ...(state.value.evaluation?.entryDiagnostics ?? [])] as readonly AnyDiagnostic[]);
+  const previewFailure = computed(() => state.value.previewStatus === "error" && state.value.message ? state.value.message : null);
+  const count = computed(() => diagnostics.value.length + (state.value.collectionEvaluation?.diagnostics.length ?? 0) + (state.value.entryFailure ? 1 : 0) + (previewFailure.value ? 1 : 0));
+  const status = memo(() => { const next = previewStatus(state.value); return [next.label, next.tone] as const; });
 
   return (
     <Pane label="Inspector" class="cms-mapping-insp">
-      <PaneHeader title="Inspector" actions={<RailCollapseButton rail="insp" />} />
+      <PaneHeader title="Inspector" actions={<RailCollapseButton rail="insp" rails={rails} />} />
       <PaneTabs
         label="Inspector"
-        activeId={tab}
+        activeId={activeTab}
         onSelect={onTabChange}
         tabs={[
           { id: "preview", label: "Preview" },
@@ -96,7 +98,7 @@ export function InspectorPane({
          * switches tabs by design. `hidden` also takes the inactive panel out
          * of the accessibility tree, which is what an inactive tab wants.
          */}
-        <div hidden={tab !== "preview"}>
+        <div hidden={computed(() => activeTab.value !== "preview")}>
           <PaneSection title="Preview">
             <dl class="cms-mapping-context">
               <div>
@@ -104,8 +106,8 @@ export function InspectorPane({
                   <EntryIcon size="xs" /> Entry
                 </dt>
                 <dd>
-                  <strong>{state.entry ? entryLabel(state.entry, model) : "No sample Entry selected"}</strong>
-                  <span>{state.entry?.id ?? "Choose one in Source fields"}</span>
+                  <strong>{computed(() => state.value.entry ? entryLabel(state.value.entry, model.value) : "No sample Entry selected")}</strong>
+                  <span>{computed(() => state.value.entry?.id ?? "Choose one in Source fields")}</span>
                 </dd>
               </div>
               <div>
@@ -113,62 +115,66 @@ export function InspectorPane({
                   <ComposerIcon size="xs" /> Composition
                 </dt>
                 <dd>
-                  <strong>{compositionName}</strong>
-                  <span>{compositionProvider} · {mapping.document.composition.recordId}</span>
+                  <strong>{computed(() => composition.value.name)}</strong>
+                  <span>{computed(() => `${composition.value.provider} · ${composition.value.recordId}`)}</span>
                 </dd>
               </div>
             </dl>
-            <StatusChip
-              state="custom"
-              label={status.label}
-              tone={status.tone}
-              icon={status.tone === "ok" ? CheckCircleIcon : undefined}
-              class="cms-mapping-preview-status"
-            />
+            <Rebuild value={status}>{([label, tone]) => (
+              <StatusChip
+                state="custom"
+                label={label}
+                tone={tone}
+                icon={tone === "ok" ? CheckCircleIcon : undefined}
+                class="cms-mapping-preview-status"
+              />
+            )}</Rebuild>
             <MappingPreviewHost
               componentProvider={componentProvider}
-              document={state.previewDocument}
-              loading={state.previewStatus === "loading"}
+              document={computed(() => state.value.previewDocument)}
+              loading={computed(() => state.value.previewStatus === "loading")}
               onCurrent={onPreviewCurrent}
               onError={onPreviewError}
             />
-            <MappingAttachmentPane state={state} mapping={mapping} controller={controller} componentProvider={componentProvider} run={run} />
+            <MappingAttachmentPane state={state} controller={controller} componentProvider={componentProvider} run={run} />
           </PaneSection>
         </div>
-        <div hidden={tab !== "diagnostics"}>
+        <div hidden={computed(() => activeTab.value !== "diagnostics")}>
           <PaneSection title="Diagnostics">
-            {count === 0 ? (
+            <Show when={computed(() => count.value === 0)}>{() => (
               <EmptyState
                 inline
                 icon={CheckCircleIcon}
                 title="No diagnostics"
                 description="Nothing blocks this Mapping and nothing needs attention."
               />
-            ) : null}
-            {state.entryFailure ? (
-              <Banner tone="err" title="Entry provider unavailable.">{state.entryFailure}</Banner>
-            ) : null}
-            {previewFailure ? <Banner tone="err" title="Preview host failure.">{previewFailure}</Banner> : null}
-            {state.collectionEvaluation?.diagnostics.map((diagnostic, index) => (
-              <Banner
-                key={`query:${diagnostic.code}:${index}`}
-                tone={diagnostic.severity === "blocking" ? "err" : "warn"}
-                title={`Query · ${diagnostic.severity}`}
-              >
-                <span class="cms-mapping-diagnostic__path">{diagnosticPath(diagnostic) ?? "query"}</span>
-                {diagnostic.message}
-              </Banner>
-            ))}
-            {diagnostics.map((diagnostic, index) => (
-              <Banner
-                key={`${diagnostic.scope}:${diagnostic.code}:${index}`}
-                tone={diagnostic.severity === "blocking" ? "err" : "warn"}
-                title={`${diagnostic.scope === "definition" ? "Definition" : "Entry"} · ${diagnostic.severity}`}
-              >
-                {diagnosticPath(diagnostic) ? <span class="cms-mapping-diagnostic__path">{diagnosticPath(diagnostic)}</span> : null}
-                {diagnostic.message}
-              </Banner>
-            ))}
+            )}</Show>
+            <Show when={computed(() => Boolean(state.value.entryFailure))}>{() => (
+              <Banner tone="err" title="Entry provider unavailable.">{computed(() => state.value.entryFailure ?? "")}</Banner>
+            )}</Show>
+            <Show when={computed(() => previewFailure.value !== null)}>{() => <Banner tone="err" title="Preview host failure.">{computed(() => previewFailure.value ?? "")}</Banner>}</Show>
+            <Rebuild value={memo(() => [state.value.collectionEvaluation?.diagnostics, diagnostics.value] as const)}>{([queryDiagnostics, current]) => <>
+              {queryDiagnostics?.map((diagnostic, index) => (
+                <Banner
+                  key={`query:${diagnostic.code}:${index}`}
+                  tone={diagnostic.severity === "blocking" ? "err" : "warn"}
+                  title={`Query · ${diagnostic.severity}`}
+                >
+                  <span class="cms-mapping-diagnostic__path">{diagnosticPath(diagnostic) ?? "query"}</span>
+                  {diagnostic.message}
+                </Banner>
+              ))}
+              {current.map((diagnostic, index) => (
+                <Banner
+                  key={`${diagnostic.scope}:${diagnostic.code}:${index}`}
+                  tone={diagnostic.severity === "blocking" ? "err" : "warn"}
+                  title={`${diagnostic.scope === "definition" ? "Definition" : "Entry"} · ${diagnostic.severity}`}
+                >
+                  {diagnosticPath(diagnostic) ? <span class="cms-mapping-diagnostic__path">{diagnosticPath(diagnostic)}</span> : null}
+                  {diagnostic.message}
+                </Banner>
+              ))}
+            </>}</Rebuild>
           </PaneSection>
         </div>
       </PaneBody>
