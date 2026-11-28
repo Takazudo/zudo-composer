@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { fireEvent, render, screen, waitFor } from "../../../../test/render";
 import { describe, expect, it, vi } from "vitest";
 import type { CompositionRecord } from "../../../../composer/library";
 import {
