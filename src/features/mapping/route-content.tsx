@@ -1,10 +1,10 @@
-import type { JSX } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
+import type { RouteServicesProps } from "../../app/services";
 import { MappingApp, type MappingRouteContentProps } from "./mapping-app";
 import "./styles.css";
-import { useWorkspace } from "../../app/workspace-context";
 
-/** Route content exported for later application-shell provider wiring. */
-export function MappingRouteContent(props: MappingRouteContentProps): JSX.Element {
-  const workspace = useWorkspace();
-  return <MappingApp {...props} navigate={props.navigate ?? (workspace ? (href) => { void workspace.navigate(href); } : undefined)} />;
+/** Route content exported for the application shell to wire to its Mapping provider. */
+export function MappingRouteContent(props: MappingRouteContentProps & RouteServicesProps): Child {
+  const workspace = props.services.workspace;
+  return <MappingApp {...props} navigate={props.navigate ?? ((href: string) => { void workspace.navigate(href); })} />;
 }
