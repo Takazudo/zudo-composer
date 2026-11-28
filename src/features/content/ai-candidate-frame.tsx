@@ -1,13 +1,11 @@
-import { computed, getScope, signal, type ReadonlySignal, type Ref, type Scope } from "@takazudo/zfb/zudo-react";
+import { computed, getScope, signal, type Ref } from "@takazudo/zfb/zudo-react";
 import type { ProductionProviderIntegration } from "../../app/provider-integration";
-import { LiveAssetReferenceResolver } from "../../assets/references";
-import type { ComponentCatalog } from "../../composer/model/types";
 import { contentAiCandidateDigest, type ContentAiProposal } from "../../content/editorial";
 import { canonicalEditorialJson } from "../../content/editorial/differences";
 import type { SiteProject } from "../../site-project";
-import { resolveCompositionAsset } from "../../site-project/assets/impact";
 import type { SiteCompiledRoute } from "../../site-project/compiler";
 import { resolvedThemeSignal } from "../../theme/use-resolved-theme";
+import { assetResolvedPreviewSnapshot } from "../composer/preview/assets-snapshot";
 import { buildComposerPreviewUrl, composerPreviewFrameProps, createComposerPreviewBridge } from "../composer/preview/bridge";
 import type { ComposerPreviewSnapshot, NativeReviewIdentity } from "../composer/preview/protocol";
 import { loadWorkingPreviewSnapshot } from "../delivery/working-preview";
@@ -32,64 +30,6 @@ type Prepared =
   | { status: "ready"; route: SiteCompiledRoute; snapshot: ComposerPreviewSnapshot; review: Omit<NativeReviewIdentity, "frameSession"> }
   | { status: "failed" | "blocked"; message: string }
   | { status: "preparing" };
-
-type ResolvedAssets = { snapshot: ComposerPreviewSnapshot | null; error?: string };
-
-async function resolveAssets(snapshot: ComposerPreviewSnapshot, catalog: ComponentCatalog, resolver: LiveAssetReferenceResolver): Promise<ResolvedAssets> {
-  const identity = { providerId: resolver.store?.provider.id, preservePinnedUrls: true };
-  const local = resolveCompositionAsset(snapshot.document, catalog, identity);
-  const linked = snapshot.linked ? resolveCompositionAsset(snapshot.linked.sourceDocument, catalog, identity) : undefined;
-  if (!local.index.complete || linked?.index.complete === false) return { snapshot: null, error: "Asset inspection is incomplete. " + [...local.index.advisory, ...(linked?.index.advisory ?? [])].map(({ reason }) => reason).join(" ") };
-  const refs = [...local.index.references, ...(linked?.index.references ?? [])].map(({ ref }) => ref);
-  if (!refs.length) return { snapshot };
-  const result = await resolver.resolve(refs);
-  if (result.status === "blocked") return { snapshot: null, error: result.diagnostics.map(({ message }) => message).join(" ") };
-  return { snapshot: { ...snapshot, document: resolveCompositionAsset(snapshot.document, catalog, { lock: result.lock }).document,
-    ...(snapshot.linked ? { linked: { ...snapshot.linked, sourceDocument: resolveCompositionAsset(snapshot.linked.sourceDocument, catalog, { lock: result.lock }).document } } : {}) } };
-}
-
-/**
- * The managed-asset references of `snapshot` resolved in this host, following
- * Assets changes; the iframe only ever receives detached JSON. Mirrors the
- * Composer preview's resolver, which still runs on the workspace context.
- */
-function resolvedAssetSnapshot(scope: Scope, snapshot: ReadonlySignal<ComposerPreviewSnapshot | null>, catalog: ComponentCatalog, integration: ProductionProviderIntegration): ReadonlySignal<ResolvedAssets & { loading: boolean }> {
-  const store = integration.assetProvider?.store;
-  const resolver = new LiveAssetReferenceResolver(store);
-  const generation = signal(0);
-  const managed = computed(() => {
-    const current = snapshot.value;
-    if (!current) return false;
-    const identity = { providerId: store?.provider.id, preservePinnedUrls: true };
-    const indices = [resolveCompositionAsset(current.document, catalog, identity).index, ...(current.linked ? [resolveCompositionAsset(current.linked.sourceDocument, catalog, identity).index] : [])];
-    return indices.some((index) => !index.complete || index.references.length > 0);
-  });
-  const resolved = signal<{ source: ComposerPreviewSnapshot; generation: number; value: ResolvedAssets } | null>(null);
-  let unsubscribe: (() => void) | null = null;
-  scope.onCleanup(() => { unsubscribe?.(); unsubscribe = null; });
-  scope.effect(() => {
-    const active = managed.value;
-    if (active && !unsubscribe) unsubscribe = resolver.subscribeChanges(() => { generation.value += 1; });
-    if (!active && unsubscribe) { unsubscribe(); unsubscribe = null; }
-  });
-  let run = 0;
-  scope.effect(() => {
-    const current = snapshot.value, at = generation.value;
-    if (!current || !managed.value) return;
-    const token = ++run;
-    const live = () => token === run && !scope.abortSignal.aborted;
-    void resolveAssets(current, catalog, resolver).then(
-      (value) => { if (live()) resolved.value = { source: current, generation: at, value }; },
-      (reason: unknown) => { if (live()) resolved.value = { source: current, generation: at, value: { snapshot: null, error: reason instanceof Error ? reason.message : "Preview assets could not be resolved." } }; },
-    );
-  });
-  return computed(() => {
-    const current = snapshot.value;
-    if (!managed.value) return { snapshot: current, loading: false };
-    const value = resolved.value?.source === current && resolved.value.generation === generation.value ? resolved.value.value : null;
-    return { snapshot: value?.snapshot ?? null, loading: !value, ...(value?.error ? { error: value.error } : {}) };
-  });
-}
 
 /**
  * The proposal's exact candidate rendered as the site page that shows it: the
@@ -132,7 +72,7 @@ export function ContentAiCandidateFrame({ controller, proposal, integration }: {
   });
 
   const ready = computed(() => prepared.value.status === "ready" ? prepared.value as Extract<Prepared, { status: "ready" }> : null);
-  const assets = resolvedAssetSnapshot(scope, computed(() => ready.value?.snapshot ?? null), integration.componentProvider.catalog, integration);
+  const assets = assetResolvedPreviewSnapshot(scope, computed(() => ready.value?.snapshot ?? null), integration.componentProvider.catalog, { store: integration.assetProvider?.store });
   const resolved = computed(() => ready.value ? assets.value.snapshot : null);
   const problem = computed(() => {
     const value = prepared.value;
