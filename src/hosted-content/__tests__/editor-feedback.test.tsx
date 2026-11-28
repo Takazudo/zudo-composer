@@ -1,5 +1,5 @@
 import { EditorView } from "@codemirror/view";
-import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
+import { fireEvent, screen, waitFor, within } from "../../test/render";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { HostedPreviewError, hostedEditorLabelsJa, hostedErrorMessages, hostedErrorMessagesJa, mountHostedContentEditor } from "../editor";
 import type { HostedContentEditorHandle, HostedContentEditorOptions } from "../editor";
