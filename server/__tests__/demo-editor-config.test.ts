@@ -28,7 +28,6 @@ async function webshop() {
   await mkdir(join(host, "node_modules/@zudo-composer"), { recursive: true });
   await mkdir(join(host, "node_modules/@takazudo"), { recursive: true });
   await symlink(APP_ROOT, join(host, "node_modules/zudo-composer"), "dir");
-  await symlink(join(APP_ROOT, "node_modules/preact"), join(host, "node_modules/preact"), "dir");
   await symlink(join(APP_ROOT, "node_modules/@takazudo/zfb"), join(host, "node_modules/@takazudo/zfb"), "dir");
   await symlink(join(APP_ROOT, "node_modules/@zudo-composer/component-contract"), join(host, "node_modules/@zudo-composer/component-contract"), "dir");
   return host;

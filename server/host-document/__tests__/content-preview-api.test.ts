@@ -22,14 +22,14 @@ import { installNativeEditApi } from "../../../plugins/native-edit-api";
 const cleanup:(()=>Promise<void>)[]=[];afterEach(async()=>{for(const fn of cleanup.splice(0).reverse())await fn();vi.clearAllMocks();});
 async function fixture(realStorage=false){
  const data=await contentPreviewFixture();const paths={data:"/missing-test/data",compositions:"/missing-test/compositions",content:"/missing-test/content",mappings:"/missing-test/mappings",sitemaps:"/missing-test/sitemaps",assets:"/missing-test/assets"};
- mocks.context={pack:data.pack,packIdentity:{},composerConfig:{workspaceRoot:"/missing-test",paths,hostDocument:{module:"test/renderer",jsxImportSource:"preact",rendererId:"host",rendererVersion:"1"}}};
+ mocks.context={pack:data.pack,packIdentity:{},composerConfig:{workspaceRoot:"/missing-test",paths,hostDocument:{module:"test/renderer",jsxImportSource:"@takazudo/zfb/zudo-react",rendererId:"host",rendererVersion:"1"}}};
  const capture={captureAuthoringWorkspace:vi.fn(async()=>data.snapshot),compileAuthoringWorkspaceSnapshot:vi.fn(async()=>data.compiled),resolveAuthoringRendererIdentity:vi.fn(async()=>data.snapshot.renderer),resolveAuthoringPackIdentity:vi.fn(async()=>({})),isAuthoringWorkspaceSnapshotCurrent:vi.fn(async()=>true)};
  let actualLease: Awaited<ReturnType<typeof acquireAuthoringLease>> | undefined;
  let readSnapshot: (()=>Promise<realCapture.AuthoringWorkspaceSnapshot>) | undefined;
  let contentStore: Awaited<ReturnType<typeof createFilesystemContentStore>> | undefined;
  if(realStorage){
   const workspaceRoot=await mkdtemp(join(tmpdir(),"content-preview-api-"));cleanup.push(()=>rm(workspaceRoot,{recursive:true}));
-  const composerConfig=composer({workspaceRoot,pack:"proof/components",authoringAuthority:"workspace",nativeEditing:{source:"workspace"},hostDocument:{module:"proof/renderer",jsxImportSource:"preact",rendererId:"host",rendererVersion:"1"}},{env:{}});
+  const composerConfig=composer({workspaceRoot,pack:"proof/components",authoringAuthority:"workspace",nativeEditing:{source:"workspace"},hostDocument:{module:"proof/renderer",jsxImportSource:"@takazudo/zfb/zudo-react",rendererId:"host",rendererVersion:"1"}},{env:{}});
   await createFilesystemAssetStore({assetsStoreRoot:composerConfig.paths.assets});
   await initializeAuthoringWorkspace({composerConfig,pack:data.pack,project:data.snapshot.project,workspaceId:"proof"});
   const packIdentity={specifier:"proof/components",source:"self",digest:"a".repeat(64),compiler:"proof",contractDigest:"c".repeat(64)};

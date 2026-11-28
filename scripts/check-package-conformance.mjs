@@ -134,8 +134,8 @@ assert(rootPackageJson.peerDependencies?.[UI_PACK.packageName] === undefined, 't
 assert(rootPackageJson.devDependencies?.[UI_PACK.packageName] === UI_PACK.workspaceSpec, 'the owned UI pack must remain a workspace:* development dependency');
 
 // Dev-only for this repository, runtime-required for a host: the installed
-// launcher imports all four.
-for (const runtime of ['vite', '@preact/preset-vite', '@tailwindcss/vite', 'tailwindcss']) {
+// launcher imports all three.
+for (const runtime of ['vite', '@tailwindcss/vite', 'tailwindcss']) {
   assert(rootPackageJson.dependencies?.[runtime] !== undefined, `${runtime} is loaded by the installed launcher and must be a runtime dependency`);
   assert(rootPackageJson.devDependencies?.[runtime] === undefined, `${runtime} must not also be a devDependency`);
 }

@@ -20,9 +20,12 @@ describe("owned UI pack dependency", () => {
     expect(pkg.peerDependencies["@zudo-composer/component-contract"]).toBe("^1.0.0");
     // The host supplies the runtime shared by the tool and its component pack.
     // Keeping a tool-owned dependency would allow a second physical copy.
-    expect(pkg.dependencies.preact).toBeUndefined();
-    expect(pkg.peerDependencies.preact).toBe("^10.29.8");
-    expect(pkg.devDependencies.preact).toBe(pkg.peerDependencies.preact);
+    expect(pkg.dependencies["@takazudo/zfb"]).toBeUndefined();
+    expect(pkg.peerDependencies["@takazudo/zfb"]).toBe("7.2.0");
+    expect(pkg.devDependencies["@takazudo/zfb"]).toBe(pkg.peerDependencies["@takazudo/zfb"]);
+    for (const field of [pkg.dependencies, pkg.devDependencies, pkg.peerDependencies]) {
+      expect(Object.keys(field).filter((name) => /^(?:preact(?:-|$)|@preact\/|@testing-library\/preact$)/.test(name))).toEqual([]);
+    }
   });
 
   it("links the workspace package and keeps no retired provider in the lock", () => {

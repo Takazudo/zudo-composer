@@ -36,7 +36,6 @@ async function hostFixture(settings: { dataDir?: string; assetsDir?: string }, m
   await mkdir(join(modules, "@zudo-composer"), { recursive: true });
   await mkdir(join(modules, "@takazudo"), { recursive: true });
   await symlink(repositoryRoot, join(modules, "zudo-composer"), "dir");
-  await symlink(join(repositoryRoot, "node_modules/preact"), join(modules, "preact"), "dir");
   await symlink(join(repositoryRoot, "node_modules/@takazudo/zfb"), join(modules, "@takazudo/zfb"), "dir");
   await symlink(join(repositoryRoot, "packages/component-contract"), join(modules, "@zudo-composer/component-contract"), "dir");
   await writeFile(join(host, "package.json"), JSON.stringify({ name: "authoring-host", type: "module", exports: { "./components": "./components.tsx" } }));
@@ -46,7 +45,7 @@ async function hostFixture(settings: { dataDir?: string; assetsDir?: string }, m
 export default defineComposerConfig(${JSON.stringify({ pack: "authoring-host/components", publicAssetsDir: "published/uploads", ...settings })});
 `);
   await writeFile(join(host, "components.tsx"), `import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
-const specimen = <span>Preact</span>;
+const specimen = <span>zudo-react</span>;
 if (specimen.type !== "span") throw new Error("The JSX runtime did not evaluate the pack.");
 export const Title = ({ title }: { title: string }) => <h1>{title}</h1>;
 export const componentPack = defineComponentPack({ packId: "authoring-host", packVersion: "1.0.0", components: [

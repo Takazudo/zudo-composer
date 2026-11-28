@@ -16,8 +16,6 @@
     "@types/node": "^26.4.0",
     "@zudo-composer/component-contract": "workspace:*",
     "@zudo-composer/ui": "workspace:*",
-    "preact": "^10.29.8",
-    "preact-render-to-string": "^6.6.6",
     "vitest": "^4.1.11",
     "zudo-composer": "workspace:*"
   },

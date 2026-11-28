@@ -112,7 +112,7 @@ for (const path of ["package.json", "pnpm-lock.yaml", "renderer/package.json", "
   lockDigests[path] = digest(await readFile(join(consumer, path)));
 await writeFile(join(consumer, "verification.json"), JSON.stringify({ installedToolSha: sha, node: process.version,
   packageManager: JSON.parse(await readFile(join(consumer, "package.json"), "utf8")).packageManager,
-  contractSha: "c0b452da075b66757c60bd0d721a47062d4354d0", contractProtocol: 2, peerPreact: "10.29.8", commands,
+  contractSha: "c0b452da075b66757c60bd0d721a47062d4354d0", contractProtocol: 2, peerZfb: "7.2.0", commands,
   payloadSha256: inventory.sha256, lockDigests,
   independentInstall: "passed", frozenReinstall: "passed", worker: "passed", browserBundle: "passed", nodeBoundary: "passed", sqlite: "passed", httpTransport: "passed", staticRenderer: "passed",
   contentAiEntries: "passed (types and runtime: hosted-content, /editor, /editor.css, /preview, /testing, /node; /browser not exported)",

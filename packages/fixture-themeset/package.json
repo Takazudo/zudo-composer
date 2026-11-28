@@ -15,7 +15,6 @@
   },
   "devDependencies": {
     "@takazudo/zfb": "7.2.0",
-    "@zudo-composer/component-contract": "workspace:*",
-    "preact": "^10.29.8"
+    "@zudo-composer/component-contract": "workspace:*"
   }
 }
