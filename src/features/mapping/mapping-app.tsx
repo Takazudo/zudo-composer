@@ -1,18 +1,16 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
-import { useWorkspace } from "../../app/workspace-context";
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { computed, getScope, signal, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
+import type { AppServices } from "../../app/services";
+import { Rebuild } from "../../components/rebuild";
 import { Banner, Button } from "../../components/ui";
 import type { ContentCatalog } from "../../content";
 import type { CompositionCatalog, MappingProvider } from "../../mapping";
+import { Keyed } from "../../runtime";
+import { mappingStateSignal } from "./signals";
 import type { ComposerComponentProvider } from "../composer/component-provider";
 import {
   createMappingEditorController,
   type MappingContentEntryCatalog,
   type MappingEditorController,
-  type MappingEditorState,
 } from "./controller";
 import type { MappingAttachmentCallbacks } from "./attachments";
 import {
@@ -30,6 +28,8 @@ import { MappingLibrary } from "./library";
 // copies opens the Mapping they were looking at.
 
 export interface MappingRouteContentProps {
+  /** The shell's route services; absent when the route is mounted standalone (tests). */
+  services?: AppServices;
   provider: MappingProvider;
   contentCatalog: ContentCatalog;
   compositionCatalog: CompositionCatalog;
@@ -48,31 +48,26 @@ function defaultNavigate(href: string): void {
   window.location.assign(href);
 }
 
-export function MappingApp(props: MappingRouteContentProps): JSX.Element {
-  const integration = useWorkspace()?.integration;
-  const controller = useMemo(
-    () => props.controller ?? createMappingEditorController(
-      props.provider,
-      { content: props.contentCatalog, compositions: props.compositionCatalog },
-      props.contentEntries,
-      props.componentProvider.catalog,
-      { attachments: props.attachmentCallbacks },
-    ),
-    [props.controller, props.provider, props.contentCatalog, props.compositionCatalog, props.contentEntries, props.componentProvider.catalog, props.attachmentCallbacks],
+
+export function MappingApp(props: MappingRouteContentProps): Child {
+  const scope = getScope();
+  const integration = props.services?.workspace.integration;
+  const controller = props.controller ?? createMappingEditorController(
+    props.provider,
+    { content: props.contentCatalog, compositions: props.compositionCatalog },
+    props.contentEntries,
+    props.componentProvider.catalog,
+    { attachments: props.attachmentCallbacks },
   );
-  const [state, setState] = useState<MappingEditorState>(controller.state);
-  const [error, setError] = useState<string | null>(null);
-  const initializationStarted = useRef(false);
-  const navigateRef = useRef(props.navigate);
-  navigateRef.current = props.navigate;
+  const state = mappingStateSignal(controller);
+  const error = signal<string | null>(null);
 
   const routePathname = props.location?.pathname ?? (typeof window === "undefined" ? "" : window.location.pathname);
   const routeSearch = props.location?.search ?? (typeof window === "undefined" ? "" : window.location.search);
-  const parsedDeepLink = useMemo(() => parseMappingDeepLink({ pathname: routePathname, search: routeSearch }), [routePathname, routeSearch]);
+  const parsedDeepLink = parseMappingDeepLink({ pathname: routePathname, search: routeSearch });
 
-  useEffect(() => controller.subscribe(setState), [controller]);
-  useEffect(() => {
-    if (!integration) return;
+  scope.onActivate(() => {
+    if (!integration) return undefined;
     const session = integration.sessions.register({ feature: "Mapping", providerId: props.provider.descriptor.id, workspaceId: integration.workspace.id }, { flush: async () => { await controller.flush(); await props.attachmentCallbacks?.flush?.(); } });
     // Only an accepted draft is a session change. Loading a record or a fresh
     // attachments snapshot is read bookkeeping; reporting it bumped the
@@ -87,10 +82,9 @@ export function MappingApp(props: MappingRouteContentProps): JSX.Element {
     // Persisted changes are caught by capture tokens; they only need a fresh pass.
     const unsubscribeAttachments = props.attachmentCallbacks?.subscribe?.(() => { void controller.attachmentsChanged().catch(() => undefined); });
     return () => { unsubscribe(); unsubscribeAttachments?.(); session.detach(); };
-  }, [controller, integration, props.provider, props.attachmentCallbacks]);
-  useEffect(() => {
-    if (initializationStarted.current || controller.state.phase !== "idle") return;
-    initializationStarted.current = true;
+  });
+  scope.onActivate(() => {
+    if (controller.state.phase !== "idle") return;
     const request = parsedDeepLink.status === "requested" ? parsedDeepLink.request : undefined;
     void Promise.resolve().then(() => controller.initialize(request)).then(() => {
       if (parsedDeepLink.status === "invalid") controller.setDeepLinkOutcome(parsedDeepLink);
@@ -100,36 +94,43 @@ export function MappingApp(props: MappingRouteContentProps): JSX.Element {
         controller.setDeepLinkOutcome({ status: "provider-failure", request: parsedDeepLink.request, message });
       }
     });
-  }, [controller, parsedDeepLink]);
+  });
 
   const run = (action: () => void | Promise<void>) => {
-    const fail = (reason: unknown) => setError(reason instanceof Error ? reason.message : "Mapping action failed.");
-    setError(null);
+    const fail = (reason: unknown) => { error.value = reason instanceof Error ? reason.message : "Mapping action failed."; };
+    error.value = null;
     try { void Promise.resolve(action()).catch(fail); } catch (reason) { fail(reason); }
   };
-  const navigate = (href: string) => (navigateRef.current ?? defaultNavigate)(href);
+  const navigate = (href: string) => (props.navigate ?? defaultNavigate)(href);
+  // One editor per open record: a different record id is a fresh editor, an
+  // edit to the open record keeps the same one (and its focus) mounted.
+  const openRecord = computed(() => state.value.mapping?.id ?? null);
 
   return (
     <div class="cms-mapping-root">
-      {state.mapping ? (
-        <MappingEditor
-          state={state}
-          controller={controller}
-          componentProvider={props.componentProvider}
-          navigate={navigate}
-          error={error}
-          run={run}
-        />
-      ) : (
-        <MappingLibrary
-          state={state}
-          controller={controller}
-          navigate={navigate}
-          notice={<DeepLinkNotice state={state.deepLink ?? { status: "none" }} controller={controller} />}
-          error={error}
-          run={run}
-        />
-      )}
+      <Keyed value={openRecord} by={(id) => id ?? ""}>
+        {(id) => id.value !== null ? (
+          <MappingEditor
+            state={state}
+            controller={controller}
+            componentProvider={props.componentProvider}
+            navigate={navigate}
+            error={error}
+            run={run}
+            services={props.services}
+          />
+        ) : (
+          <MappingLibrary
+            state={state}
+            controller={controller}
+            navigate={navigate}
+            notice={<DeepLinkNotice state={computed(() => state.value.deepLink ?? { status: "none" })} controller={controller} />}
+            error={error}
+            run={run}
+            services={props.services}
+          />
+        )}
+      </Keyed>
     </div>
   );
 }
@@ -140,33 +141,34 @@ export function MappingApp(props: MappingRouteContentProps): JSX.Element {
  * be to pick another Mapping, and the dismissal takes the dead query string
  * off the URL so a reload does not ask the same failing question again.
  */
-function DeepLinkNotice({ state, controller }: { state: MappingDeepLinkState; controller: MappingEditorController }): JSX.Element | null {
-  if (state.status === "none" || state.status === "ready" || state.status === "loading") return null;
-  const title = state.status === "invalid"
-    ? "Invalid Mapping link"
-    : state.status === "missing"
-      ? "Mapping not found"
-      : "Mapping provider unavailable";
-
-  return (
-    <Banner
-      tone={state.status === "invalid" ? "warn" : "err"}
-      title={title}
-      action={
-        <Button
-          size="sm"
-          onClick={() => {
-            controller.setDeepLinkOutcome({ status: "none" });
-            if (typeof window !== "undefined" && window.location.pathname === MAPPING_ROUTE) {
-              window.history.replaceState({}, "", MAPPING_ROUTE);
-            }
-          }}
-        >
-          Dismiss
-        </Button>
-      }
-    >
-      {state.message}
-    </Banner>
-  );
+function DeepLinkNotice({ state, controller }: { state: ReadonlySignal<MappingDeepLinkState>; controller: MappingEditorController }): Child {
+  return <Rebuild value={state}>{(current) => {
+    if (current.status === "none" || current.status === "ready" || current.status === "loading") return null;
+    const title = current.status === "invalid"
+      ? "Invalid Mapping link"
+      : current.status === "missing"
+        ? "Mapping not found"
+        : "Mapping provider unavailable";
+    return (
+      <Banner
+        tone={current.status === "invalid" ? "warn" : "err"}
+        title={title}
+        action={
+          <Button
+            size="sm"
+            on:click={() => {
+              controller.setDeepLinkOutcome({ status: "none" });
+              if (typeof window !== "undefined" && window.location.pathname === MAPPING_ROUTE) {
+                window.history.replaceState({}, "", MAPPING_ROUTE);
+              }
+            }}
+          >
+            Dismiss
+          </Button>
+        }
+      >
+        {current.message}
+      </Banner>
+    );
+  }}</Rebuild>;
 }

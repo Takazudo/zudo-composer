@@ -1,12 +1,8 @@
-"use client";
-
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { computed, For, getScope, Show, signal, type Child, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
 import { SitemapperIcon } from "../../../../components/icons";
+import { toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Button, EmptyState, SegmentedControl } from "../../../../components/ui";
+import { derive } from "../../../mapping/signals";
 import type { SitemapDocument, SitemapNode as SitemapNodeModel } from "../../../../sitemapper/model";
 import SitemapConnectors from "./connectors";
 import {
@@ -14,6 +10,7 @@ import {
   DESKTOP_MEDIA_QUERY,
   layoutSitemap,
   NODE_MIN_HEIGHT,
+  type CanvasLayout,
   type CanvasLayoutMode,
   type NodeHeights,
 } from "./layout";
@@ -26,12 +23,12 @@ export const MAX_CANVAS_ZOOM = 1.5;
 export type CanvasLayoutPreference = "auto" | CanvasLayoutMode;
 
 export interface SitemapCanvasProps {
-  document: SitemapDocument;
+  document: MaybeSignal<SitemapDocument>;
   /** Authored route per page id. */
-  routes: ReadonlyMap<string, string>;
-  sources: PageSourceLabels;
-  selectedId: string | null;
-  zoom: number;
+  routes: MaybeSignal<ReadonlyMap<string, string>>;
+  sources: MaybeSignal<PageSourceLabels>;
+  selectedId: MaybeSignal<string | null>;
+  zoom: MaybeSignal<number>;
   onZoomChange: (zoom: number) => void;
   onSelect: (id: string) => void;
   onAddChild: (id: string) => void;
@@ -39,7 +36,7 @@ export interface SitemapCanvasProps {
   onDelete: (id: string) => void;
   onCreateRoot: () => void;
   /** Auto follows the responsive seam; the other choices remain author-controlled. */
-  layoutPreference?: CanvasLayoutPreference;
+  layoutPreference?: MaybeSignal<CanvasLayoutPreference>;
   onLayoutPreferenceChange?: (preference: CanvasLayoutPreference) => void;
   class?: string;
 }
@@ -100,52 +97,78 @@ export function canvasStageMargin(viewportSize: number, contentSize: number, zoo
   return Math.max(0, (viewportSize - contentSize * zoom) / 2);
 }
 
-export function SitemapCanvas({
+export function SitemapCanvas(props: SitemapCanvasProps): Child {
+  const document = toSignal(props.document);
+  const className = props.class;
+  return (
+    <div class={`sg-sitemapper-canvas${className ? ` ${className}` : ""}`}>
+      <Show when={computed(() => document.value.root.length === 0)}>{() => (
+        <EmptyState
+          icon={SitemapperIcon}
+          title="No pages yet"
+          description="Create the Home page to start mapping this site."
+          action={<Button variant="primary" on:click={() => props.onCreateRoot()}>Create Home page</Button>}
+        />
+      )}</Show>
+      <Show when={computed(() => document.value.root.length > 0)}>{() => <CanvasSurface {...props} document={document} />}</Show>
+    </div>
+  );
+}
+
+function CanvasSurface({
   document,
-  routes,
-  sources,
-  selectedId,
-  zoom,
+  routes: routesInput,
+  sources: sourcesInput,
+  selectedId: selectedInput,
+  zoom: zoomInput,
   onZoomChange,
   onSelect,
   onAddChild,
   onDuplicate,
   onDelete,
-  onCreateRoot,
-  layoutPreference = "auto",
+  layoutPreference: preferenceInput = "auto",
   onLayoutPreferenceChange,
-  class: className,
-}: SitemapCanvasProps): JSX.Element {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const nodeRefs = useRef(new Map<string, HTMLDivElement>());
-  const frameRef = useRef<number | null>(null);
-  const [measurements, setMeasurements] = useState<Measurements>({ viewportWidth: 0, viewportHeight: 0, heights: new Map() });
-  const [mediaLayoutMode, setMediaLayoutMode] = useState<CanvasLayoutMode>(() => modeFromMediaQuery(
+}: SitemapCanvasProps & { document: ReadonlySignal<SitemapDocument> }): Child {
+  const scope = getScope();
+  const routes = toSignal(routesInput);
+  const sources = toSignal(sourcesInput);
+  const selectedId = toSignal(selectedInput);
+  const zoom = toSignal(zoomInput);
+  const layoutPreference = toSignal(preferenceInput);
+  const scrollRef: Ref<HTMLDivElement> = { current: null };
+  const nodeElements = new Map<string, HTMLDivElement>();
+  let frame: number | null = null;
+  let observer: ResizeObserver | null = null;
+  let active = false;
+  const measurements = signal<Measurements>({ viewportWidth: 0, viewportHeight: 0, heights: new Map() });
+  const mediaLayoutMode = signal<CanvasLayoutMode>(modeFromMediaQuery(
     typeof globalThis.matchMedia === "function" ? globalThis.matchMedia(DESKTOP_MEDIA_QUERY) : undefined,
   ));
-  const layoutMode: CanvasLayoutMode = layoutPreference === "auto" ? mediaLayoutMode : layoutPreference;
-  const panRef = useRef<{ pointerId: number; x: number; y: number; left: number; top: number } | null>(null);
+  const layoutMode = computed<CanvasLayoutMode>(() => layoutPreference.value === "auto" ? mediaLayoutMode.value : layoutPreference.value);
+  let pan: { pointerId: number; x: number; y: number; left: number; top: number } | null = null;
 
   // The document-reference boundary is intentional: commands preserve the
   // reference for no-ops and replace it for real mutations.
-  const logicalTree = useMemo(() => buildLogicalTree(document), [document]);
-  const nodesById = useMemo(() => nodeMap(document), [document]);
-  const rootId = document.root[0]?.id ?? null;
-  const layout = useMemo(() => document.root.length === 0
-    ? null
-    : layoutSitemap(logicalTree, measurements.heights, measurements.viewportWidth, layoutMode),
-  [document, layoutMode, logicalTree, measurements.heights, measurements.viewportWidth]);
+  // `derive` keeps each derived object stable until its inputs change: `computed` has no equality cutoff.
+  const logicalTree = derive(() => [document.value] as const, buildLogicalTree);
+  const nodesById = derive(() => [document.value] as const, nodeMap);
+  const rootId = computed(() => document.value.root[0]?.id ?? null);
+  const layout = derive(
+    () => [logicalTree.value, measurements.value.heights, measurements.value.viewportWidth, layoutMode.value] as const,
+    (tree, heights, width, mode): CanvasLayout => layoutSitemap(tree, heights, width, mode),
+  );
+  const placed = derive(() => [layout.value, nodesById.value] as const, (current, nodes) => current.nodes.filter((rectangle) => nodes.has(rectangle.id)));
 
-  useEffect(() => {
+  scope.onActivate(() => {
     if (typeof globalThis.matchMedia !== "function") return undefined;
     const query = globalThis.matchMedia(DESKTOP_MEDIA_QUERY);
-    const updateMode = (): void => setMediaLayoutMode(modeFromMediaQuery(query));
+    const updateMode = (): void => { mediaLayoutMode.value = modeFromMediaQuery(query); };
     updateMode();
     query.addEventListener("change", updateMode);
     return () => query.removeEventListener("change", updateMode);
-  }, []);
+  });
 
-  const measure = useCallback(() => {
+  const measure = (): void => {
     const scroller = scrollRef.current;
     if (!scroller) return;
 
@@ -154,50 +177,74 @@ export function SitemapCanvas({
     // into the layout that produced it.
     const { width: viewportWidth, height: viewportHeight } = contentBox(scroller);
     const heights = new Map<string, number>();
-    for (const logical of logicalTree.nodes) {
-      const element = nodeRefs.current.get(logical.node.id);
+    for (const logical of logicalTree.value.nodes) {
+      const element = nodeElements.get(logical.node.id);
       if (element) heights.set(logical.node.id, Math.max(NODE_MIN_HEIGHT, element.offsetHeight));
     }
-    setMeasurements((previous) => {
-      const stableHeights = sameHeights(previous.heights, heights) ? previous.heights : heights;
-      return previous.viewportWidth === viewportWidth && previous.viewportHeight === viewportHeight && previous.heights === stableHeights
-        ? previous
-        : { viewportWidth, viewportHeight, heights: stableHeights };
-    });
-  }, [logicalTree]);
+    const previous = measurements.value;
+    const stableHeights = sameHeights(previous.heights, heights) ? previous.heights : heights;
+    if (previous.viewportWidth === viewportWidth && previous.viewportHeight === viewportHeight && previous.heights === stableHeights) return;
+    measurements.value = { viewportWidth, viewportHeight, heights: stableHeights };
+  };
 
-  const scheduleMeasure = useCallback(() => {
-    if (frameRef.current !== null) return;
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = null;
+  const scheduleMeasure = (): void => {
+    if (frame !== null) return;
+    frame = requestAnimationFrame(() => {
+      frame = null;
       measure();
     });
-  }, [measure]);
+  };
 
-  useLayoutEffect(() => {
-    if (document.root.length === 0) return undefined;
+  // Nodes activate before this surface does, so the first pass observes every
+  // node at once; a node added later joins the observer and asks for one pass.
+  const nodeElement = (id: string, element: HTMLDivElement | null): void => {
+    const previous = nodeElements.get(id);
+    if (previous && previous !== element) observer?.unobserve(previous);
+    if (element) nodeElements.set(id, element);
+    else nodeElements.delete(id);
+    if (element) observer?.observe(element);
+    if (active) scheduleMeasure();
+  };
+
+  scope.onActivate(() => {
+    active = true;
     measure();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(scheduleMeasure);
-    if (scrollRef.current) observer.observe(scrollRef.current);
-    for (const element of nodeRefs.current.values()) observer.observe(element);
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(scheduleMeasure);
+      if (scrollRef.current) observer.observe(scrollRef.current);
+      for (const element of nodeElements.values()) observer.observe(element);
+    }
     return () => {
-      observer.disconnect();
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
+      active = false;
+      observer?.disconnect();
+      observer = null;
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null;
     };
-  }, [document, logicalTree, measure, scheduleMeasure]);
+  });
 
-  const centerOnSelection = useCallback(() => {
+  // A changed document re-measures the nodes it kept, as the layout pass did.
+  let measuredTree = logicalTree.value;
+  scope.effect(() => {
+    const tree = logicalTree.value;
+    if (tree === measuredTree) return;
+    measuredTree = tree;
+    if (active) measure();
+  });
+
+  const centerOnSelection = (): void => {
     const scroller = scrollRef.current;
-    const element = selectedId ? nodeRefs.current.get(selectedId) : undefined;
-    if (!scroller || !element || !layout) return;
+    const selected = selectedId.value;
+    const element = selected ? nodeElements.get(selected) : undefined;
+    if (!scroller || !element) return;
+    const current = layout.value;
+    const scale = zoom.value;
     const { width, height } = contentBox(scroller);
-    const left = canvasStageMargin(measurements.viewportWidth, layout.width, zoom);
-    const top = canvasStageMargin(measurements.viewportHeight, layout.height, zoom);
-    scroller.scrollLeft = Math.max(0, left + (element.offsetLeft + element.offsetWidth / 2) * zoom - width / 2);
-    scroller.scrollTop = Math.max(0, top + (element.offsetTop + element.offsetHeight / 2) * zoom - height / 2);
-  }, [layout, measurements.viewportWidth, measurements.viewportHeight, selectedId, zoom]);
+    const left = canvasStageMargin(measurements.value.viewportWidth, current.width, scale);
+    const top = canvasStageMargin(measurements.value.viewportHeight, current.height, scale);
+    scroller.scrollLeft = Math.max(0, left + (element.offsetLeft + element.offsetWidth / 2) * scale - width / 2);
+    scroller.scrollTop = Math.max(0, top + (element.offsetTop + element.offsetHeight / 2) * scale - height / 2);
+  };
 
   /**
    * The selection this canvas has already brought into view.
@@ -207,78 +254,69 @@ export function SitemapCanvas({
    * Re-asserting the reveal on each one scrolled the selected node's ancestors
    * repeatedly (measured at up to nine times for a single selection), which
    * pulls the page back under whoever is working in it and moves every other
-   * row on the route while it happens. `layout` stays in the dependencies so a
+   * row on the route while it happens. `layout` stays a dependency so a
    * selection made before its node exists is still revealed by the first layout
    * that has it — but once, not on every later measurement.
    */
-  const revealedRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!selectedId) { revealedRef.current = null; return; }
-    if (revealedRef.current === selectedId) return;
-    const element = nodeRefs.current.get(selectedId);
+  let revealed: string | null = null;
+  scope.effect(() => {
+    const selected = selectedId.value;
+    void layout.value;
+    if (!selected) { revealed = null; return; }
+    if (revealed === selected) return;
+    const element = nodeElements.get(selected);
     if (!element) return;
-    revealedRef.current = selectedId;
+    revealed = selected;
     element.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, [selectedId, layout]);
+  });
 
-  const fit = useCallback(() => {
+  const fit = (): void => {
     const scroller = scrollRef.current;
-    if (!scroller || !layout || layout.width === 0) return;
+    const current = layout.value;
+    if (!scroller || current.width === 0) return;
     const { width, height } = contentBox(scroller);
-    const nextZoom = fitCanvasZoom(width, height, layout.width, layout.height);
+    const nextZoom = fitCanvasZoom(width, height, current.width, current.height);
     onZoomChange(nextZoom);
     requestAnimationFrame(() => {
-      const current = scrollRef.current;
-      if (!current) return;
-      current.scrollLeft = 0;
-      current.scrollTop = 0;
+      const element = scrollRef.current;
+      if (!element) return;
+      element.scrollLeft = 0;
+      element.scrollTop = 0;
     });
-  }, [layout, onZoomChange]);
+  };
 
-  const beginPan = useCallback((event: PointerEvent): void => {
+  const beginPan = (event: PointerEvent): void => {
     if (event.button !== 0 || !event.isPrimary) return;
     const target = event.target;
     if (target instanceof Element && target.closest("button,a,input,textarea,select,[role=group],[role=menu],[data-sg-pan-disabled=\"true\"]")) return;
     const scroller = scrollRef.current;
     if (!scroller) return;
-    panRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: scroller.scrollLeft, top: scroller.scrollTop };
+    pan = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: scroller.scrollLeft, top: scroller.scrollTop };
     scroller.setPointerCapture?.(event.pointerId);
-  }, []);
+  };
 
-  const movePan = useCallback((event: PointerEvent): void => {
-    const pan = panRef.current;
+  const movePan = (event: PointerEvent): void => {
     const scroller = scrollRef.current;
     if (!pan || !scroller || pan.pointerId !== event.pointerId) return;
     scroller.scrollLeft = pan.left - (event.clientX - pan.x);
     scroller.scrollTop = pan.top - (event.clientY - pan.y);
-  }, []);
+  };
 
-  const endPan = useCallback((event: PointerEvent): void => {
-    if (panRef.current?.pointerId !== event.pointerId) return;
+  const endPan = (event: PointerEvent): void => {
+    if (pan?.pointerId !== event.pointerId) return;
     scrollRef.current?.releasePointerCapture?.(event.pointerId);
-    panRef.current = null;
-  }, []);
+    pan = null;
+  };
 
-  if (document.root.length === 0) {
-    return (
-      <div class={`sg-sitemapper-canvas${className ? ` ${className}` : ""}`}>
-        <EmptyState
-          icon={SitemapperIcon}
-          title="No pages yet"
-          description="Create the Home page to start mapping this site."
-          action={<Button variant="primary" onClick={onCreateRoot}>Create Home page</Button>}
-        />
-      </div>
-    );
-  }
+  const viewportWidth = computed(() => Math.max(layout.value.width * zoom.value, measurements.value.viewportWidth));
+  const viewportHeight = computed(() => Math.max(layout.value.height * zoom.value, measurements.value.viewportHeight));
 
   return (
-    <div class={`sg-sitemapper-canvas${className ? ` ${className}` : ""}`}>
+    <>
       <div class="sg-sitemapper-canvas__controls">
         <div class="cms-seg cms-seg--sm" role="group" aria-label="Canvas view controls">
-          <button type="button" class="cms-seg__option" onClick={fit}>Fit</button>
-          <button type="button" class="cms-seg__option" disabled={selectedId === null} onClick={centerOnSelection}>Center on selection</button>
+          <button type="button" class="cms-seg__option" on:click={fit}>Fit</button>
+          <button type="button" class="cms-seg__option" disabled={computed(() => selectedId.value === null)} on:click={centerOnSelection}>Center on selection</button>
         </div>
         <SegmentedControl<CanvasLayoutPreference>
           label="Layout"
@@ -297,59 +335,55 @@ export function SitemapCanvas({
         ref={scrollRef}
         class="sg-sitemapper-canvas__scroll"
         data-sg-layout-preference={layoutPreference}
-        onPointerDown={beginPan}
-        onPointerMove={movePan}
-        onPointerUp={endPan}
-        onPointerCancel={endPan}
+        on:pointerdown={beginPan}
+        on:pointermove={movePan}
+        on:pointerup={endPan}
+        on:pointercancel={endPan}
       >
-        {layout ? (
+        <div
+          class="sg-sitemapper-canvas__viewport"
+          style={computed(() => ({
+            width: `${viewportWidth.value}px`,
+            height: `${viewportHeight.value}px`,
+          }))}
+        >
           <div
-            class="sg-sitemapper-canvas__viewport"
-            style={{
-              width: `${Math.max(layout.width * zoom, measurements.viewportWidth)}px`,
-              height: `${Math.max(layout.height * zoom, measurements.viewportHeight)}px`,
-            }}
+            class="sg-sitemapper-canvas__stage"
+            data-sg-layout={computed(() => layout.value.mode)}
+            style={computed(() => ({
+              width: `${layout.value.width}px`,
+              height: `${layout.value.height}px`,
+              transform: `scale(${zoom.value})`,
+              left: `${canvasStageMargin(viewportWidth.value, layout.value.width, zoom.value)}px`,
+              top: `${canvasStageMargin(viewportHeight.value, layout.value.height, zoom.value)}px`,
+            }))}
           >
-            <div
-              class="sg-sitemapper-canvas__stage"
-              data-sg-layout={layout.mode}
-              style={{
-                width: `${layout.width}px`,
-                height: `${layout.height}px`,
-                transform: `scale(${zoom})`,
-                left: `${canvasStageMargin(Math.max(layout.width * zoom, measurements.viewportWidth), layout.width, zoom)}px`,
-                top: `${canvasStageMargin(Math.max(layout.height * zoom, measurements.viewportHeight), layout.height, zoom)}px`,
-              }}
-            >
-              <SitemapConnectors layout={layout} />
-              {layout.nodes.map((rectangle) => {
-                const node = nodesById.get(rectangle.id);
-                if (!node) return null;
-                return (
-                  <SitemapNode
-                    key={node.id}
-                    node={node}
-                    route={routes.get(node.id) ?? "/"}
-                    source={sources.get(node.id)}
-                    rectangle={rectangle}
-                    selected={selectedId === node.id}
-                    isRoot={node.id === rootId}
-                    nodeRef={(element) => {
-                      if (element) nodeRefs.current.set(node.id, element);
-                      else nodeRefs.current.delete(node.id);
-                    }}
-                    onSelect={onSelect}
-                    onAddChild={onAddChild}
-                    onDuplicate={onDuplicate}
-                    onDelete={onDelete}
-                  />
-                );
-              })}
-            </div>
+            <SitemapConnectors layout={layout} />
+            <For each={placed} by={(rectangle) => rectangle.id}>{(rectangle) => {
+              const id = rectangle.value.id;
+              // Kept across the one pass in which a removed page is still listed.
+              let last = nodesById.value.get(id)!;
+              return (
+                <SitemapNode
+                  id={id}
+                  node={computed(() => { last = nodesById.value.get(id) ?? last; return last; })}
+                  route={computed(() => routes.value.get(id) ?? "/")}
+                  source={computed(() => sources.value.get(id))}
+                  rectangle={rectangle}
+                  selected={computed(() => selectedId.value === id)}
+                  isRoot={computed(() => rootId.value === id)}
+                  onElement={nodeElement}
+                  onSelect={onSelect}
+                  onAddChild={onAddChild}
+                  onDuplicate={onDuplicate}
+                  onDelete={onDelete}
+                />
+              );
+            }}</For>
           </div>
-        ) : null}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

@@ -1,9 +1,8 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
+import { computed, getScope, Show, signal, type Child } from "@takazudo/zfb/zudo-react";
 import { formatIntent } from "../../../../app/route-intents";
-import type { JSX } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { Rebuild } from "../../../../components/rebuild";
+import { keyedBy } from "../../../mapping/signals";
 import { ComposerIcon, EditIcon, ExternalLinkIcon } from "../../../../components/icons";
 import { Banner, Button, EmptyState } from "../../../../components/ui";
 import type { CompositionCatalog, ResolveOutcome } from "../../../../sitemapper/catalog";
@@ -11,7 +10,7 @@ import type { CompositionRef } from "../../../../sitemapper/model";
 import { CompositionPickerDialog } from "../picker/composition-picker-dialog";
 
 export interface CompositionFieldProps {
-  value?: CompositionRef;
+  value?: MaybeSignal<CompositionRef | undefined>;
   catalog: Pick<CompositionCatalog, "listCompositions" | "resolveComposition">;
   onChange: (value: CompositionRef | null) => void;
 }
@@ -35,21 +34,28 @@ function brokenReason(outcome: Exclude<ResolveOutcome, { status: "resolved" }>):
   }
 }
 
-export function CompositionField({ value, catalog, onChange }: CompositionFieldProps): JSX.Element {
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const requestRef = useRef(0);
-  const [reference, setReference] = useState<ReferenceState>(
-    value ? { status: "loading", ref: value } : { status: "unassigned" },
+export function CompositionField({ value: valueInput, catalog, onChange }: CompositionFieldProps): Child {
+  const value = toSignal(valueInput);
+  const pickerOpen = signal(false);
+  let request = 0;
+  const reference = signal<ReferenceState>(
+    value.value ? { status: "loading", ref: value.value } : { status: "unassigned" },
   );
+  // Only a different reference reloads; an unchanged one arriving as a new object does not.
+  const stableRef = keyedBy(() => value.value, (ref) => ref ? `${ref.providerId}\u0000${ref.recordId}` : "");
 
-  useEffect(() => {
-    const request = ++requestRef.current;
-    if (!value) {
-      setReference({ status: "unassigned" });
+  // `computed` has no equality cutoff: the effect re-runs on upstream changes, so it compares the last reference it loaded.
+  let loadedRef: CompositionRef | null | undefined | false = false;
+  getScope().effect(() => {
+    const ref = stableRef.value;
+    if (ref === loadedRef) return;
+    loadedRef = ref;
+    const current = ++request;
+    if (!ref) {
+      reference.value = { status: "unassigned" };
       return;
     }
-    const ref = value;
-    setReference({ status: "loading", ref });
+    reference.value = { status: "loading", ref };
     // Catalog labels enrich a resolved reference, but an unexpected list
     // failure must not turn a successfully resolved target into a broken one.
     void Promise.all([
@@ -57,84 +63,84 @@ export function CompositionField({ value, catalog, onChange }: CompositionFieldP
       catalog.listCompositions().catch(() => ({ entries: [], failures: [] })),
     ])
       .then(([outcome, list]) => {
-        if (request !== requestRef.current) return;
+        if (current !== request) return;
         if (outcome.status === "resolved") {
           const entry = list.entries.find((candidate) => sameRef(candidate.ref, ref));
-          setReference({
+          reference.value = {
             status: "resolved",
             ref,
             name: outcome.record.document.name,
             providerLabel: entry?.providerLabel ?? ref.providerId,
-          });
+          };
           return;
         }
-        setReference({ status: "broken", ref, reason: brokenReason(outcome) });
+        reference.value = { status: "broken", ref, reason: brokenReason(outcome) };
       })
       .catch((reason: unknown) => {
-        if (request !== requestRef.current) return;
-        setReference({
+        if (current !== request) return;
+        reference.value = {
           status: "broken",
           ref,
           reason: reason instanceof Error ? reason.message : "The composition reference could not be resolved.",
-        });
+        };
       });
-  }, [catalog, value?.providerId, value?.recordId]);
+  });
+
+  const status = computed(() => reference.value.status);
 
   return (
     <div class="sg-sitemapper-source" role="group" aria-label="Composition">
-      {reference.status === "unassigned" ? (
+      <Show when={computed(() => status.value === "unassigned")}>{() => (
         <EmptyState
           inline
           icon={ComposerIcon}
           title="No composition assigned"
-          action={<Button variant="primary" size="sm" onClick={() => setPickerOpen(true)}>Choose composition…</Button>}
+          action={<Button variant="primary" size="sm" on:click={() => { pickerOpen.value = true; }}>Choose composition…</Button>}
         />
-      ) : null}
+      )}</Show>
 
-      {reference.status === "loading" ? <p role="status">Resolving composition…</p> : null}
+      <Show when={computed(() => status.value === "loading")}>{() => <p role="status">Resolving composition…</p>}</Show>
 
-      {reference.status === "resolved" ? (
+      <Rebuild value={reference}>{(current) => current.status === "resolved" ? (
         <div class="sg-sitemapper-source__card">
           <ComposerIcon size="sm" class="sg-sitemapper-source__glyph" />
           <span class="sg-sitemapper-source__text">
-            <strong>{reference.name}</strong>
-            <span>{reference.providerLabel}</span>
+            <strong>{current.name}</strong>
+            <span>{current.providerLabel}</span>
           </span>
-          <Button size="xs" variant="ghost" iconOnly aria-label="Change composition" onClick={() => setPickerOpen(true)}>
+          <Button size="xs" variant="ghost" iconOnly aria-label="Change composition" on:click={() => { pickerOpen.value = true; }}>
             <EditIcon size="xs" />
           </Button>
           {/* Source ownership is distinct from route-backed page authoring. */}
           <a
             class="cms-btn cms-btn--ghost cms-btn--xs cms-btn--icon"
-            href={value ? formatIntent({ route: "composer", providerId: value.providerId, compositionId: value.recordId }) : "/composer"}
+            href={formatIntent({ route: "composer", providerId: current.ref.providerId, compositionId: current.ref.recordId })}
             aria-label="Open in Composer"
           >
             <ExternalLinkIcon size="xs" />
           </a>
         </div>
-      ) : null}
-
-      {reference.status === "broken" ? (
+      ) : current.status === "broken" ? (
         <Banner
           tone="err"
           title="Broken reference"
           action={
             <>
-              <Button size="sm" onClick={() => setPickerOpen(true)}>Change…</Button>
-              <Button size="sm" variant="danger" onClick={() => onChange(null)}>Clear</Button>
+              <Button size="sm" on:click={() => { pickerOpen.value = true; }}>Change…</Button>
+              <Button size="sm" variant="danger" on:click={() => onChange(null)}>Clear</Button>
             </>
           }
         >
-          {reference.reason} <code class="sg-sitemapper-mono">{reference.ref.providerId}:{reference.ref.recordId}</code>
+          {current.reason} <code class="sg-sitemapper-mono">{`${current.ref.providerId}:${current.ref.recordId}`}</code>
         </Banner>
-      ) : null}
+      ) : null}</Rebuild>
 
       <CompositionPickerDialog
         open={pickerOpen}
         currentRef={value}
         listCompositions={() => catalog.listCompositions()}
         onSelect={onChange}
-        onClose={() => setPickerOpen(false)}
+        onClose={() => { pickerOpen.value = false; }}
       />
     </div>
   );

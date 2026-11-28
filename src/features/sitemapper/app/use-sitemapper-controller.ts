@@ -1,7 +1,5 @@
-"use client";
-
-import { useCallback, useEffect, useRef, useState } from "preact/hooks";
-import { useWorkspace } from "../../../app/workspace-context";
+import { getScope, signal, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
+import type { ProductionProviderIntegration } from "../../../app/provider-integration";
 import { cloneJson, createUuidIdFactory, type IdFactory } from "../../../shared";
 import {
   createSaveQueue,
@@ -38,13 +36,26 @@ export interface UseSitemapperControllerOptions {
   idFactory?: IdFactory;
   now?: () => string;
   debounceMs?: number;
+  /** The workspace whose save barrier flushes this editor; none when mounted standalone. */
+  integration?: ProductionProviderIntegration | null;
 }
 
+export interface SitemapperControllerSignals {
+  readonly state: ReadonlySignal<SitemapperControllerState>;
+  readonly lastError: ReadonlySignal<string | null>;
+  readonly canUndoRemove: ReadonlySignal<boolean>;
+}
+
+/**
+ * `state`, `lastError` and `canUndoRemove` read the current values; bind live
+ * markup to `signals`.
+ */
 export interface SitemapperController {
-  state: SitemapperControllerState;
-  record: SitemapRecord;
+  readonly state: SitemapperControllerState;
+  readonly signals: SitemapperControllerSignals;
+  readonly record: SitemapRecord;
   queue: SitemapSaveQueue;
-  lastError: string | null;
+  readonly lastError: string | null;
   dispatch: (action: SitemapperAction) => string | null;
   updatePropsDebounced: (pageId: string, patch: SitemapPagePropsPatch) => void;
   flushPropUpdates: () => SitemapDocument;
@@ -53,7 +64,7 @@ export interface SitemapperController {
   flushPersistence: () => Promise<void>;
   retrySave: () => void;
   /** Undo only the most recent local remove while no later mutation occurred. */
-  canUndoRemove: boolean;
+  readonly canUndoRemove: boolean;
   undoRemove: () => string | null;
 }
 
@@ -63,71 +74,74 @@ function statusFromQueue(state: SaveQueueState<SitemapRecord>): SitemapperSaveSt
     : { kind: state.status };
 }
 
-export function useSitemapperController(options: UseSitemapperControllerOptions): SitemapperController {
-  const integration = useWorkspace()?.integration;
-  const workspaceSession = useRef<ReturnType<NonNullable<typeof integration>["sessions"]["register"]> | null>(null);
-  const idFactoryRef = useRef(options.idFactory ?? createUuidIdFactory());
-  const nowRef = useRef(options.now ?? (() => new Date().toISOString()));
-  const debounceMsRef = useRef(options.debounceMs ?? SITEMAPPER_PROP_DEBOUNCE_MS);
+/**
+ * The Sitemap editor session. Call during component setup: the record, the
+ * save queue and the workspace session live as long as the calling scope, and
+ * leaving it flushes pending property drafts.
+ */
+export function createSitemapperController(options: UseSitemapperControllerOptions): SitemapperController {
+  const scope = getScope();
+  const integration = options.integration ?? null;
+  let workspaceSession: ReturnType<ProductionProviderIntegration["sessions"]["register"]> | null = null;
+  const idFactory = options.idFactory ?? createUuidIdFactory();
+  const now = options.now ?? (() => new Date().toISOString());
+  const debounceMs = options.debounceMs ?? SITEMAPPER_PROP_DEBOUNCE_MS;
   if (options.record.id !== options.record.document.id) {
     throw new Error("The Sitemap record and document identities do not match.");
   }
-  const recordRef = useRef<SitemapRecord>(cloneJson(options.record));
-  const queueRef = useRef<SitemapSaveQueue | null>(null);
-  if (queueRef.current === null) {
-    if (options.saveQueue) {
-      if (options.saveQueue.ref.recordId !== options.record.id) {
-        throw new Error("The Sitemap record does not match its save queue identity.");
-      }
-      queueRef.current = options.saveQueue;
-    } else {
-      const write = options.write
-        ?? (options.store ? (snapshot: SaveQueueSnapshot<SitemapRecord>) => options.store!.put(snapshot.record) : null);
-      if (!write) throw new Error("useSitemapperController requires saveQueue, write, or store.");
-      const ref: SaveQueueRef = { providerId: options.providerId ?? SITEMAP_PROVIDERS.filesystem.id, recordId: options.record.id };
-      queueRef.current = createSaveQueue<SitemapRecord>({
-        ref,
-        initialRecord: options.record,
-        write,
-      });
+  let record: SitemapRecord = cloneJson(options.record);
+  let queue: SitemapSaveQueue;
+  if (options.saveQueue) {
+    if (options.saveQueue.ref.recordId !== options.record.id) {
+      throw new Error("The Sitemap record does not match its save queue identity.");
     }
+    queue = options.saveQueue;
+  } else {
+    const write = options.write
+      ?? (options.store ? (snapshot: SaveQueueSnapshot<SitemapRecord>) => options.store!.put(snapshot.record) : null);
+    if (!write) throw new Error("createSitemapperController requires saveQueue, write, or store.");
+    const ref: SaveQueueRef = { providerId: options.providerId ?? SITEMAP_PROVIDERS.filesystem.id, recordId: options.record.id };
+    queue = createSaveQueue<SitemapRecord>({
+      ref,
+      initialRecord: options.record,
+      write,
+    });
   }
 
-  const stateRef = useRef<SitemapperControllerState | null>(null);
-  if (stateRef.current === null) {
-    stateRef.current = createInitialSitemapperControllerState(
-      recordRef.current.document,
-      statusFromQueue(queueRef.current.state),
-    );
-  }
-  const [state, setState] = useState(stateRef.current);
-  const [lastError, setLastError] = useState<string | null>(null);
-  const pendingRef = useRef<Map<string, SitemapPagePropsPatch>>(new Map());
-  const pendingNavigationRef = useRef<Map<string, { menu: "primary" | "footer"; itemId: string; patch: SitemapperNavigationPatch }>>(new Map());
-  const pendingNavigationErrorRef = useRef<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mutationRevisionRef = useRef(0);
-  const undoRemoveRef = useRef<{ document: SitemapDocument; selectedId: string | null; revision: number } | null>(null);
+  const state = signal<SitemapperControllerState>(createInitialSitemapperControllerState(
+    record.document,
+    statusFromQueue(queue.state),
+  ));
+  const lastError = signal<string | null>(null);
+  const canUndoRemove = signal(false);
+  let pending = new Map<string, SitemapPagePropsPatch>();
+  const pendingNavigation = new Map<string, { menu: "primary" | "footer"; itemId: string; patch: SitemapperNavigationPatch }>();
+  let pendingNavigationError: string | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let mutationRevision = 0;
+  let undoRemoveState: { document: SitemapDocument; selectedId: string | null; revision: number } | null = null;
+  const syncUndo = () => { canUndoRemove.value = undoRemoveState !== null && undoRemoveState.revision === mutationRevision; };
+  const setState = (next: SitemapperControllerState) => { state.value = next; };
 
-  const applyAction = useCallback((action: SitemapperAction): string | null => {
-    const prior = stateRef.current!;
-    const result = applySitemapperAction(prior, action, idFactoryRef.current);
-    setLastError(result.error);
+  const applyAction = (action: SitemapperAction): string | null => {
+    const prior = state.value;
+    const result = applySitemapperAction(prior, action, idFactory);
+    lastError.value = result.error;
     if (result.error) return result.error;
     let next = result.state;
     if (result.documentChanged) {
-      mutationRevisionRef.current += 1;
-      undoRemoveRef.current = action.type === "remove"
-        ? { document: cloneJson(prior.document), selectedId: prior.selectedId, revision: mutationRevisionRef.current }
+      mutationRevision += 1;
+      undoRemoveState = action.type === "remove"
+        ? { document: cloneJson(prior.document), selectedId: prior.selectedId, revision: mutationRevision }
         : null;
-      recordRef.current = {
-        ...recordRef.current,
-        updatedAt: nowRef.current(),
+      record = {
+        ...record,
+        updatedAt: now(),
         document: next.document,
       };
       try {
-        queueRef.current!.edit(queueRef.current!.ref, recordRef.current);
-        next = { ...next, saveStatus: statusFromQueue(queueRef.current!.state) };
+        queue.edit(queue.ref, record);
+        next = { ...next, saveStatus: statusFromQueue(queue.state) };
       } catch (error) {
         next = {
           ...next,
@@ -137,164 +151,149 @@ export function useSitemapperController(options: UseSitemapperControllerOptions)
           },
         };
       }
+      syncUndo();
     }
-    stateRef.current = next;
     setState(next);
     return null;
-  }, []);
+  };
 
-  const flushPropUpdates = useCallback((): SitemapDocument => {
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
+  const flushPropUpdates = (): SitemapDocument => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
     }
-    const pending = pendingRef.current;
-    pendingRef.current = new Map();
-    for (const [pageId, patch] of pending) {
+    const drained = pending;
+    pending = new Map();
+    for (const [pageId, patch] of drained) {
       applyAction({ type: "updateProps", pageId, patch });
     }
     let navigationError: string | null = null;
-    for (const [key, pendingNavigation] of pendingNavigationRef.current) {
-      const items = stateRef.current!.document.navigation[pendingNavigation.menu];
-      const index = items.findIndex((item) => item.id === pendingNavigation.itemId);
+    for (const [key, draft] of pendingNavigation) {
+      const items = state.value.document.navigation[draft.menu];
+      const index = items.findIndex((item) => item.id === draft.itemId);
       const current = index < 0 ? undefined : items[index];
       if (!current) {
-        pendingNavigationRef.current.delete(key);
-        navigationError = `Navigation item "${pendingNavigation.itemId}" no longer exists.`;
+        pendingNavigation.delete(key);
+        navigationError = `Navigation item "${draft.itemId}" no longer exists.`;
         continue;
       }
-      const result = applySitemapperAction(stateRef.current!, {
+      const result = applySitemapperAction(state.value, {
         type: "editNavigation",
-        menu: pendingNavigation.menu,
-        command: { kind: "put", item: { ...current, ...pendingNavigation.patch }, index },
-      }, idFactoryRef.current);
+        menu: draft.menu,
+        command: { kind: "put", item: { ...current, ...draft.patch }, index },
+      }, idFactory);
       if (!result.error && result.documentChanged) {
         const next = result.state;
-        mutationRevisionRef.current += 1;
-        undoRemoveRef.current = null;
-        recordRef.current = { ...recordRef.current, updatedAt: nowRef.current(), document: next.document };
+        mutationRevision += 1;
+        undoRemoveState = null;
+        syncUndo();
+        record = { ...record, updatedAt: now(), document: next.document };
         try {
-          queueRef.current!.edit(queueRef.current!.ref, recordRef.current);
-          stateRef.current = { ...next, saveStatus: statusFromQueue(queueRef.current!.state) };
-          setState(stateRef.current);
-          pendingNavigationRef.current.delete(key);
+          queue.edit(queue.ref, record);
+          setState({ ...next, saveStatus: statusFromQueue(queue.state) });
+          pendingNavigation.delete(key);
         } catch (error) {
           navigationError = error instanceof Error ? error.message : "Sitemap persistence failed.";
         }
       } else if (result.error) {
         navigationError = result.error;
       } else {
-        pendingNavigationRef.current.delete(key);
+        pendingNavigation.delete(key);
       }
     }
-    pendingNavigationErrorRef.current = navigationError;
+    pendingNavigationError = navigationError;
     if (navigationError) {
-      setLastError(navigationError);
-      const current = stateRef.current!;
-      const next = { ...current, saveStatus: { kind: "error" as const, reason: navigationError } };
-      stateRef.current = next;
-      setState(next);
+      lastError.value = navigationError;
+      setState({ ...state.value, saveStatus: { kind: "error" as const, reason: navigationError } });
     }
     // Invalid/no-op pending patches do not call queue.edit. Restore the honest
     // queue status instead of leaving the toolbar permanently dirty.
-    const current = stateRef.current!;
-    const saveStatus = statusFromQueue(queueRef.current!.state);
-    if (pendingNavigationRef.current.size === 0 && current.saveStatus.kind === "dirty" && saveStatus.kind !== "dirty") {
-      const next = { ...current, saveStatus };
-      stateRef.current = next;
-      setState(next);
+    const current = state.value;
+    const saveStatus = statusFromQueue(queue.state);
+    if (pendingNavigation.size === 0 && current.saveStatus.kind === "dirty" && saveStatus.kind !== "dirty") {
+      setState({ ...current, saveStatus });
     }
-    return stateRef.current!.document;
-  }, [applyAction]);
+    return state.value.document;
+  };
 
-  const flushNavigationDrafts = useCallback((): string | null => {
+  const flushNavigationDrafts = (): string | null => {
     flushPropUpdates();
-    return pendingNavigationErrorRef.current;
-  }, [flushPropUpdates]);
+    return pendingNavigationError;
+  };
 
-  const dispatch = useCallback((action: SitemapperAction): string | null => {
+  const dispatch = (action: SitemapperAction): string | null => {
     const flushError = flushNavigationDrafts();
     if (flushError) return flushError;
     return applyAction(action);
-  }, [applyAction, flushNavigationDrafts]);
+  };
 
-  const updatePropsDebounced = useCallback((pageId: string, patch: SitemapPagePropsPatch): void => {
-    pendingRef.current.set(pageId, { ...pendingRef.current.get(pageId), ...patch });
-    workspaceSession.current?.changed();
-    const current = stateRef.current!;
-    if (current.saveStatus.kind !== "dirty") {
-      const next = { ...current, saveStatus: { kind: "dirty" } as const };
-      stateRef.current = next;
-      setState(next);
-    }
-    if (timerRef.current !== null) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null;
+  const markDirty = () => {
+    const current = state.value;
+    if (current.saveStatus.kind !== "dirty") setState({ ...current, saveStatus: { kind: "dirty" as const } });
+  };
+  const schedule = () => {
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
       flushPropUpdates();
-    }, debounceMsRef.current);
-  }, [flushPropUpdates]);
+    }, debounceMs);
+  };
 
-  const updateNavigationDebounced = useCallback((menu: "primary" | "footer", itemId: string, patch: SitemapperNavigationPatch): void => {
+  const updatePropsDebounced = (pageId: string, patch: SitemapPagePropsPatch): void => {
+    pending.set(pageId, { ...pending.get(pageId), ...patch });
+    workspaceSession?.changed();
+    markDirty();
+    schedule();
+  };
+
+  const updateNavigationDebounced = (menu: "primary" | "footer", itemId: string, patch: SitemapperNavigationPatch): void => {
     const key = `${menu}:${itemId}`;
-    const current = pendingNavigationRef.current.get(key);
-    pendingNavigationRef.current.set(key, {
+    const current = pendingNavigation.get(key);
+    pendingNavigation.set(key, {
       menu,
       itemId,
       patch: { ...current?.patch, ...patch },
     });
-    pendingNavigationErrorRef.current = null;
-    setLastError(null);
-    workspaceSession.current?.changed();
-    const currentState = stateRef.current!;
-    if (currentState.saveStatus.kind !== "dirty") {
-      const next = { ...currentState, saveStatus: { kind: "dirty" as const } };
-      stateRef.current = next;
-      setState(next);
-    }
-    if (timerRef.current !== null) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null;
-      flushPropUpdates();
-    }, debounceMsRef.current);
-  }, [flushPropUpdates]);
+    pendingNavigationError = null;
+    lastError.value = null;
+    workspaceSession?.changed();
+    markDirty();
+    schedule();
+  };
 
-  const flushPersistence = useCallback(async (): Promise<void> => {
+  const flushPersistence = async (): Promise<void> => {
     flushPropUpdates();
-    if (pendingNavigationErrorRef.current || pendingNavigationRef.current.size > 0) {
-      throw new Error(pendingNavigationErrorRef.current ?? "Navigation drafts could not be saved.");
+    if (pendingNavigationError || pendingNavigation.size > 0) {
+      throw new Error(pendingNavigationError ?? "Navigation drafts could not be saved.");
     }
-    await queueRef.current!.flush();
-  }, [flushPropUpdates]);
+    await queue.flush();
+  };
 
-  const retrySave = useCallback((): void => {
+  const retrySave = (): void => {
     flushPropUpdates();
-    if (pendingNavigationErrorRef.current || pendingNavigationRef.current.size > 0) {
-      const reason = pendingNavigationErrorRef.current ?? "Navigation drafts could not be saved.";
-      setLastError(reason);
+    if (pendingNavigationError || pendingNavigation.size > 0) {
+      lastError.value = pendingNavigationError ?? "Navigation drafts could not be saved.";
       return;
     }
     try {
-      queueRef.current!.retry();
+      queue.retry();
     } catch (error) {
-      const current = stateRef.current!;
-      const next = {
-        ...current,
+      setState({
+        ...state.value,
         saveStatus: {
           kind: "error" as const,
           reason: error instanceof Error ? error.message : "Sitemap persistence failed.",
         },
-      };
-      stateRef.current = next;
-      setState(next);
+      });
     }
-  }, [flushPropUpdates]);
+  };
 
-  const undoRemove = useCallback((): string | null => {
+  const undoRemove = (): string | null => {
     flushPropUpdates();
-    if (pendingNavigationErrorRef.current || pendingNavigationRef.current.size > 0) return null;
-    const undo = undoRemoveRef.current;
-    if (!undo || undo.revision !== mutationRevisionRef.current) return null;
-    const current = stateRef.current!;
+    if (pendingNavigationError || pendingNavigation.size > 0) return null;
+    const undo = undoRemoveState;
+    if (!undo || undo.revision !== mutationRevision) return null;
+    const current = state.value;
     const document = cloneJson(undo.document);
     const nextState: SitemapperControllerState = {
       ...current,
@@ -302,61 +301,51 @@ export function useSitemapperController(options: UseSitemapperControllerOptions)
       selectedId: undo.selectedId,
       saveStatus: { kind: "dirty" },
     };
-    mutationRevisionRef.current += 1;
-    undoRemoveRef.current = null;
-    recordRef.current = { ...recordRef.current, updatedAt: nowRef.current(), document };
+    mutationRevision += 1;
+    undoRemoveState = null;
+    syncUndo();
+    record = { ...record, updatedAt: now(), document };
     try {
-      queueRef.current!.edit(queueRef.current!.ref, recordRef.current);
-      nextState.saveStatus = statusFromQueue(queueRef.current!.state);
+      queue.edit(queue.ref, record);
+      nextState.saveStatus = statusFromQueue(queue.state);
     } catch (error) {
       nextState.saveStatus = { kind: "error", reason: error instanceof Error ? error.message : "Sitemap persistence failed." };
     }
-    stateRef.current = nextState;
     setState(nextState);
-    setLastError(null);
+    lastError.value = null;
     return null;
-  }, [flushPropUpdates]);
+  };
 
-  const flushRef = useRef(flushPropUpdates);
-  flushRef.current = flushPropUpdates;
-  const persistenceRef = useRef(flushPersistence);
-  persistenceRef.current = flushPersistence;
-  useEffect(() => {
-    if (!integration) return;
-    const queue = queueRef.current!;
+  if (integration) {
     const session = integration.sessions.register({ feature: "Sitemap", ...queue.ref, workspaceId: integration.workspace.id }, {
-      flush: async () => { await persistenceRef.current(); }, retry: () => queue.retry(),
+      flush: async () => { await flushPersistence(); }, retry: () => queue.retry(),
     });
-    workspaceSession.current = session;
+    workspaceSession = session;
     let revision = queue.state.draftRevision;
     const unsubscribe = queue.subscribe((next) => { if (revision !== next.draftRevision) { revision = next.draftRevision; session.changed(); } });
-    return () => { flushRef.current(); unsubscribe(); session.detach(); workspaceSession.current = null; };
-  }, [integration]);
-  useEffect(() => {
-    const queue = queueRef.current!;
-    const unsubscribe = queue.subscribe((queueState) => {
-      const current = stateRef.current!;
-      const saveStatus = pendingRef.current.size > 0 || pendingNavigationRef.current.size > 0 ? { kind: "dirty" as const } : statusFromQueue(queueState);
-      if (
-        current.saveStatus.kind === saveStatus.kind
-        && (saveStatus.kind !== "error"
-          || (current.saveStatus.kind === "error" && current.saveStatus.reason === saveStatus.reason))
-      ) return;
-      const next = { ...current, saveStatus };
-      stateRef.current = next;
-      setState(next);
-    });
-    return () => {
-      flushRef.current();
-      unsubscribe();
-    };
-  }, []);
+    scope.onCleanup(() => { flushPropUpdates(); unsubscribe(); session.detach(); workspaceSession = null; });
+  }
+  const unsubscribeQueue = queue.subscribe((queueState) => {
+    const current = state.value;
+    const saveStatus = pending.size > 0 || pendingNavigation.size > 0 ? { kind: "dirty" as const } : statusFromQueue(queueState);
+    if (
+      current.saveStatus.kind === saveStatus.kind
+      && (saveStatus.kind !== "error"
+        || (current.saveStatus.kind === "error" && current.saveStatus.reason === saveStatus.reason))
+    ) return;
+    setState({ ...current, saveStatus });
+  });
+  scope.onCleanup(() => {
+    flushPropUpdates();
+    unsubscribeQueue();
+  });
 
   return {
-    state,
-    record: recordRef.current,
-    queue: queueRef.current,
-    lastError,
+    get state() { return state.value; },
+    signals: { state, lastError, canUndoRemove },
+    get record() { return record; },
+    queue,
+    get lastError() { return lastError.value; },
     dispatch,
     updatePropsDebounced,
     flushPropUpdates,
@@ -364,7 +353,7 @@ export function useSitemapperController(options: UseSitemapperControllerOptions)
     updateNavigationDebounced,
     flushPersistence,
     retrySave,
-    canUndoRemove: undoRemoveRef.current !== null && undoRemoveRef.current.revision === mutationRevisionRef.current,
+    get canUndoRemove() { return canUndoRemove.value; },
     undoRemove,
   };
 }

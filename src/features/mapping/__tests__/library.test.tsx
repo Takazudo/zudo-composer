@@ -1,7 +1,4 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { fireEvent, render, screen, settle, waitFor, within } from "../../../test/render";
 import { describe, expect, it, vi } from "vitest";
 import "../../composer/test-support/cleanup";
 import { activeComponentProvider } from "../../composer/active-pack";
@@ -39,7 +36,9 @@ async function library(records = [mappingRecord([READY_BINDING])], search = "") 
   const workspace = harness(records);
   await workspace.controller.initialize();
   const navigate = vi.fn();
-  return { ...renderApp(workspace, navigate, search), workspace, navigate };
+  const view = renderApp(workspace, navigate, search);
+  await settle();
+  return { ...view, workspace, navigate };
 }
 
 /**
@@ -150,6 +149,7 @@ describe("Mapping library", () => {
 
     fireEvent.input(name, { target: { value: "  " } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+    await settle();
     expect(within(dialog).getByText("Enter a mapping name.")).toBeInTheDocument();
     expect(workspace.records.size).toBe(0);
 
@@ -201,6 +201,7 @@ describe("Mapping library", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear library" }));
     const confirm = await screen.findByRole("alertdialog", { name: "Clear library?" });
     fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    await settle();
 
     expect(clear).not.toHaveBeenCalled();
     expect(screen.getByRole("link", { name: "First" })).toBeInTheDocument();

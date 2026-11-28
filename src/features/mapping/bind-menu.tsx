@@ -1,11 +1,6 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { ComponentChildren, JSX } from "preact";
-import { Fragment } from "preact";
-import { useRef } from "preact/hooks";
+import type { Child, Ref } from "@takazudo/zfb/zudo-react";
 import { PlusIcon, type IconComponent } from "../../components/icons";
-import { Menu, MenuItem, MenuSection, useMenu } from "../../components/overlay";
+import { createMenu, Menu, MenuItem, MenuSection } from "../../components/overlay";
 import { Button, type ButtonProps } from "../../components/ui";
 import type { MappingMenuGroup } from "./presentation";
 
@@ -29,7 +24,7 @@ export interface BindMenuProps {
   /** Accessible name of the trigger; required, because the `+` triggers have no text. */
   triggerLabel: string;
   /** Trigger content; a bare `+` icon button when omitted. */
-  children?: ComponentChildren;
+  children?: Child;
   triggerVariant?: ButtonProps["variant"];
   triggerSize?: ButtonProps["size"];
   triggerClass?: string;
@@ -49,14 +44,14 @@ export function BindMenu({
   groups,
   emptyLabel,
   onSelect,
-}: BindMenuProps): JSX.Element {
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menu = useMenu(triggerRef, { align: "start" });
+}: BindMenuProps): Child {
+  const triggerRef: Ref<HTMLButtonElement> = { current: null };
+  const menu = createMenu(triggerRef, { align: "start" });
   const empty = groups.every((group) => group.items.length === 0);
   const trigger = { elementRef: triggerRef, variant: triggerVariant, size: triggerSize, class: triggerClass, ...menu.triggerProps };
 
   return (
-    <Fragment>
+    <>
       {children === undefined ? (
         <Button {...trigger} iconOnly aria-label={triggerLabel}>
           <PlusIcon size="sm" />
@@ -82,6 +77,6 @@ export function BindMenu({
           ))
         )}
       </Menu>
-    </Fragment>
+    </>
   );
 }

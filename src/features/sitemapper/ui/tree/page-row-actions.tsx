@@ -1,9 +1,4 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import { Fragment } from "preact";
-import type { JSX } from "preact";
-import { useRef } from "preact/hooks";
+import type { Child, Ref } from "@takazudo/zfb/zudo-react";
 import {
   ChevronDownIcon,
   ChevronUpIcon,
@@ -13,7 +8,7 @@ import {
   PlusIcon,
   TrashIcon,
 } from "../../../../components/icons";
-import { Menu, MenuItem, MenuSeparator, useMenu } from "../../../../components/overlay";
+import { createMenu, Menu, MenuItem, MenuSeparator } from "../../../../components/overlay";
 import { Button } from "../../../../components/ui";
 
 // The hover affordance on one outline row: Add child, then everything else
@@ -48,24 +43,22 @@ export function PageRowActions({
   onMove,
   onDuplicate,
   onDelete,
-}: PageRowActionsProps): JSX.Element {
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menu = useMenu(triggerRef, { align: "end" });
+}: PageRowActionsProps): Child {
+  const triggerRef: Ref<HTMLButtonElement> = { current: null };
+  const menu = createMenu(triggerRef, { align: "end" });
 
   return (
-    <Fragment>
+    <>
       <Button
         size="xs"
         variant="ghost"
         iconOnly
         aria-label={`Add child page to ${title}`}
         disabled={!canAddChild}
-        onClick={() => onAddChild(pageId)}
+        on:click={() => onAddChild(pageId)}
       >
         <PlusIcon size="xs" />
       </Button>
-      {/* A raw button rather than `Button`: the menu measures its trigger
-       * through a ref, and Preact strips `ref` from a function component. */}
       <button
         type="button"
         ref={triggerRef}
@@ -83,6 +76,6 @@ export function PageRowActions({
         <MenuSeparator />
         <MenuItem icon={TrashIcon} tone="danger" disabled={isRoot} onSelect={() => onDelete(pageId)}>Delete…</MenuItem>
       </Menu>
-    </Fragment>
+    </>
   );
 }

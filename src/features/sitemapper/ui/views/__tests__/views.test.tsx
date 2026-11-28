@@ -1,15 +1,10 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "../../../../../test/render";
+import { describe, expect, it, vi } from "vitest";
 import type { SitemapDocument } from "../../../../../sitemapper/model";
 import { SITEMAP_SCHEMA_VERSION } from "../../../../../sitemapper/model";
 import type { SitemapRouteExpansion } from "../../../../../sitemapper/routes";
 import { NavigationPane } from "../navigation-pane";
 import { RoutePreviewPane, routeIdentity } from "../route-preview-pane";
-
-afterEach(cleanup);
 
 const document: SitemapDocument = {
   schemaVersion: SITEMAP_SCHEMA_VERSION,

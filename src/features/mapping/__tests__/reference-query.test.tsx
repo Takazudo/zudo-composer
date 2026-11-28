@@ -1,6 +1,7 @@
-import { useEffect, useState } from "preact/hooks";
-import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/preact";
-import { afterEach, expect, it, vi } from "vitest";
+import { batch, signal } from "@takazudo/zfb/zudo-react";
+import { fireEvent, render, settle, settleTasks, waitFor, within } from "../../../test/render";
+import { expect, it, vi } from "vitest";
+import { mappingStateSignal } from "../signals";
 import { ReferenceQueryValue } from "../reference-query-value";
 import { CollectionQueryPane } from "../query-pane";
 import { evaluateCollectionQuery } from "../../../mapping";
@@ -10,7 +11,6 @@ const target = { providerId: "content-filesystem", recordId: "result-year" };
 const selected = { providerId: target.providerId, modelId: target.recordId, recordId: "year-2015" };
 const next = { ...selected, recordId: "year-2027" };
 const key = (ref: typeof selected) => JSON.stringify([ref.providerId, ref.modelId, ref.recordId]);
-afterEach(cleanup);
 it("loads without editing, selects qualified identity despite duplicate labels, and retains a deleted target", async () => {
   const onChange = vi.fn(), load = vi.fn().mockResolvedValue([{ ref: selected, label: "Year" }, { ref: next, label: "Year" }]);
   const view = render(<ReferenceQueryValue target={target} value={selected} label="Year" load={load} onChange={onChange} />);
@@ -80,9 +80,11 @@ it("ignores a late catalog response after the target model changes", async () =>
   const late = new Promise<readonly { ref: typeof selected; label: string }[]>(resolve => { finish = resolve; });
   const load = vi.fn().mockReturnValueOnce(late).mockResolvedValueOnce([{ ref: { ...selected, modelId: "faq-group", recordId: "faq-exam" }, label: "Exams" }]);
   const onChange = vi.fn();
-  const view = render(<ReferenceQueryValue target={target} value={selected} label="Target" load={load} onChange={onChange} />);
+  const currentTarget = signal(target), currentValue = signal(selected);
+  const view = render(<ReferenceQueryValue target={currentTarget} value={currentValue} label="Target" load={load} onChange={onChange} />);
   await waitFor(() => expect(load).toHaveBeenCalledOnce());
-  view.rerender(<ReferenceQueryValue target={{ ...target, recordId: "faq-group" }} value={{ ...selected, modelId: "faq-group", recordId: "faq-exam" }} label="Target" load={load} onChange={onChange} />);
+  batch(() => { currentTarget.value = { ...target, recordId: "faq-group" }; currentValue.value = { ...selected, modelId: "faq-group", recordId: "faq-exam" }; });
+  await settleTasks();
   await view.findByRole("option", { name: /Exams/ });
   finish([{ ref: selected, label: "Old year" }]);
   await waitFor(() => expect(view.queryByRole("option", { name: /Old year/ })).toBeNull());
@@ -98,18 +100,22 @@ it("authors a reference filter through the real controller and persists only on 
   await workspace.controller.initialize(); await workspace.controller.open(record.id);
   const load = workspace.controller.referenceQueryEntries.bind(workspace.controller);
   function Editor() {
-    const [state, setState] = useState(workspace.controller.state);
-    useEffect(() => workspace.controller.subscribe(setState), []);
+    const state = mappingStateSignal(workspace.controller);
     return <CollectionQueryPane state={state} referenceEntries={load} onQueryChange={change => void workspace.controller.updateCollectionQuery(change)} onModeChange={vi.fn()} onOpenPins={vi.fn()} />;
   }
   const view = render(<Editor />);
   fireEvent.click(view.getByRole("button", { name: "Add filter" }));
   fireEvent.change(await view.findByRole("combobox", { name: "Filter 1 field" }), { target: { value: "result-entry-year" } });
+  await settle();
   expect((view.getByRole("combobox", { name: "Filter 1 operator" }) as HTMLSelectElement).value).toBe("exists");
   fireEvent.change(view.getByRole("combobox", { name: "Filter 1 operator" }), { target: { value: "equals" } });
-  const picker = await view.findByRole("combobox", { name: "Filter 1 value" });
-  await waitFor(() => expect((picker as HTMLSelectElement).disabled).toBe(false));
-  fireEvent.change(picker, { target: { value: key(next) } });
+  await settle();
+  // The value select is rebuilt once its option list loads (static options per select), so it is read afresh.
+  const picker = () => view.getByRole("combobox", { name: "Filter 1 value" }) as HTMLSelectElement;
+  await view.findByRole("combobox", { name: "Filter 1 value" });
+  await waitFor(() => expect(picker().disabled).toBe(false));
+  fireEvent.change(picker(), { target: { value: key(next) } });
+  await settle();
   fireEvent.change(view.getByRole("combobox", { name: "Filter 1 operator" }), { target: { value: "not-equals" } });
   await waitFor(() => expect(workspace.controller.state.collectionEvaluation?.status).toBe("ready"));
   const expected = [{ fieldId: "result-entry-year", operator: "not-equals", value: next }];

@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
-import { afterEach, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
+import { fireEvent, render, screen, settle } from "../../../test/render";
 import type { ProductionProviderIntegration } from "../../../app/provider-integration";
 import { project } from "../../../site-project/compiler/__tests__/fixtures";
 import { createReleaseController } from "../controller";
@@ -7,13 +7,13 @@ import type { ReleaseController, ReleaseState } from "../controller";
 import type { ReleasePlan } from "../../../site-project/api/types";
 import { ReleaseRoute } from "../release-route";
 
-afterEach(cleanup);
-it("offers each retained server stage with its exact incarnation", () => {
+it("offers each retained server stage with its exact incarnation", async () => {
   const base = createReleaseController({ workspace: { id: "chooser" }, subscribeChanges: () => () => {} } as unknown as ProductionProviderIntegration, { available: true, request: vi.fn(), subscribe: () => () => {}, dispose: () => {} });
   const retainedStages = [{ projectId: "first-project", buildId: "a".repeat(64), stageGeneration: 1 }, { projectId: "second-project", buildId: "b".repeat(64), stageGeneration: 9 }];
   const selectStage = vi.fn(), state = { ...base.getSnapshot(), working: project(), retainedStages };
   render(<ReleaseRoute controller={{ ...base, getSnapshot: () => state, selectStage }} href={() => null} />);
   fireEvent.click(screen.getByRole("button", { name: "Inspect stage bbbbbbbb" }));
+  await settle();
   expect(selectStage).toHaveBeenCalledWith(retainedStages[1]); expect(screen.getByRole("button", { name: "Inspect stage aaaaaaaa" })).toBeEnabled(); base.dispose();
 });
 it("renders real static inspection and explanatory disabled release actions", async () => {

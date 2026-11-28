@@ -1,21 +1,19 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
-import { useMemo } from "preact/hooks";
-import { RailCollapseButton, useEditorChrome } from "../../../../components/editor-chrome";
+import { computed, type Child } from "@takazudo/zfb/zudo-react";
+import { RailCollapseButton, type EditorChromeController, type EditorRailsController } from "../../../../components/editor-chrome";
 import { OutlineTree, type OutlineAddRequest, type OutlineInsertTarget } from "../../../../components/outline-tree";
+import { toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { derive } from "../../../mapping/signals";
 import { Pane, PaneBody, PaneHeader } from "../../../../components/ui";
 import { indexDocument, type SitemapDocument } from "../../../../sitemapper/model";
 import type { SitemapOutline } from "./outline-model";
 import { PageRowActions } from "./page-row-actions";
 
 export interface PagesPaneProps {
-  document: SitemapDocument;
+  document: MaybeSignal<SitemapDocument>;
   /** The document as outline rows; the editor builds it once for every surface. */
-  outline: SitemapOutline;
-  selectedId: string | null;
-  expandedIds: ReadonlySet<string>;
+  outline: MaybeSignal<SitemapOutline>;
+  selectedId: MaybeSignal<string | null>;
+  expandedIds: MaybeSignal<ReadonlySet<string>>;
   onSelect: (pageId: string) => void;
   onExpandedChange: (ids: readonly string[]) => void;
   onAdd: (request: OutlineAddRequest) => void;
@@ -24,13 +22,17 @@ export interface PagesPaneProps {
   onMove: (pageId: string, direction: "up" | "down") => void;
   onDuplicate: (pageId: string) => void;
   onDelete: (pageId: string) => void;
+  /** The editor's chrome controller; Enter on a row brings the inspector forward through it. */
+  chrome?: EditorChromeController;
+  /** The editor body's rails controller, for the collapse control. */
+  rails?: EditorRailsController;
   /** Main Outline mode reuses the canonical tree without collapsing the nav rail. */
   showCollapseButton?: boolean;
   heading?: string;
   class?: string;
 }
 
-function Legend(): JSX.Element {
+function Legend(): Child {
   return (
     <>
       <span><span class="cms-tree-dot cms-tree-dot--ok" />Composition</span>
@@ -42,10 +44,10 @@ function Legend(): JSX.Element {
 }
 
 export function PagesPane({
-  document,
-  outline,
-  selectedId,
-  expandedIds,
+  document: documentInput,
+  outline: outlineInput,
+  selectedId: selectedInput,
+  expandedIds: expandedInput,
   onSelect,
   onExpandedChange,
   onAdd,
@@ -54,36 +56,40 @@ export function PagesPane({
   onMove,
   onDuplicate,
   onDelete,
+  chrome,
+  rails,
   showCollapseButton = true,
   heading = "Pages",
   class: className,
-}: PagesPaneProps): JSX.Element {
-  const { setActivePane } = useEditorChrome();
-  const index = useMemo(() => indexDocument(document), [document]);
-  const expanded = useMemo(() => [...expandedIds], [expandedIds]);
-  const rootId = document.root[0]?.id ?? null;
+}: PagesPaneProps): Child {
+  const document = toSignal(documentInput);
+  const outline = toSignal(outlineInput);
+  const selectedId = toSignal(selectedInput);
+  const expandedIds = toSignal(expandedInput);
+  const index = derive(() => [document.value] as const, indexDocument);
+  const expanded = derive(() => [expandedIds.value] as const, (ids) => [...ids]);
 
   // The schema keeps exactly one root page, so the root list offers an insert
   // only while it is empty — that insert IS the "create the Home page" action.
   // All existing parents may contain authored children, including nested
   // Mapping route families. Commands remain authoritative for stale targets.
   function canInsert(target: OutlineInsertTarget): boolean {
-    if (target.parentId === null) return document.root.length === 0;
-    const parent = index.byId.get(target.parentId)?.node;
+    if (target.parentId === null) return document.value.root.length === 0;
+    const parent = index.value.byId.get(target.parentId)?.node;
     return parent !== undefined;
   }
 
   return (
     <Pane label={heading} class={className}>
-      <PaneHeader title={heading} count={index.byId.size} actions={showCollapseButton ? <RailCollapseButton rail="nav" /> : undefined} />
+      <PaneHeader title={heading} count={computed(() => index.value.byId.size)} actions={showCollapseButton && rails ? <RailCollapseButton rail="nav" rails={rails} /> : undefined} />
       <PaneBody>
         <OutlineTree
           label="Pages"
-          nodes={outline.nodes}
+          nodes={computed(() => outline.value.nodes)}
           prefKey="sitemapper"
-          selectedId={selectedId ?? undefined}
+          selectedId={computed(() => selectedId.value ?? undefined)}
           onSelect={onSelect}
-          onOpen={() => setActivePane("insp")}
+          onOpen={() => chrome?.setActivePane("insp")}
           expandedIds={expanded}
           onExpandedChange={onExpandedChange}
           canInsert={canInsert}
@@ -92,16 +98,17 @@ export function PagesPane({
           addLabel={(parent) => (parent === null ? "Add root page" : "Add page")}
           legend={<Legend />}
           renderActions={(node) => {
-            const location = index.byId.get(node.id);
+            const currentIndex = index.value;
+            const location = currentIndex.byId.get(node.id);
             if (!location) return null;
             const siblings = location.parentId === null
-              ? document.root
-              : index.byId.get(location.parentId)?.node.children ?? [];
+              ? document.value.root
+              : currentIndex.byId.get(location.parentId)?.node.children ?? [];
             return (
               <PageRowActions
                 pageId={node.id}
                 title={node.title}
-                isRoot={node.id === rootId}
+                isRoot={node.id === (document.value.root[0]?.id ?? null)}
                 canMoveUp={location.parentId !== null && location.index > 0}
                 canMoveDown={location.parentId !== null && location.index < siblings.length - 1}
                 canAddChild={true}

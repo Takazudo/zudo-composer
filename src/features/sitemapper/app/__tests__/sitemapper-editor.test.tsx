@@ -1,11 +1,8 @@
 import { subscribeAuthoringPersistenceChanges } from "../../../../app/persistence-channels";
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, settle, waitFor, within } from "../../../../test/render";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { ChromeContext, createChromeStore } from "../../../../app/chrome-context";
-import { WorkspaceContext } from "../../../../app/workspace-context";
+import { createChromeStore } from "../../../../app/chrome-context";
+import { testServices } from "../../test-support/services";
 import type { ProductionProviderIntegration } from "../../../../app/provider-integration";
 import { createWorkspaceSaveRegistry } from "../../../../app/workspace-sessions";
 import { CONTENT_FILE_PROVIDER_DOMAIN } from "../../../../content/storage/file-provider";
@@ -77,7 +74,6 @@ function renderEditor(overrides: Partial<Harness> = {}, initialPageId?: string) 
   const chrome = overrides.chrome ?? createChromeStore();
   const navigate = vi.fn(overrides.navigate ?? (() => {}));
   const view = render(
-    <ChromeContext.Provider value={chrome}>
       <SitemapperIntegration
         providerId="sitemap-filesystem"
         record={record()}
@@ -88,8 +84,8 @@ function renderEditor(overrides: Partial<Harness> = {}, initialPageId?: string) 
         idFactory={createSequentialIdFactory("page")}
         recordIdFactory={createSequentialIdFactory("map")}
         now={() => "2026-04-02T00:00:00.000Z"}
-      />
-    </ChromeContext.Provider>,
+        services={testServices({ chrome })}
+      />,
   );
   return { ...view, store, chrome, navigate };
 }
@@ -105,8 +101,9 @@ describe("Sitemapper editor chrome", () => {
     const mapped = selectedId === "home" ? value.document.root[0]! : value.document.root[0]!.children[0]!;
     mapped.source = { kind: "mapping", ref: { providerId: "mapping-filesystem", recordId: "articles" }, route: { kind: "entry-field", fieldId: "slug" } };
     const oldLength = mapped.children.length, store = fakeStore();
-    render(<ChromeContext.Provider value={createChromeStore()}><SitemapperIntegration providerId="sitemap-filesystem" record={value} store={store} catalog={catalog} initialPageId={selectedId} idFactory={createSequentialIdFactory("nested")} /></ChromeContext.Provider>);
+    render(<SitemapperIntegration providerId="sitemap-filesystem" record={value} store={store} catalog={catalog} initialPageId={selectedId} idFactory={createSequentialIdFactory("nested")} services={testServices()} />);
     const add = within(toolbar()).getByRole("button", { name: "Add page" }); expect(add).toBeEnabled(); fireEvent.click(add);
+    await settle();
     await waitFor(() => expect(store.put).toHaveBeenCalled());
     const saved = store.put.mock.lastCall![0].document;
     const parent = selectedId === "home" ? saved.root[0]! : saved.root[0]!.children[0]!;
@@ -121,7 +118,7 @@ describe("Sitemapper editor chrome", () => {
     value.document.root[0]!.source = { kind: "mapping", ref: { providerId: "mapping", recordId: "mapped" }, route: kind === "entry-field" ? { kind, fieldId: "slug" } : { kind, entry: { providerId: "content", modelId: model.id, recordId: draft.id } } };
     const mapping: MappingRecord = { id: "mapped", createdAt: draft.createdAt, updatedAt: draft.updatedAt, document: { schemaVersion: 2, id: "mapped", name: "Mapped", contentModel: { providerId: "content", recordId: model.id }, composition: { providerId: "files", recordId: "page" }, mode: { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 10 } }, bindings: [] } };
     const expand = vi.spyOn(routeServices, "expandSitemapRoutes");
-    render(<ChromeContext.Provider value={createChromeStore()}><SitemapperIntegration providerId="sitemap-filesystem" record={value} store={fakeStore()} catalog={catalog} mappingCatalog={{ list: async () => ({ status: "listed" as const, entries: [], failures: [] }), routes: { list: async () => ({ status: "listed" as const, entries: [], failures: [] }), resolveMapping: async () => ({ status: "resolved", record: mapping }), resolveDefinitionReadiness: async () => ({ status: "ready" }), resolveContentSnapshot: async () => ({ status: "resolved", model, snapshot: { model, entries: [draft], count: 1, diagnostics: [] } }) } }} /></ChromeContext.Provider>);
+    render(<SitemapperIntegration providerId="sitemap-filesystem" record={value} store={fakeStore()} catalog={catalog} mappingCatalog={{ list: async () => ({ status: "listed" as const, entries: [], failures: [] }), routes: { list: async () => ({ status: "listed" as const, entries: [], failures: [] }), resolveMapping: async () => ({ status: "resolved", record: mapping }), resolveDefinitionReadiness: async () => ({ status: "ready" }), resolveContentSnapshot: async () => ({ status: "resolved", model, snapshot: { model, entries: [draft], count: 1, diagnostics: [] } }) } }} services={testServices()} />);
     await waitFor(() => expect(expand).toHaveBeenCalledWith(expect.objectContaining({ policy: "authoring-preview" })));
     const result = await expand.mock.results[0]!.value;
     expect(result.routes).toHaveLength(1); expect(result.routes[0].selectedEntry.recordId).toBe("draft"); expand.mockRestore();
@@ -136,6 +133,7 @@ describe("Sitemapper editor chrome", () => {
     expect(chrome.getSnapshot().editorStatus).toEqual({ state: "saved" });
 
     fireEvent.click(within(toolbar()).getByRole("button", { name: "Add page" }));
+    await settle();
     await waitFor(() => expect(chrome.getSnapshot().editorStatus?.state).not.toBe("saved"));
   });
 
@@ -147,6 +145,7 @@ describe("Sitemapper editor chrome", () => {
 
     expect(listen.mock.calls.some(([type]) => type === "beforeunload")).toBe(false);
     fireEvent.click(within(toolbar()).getByRole("button", { name: "Add page" }));
+    await settle();
     await waitFor(() => expect(listen.mock.calls.some(([type]) => type === "beforeunload")).toBe(true));
     listen.mockRestore();
   });
@@ -157,6 +156,7 @@ describe("Sitemapper editor chrome", () => {
     expect(screen.getByRole("treeitem", { name: /Contact/ })).toHaveAttribute("aria-selected", "true");
 
     fireEvent.click(screen.getByRole("treeitem", { name: /About/ }));
+    await settle();
     await waitFor(() => expect(window.location.search).toContain("page=about"));
   });
 
@@ -166,10 +166,14 @@ describe("Sitemapper editor chrome", () => {
     renderEditor({}, "about");
 
     fireEvent.click(screen.getByRole("button", { name: "More actions for About" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Rename…" }));
+    await settle();
     const dialog = screen.getByRole("dialog", { name: "Rename page" });
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Page title" }), { target: { value: "About us" } });
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: "Save name" }));
+    await settle();
 
     expect(await screen.findByRole("treeitem", { name: /About us/ })).toBeInTheDocument();
     expect(prompt).not.toHaveBeenCalled();
@@ -182,9 +186,12 @@ describe("Sitemapper editor chrome", () => {
     renderEditor({}, "home");
 
     fireEvent.click(screen.getByRole("button", { name: "More actions for About" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    await settle();
     const dialog = screen.getByRole("alertdialog", { name: "Delete About?" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await settle();
 
     await waitFor(() => expect(screen.queryByRole("treeitem", { name: /About/ })).toBeNull());
     expect(confirmSpy).not.toHaveBeenCalled();
@@ -195,9 +202,12 @@ describe("Sitemapper editor chrome", () => {
     const { store } = renderEditor();
     const addRow = document.querySelector(".cms-tree-cat > .cms-tree-children > .cms-tree-add-wrap .cms-tree-add");
     fireEvent.click(addRow as HTMLElement);
+    await settle();
     const input = document.querySelector(".cms-tree-add-wrap .cms-tree-inline input") as HTMLInputElement;
     fireEvent.input(input, { target: { value: "Careers" } });
+    await settle();
     fireEvent.keyDown(input, { key: "Enter" });
+    await settle();
 
     expect(await screen.findByRole("treeitem", { name: /Careers/ })).toBeInTheDocument();
     await waitFor(() => expect(store.put).toHaveBeenCalled());
@@ -209,8 +219,11 @@ describe("Sitemapper editor chrome", () => {
     const { store, navigate } = renderEditor();
 
     fireEvent.click(screen.getByRole("button", { name: "More sitemap actions" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Delete Walk map?" })).getByRole("button", { name: "Delete" }));
+    await settle();
 
     await waitFor(() => expect(store.delete).toHaveBeenCalledWith("walk-map"));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper"));
@@ -226,7 +239,7 @@ describe("Sitemapper editor chrome", () => {
     const sessions = createWorkspaceSaveRegistry();
     const integration = { sessions, workspace: { id: "workspace", metadata: vi.fn(async () => ({ metadata: { activeSitemap: { providerId: "sitemap-filesystem", recordId: "other" } } })) }, subscribeChanges: (listener: () => void, channels: readonly string[]) => subscribeAuthoringPersistenceChanges(channels, listener) } as unknown as ProductionProviderIntegration;
     const expand = vi.spyOn(routeServices, "expandSitemapRoutes");
-    render(<WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}><ChromeContext.Provider value={createChromeStore()}><SitemapperIntegration providerId="sitemap-filesystem" record={value} store={fakeStore()} catalog={catalog} mappingCatalog={mappingCatalog} /></ChromeContext.Provider></WorkspaceContext.Provider>);
+    render(<SitemapperIntegration providerId="sitemap-filesystem" record={value} store={fakeStore()} catalog={catalog} mappingCatalog={mappingCatalog} services={testServices({ integration })} />);
     await waitFor(() => expect(expand).toHaveBeenCalledTimes(1));
     expect(integration.workspace.metadata).toHaveBeenCalledTimes(1);
     notifyPersistenceChange(CONTENT_FILE_PROVIDER_DOMAIN);
@@ -250,21 +263,21 @@ describe("Sitemapper editor chrome", () => {
     } as unknown as ProductionProviderIntegration;
     cleanup();
     render(
-      <WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}>
-        <ChromeContext.Provider value={createChromeStore()}>
-          <SitemapperIntegration
-            providerId="sitemap-filesystem"
-            record={record()}
-            store={store}
-            catalog={catalog}
-            navigate={navigate}
-          />
-        </ChromeContext.Provider>
-      </WorkspaceContext.Provider>,
+      <SitemapperIntegration
+        providerId="sitemap-filesystem"
+        record={record()}
+        store={store}
+        catalog={catalog}
+        navigate={navigate}
+        services={testServices({ integration })}
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: "More sitemap actions" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Delete Walk map?" })).getByRole("button", { name: "Delete" }));
+    await settle();
     expect(await screen.findByText("This is the active Sitemap. Select another Sitemap as active before deleting it.")).toBeInTheDocument();
     expect(store.delete).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();

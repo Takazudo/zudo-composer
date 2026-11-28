@@ -1,12 +1,11 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
-import { useRef, useState } from "preact/hooks";
+import { computed, getScope, Show, signal, type Child, type Ref } from "@takazudo/zfb/zudo-react";
 import { SearchIcon, type IconComponent } from "../../components/icons";
 import { matchesLibrarySearch } from "../../components/library-page";
 import { Dialog } from "../../components/overlay";
+import { toSignal, type MaybeSignal } from "../../components/reactive";
+import { Rebuild } from "../../components/rebuild";
 import { Button, EmptyState, Input } from "../../components/ui";
+import { derive, memo } from "./signals";
 
 // The toolbar's two source/target pickers. They replace the editor's old
 // `<select>` pair: a catalog is a list of records to search, not a dropdown to
@@ -23,14 +22,14 @@ export interface RecordPickerEntry {
 }
 
 export interface RecordPickerDialogProps {
-  open: boolean;
+  open: MaybeSignal<boolean>;
   title: string;
   /** One line saying what picking here changes. */
   description: string;
   searchLabel: string;
-  entries: readonly RecordPickerEntry[];
+  entries: MaybeSignal<readonly RecordPickerEntry[]>;
   /** The record in force; its row is marked and inert. */
-  currentKey: string;
+  currentKey: MaybeSignal<string>;
   emptyMessage: string;
   onSelect: (key: string) => void;
   onClose: () => void;
@@ -46,29 +45,33 @@ export function RecordPickerDialog({
   emptyMessage,
   onSelect,
   onClose,
-}: RecordPickerDialogProps): JSX.Element {
-  const searchRef = useRef<HTMLInputElement | null>(null);
-  const [search, setSearch] = useState("");
+}: RecordPickerDialogProps): Child {
+  const isOpen = toSignal(open);
+  const entryList = toSignal(entries);
+  const current = toSignal(currentKey);
+  const searchRef: Ref<HTMLInputElement> = { current: null };
+  const search = signal("");
 
-  // During the opening render rather than in an effect; see `NewMappingDialog`.
-  const wasOpen = useRef(open);
-  if (open !== wasOpen.current) {
-    wasOpen.current = open;
-    if (open) setSearch("");
-  }
+  // Every opening starts from an empty search; see `NewMappingDialog`.
+  let wasOpen = isOpen.value;
+  getScope().effect(() => {
+    const next = isOpen.value;
+    if (next === wasOpen) return;
+    wasOpen = next;
+    if (next) search.value = "";
+  });
 
-  const visible = entries.filter((entry) => matchesLibrarySearch(`${entry.name} ${entry.detail}`, search));
-  const query = search.trim();
+  const visible = derive(() => [entryList.value, search.value] as const, (list, text) => list.filter((entry) => matchesLibrarySearch(`${entry.name} ${entry.detail}`, text)));
 
   return (
     <Dialog
-      open={open}
+      open={isOpen}
       title={title}
       class="cms-mapping-picker"
       initialFocusRef={searchRef}
       onClose={onClose}
       footer={
-        <button type="button" class="cms-dialog__action" onClick={onClose}>
+        <button type="button" class="cms-dialog__action" on:click={() => onClose()}>
           Cancel
         </button>
       }
@@ -78,20 +81,19 @@ export function RecordPickerDialog({
         elementRef={searchRef}
         type="search"
         icon={SearchIcon}
-        value={search}
+        modelValue={search}
         aria-label={searchLabel}
-        placeholder={`Search ${entries.length} ${entries.length === 1 ? "record" : "records"}…`}
-        onInput={(event) => setSearch(event.currentTarget.value)}
+        placeholder={computed(() => `Search ${entryList.value.length} ${entryList.value.length === 1 ? "record" : "records"}…`)}
       />
-      {entries.length === 0 ? <EmptyState inline icon={SearchIcon} title={emptyMessage} /> : null}
-      {entries.length > 0 && visible.length === 0 ? (
-        <EmptyState inline icon={SearchIcon} title={`No matches for “${query}”`} />
-      ) : null}
-      {visible.length > 0 ? (
+      <Show when={computed(() => entryList.value.length === 0)}>{() => <EmptyState inline icon={SearchIcon} title={emptyMessage} />}</Show>
+      <Show when={computed(() => entryList.value.length > 0 && visible.value.length === 0)}>{() => (
+        <EmptyState inline icon={SearchIcon} title={computed(() => `No matches for “${search.value.trim()}”`)} />
+      )}</Show>
+      <Rebuild value={memo(() => [visible.value, current.value] as const)}>{([rows, currentRow]) => rows.length > 0 ? (
         <ul class="cms-mapping-picker__list">
-          {visible.map((entry) => {
+          {rows.map((entry) => {
             const Icon = entry.icon;
-            const current = entry.key === currentKey;
+            const selected = entry.key === currentRow;
             return (
               <li key={entry.key}>
                 {Icon ? <Icon size="sm" class="cms-mapping-picker__glyph" /> : null}
@@ -102,20 +104,20 @@ export function RecordPickerDialog({
                 <Button
                   variant="primary"
                   size="sm"
-                  disabled={current}
-                  aria-label={`${current ? "Selected" : "Select"} ${entry.name}`}
-                  onClick={() => {
+                  disabled={selected}
+                  aria-label={`${selected ? "Selected" : "Select"} ${entry.name}`}
+                  on:click={() => {
                     onSelect(entry.key);
                     onClose();
                   }}
                 >
-                  {current ? "Selected" : "Select"}
+                  {selected ? "Selected" : "Select"}
                 </Button>
               </li>
             );
           })}
         </ul>
-      ) : null}
+      ) : null}</Rebuild>
     </Dialog>
   );
 }
