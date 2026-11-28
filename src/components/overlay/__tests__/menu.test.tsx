@@ -308,6 +308,19 @@ describe("Menu dismissal and focus restore", () => {
     expect(screen.getByRole("button", { name: "More" })).toHaveFocus();
   });
 
+  // A browser runs microtasks between a real click's listeners, so a dialog the
+  // item opens mounts before the menu's bubbling close. It must still find the
+  // trigger focused, or it returns focus to the unmounted item on close.
+  it("hands focus back to the trigger before the chosen item's action runs", async () => {
+    let focusedAtSelect: Element | null = null;
+    render(<RowMenu onDelete={() => { focusedAtSelect = document.activeElement; }} />);
+    await openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    expect(focusedAtSelect).toBe(screen.getByRole("button", { name: "More" }));
+    await settle();
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("closes on an outside pointer press and leaves focus where the pointer went", async () => {
     render(<RowMenu />);
     await openMenu();

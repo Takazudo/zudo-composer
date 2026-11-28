@@ -25,6 +25,8 @@ const TYPEAHEAD_RESET_MS = 500;
 
 interface MenuSurfaceHandle {
   close: (options?: CloseMenuOptions) => void;
+  /** Focus the outermost menu's trigger without closing anything yet. */
+  focusRoot: () => void;
   register: (panel: HTMLElement) => () => void;
 }
 
@@ -116,6 +118,7 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
 
   const handle: MenuSurfaceHandle = {
     close: (options) => { closeMenu(options); parent?.close(options); },
+    focusRoot: () => { if (parent) parent.focusRoot(); else triggerRef.current?.focus(); },
     register: (panel) => {
       descendants.add(panel);
       const unregisterParent = parent?.register(panel);
@@ -253,12 +256,24 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
     if (panelRef.current) focusInitial(intent);
   });
 
-  function onClick(event: MouseEvent): void {
+  function closingItem(event: MouseEvent): Element | null {
     const item = (event.target as Element | null)?.closest(ITEM_SELECTOR);
-    if (!item || !panelRef.current?.contains(item)) return;
-    if ((item as HTMLButtonElement).disabled || item.getAttribute("aria-disabled") === "true") return;
-    if (item.hasAttribute("data-menu-keep-open")) return;
-    handle.close();
+    if (!item || !panelRef.current?.contains(item)) return null;
+    if ((item as HTMLButtonElement).disabled || item.getAttribute("aria-disabled") === "true") return null;
+    if (item.hasAttribute("data-menu-keep-open")) return null;
+    return item;
+  }
+
+  // A browser drains microtasks between a real click's listeners, so whatever
+  // the item's own handler opens (a confirm dialog, say) mounts before the
+  // bubbling close below. Handing focus back first makes that dialog capture
+  // the trigger, not the item about to unmount, as the place to return to.
+  function onClickCapture(event: MouseEvent): void {
+    if (closingItem(event)) handle.focusRoot();
+  }
+
+  function onClick(event: MouseEvent): void {
+    if (closingItem(event)) handle.close();
   }
 
   function onKeyDown(event: KeyboardEvent): void {
@@ -329,6 +344,7 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
       tabindex={-1}
       class={className ? `cms-menu ${className}` : "cms-menu"}
       on:keydown={onKeyDown}
+      {...{ "on:click:capture": onClickCapture }}
       on:click={onClick}
     >
       {children}
