@@ -1,11 +1,7 @@
 "use client";
 
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import { Fragment } from "preact";
-import type { JSX } from "preact";
-import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { computed, For, getScope, Show, signal, type Child, type Ref } from "@takazudo/zfb/zudo-react";
+import type { VersionedAssetStore } from "../../../assets/library";
 import type {
   BrowserJsxExportOutcome,
   CompositionInitializationOutcome,
@@ -23,6 +19,9 @@ import {
 } from "../../../components/icons";
 import {
   BulkBar,
+  createLibraryConfirm,
+  createLibraryQuery,
+  createLibrarySelection,
   LibraryEmpty,
   LibraryNoMatch,
   LibraryPage,
@@ -34,17 +33,20 @@ import {
   LibraryUnavailableBanner,
   LibraryViewToggle,
   RowMenu,
-  useLibraryConfirm,
-  useLibraryQuery,
-  useLibrarySelection,
   type LibraryFacet,
   type LibraryKindTag,
   type LibraryRowContract,
   type LibrarySort,
+  type LibraryView,
+  type RowMenuProps,
 } from "../../../components/library-page";
-import { ConfirmDialog, Dialog, Menu, MenuRadioItem, useMenu } from "../../../components/overlay";
+import { ConfirmDialog, createMenu, Dialog, Menu, MenuRadioItem } from "../../../components/overlay";
+import { read, type MaybeSignal } from "../../../components/reactive";
+import { Rebuild } from "../../../components/rebuild";
 import { Banner, Button, Chip, Field, Input, SegmentedControl } from "../../../components/ui";
+import { Keyed } from "../../../runtime";
 import type { ComposerComponentProvider } from "../active-pack";
+import { memoOn } from "../reactive/memo";
 import { formatComposerRoute } from "../routing";
 import { ComposerExportDialog } from "../ui/export/export-dialog";
 import { NewCompositionDialog } from "./new-composition-dialog";
@@ -69,6 +71,8 @@ export interface CompositionLibraryProps {
   openNewOnMount?: boolean;
   /** Fired once `openNewOnMount` has been acted on, so the caller can drop it for later remounts. */
   onOpenNewConsumed?: () => void;
+  /** The workspace's versioned Asset store, for resolving managed Asset references in previews. */
+  assetStore?: VersionedAssetStore;
 }
 
 type RenameDialogState = { id: string; name: string } | null;
@@ -81,7 +85,7 @@ function message(reason: unknown, fallback: string): string {
   return reason instanceof Error && reason.message ? reason.message : fallback;
 }
 
-/** One stable empty list, so the query and selection hooks see a stable input. */
+/** One stable empty list, so the query and selection see a stable input. */
 const NO_SUMMARIES: readonly CompositionSummary[] = [];
 
 function kindTag(row: CompositionSummary): LibraryKindTag {
@@ -128,121 +132,122 @@ function ProviderMenu({
   onChange,
 }: {
   providers: readonly CompositionLibraryProviderCapability[];
-  activeProviderId: CompositionProviderId;
-  disabled?: boolean;
+  activeProviderId: MaybeSignal<CompositionProviderId>;
+  disabled?: MaybeSignal<boolean>;
   onChange: (providerId: CompositionProviderId) => void;
-}): JSX.Element | null {
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menu = useMenu(triggerRef, { align: "end" });
+}): Child {
+  const triggerRef: Ref<HTMLButtonElement> = { current: null };
+  const menu = createMenu(triggerRef, { align: "end" });
   if (providers.length === 0) return null;
-  const active = providers.find(({ descriptor }) => descriptor.id === activeProviderId) ?? providers[0]!;
+  const activeLabel = computed(() => {
+    const id = read(activeProviderId);
+    return (providers.find(({ descriptor }) => descriptor.id === id) ?? providers[0]!).descriptor.label;
+  });
 
   return (
-    <Fragment>
+    <>
       <button
         type="button"
         ref={triggerRef}
         class="cms-btn cms-btn--sm"
-        disabled={disabled}
+        disabled={computed(() => Boolean(read(disabled)))}
         {...menu.triggerProps}
       >
-        <span>{`Provider: ${active.descriptor.label}`}</span>
+        <span>{computed(() => `Provider: ${activeLabel.value}`)}</span>
         <ChevronDownIcon size="xs" class="cms-library-toolbar__caret" />
       </button>
       <Menu controller={menu} label="Provider">
         {providers.map(({ descriptor }) => (
           <MenuRadioItem
-            key={descriptor.id}
-            checked={descriptor.id === activeProviderId}
+            checked={computed(() => descriptor.id === read(activeProviderId))}
             onSelect={() => {
-              if (descriptor.id !== activeProviderId) onChange(descriptor.id);
+              if (descriptor.id !== read(activeProviderId)) onChange(descriptor.id);
             }}
           >
             {descriptor.label}
           </MenuRadioItem>
         ))}
       </Menu>
-    </Fragment>
+    </>
   );
 }
 
-// The one naming question outside creation — renaming a stored composition —
-// on the shared `Dialog`. State resets during the opening RENDER, not an
-// effect: see new-composition-dialog.tsx for why that distinction matters.
-function CompositionRenameDialog({
-  state,
-  busy,
-  error,
-  onSubmit,
-  onClose,
-}: {
-  state: RenameDialogState;
-  busy: boolean;
-  error: string | null;
+interface RenameDialogProps {
+  state: MaybeSignal<RenameDialogState>;
+  busy: MaybeSignal<boolean>;
+  error: MaybeSignal<string | null>;
   onSubmit: (id: string, name: string) => void;
   onClose: () => void;
-}): JSX.Element {
-  const fieldRef = useRef<HTMLInputElement | null>(null);
-  const open = state !== null;
-  const [value, setValue] = useState(state?.name ?? "");
-  const [missing, setMissing] = useState(false);
-  const wasOpen = useRef(open);
-  if (open !== wasOpen.current) {
-    wasOpen.current = open;
-    if (open) {
-      setValue(state!.name);
-      setMissing(false);
-    }
-  }
+}
+
+// The one naming question outside creation — renaming a stored composition —
+// on the shared `Dialog`. Each opening is a fresh session, so its field state
+// is reset before the dialog can be seen or typed into.
+function CompositionRenameDialog(props: RenameDialogProps): Child {
+  const state = computed(() => read(props.state));
+  return (
+    <Keyed value={state} by={(current) => (current ? `open:${current.id}` : "closed")}>
+      {(current) => <CompositionRenameSession {...props} state={current.value} />}
+    </Keyed>
+  );
+}
+
+function CompositionRenameSession({ state, busy: busyProp, error, onSubmit, onClose }: Omit<RenameDialogProps, "state"> & { state: RenameDialogState }): Child {
+  const fieldRef: Ref<HTMLInputElement> = { current: null };
+  const value = signal(state?.name ?? "");
+  const missing = signal(false);
+  const busy = computed(() => Boolean(read(busyProp)));
 
   function submit(): void {
-    if (busy || !state) return;
-    const next = value.trim();
+    if (busy.value || !state) return;
+    const next = value.value.trim();
     if (next === "") {
-      setMissing(true);
+      missing.value = true;
       return;
     }
-    setMissing(false);
+    missing.value = false;
     onSubmit(state.id, next);
   }
 
   return (
     <Dialog
-      open={open}
+      open={state !== null}
       title="Rename composition"
       initialFocusRef={fieldRef}
-      dismissOnBackdrop={!busy}
+      dismissOnBackdrop={computed(() => !busy.value)}
       onClose={() => {
-        if (!busy) onClose();
+        if (!busy.value) onClose();
       }}
       footer={
         <>
-          <button type="button" class="cms-dialog__action" disabled={busy} onClick={onClose}>
+          <button type="button" class="cms-dialog__action" disabled={busy} on:click={onClose}>
             Cancel
           </button>
-          <button type="button" class="cms-dialog__action cms-dialog__action--primary" disabled={busy} onClick={submit}>
-            {busy ? "Saving…" : "Save name"}
+          <button type="button" class="cms-dialog__action cms-dialog__action--primary" disabled={busy} on:click={submit}>
+            {computed(() => (busy.value ? "Saving…" : "Save name"))}
           </button>
         </>
       }
     >
       <p class="cms-dialog__message">{state ? `Choose a new name for ${state.name}.` : null}</p>
-      {error ? <Banner tone="err">{error}</Banner> : null}
-      <Field label="Name" error={missing ? "Enter a composition name." : undefined}>
-        <Input
-          elementRef={fieldRef}
-          value={value}
-          disabled={busy}
-          onInput={(event) => {
-            setMissing(false);
-            setValue(event.currentTarget.value);
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter") return;
-            event.preventDefault();
-            submit();
-          }}
-        />
+      <Show when={computed(() => Boolean(read(error)))}>
+        {() => <Banner tone="err">{computed(() => read(error) ?? "")}</Banner>}
+      </Show>
+      <Field label="Name" error={computed(() => (missing.value ? "Enter a composition name." : undefined))}>
+        {(field) => (
+          <Input
+            field={field}
+            elementRef={fieldRef}
+            modelValue={value}
+            disabled={busy}
+            on:input={() => { missing.value = false; }}
+            on:keydown={(event: KeyboardEvent) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              submit();
+            }}
+          />
+        )}
       </Field>
     </Dialog>
   );
@@ -256,131 +261,128 @@ export function CompositionLibrary({
   onInitializationApplied,
   openNewOnMount = false,
   onOpenNewConsumed,
-}: CompositionLibraryProps): JSX.Element {
-  const availableProviders = useMemo(() => providers.filter((provider) => provider.available), [providers]);
-  const [activeProviderId, setActiveProviderId] = useState<CompositionProviderId>(
-    () => availableProviders.find(({ descriptor }) => descriptor.id === initialProviderId)?.descriptor.id
+  assetStore,
+}: CompositionLibraryProps): Child {
+  const scope = getScope();
+  const availableProviders = providers.filter((provider) => provider.available);
+  const activeProviderId = signal<CompositionProviderId>(
+    availableProviders.find(({ descriptor }) => descriptor.id === initialProviderId)?.descriptor.id
       ?? availableProviders[0]?.descriptor.id
       ?? initialProviderId,
   );
-  const [outcome, setOutcome] = useState<CompositionInitializationOutcome | null>(null);
-  const [busy, setBusy] = useState(availableProviders.length > 0);
-  const [operationError, setOperationError] = useState<string | null>(
+  const outcome = signal<CompositionInitializationOutcome | null>(null);
+  const busy = signal(availableProviders.length > 0);
+  const operationError = signal<string | null>(
     availableProviders.length === 0 ? "No composition storage provider is available." : null,
   );
-  const [newDialogOpen, setNewDialogOpen] = useState(false);
-  const [renameDialog, setRenameDialog] = useState<RenameDialogState>(null);
-  const [exportDialog, setExportDialog] = useState<ExportDialogState>(null);
-  const [view, setView] = useState<"table" | "cards">("table");
-  const [thumbnailDevice, setThumbnailDevice] = useState<CompositionThumbnailDevice>("desktop");
-  const [openPreviewKey, setOpenPreviewKey] = useState<string | null>(null);
-
-  const startedRef = useRef(false);
-  const createdForNavigationRef = useRef<CompositionSummary | null>(null);
+  const newDialogOpen = signal(false);
+  const renameDialog = signal<RenameDialogState>(null);
+  const exportDialog = signal<ExportDialogState>(null);
+  const view = signal<LibraryView>("table");
+  const thumbnailDevice = signal<CompositionThumbnailDevice>("desktop");
+  const openPreviewKey = signal<string | null>(null);
+  let createdForNavigation: CompositionSummary | null = null;
 
   // Always commits the result — including a returned "error" status — so a
   // retry against the SAME provider replaces a stale description with the
   // fresh one. Only a thrown exception goes to `operationError` instead.
-  const load = useCallback(
-    async (providerId: CompositionProviderId, mode: "initialize" | "retry" | "startFresh") => {
-      setBusy(true);
-      setOperationError(null);
-      try {
-        const result = await intents[mode](providerId);
-        setActiveProviderId(providerId);
-        setOpenPreviewKey(null);
-        setOutcome(result);
-        if (result.status !== "error") onInitializationApplied?.(providerId, result);
-        return result.status !== "error";
-      } catch (reason) {
-        setOperationError(message(reason, "The composition library could not be loaded."));
-        return false;
-      } finally {
-        setBusy(false);
-      }
-    },
-    [intents, onInitializationApplied],
-  );
+  async function load(providerId: CompositionProviderId, mode: "initialize" | "retry" | "startFresh"): Promise<boolean> {
+    busy.value = true;
+    operationError.value = null;
+    try {
+      const result = await intents[mode](providerId);
+      if (scope.abortSignal.aborted) return false;
+      activeProviderId.value = providerId;
+      openPreviewKey.value = null;
+      outcome.value = result;
+      if (result.status !== "error") onInitializationApplied?.(providerId, result);
+      return result.status !== "error";
+    } catch (reason) {
+      if (scope.abortSignal.aborted) return false;
+      operationError.value = message(reason, "The composition library could not be loaded.");
+      return false;
+    } finally {
+      if (!scope.abortSignal.aborted) busy.value = false;
+    }
+  }
 
   // Switching providers is different: a failure must leave the previously
   // active provider and its already-displayed rows exactly as they were,
   // rather than replacing them with the new provider's error.
-  const switchProvider = useCallback(
-    async (providerId: CompositionProviderId) => {
-      if (providerId === activeProviderId || busy) return;
-      setBusy(true);
-      setOperationError(null);
-      try {
-        const result = await intents.initialize(providerId);
-        if (result.status === "error") {
-          setOperationError(result.error.message);
-          return;
-        }
-        setActiveProviderId(providerId);
-        setOutcome(result);
-        onInitializationApplied?.(providerId, result);
-      } catch (reason) {
-        setOperationError(message(reason, "The composition library could not be loaded."));
-      } finally {
-        setBusy(false);
+  async function switchProvider(providerId: CompositionProviderId): Promise<void> {
+    if (providerId === activeProviderId.value || busy.value) return;
+    busy.value = true;
+    operationError.value = null;
+    try {
+      const result = await intents.initialize(providerId);
+      if (scope.abortSignal.aborted) return;
+      if (result.status === "error") {
+        operationError.value = result.error.message;
+        return;
       }
-    },
-    [activeProviderId, busy, intents, onInitializationApplied],
-  );
+      activeProviderId.value = providerId;
+      outcome.value = result;
+      onInitializationApplied?.(providerId, result);
+    } catch (reason) {
+      if (scope.abortSignal.aborted) return;
+      operationError.value = message(reason, "The composition library could not be loaded.");
+    } finally {
+      if (!scope.abortSignal.aborted) busy.value = false;
+    }
+  }
 
-  useEffect(() => {
-    if (startedRef.current || availableProviders.length === 0) return;
-    startedRef.current = true;
-    void load(activeProviderId, "initialize");
-    // Runs once, against the provider resolved at mount.
-  }, []);
+  scope.onActivate(() => {
+    if (availableProviders.length > 0) void load(activeProviderId.value, "initialize");
+    // `openNewOnMount` is a one-shot route intent, not a toggle.
+    if (openNewOnMount) {
+      operationError.value = null;
+      newDialogOpen.value = true;
+      onOpenNewConsumed?.();
+    }
+  });
 
-  useEffect(() => {
-    if (!openNewOnMount) return;
-    setOperationError(null);
-    setNewDialogOpen(true);
-    onOpenNewConsumed?.();
-    // Runs once: `openNewOnMount` is a one-shot route intent, not a toggle.
-  }, []);
-
-  const summaries = outcome?.status === "ready" ? outcome.summaries : NO_SUMMARIES;
-  const ready = outcome?.status === "ready";
-  const query = useLibraryQuery({
+  const summaries = computed(() => {
+    const current = outcome.value;
+    return current?.status === "ready" ? current.summaries : NO_SUMMARIES;
+  });
+  const ready = computed(() => outcome.value?.status === "ready");
+  const query = createLibraryQuery({
     rows: summaries,
     searchText: (row) => `${row.name} ${row.id}`,
     facets: FACETS,
     sorts: SORTS,
   });
-  const selection = useLibrarySelection({ rows: summaries, visibleRows: query.rows, rowId: (row) => row.id });
-  const confirm = useLibraryConfirm();
-  const previewDialogNeedsBudget = openPreviewKey !== null
-    && !query.rows.slice(0, COMPOSITION_PREVIEW_FALLBACK_LIMIT).some((row) => `${activeProviderId}:${row.id}` === openPreviewKey);
+  const selection = createLibrarySelection({ rows: summaries, visibleRows: query.rows, rowId: (row) => row.id });
+  const confirm = createLibraryConfirm();
+  const previewDialogNeedsBudget = computed(() => {
+    const key = openPreviewKey.value;
+    const providerId = activeProviderId.value;
+    return key !== null
+      && !query.rows.value.slice(0, COMPOSITION_PREVIEW_FALLBACK_LIMIT).some((row) => `${providerId}:${row.id}` === key);
+  });
 
-  useEffect(() => {
-    if (openPreviewKey === null) return;
-    const prefix = `${activeProviderId}:`;
-    if (!openPreviewKey.startsWith(prefix) || !summaries.some((row) => `${prefix}${row.id}` === openPreviewKey)) {
-      setOpenPreviewKey(null);
+  scope.effect(() => {
+    const key = openPreviewKey.value;
+    if (key === null) return;
+    const prefix = `${activeProviderId.value}:`;
+    if (!key.startsWith(prefix) || !summaries.value.some((row) => `${prefix}${row.id}` === key)) {
+      openPreviewKey.value = null;
     }
-  }, [activeProviderId, openPreviewKey, summaries]);
+  });
 
-  const commitSummary = (summary: CompositionSummary): void => {
-    setOutcome((current) => (current?.status === "ready"
-      ? { ...current, summaries: sortByUpdated([summary, ...current.summaries.filter((item) => item.id !== summary.id)]) }
-      : current));
+  const updateReady = (change: (summaries: readonly CompositionSummary[]) => readonly CompositionSummary[]): void => {
+    const current = outcome.value;
+    if (current?.status === "ready") outcome.value = { ...current, summaries: [...change(current.summaries)] };
   };
-
+  const commitSummary = (summary: CompositionSummary): void => {
+    updateReady((current) => sortByUpdated([summary, ...current.filter((item) => item.id !== summary.id)]));
+  };
   const addSummaries = (created: readonly CompositionSummary[]): void => {
     if (created.length === 0) return;
-    setOutcome((current) => (current?.status === "ready"
-      ? { ...current, summaries: sortByUpdated([...current.summaries, ...created]) }
-      : current));
+    updateReady((current) => sortByUpdated([...current, ...created]));
   };
-
   const dropSummaries = (ids: ReadonlySet<string>): void => {
-    setOutcome((current) => (current?.status === "ready"
-      ? { ...current, summaries: current.summaries.filter((item) => !ids.has(item.id)) }
-      : current));
+    updateReady((current) => current.filter((item) => !ids.has(item.id)));
   };
 
   // Opens a just-created (or just-duplicated) record and reports whether that
@@ -389,12 +391,12 @@ export function CompositionLibrary({
     created: CompositionSummary,
   ): Promise<{ status: "created" } | { status: "navigation-error"; message: string }> {
     try {
-      const opened = await intents.open({ providerId: activeProviderId, recordId: created.id });
+      const opened = await intents.open({ providerId: activeProviderId.value, recordId: created.id });
       if (opened.status === "not-found") {
         return { status: "navigation-error", message: "The new composition was saved but could not be opened because it was not found." };
       }
-      createdForNavigationRef.current = null;
-      setNewDialogOpen(false);
+      createdForNavigation = null;
+      if (!scope.abortSignal.aborted) newDialogOpen.value = false;
       return { status: "created" };
     } catch (reason) {
       return {
@@ -405,107 +407,125 @@ export function CompositionLibrary({
   }
 
   async function rename(id: string, name: string): Promise<void> {
-    if (busy) return;
-    setBusy(true);
-    setOperationError(null);
+    if (busy.value) return;
+    busy.value = true;
+    operationError.value = null;
     try {
-      const updated = await intents.rename({ providerId: activeProviderId, recordId: id }, name);
+      const updated = await intents.rename({ providerId: activeProviderId.value, recordId: id }, name);
+      if (scope.abortSignal.aborted) return;
       commitSummary(updated);
-      setRenameDialog(null);
+      renameDialog.value = null;
     } catch (reason) {
-      setOperationError(message(reason, "The composition could not be renamed."));
+      if (scope.abortSignal.aborted) return;
+      operationError.value = message(reason, "The composition could not be renamed.");
     } finally {
-      setBusy(false);
+      if (!scope.abortSignal.aborted) busy.value = false;
     }
   }
 
   async function duplicateRow(id: string): Promise<void> {
-    if (busy) return;
-    setBusy(true);
-    setOperationError(null);
+    if (busy.value) return;
+    busy.value = true;
+    operationError.value = null;
     try {
-      const created = await intents.duplicate({ providerId: activeProviderId, recordId: id });
+      const created = await intents.duplicate({ providerId: activeProviderId.value, recordId: id });
+      if (scope.abortSignal.aborted) return;
       commitSummary(created);
       try {
-        const opened = await intents.open({ providerId: activeProviderId, recordId: created.id });
+        const opened = await intents.open({ providerId: activeProviderId.value, recordId: created.id });
+        if (scope.abortSignal.aborted) return;
         if (opened.status === "not-found") {
-          setOperationError("The duplicate was saved but could not be opened because it was not found.");
+          operationError.value = "The duplicate was saved but could not be opened because it was not found.";
         }
       } catch (reason) {
-        setOperationError(`The duplicate was saved, but opening failed. ${message(reason, "")}`.trim());
+        if (scope.abortSignal.aborted) return;
+        operationError.value = `The duplicate was saved, but opening failed. ${message(reason, "")}`.trim();
       }
     } catch (reason) {
-      setOperationError(message(reason, "The composition could not be duplicated."));
+      if (scope.abortSignal.aborted) return;
+      operationError.value = message(reason, "The composition could not be duplicated.");
     } finally {
-      setBusy(false);
+      if (!scope.abortSignal.aborted) busy.value = false;
     }
   }
 
   async function duplicateBulk(ids: readonly string[]): Promise<void> {
-    if (busy) return;
-    setBusy(true);
-    setOperationError(null);
+    if (busy.value) return;
+    busy.value = true;
+    operationError.value = null;
     const created: CompositionSummary[] = [];
     try {
       for (const id of ids) {
-        created.push(await intents.duplicate({ providerId: activeProviderId, recordId: id }));
+        created.push(await intents.duplicate({ providerId: activeProviderId.value, recordId: id }));
+        if (scope.abortSignal.aborted) return;
       }
     } catch (reason) {
-      setOperationError(message(reason, "The compositions could not be duplicated."));
+      if (scope.abortSignal.aborted) return;
+      operationError.value = message(reason, "The compositions could not be duplicated.");
     } finally {
-      addSummaries(created);
-      if (created.length > 0) selection.clear();
-      setBusy(false);
+      if (!scope.abortSignal.aborted) {
+        addSummaries(created);
+        if (created.length > 0) selection.clear();
+        busy.value = false;
+      }
     }
   }
 
   async function remove(ids: readonly string[]): Promise<void> {
-    setBusy(true);
-    setOperationError(null);
+    busy.value = true;
+    operationError.value = null;
     // Deletions are reported one by one: a bulk delete that fails halfway must
     // still drop the records that are actually gone, or the list lies.
     const deleted = new Set<string>();
     try {
       for (const id of ids) {
-        const ok = await intents.delete({ providerId: activeProviderId, recordId: id });
+        const ok = await intents.delete({ providerId: activeProviderId.value, recordId: id });
+        if (scope.abortSignal.aborted) return;
         if (ok) deleted.add(id);
       }
       if (deleted.size < ids.length) {
-        setOperationError("Some compositions were not found, so they could not be deleted. The library list has been preserved.");
+        operationError.value = "Some compositions were not found, so they could not be deleted. The library list has been preserved.";
       }
     } catch (reason) {
-      setOperationError(message(reason, "The composition could not be deleted."));
+      if (scope.abortSignal.aborted) return;
+      operationError.value = message(reason, "The composition could not be deleted.");
     } finally {
-      if (deleted.size > 0) {
-        dropSummaries(deleted);
-        selection.clear();
+      if (!scope.abortSignal.aborted) {
+        if (deleted.size > 0) {
+          dropSummaries(deleted);
+          selection.clear();
+        }
+        busy.value = false;
       }
-      setBusy(false);
     }
   }
 
   async function clearLibrary(): Promise<void> {
-    if (busy) return;
-    setBusy(true);
-    setOperationError(null);
+    if (busy.value) return;
+    busy.value = true;
+    operationError.value = null;
     try {
-      await intents.clear(activeProviderId);
-      setOutcome({ status: "ready", summaries: [] });
+      await intents.clear(activeProviderId.value);
+      if (scope.abortSignal.aborted) return;
+      outcome.value = { status: "ready", summaries: [] };
       selection.clear();
     } catch (reason) {
-      setOperationError(message(reason, "The compositions could not be cleared."));
+      if (scope.abortSignal.aborted) return;
+      operationError.value = message(reason, "The compositions could not be cleared.");
     } finally {
-      setBusy(false);
+      if (!scope.abortSignal.aborted) busy.value = false;
     }
   }
 
   async function exportRow(row: CompositionSummary): Promise<void> {
-    setOperationError(null);
+    operationError.value = null;
     try {
-      const exported = await intents.exportJsx({ providerId: activeProviderId, recordId: row.id });
-      setExportDialog({ name: exported.documentName, outcome: exported.outcome });
+      const exported = await intents.exportJsx({ providerId: activeProviderId.value, recordId: row.id });
+      if (scope.abortSignal.aborted) return;
+      exportDialog.value = { name: exported.documentName, outcome: exported.outcome };
     } catch (reason) {
-      setOperationError(message(reason, "The composition could not be exported."));
+      if (scope.abortSignal.aborted) return;
+      operationError.value = message(reason, "The composition could not be exported.");
     }
   }
 
@@ -524,7 +544,7 @@ export function CompositionLibrary({
   function askClear(): void {
     confirm.request({
       title: "Clear library?",
-      message: `Delete all ${summaries.length} compositions? This cannot be undone.`,
+      message: `Delete all ${summaries.value.length} compositions? This cannot be undone.`,
       confirmLabel: "Clear library",
       tone: "danger",
       onConfirm: () => void clearLibrary(),
@@ -532,31 +552,81 @@ export function CompositionLibrary({
   }
 
   function startCreate(): void {
-    setOperationError(null);
-    setNewDialogOpen(true);
+    operationError.value = null;
+    newDialogOpen.value = true;
   }
 
-  const contract = useMemo<LibraryRowContract<CompositionSummary>>(() => ({
+  const startRename = (row: CompositionSummary): void => {
+    operationError.value = null;
+    renameDialog.value = { id: row.id, name: row.name };
+  };
+
+  const hrefFor = (row: CompositionSummary): string =>
+    formatComposerRoute({ kind: "detail", providerId: activeProviderId.value, recordId: row.id });
+
+  const contract: LibraryRowContract<CompositionSummary> = {
     id: (row) => row.id,
     name: (row) => row.name,
     icon: () => ComposerIcon,
-    href: (row) => formatComposerRoute({ kind: "detail", providerId: activeProviderId, recordId: row.id }),
+    href: hrefFor,
     kind: kindTag,
     updatedAt: (row) => row.updatedAt,
-  }), [activeProviderId]);
+  };
 
-  // The header action and the empty state's call to action are the same
-  // command, but not the same control: two "New composition" buttons on one
-  // screen is an ambiguity for pointer and screen-reader users alike.
-  const newComposition = (
-    <Button variant="primary" disabled={busy} onClick={startCreate}>
-      <PlusIcon size="sm" />
-      New composition
-    </Button>
+  const rowActions = (row: CompositionSummary): Pick<RowMenuProps, "actions" | "destructive"> => ({
+    actions: [
+      { id: "rename", label: "Rename…", icon: EditIcon, onSelect: () => startRename(row) },
+      { id: "duplicate", label: "Duplicate", icon: DuplicateIcon, onSelect: () => void duplicateRow(row.id) },
+      { id: "export", label: "Export JSX", icon: DownloadIcon, onSelect: () => void exportRow(row) },
+    ],
+    destructive: [
+      { id: "delete", label: "Delete…", icon: TrashIcon, onSelect: () => askDelete([row.name], [row.id]) },
+    ],
+  });
+
+  const activeLabel = computed(() => {
+    const id = activeProviderId.value;
+    return (providers.find(({ descriptor }) => descriptor.id === id) ?? availableProviders[0])?.descriptor.label ?? "Unavailable";
+  });
+
+  const hasSelection = computed(() => selection.selectedCount.value > 0);
+  const bulkBar = memoOn(
+    () => [hasSelection.value] as const,
+    (selected): Child => (selected ? (
+      <BulkBar
+        count={selection.selectedCount}
+        describeCount={(count) => `${count} ${count === 1 ? "composition" : "compositions"} selected`}
+        actions={[
+          {
+            id: "duplicate",
+            label: "Duplicate",
+            icon: DuplicateIcon,
+            onSelect: () => void duplicateBulk(selection.selectedRows.value.map((row) => row.id)),
+          },
+          {
+            id: "delete",
+            label: "Delete",
+            icon: TrashIcon,
+            tone: "danger",
+            onSelect: () => askDelete(
+              selection.selectedRows.value.map((row) => row.name),
+              selection.selectedRows.value.map((row) => row.id),
+            ),
+          },
+        ]}
+        onClear={selection.clear}
+      />
+    ) : null),
   );
 
-  const activeLabel = (providers.find(({ descriptor }) => descriptor.id === activeProviderId) ?? availableProviders[0])?.descriptor.label
-    ?? "Unavailable";
+  // Only the failure states draw a banner; their identity follows the outcome,
+  // so a retry that fails again shows the fresh description.
+  const failure = computed(() => {
+    const current = outcome.value;
+    return current?.status === "error" || current?.status === "recovery-required" ? current : null;
+  });
+
+  const noMatch = (): Child => <LibraryNoMatch search={query.search} onClearFilters={query.clearFilters} />;
 
   return (
     <LibraryPage
@@ -568,164 +638,158 @@ export function CompositionLibrary({
         <ProviderMenu
           providers={availableProviders}
           activeProviderId={activeProviderId}
-          disabled={busy || availableProviders.length === 0}
+          disabled={computed(() => busy.value || availableProviders.length === 0)}
           onChange={(providerId) => void switchProvider(providerId)}
         />
       )}
-      primaryAction={newComposition}
+      // The header action and the empty state's call to action are the same
+      // command, but not the same control: two "New composition" buttons on one
+      // screen is an ambiguity for pointer and screen-reader users alike.
+      primaryAction={(
+        <Button variant="primary" disabled={busy} on:click={startCreate}>
+          <PlusIcon size="sm" />
+          New composition
+        </Button>
+      )}
     >
-      {operationError ? <Banner tone="err">{operationError}</Banner> : null}
-      {outcome?.status === "error" ? (
-        <LibraryUnavailableBanner
-          title="Composition library unavailable."
-          description={outcome.error.message}
-          onRetry={() => void load(activeProviderId, "retry")}
-        />
-      ) : null}
-      {outcome?.status === "recovery-required" ? (
-        <LibraryRecoveryBanner
-          title="Stored compositions need recovery."
-          description={`${outcome.recovery.message} The original source has been preserved.`}
-          onRetry={() => void load(activeProviderId, "retry")}
-          onStartFresh={() => confirm.request({
-            title: "Start fresh?",
-            message: "Every stored composition is permanently deleted, including the ones that still read correctly.",
-            confirmLabel: "Start fresh",
-            tone: "danger",
-            onConfirm: () => void load(activeProviderId, "startFresh"),
-          })}
-        />
-      ) : null}
-      {outcome === null && availableProviders.length > 0 ? (
-        <LibrarySkeleton columns={4} label="Loading compositions…" />
-      ) : null}
-      {ready && summaries.length === 0 ? (
-        <LibraryEmpty
-          icon={ComposerIcon}
-          title="No compositions yet"
-          description="A composition is a reusable page structure built from the provider components."
-          action={
-            <Button variant="primary" disabled={busy} onClick={startCreate}>
-              <PlusIcon size="sm" />
-              Create your first composition
-            </Button>
+      <Show when={computed(() => operationError.value !== null && operationError.value !== "")}>
+        {() => <Banner tone="err">{computed(() => operationError.value ?? "")}</Banner>}
+      </Show>
+      <Rebuild value={failure}>
+        {(current) => {
+          if (current?.status === "error") {
+            return (
+              <LibraryUnavailableBanner
+                title="Composition library unavailable."
+                description={current.error.message}
+                onRetry={() => void load(activeProviderId.value, "retry")}
+              />
+            );
           }
-        />
-      ) : null}
-      {ready && summaries.length > 0 ? (
-        <>
-          <LibraryToolbar
-            query={query}
-            searchLabel="Filter compositions"
-            searchPlaceholder="Filter by name or ID"
-            end={<>
-              <SegmentedControl<CompositionThumbnailDevice>
-                label="Thumbnail device"
-                size="sm"
-                value={thumbnailDevice}
-                onChange={setThumbnailDevice}
-                options={[{ value: "desktop", label: "Desktop previews" }, { value: "phone", label: "Phone previews" }]}
+          if (current?.status === "recovery-required") {
+            return (
+              <LibraryRecoveryBanner
+                title="Stored compositions need recovery."
+                description={`${current.recovery.message} The original source has been preserved.`}
+                onRetry={() => void load(activeProviderId.value, "retry")}
+                onStartFresh={() => confirm.request({
+                  title: "Start fresh?",
+                  message: "Every stored composition is permanently deleted, including the ones that still read correctly.",
+                  confirmLabel: "Start fresh",
+                  tone: "danger",
+                  onConfirm: () => void load(activeProviderId.value, "startFresh"),
+                })}
               />
-              <LibraryViewToggle value={view} onChange={setView} tableLabel="List" />
-              <Button size="sm" variant="ghost" disabled={busy} onClick={askClear}>
-                <TrashIcon size="sm" />
-                Clear library
+            );
+          }
+          return null;
+        }}
+      </Rebuild>
+      <Show when={computed(() => outcome.value === null && availableProviders.length > 0)}>
+        {() => <LibrarySkeleton columns={4} label="Loading compositions…" />}
+      </Show>
+      <Show when={computed(() => ready.value && summaries.value.length === 0)}>
+        {() => (
+          <LibraryEmpty
+            icon={ComposerIcon}
+            title="No compositions yet"
+            description="A composition is a reusable page structure built from the provider components."
+            action={
+              <Button variant="primary" disabled={busy} on:click={startCreate}>
+                <PlusIcon size="sm" />
+                Create your first composition
               </Button>
-            </>}
+            }
           />
-          {view === "table" ? <LibraryTable
-            caption="Compositions"
-            rows={query.rows}
-            contract={contract}
-            columns={[{ key: "nodes", header: "Nodes", variant: "num", cell: (row) => row.nodeCount }]}
-            selection={selection}
-            empty={<LibraryNoMatch search={query.search} onClearFilters={query.clearFilters} />}
-            bulkBar={selection.selectedCount > 0 ? (
-              <BulkBar
-                count={selection.selectedCount}
-                describeCount={(count) => `${count} ${count === 1 ? "composition" : "compositions"} selected`}
-                actions={[
-                  {
-                    id: "duplicate",
-                    label: "Duplicate",
-                    icon: DuplicateIcon,
-                    onSelect: () => void duplicateBulk(selection.selectedRows.map((row) => row.id)),
-                  },
-                  {
-                    id: "delete",
-                    label: "Delete",
-                    icon: TrashIcon,
-                    tone: "danger",
-                    onSelect: () => askDelete(selection.selectedRows.map((row) => row.name), selection.selectedRows.map((row) => row.id)),
-                  },
-                ]}
-                onClear={selection.clear}
-              />
-            ) : undefined}
-            rowMenu={(row) => ({
-              label: row.name,
-              open: { id: "open", label: "Open", kbd: "↵", href: contract.href!(row) },
-              actions: [
-                {
-                  id: "rename",
-                  label: "Rename…",
-                  icon: EditIcon,
-                  onSelect: () => { setOperationError(null); setRenameDialog({ id: row.id, name: row.name }); },
-                },
-                { id: "duplicate", label: "Duplicate", icon: DuplicateIcon, onSelect: () => void duplicateRow(row.id) },
-                { id: "export", label: "Export JSX", icon: DownloadIcon, onSelect: () => void exportRow(row) },
-              ],
-              destructive: [
-                { id: "delete", label: "Delete…", icon: TrashIcon, onSelect: () => askDelete([row.name], [row.id]) },
-              ],
-            })}
-          /> : (
-            <div class="cms-composition-library__cards" aria-label="Composition cards">
-              {query.rows.length === 0 ? <LibraryNoMatch search={query.search} onClearFilters={query.clearFilters} /> : query.rows.map((row, index) => {
-                const href = contract.href!(row);
-                const tag = kindTag(row);
-                const previewKey = `${activeProviderId}:${row.id}`;
-                return (
-                  <article key={previewKey} class="cms-composition-card">
-                    <CompositionLibraryPreview
-                      row={row}
-                      providerId={activeProviderId}
-                      componentProvider={componentProvider}
-                      intents={intents}
-                      device={thumbnailDevice}
-                      fallbackNear={index < COMPOSITION_PREVIEW_FALLBACK_LIMIT - (previewDialogNeedsBudget ? 1 : 0)}
-                      dialogOpen={openPreviewKey === previewKey}
-                      onDialogOpenChange={(open) => setOpenPreviewKey(open ? previewKey : null)}
-                    />
-                    <div class="cms-composition-card__body">
-                      <div class="cms-composition-card__meta">
-                        <Chip tone={tag.tone}>{tag.label}</Chip>
-                        <span>{row.nodeCount} node{row.nodeCount === 1 ? "" : "s"}</span>
-                      </div>
-                      <h2><a href={href}>{row.name}</a></h2>
-                      <p>{row.publicationKind === "global-template" ? `Shared layout · ${row.outletLabel || row.outletId || "content outlet"}` : row.publicationKind === "pattern" ? "Reusable structure copied on insertion." : "Local page structure."}</p>
-                    </div>
-                    <div class="cms-composition-card__actions">
-                      <a class="cms-btn cms-btn--sm" href={href}>Edit</a>
-                      <RowMenu
-                        label={row.name}
-                        open={{ id: "open", label: "Open", kbd: "↵", href }}
-                        actions={[
-                          { id: "rename", label: "Rename…", icon: EditIcon, onSelect: () => { setOperationError(null); setRenameDialog({ id: row.id, name: row.name }); } },
-                          { id: "duplicate", label: "Duplicate", icon: DuplicateIcon, onSelect: () => void duplicateRow(row.id) },
-                          { id: "export", label: "Export JSX", icon: DownloadIcon, onSelect: () => void exportRow(row) },
-                        ]}
-                        destructive={[{ id: "delete", label: "Delete…", icon: TrashIcon, onSelect: () => askDelete([row.name], [row.id]) }]}
-                      />
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-          <LibraryPagination summary={`${query.rows.length} of ${summaries.length} compositions · ${activeLabel}`} />
-        </>
-      ) : null}
+        )}
+      </Show>
+      <Show when={computed(() => ready.value && summaries.value.length > 0)}>
+        {() => (
+          <>
+            <LibraryToolbar
+              query={query}
+              searchLabel="Filter compositions"
+              searchPlaceholder="Filter by name or ID"
+              end={<>
+                <SegmentedControl<CompositionThumbnailDevice>
+                  label="Thumbnail device"
+                  size="sm"
+                  value={thumbnailDevice}
+                  onChange={(device) => { thumbnailDevice.value = device; }}
+                  options={[{ value: "desktop", label: "Desktop previews" }, { value: "phone", label: "Phone previews" }]}
+                />
+                <LibraryViewToggle value={view} onChange={(next) => { view.value = next; }} tableLabel="List" />
+                <Button size="sm" variant="ghost" disabled={busy} on:click={askClear}>
+                  <TrashIcon size="sm" />
+                  Clear library
+                </Button>
+              </>}
+            />
+            {/* Row links name the active provider, so a provider switch rebuilds the rows too. */}
+            <Keyed value={computed(() => `${view.value}\u0000${activeProviderId.value}`)} by={(key) => key}>
+              {() => (view.value === "table" ? (
+                <LibraryTable
+                  caption="Compositions"
+                  rows={query.rows}
+                  contract={contract}
+                  columns={[{ key: "nodes", header: "Nodes", variant: "num", cell: (row) => row.nodeCount }]}
+                  selection={selection}
+                  empty={noMatch()}
+                  bulkBar={bulkBar}
+                  rowMenu={(row) => ({
+                    label: row.name,
+                    open: { id: "open", label: "Open", kbd: "↵", href: hrefFor(row) },
+                    ...rowActions(row),
+                  })}
+                />
+              ) : (
+                <div class="cms-composition-library__cards" aria-label="Composition cards">
+                  <Show when={computed(() => query.rows.value.length === 0)} fallback={() => (
+                    <For each={query.rows} by={(row) => `${activeProviderId.value}:${row.id}:${row.updatedAt}`}>
+                      {(item, index) => {
+                        const row = item.value;
+                        const href = hrefFor(row);
+                        const tag = kindTag(row);
+                        const previewKey = `${activeProviderId.value}:${row.id}`;
+                        return (
+                          <article class="cms-composition-card">
+                            <CompositionLibraryPreview
+                              row={row}
+                              providerId={activeProviderId.value}
+                              componentProvider={componentProvider}
+                              intents={intents}
+                              device={thumbnailDevice}
+                              fallbackNear={computed(() => index.value < COMPOSITION_PREVIEW_FALLBACK_LIMIT - (previewDialogNeedsBudget.value ? 1 : 0))}
+                              dialogOpen={computed(() => openPreviewKey.value === previewKey)}
+                              onDialogOpenChange={(open) => { openPreviewKey.value = open ? previewKey : null; }}
+                              assetStore={assetStore}
+                            />
+                            <div class="cms-composition-card__body">
+                              <div class="cms-composition-card__meta">
+                                <Chip tone={tag.tone}>{tag.label}</Chip>
+                                <span>{`${row.nodeCount} node${row.nodeCount === 1 ? "" : "s"}`}</span>
+                              </div>
+                              <h2><a href={href}>{row.name}</a></h2>
+                              <p>{row.publicationKind === "global-template" ? `Shared layout · ${row.outletLabel || row.outletId || "content outlet"}` : row.publicationKind === "pattern" ? "Reusable structure copied on insertion." : "Local page structure."}</p>
+                            </div>
+                            <div class="cms-composition-card__actions">
+                              <a class="cms-btn cms-btn--sm" href={href}>Edit</a>
+                              <RowMenu label={row.name} open={{ id: "open", label: "Open", kbd: "↵", href }} {...rowActions(row)} />
+                            </div>
+                          </article>
+                        );
+                      }}
+                    </For>
+                  )}>
+                    {noMatch}
+                  </Show>
+                </div>
+              ))}
+            </Keyed>
+            <LibraryPagination summary={computed(() => `${query.rows.value.length} of ${summaries.value.length} compositions · ${activeLabel.value}`)} />
+          </>
+        )}
+      </Show>
       <NewCompositionDialog
         open={newDialogOpen}
         providerId={activeProviderId}
@@ -739,31 +803,34 @@ export function CompositionLibrary({
           } catch (reason) {
             return { status: "create-error" as const, message: message(reason, "The composition could not be created.") };
           }
-          commitSummary(created);
-          createdForNavigationRef.current = created;
+          if (!scope.abortSignal.aborted) commitSummary(created);
+          createdForNavigation = created;
           return openCreatedComposition(created);
         }}
         onRetryNavigation={async () => {
-          const created = createdForNavigationRef.current;
+          const created = createdForNavigation;
           return created
             ? openCreatedComposition(created)
             : { status: "navigation-error" as const, message: "There is no saved composition to retry opening." };
         }}
-        onClose={() => { createdForNavigationRef.current = null; setNewDialogOpen(false); }}
+        onClose={() => { createdForNavigation = null; newDialogOpen.value = false; }}
       />
       <CompositionRenameDialog
         state={renameDialog}
         busy={busy}
-        error={renameDialog ? operationError : null}
+        error={computed(() => (renameDialog.value ? operationError.value : null))}
         onSubmit={(id, name) => void rename(id, name)}
-        onClose={() => { setRenameDialog(null); setOperationError(null); }}
+        onClose={() => { renameDialog.value = null; operationError.value = null; }}
       />
       <ComposerExportDialog
-        open={exportDialog !== null}
-        onClose={() => setExportDialog(null)}
-        documentName={exportDialog?.name ?? ""}
-        result={exportDialog?.outcome.status === "ready" ? exportDialog.outcome.generation : null}
-        copyOutcome={exportDialog?.outcome ?? null}
+        open={computed(() => exportDialog.value !== null)}
+        onClose={() => { exportDialog.value = null; }}
+        documentName={computed(() => exportDialog.value?.name ?? "")}
+        result={computed(() => {
+          const current = exportDialog.value;
+          return current?.outcome.status === "ready" ? current.outcome.generation : null;
+        })}
+        copyOutcome={computed(() => exportDialog.value?.outcome ?? null)}
       />
       <ConfirmDialog {...confirm.dialogProps} />
     </LibraryPage>
