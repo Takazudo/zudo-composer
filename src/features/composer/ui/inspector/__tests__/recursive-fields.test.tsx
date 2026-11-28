@@ -114,7 +114,7 @@ function renderInspector(props: JsonObject = { actions: [{ label: "Get started",
 
 beforeEach(() => resetTestIds());
 
-describe("recursive contract-v2 inspector fields", async () => {
+describe("recursive contract-v2 inspector fields", () => {
   it("edits a Hero action at its exact nested path and keeps records as raw JSON", async () => {
     const { onUpdatePropsDebounced } = renderInspector();
     fireEvent.click(screen.getByRole("button", { name: "Get started" }));

@@ -76,7 +76,7 @@ function PatternPublicationHarness({ initialDocument = reusableDocument() }: { i
   );
 }
 
-describe("InspectorPanel — root/empty state", async () => {
+describe("InspectorPanel — root/empty state", () => {
   it("opens on Properties and shows an empty-composition note when the document has no nodes", async () => {
     renderPanel({ document: makeDocument([]), selectedId: null });
     expect(screen.getByRole("tab", { name: "Properties" })).toHaveAttribute("aria-selected", "true");
@@ -144,7 +144,7 @@ describe("InspectorPanel — root/empty state", async () => {
   });
 });
 
-describe("InspectorPanel — Reuse tab", async () => {
+describe("InspectorPanel — Reuse tab", () => {
   it("presents linked ownership on the Reuse tab, separately from the selected node's props", async () => {
     const onOpenSource = vi.fn();
     const onDetach = vi.fn();
@@ -387,7 +387,7 @@ describe("InspectorPanel — Reuse tab", async () => {
   });
 });
 
-describe("InspectorPanel — identity, parent and position", async () => {
+describe("InspectorPanel — identity, parent and position", () => {
   it("shows the component id, node id and a Document root parent for a top-level node", async () => {
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Hi" }, {}, "a")]);
     const { container } = renderPanel({ document: doc, selectedId: "a" });
@@ -431,7 +431,7 @@ describe("InspectorPanel — identity, parent and position", async () => {
   });
 });
 
-describe("InspectorPanel — Slots tab", async () => {
+describe("InspectorPanel — Slots tab", () => {
   it("lists every slot with its child count, an open-slot line, and jumps to one", async () => {
     const doc = makeDocument([
       makeNode(
@@ -537,7 +537,7 @@ describe("InspectorPanel — Slots tab", async () => {
   });
 });
 
-describe("InspectorPanel — Grammar for agents", async () => {
+describe("InspectorPanel — Grammar for agents", () => {
   beforeEach(() => {
     copyTextMock.mockReset();
   });
@@ -641,7 +641,7 @@ describe("InspectorPanel — Grammar for agents", async () => {
   });
 });
 
-describe("InspectorPanel — unaccepted-child diagnostics", async () => {
+describe("InspectorPanel — unaccepted-child diagnostics", () => {
   it("points at the slot rule when a node holds a child its own slot rejects", async () => {
     const doc = makeDocument([
       makeNode(
@@ -658,7 +658,7 @@ describe("InspectorPanel — unaccepted-child diagnostics", async () => {
   });
 });
 
-describe("InspectorPanel — field rendering + commits", async () => {
+describe("InspectorPanel — field rendering + commits", () => {
   function widgetDoc() {
     return makeDocument([
       makeNode(
@@ -763,7 +763,7 @@ describe("InspectorPanel — field rendering + commits", async () => {
   });
 });
 
-describe("InspectorPanel — read-only / preview mode", async () => {
+describe("InspectorPanel — read-only / preview mode", () => {
   it("disables every field control and the node actions while keeping values visible", async () => {
     const doc = makeDocument([
       makeNode(TEST_COMPONENT_IDS.widget, { title: "Locked", note: "n", enabled: true, count: 3, variant: "solid", tint: "#000" }, {}, "w"),
@@ -776,7 +776,7 @@ describe("InspectorPanel — read-only / preview mode", async () => {
   });
 });
 
-describe("InspectorPanel — opaque nodes", async () => {
+describe("InspectorPanel — opaque nodes", () => {
   it("shows diagnostics + raw identity, no editable fields, but keeps Delete", async () => {
     const doc = makeDocument([makeNode("unknown.thing", { anything: "x" }, {}, "ghost")]);
     const { container, onRemove } = renderPanel({ document: doc, selectedId: "ghost" });
@@ -803,7 +803,7 @@ describe("InspectorPanel — opaque nodes", async () => {
   });
 });
 
-describe("InspectorPanel — DOM scoping sanity", async () => {
+describe("InspectorPanel — DOM scoping sanity", () => {
   it("does not leak diagnostics markup when the node is editable", async () => {
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Hi" }, {}, "a")]);
     const { container } = renderPanel({ document: doc, selectedId: "a" });

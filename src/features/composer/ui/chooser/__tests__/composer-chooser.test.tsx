@@ -115,7 +115,7 @@ const patternCatalog: ReuseCatalogOutcome = {
   ],
 };
 
-describe("ComposerChooser — modal behavior", async () => {
+describe("ComposerChooser — modal behavior", () => {
   it("uses the full-screen dialog size", async () => {
     render(<ComposerChooser {...baseProps()} />);
     await settle();
@@ -204,7 +204,7 @@ describe("ComposerChooser — modal behavior", async () => {
   });
 });
 
-describe("ComposerChooser — target capture survives a selection change", async () => {
+describe("ComposerChooser — target capture survives a selection change", () => {
   it("keeps adding to the target captured at open time even after the target prop changes while open", async () => {
     resetFixtureIds();
     const onAdd = vi.fn();
@@ -268,7 +268,7 @@ describe("ComposerChooser — target capture survives a selection change", async
   });
 });
 
-describe("ComposerChooser — search / category / constraint filters", async () => {
+describe("ComposerChooser — search / category / constraint filters", () => {
   it("shows the destination label and every eligible component with a result count", async () => {
     const props = baseProps();
     render(<ComposerChooser {...props} />);
@@ -361,7 +361,7 @@ function hiddenDisclosure(): HTMLDetailsElement | null {
   return document.querySelector<HTMLDetailsElement>(".sg-composer-chooser-hidden");
 }
 
-describe("ComposerChooser — restricted target rule", async () => {
+describe("ComposerChooser — restricted target rule", () => {
   it("renders no rule header, allowed section, disclosure, or footer note for an open target", async () => {
     render(<ComposerChooser {...baseProps()} />);
     await settle();
@@ -450,7 +450,7 @@ describe("ComposerChooser — restricted target rule", async () => {
   });
 });
 
-describe("ComposerChooser — Enter / Escape and successful add", async () => {
+describe("ComposerChooser — Enter / Escape and successful add", () => {
   it("Enter in the search field adds the sole matching result", async () => {
     const props = baseProps({ target: rootTarget });
     render(<ComposerChooser {...props} />);
@@ -484,7 +484,7 @@ describe("ComposerChooser — Enter / Escape and successful add", async () => {
   });
 });
 
-describe("ComposerChooser — published Pattern insertion", async () => {
+describe("ComposerChooser — published Pattern insertion", () => {
   it("keeps Components as the default, then loads a full multi-root Pattern for the isolated preview", async () => {
     const source = savedPattern();
     const loadPattern = vi.fn(async () => ({
@@ -578,7 +578,7 @@ describe("ComposerChooser — published Pattern insertion", async () => {
   });
 });
 
-describe("ComposerChooser — live preview pane (issue #254)", async () => {
+describe("ComposerChooser — live preview pane (issue #254)", () => {
   it("shows an empty-state hint before the first hover/focus", async () => {
     const harness = makeChooserPreviewBridgeHarness(fixtureComponentProvider.manifest);
     const props = baseProps({ previewCreateBridge: harness.createBridge, previewLocation: harness.location });
@@ -717,7 +717,7 @@ describe("ComposerChooser — live preview pane (issue #254)", async () => {
 });
 
 
-describe("chooser card and list views", async () => {
+describe("chooser card and list views", () => {
   beforeEach(() => localStorage.removeItem("zudo-composer.chooser.view"));
   afterEach(() => { vi.restoreAllMocks(); localStorage.removeItem("zudo-composer.chooser.view"); });
 

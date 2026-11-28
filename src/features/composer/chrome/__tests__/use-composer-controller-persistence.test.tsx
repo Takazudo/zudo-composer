@@ -1,5 +1,5 @@
 import "../../test-support/cleanup";
-import { act, renderController, type ControllerView as ComposerController } from "./controller-harness";
+import { act, renderController } from "./controller-harness";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createSaveQueue,
