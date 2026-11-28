@@ -160,7 +160,7 @@ describe("forbidden-marker regressions", () => {
     const devMetadata = await readFile(join(directory, "dev-jsx-metadata.js.txt"), "utf8");
     expect(DEV_JSX_SITE_MARKER.test(devMetadata)).toBe(true);
     expect(DEV_JSX_SITE_MARKER.test(runtimeRead)).toBe(false);
-    for (const literal of ["{columnNumber:5}", "{ columnNumber: 12 }", "columnNumber :0"]) {
+    for (const literal of ["{columnNumber:5}", "{ columnNumber: 12 }", "columnNumber :0", '{"columnNumber":12}', "{ 'columnNumber': 3 }"]) {
       expect(() => assertDemoEditorText(literal, "assets/demo-pack.js")).toThrow("forbidden marker");
     }
   });
