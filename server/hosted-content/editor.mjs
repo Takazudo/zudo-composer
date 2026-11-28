@@ -38,7 +38,8 @@ function mountOwnedChild(node, options) {
 		signal: options.signal,
 		report: (diagnostic) => {
 			diagnostics.push(diagnostic);
-			options.report?.(diagnostic);
+			if (options.report) options.report(diagnostic);
+			else console.error(`${diagnostic.code} at ${diagnostic.path} (${diagnostic.component}, ${diagnostic.phase}): ${diagnostic.actual}`, diagnostic);
 		}
 	});
 	let stopped = false;
