@@ -34,7 +34,6 @@ import { notifyRouteSelection, parseIntent } from "../../../app/route-intents";
 import type { AppServices } from "../../../app/services";
 import { Banner, Button, EmptyState } from "../../../components/ui";
 import { Keyed } from "../../../runtime";
-import { memoOn } from "../reactive/memo";
 import type { ComposerComponentProvider } from "../active-pack";
 import { CompositionLibrary } from "../library";
 import type { CompositionLibraryIntents } from "../library";
@@ -56,6 +55,7 @@ import {
 import { ComposerIntegration } from "./composer-integration";
 import type { ComposerIntegrationProps } from "./composer-integration";
 import type { ReuseDependencyCheck } from "../ui/shared/reuse-authoring-contract";
+import { derive } from "../../../components/reactive";
 
 export interface ComposerBrowserNavigation extends ComposerTransitionHistory {
   read(): ComposerRouteLocation;
@@ -237,7 +237,7 @@ export function ProductionComposerApp({
   let locationGeneration = 0;
   let recoveryGeneration = 0;
 
-  const activeRef = memoOn(
+  const activeRef = derive(
     () => {
       const current = state.value;
       const ref = current?.view === "detail" ? routeRef(current.route) : null;
@@ -279,17 +279,17 @@ export function ProductionComposerApp({
     releaseRegistration = null;
   });
 
-  const activeReuseService = memoOn(
+  const activeReuseService = derive(
     () => [activeProvider.value] as const,
     (provider) => (provider ? createCompositionReuseService(provider.store, reuseManifest) : null),
   );
-  const activeLifecycleService = memoOn(
+  const activeLifecycleService = derive(
     () => [activeProvider.value] as const,
     (provider) => provider
       ? createCompositionReuseLifecycleService(provider, { manifest: reuseManifest, nodeIdFactory, now: () => now() })
       : null,
   );
-  const activeReuseResolution = memoOn(
+  const activeReuseResolution = derive(
     () => [activeRef.value, activeReuseService.value] as const,
     (ref, service) => (ref && service ? { ref, resolver: service } : undefined),
   );

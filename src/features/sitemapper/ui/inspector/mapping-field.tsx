@@ -1,8 +1,7 @@
 import { computed, Show, signal, type Child } from "@takazudo/zfb/zudo-react";
-import { toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { followModel, memo, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Rebuild } from "../../../../components/rebuild";
 import { Keyed } from "../../../../runtime";
-import { followModel, memo } from "../../../mapping/signals";
 import { EditIcon, MappingIcon } from "../../../../components/icons";
 import { Banner, Button, Chip, EmptyState, Field, Select } from "../../../../components/ui";
 import type { MappingRef, SitemapPageSource } from "../../../../sitemapper/model";

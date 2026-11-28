@@ -62,10 +62,9 @@ import {
   hiddenComponentNote,
 } from "./chooser-rule";
 import { LibraryViewToggle } from "../../../../components/library-page/library-toolbar";
-import { read, toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { memo, read, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Rebuild } from "../../../../components/rebuild";
 import { Keyed } from "../../../../runtime";
-import { memo } from "../../reactive/memo";
 import { ChooserCardGrid } from "./chooser-card-grid";
 import { ChooserPreviewHost } from "./chooser-preview-host";
 import { Dialog } from "../../../../components/overlay";

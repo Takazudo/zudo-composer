@@ -2,7 +2,7 @@ import { computed, For, getScope, Show, signal, type Child, type ReadonlySignal,
 import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, ErrorIcon, InfoIcon, PlusIcon, TrashIcon } from "../../components/icons";
 import { formatLibraryTimestampFull } from "../../components/library-page";
 import { createMenu, Menu, MenuItem, MenuSeparator } from "../../components/overlay";
-import { toSignal, type MaybeSignal } from "../../components/reactive";
+import { keyedBy, toSignal, type MaybeSignal } from "../../components/reactive";
 import { Rebuild } from "../../components/rebuild";
 import { Button, Chip, DataTable, Field, Input, Select, Switch, Textarea, type DataTableColumn, type FieldControl } from "../../components/ui";
 import { createDomId } from "../../components/use-dom-id";
@@ -14,7 +14,7 @@ import type { ContentAuthoringController, ContentAuthoringState } from "./contro
 import { EntryHistory } from "./entry-history";
 import { FieldKindPicker, contentFieldKindPresentation } from "./field-kind-picker";
 import { MarkdownEditor } from "./markdown-editor";
-import { externalDraft, followExternal, stableComputed } from "./reactive-draft";
+import { externalDraft, followExternal } from "./reactive-draft";
 import { deriveSlug } from "./slug";
 import { StructuredValueEditor, type ContentAssetPickerRenderer } from "./structured-field-editor";
 import type { ProductionProviderIntegration } from "../../app/provider-integration";
@@ -134,7 +134,7 @@ function ChoiceOptionsEditor({ field, controller, run }: { field: ReadonlySignal
   const update = (next: readonly ChoiceOption[]) => { draft.value = next; if (next.length && next.every((option) => option.value.trim() && option.label.trim()) && new Set(next.map((option) => option.value)).size === next.length) run(() => controller.replaceField(field.value.id, { ...field.value, options: [...next] })); };
   const move = (index: number, direction: -1 | 1) => { const target = index + direction; if (target < 0 || target >= draft.value.length) return; const next = [...draft.value]; [next[index], next[target]] = [next[target]!, next[index]!]; update(next); };
   const edit = (index: number, part: "value" | "label", text: string) => update(draft.value.map((item, candidate) => candidate === index ? { ...item, [part]: text } : item));
-  const indexes = stableComputed(() => draft.value.map((_, index) => index), (items) => String(items.length));
+  const indexes = keyedBy(() => draft.value.map((_, index) => index), (items) => String(items.length));
   return <div class="sg-content-choice-options"><For each={indexes} by={(index) => index}>{(slot) => {
     const index = slot.value;
     const valueDraft = externalDraft(getScope(), computed(() => draft.value[index]?.value ?? ""));
@@ -209,7 +209,7 @@ export function ContentSchemaAuthor({ state: suppliedState, controller, run, onR
   const collection = computed(() => model.value.document.kind === "collection");
   // The table rebuilds only when the set or order of fields changes, so a cell
   // being typed in stays mounted while its own edit round-trips.
-  const rows = stableComputed(() => fields.value, (list) => `${model.value.id}\u0000${list.map((field) => field.id).join("\u0000")}`);
+  const rows = keyedBy(() => fields.value, (list) => `${model.value.id}\u0000${list.map((field) => field.id).join("\u0000")}`);
   const fieldOf = (initial: ContentFieldDefinition): ReadonlySignal<ContentFieldDefinition> => {
     let last = initial;
     return computed(() => { const found = fields.value.find((field) => field.id === initial.id); if (found) last = found; return last; });

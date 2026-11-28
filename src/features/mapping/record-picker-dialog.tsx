@@ -2,10 +2,9 @@ import { computed, getScope, Show, signal, type Child, type Ref } from "@takazud
 import { SearchIcon, type IconComponent } from "../../components/icons";
 import { matchesLibrarySearch } from "../../components/library-page";
 import { Dialog } from "../../components/overlay";
-import { toSignal, type MaybeSignal } from "../../components/reactive";
+import { derive, memo, toSignal, type MaybeSignal } from "../../components/reactive";
 import { Rebuild } from "../../components/rebuild";
 import { Button, EmptyState, Input } from "../../components/ui";
-import { derive, memo } from "./signals";
 
 // The toolbar's two source/target pickers. They replace the editor's old
 // `<select>` pair: a catalog is a list of records to search, not a dropdown to

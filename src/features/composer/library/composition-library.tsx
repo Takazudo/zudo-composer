@@ -41,12 +41,11 @@ import {
   type RowMenuProps,
 } from "../../../components/library-page";
 import { ConfirmDialog, createMenu, Dialog, Menu, MenuRadioItem } from "../../../components/overlay";
-import { read, type MaybeSignal } from "../../../components/reactive";
+import { derive, read, type MaybeSignal } from "../../../components/reactive";
 import { Rebuild } from "../../../components/rebuild";
 import { Banner, Button, Chip, Field, Input, SegmentedControl } from "../../../components/ui";
 import { Keyed } from "../../../runtime";
 import type { ComposerComponentProvider } from "../active-pack";
-import { memoOn } from "../reactive/memo";
 import { formatComposerRoute } from "../routing";
 import { ComposerExportDialog } from "../ui/export/export-dialog";
 import { NewCompositionDialog } from "./new-composition-dialog";
@@ -590,7 +589,7 @@ export function CompositionLibrary({
   });
 
   const hasSelection = computed(() => selection.selectedCount.value > 0);
-  const bulkBar = memoOn(
+  const bulkBar = derive(
     () => [hasSelection.value] as const,
     (selected): Child => (selected ? (
       <BulkBar

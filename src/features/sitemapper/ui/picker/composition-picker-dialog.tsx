@@ -1,13 +1,12 @@
 import { computed, For, getScope, Show, signal, type Child } from "@takazudo/zfb/zudo-react";
 import { ComposerIcon, SearchIcon } from "../../../../components/icons";
 import { Dialog } from "../../../../components/overlay";
-import { toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { derive, memo, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Rebuild } from "../../../../components/rebuild";
 import { Banner, Button, EmptyState, Input } from "../../../../components/ui";
 import { matchesLibrarySearch } from "../../../../components/library-page";
 import type { CatalogEntry, CompositionCatalogListOutcome } from "../../../../sitemapper/catalog";
 import type { CompositionRef } from "../../../../sitemapper/model";
-import { derive, memo } from "../../../mapping/signals";
 
 // The Composition chooser, on the shared modal. It keeps its own catalog
 // request so a provider failure is reported per provider rather than sinking

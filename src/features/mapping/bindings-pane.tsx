@@ -19,7 +19,6 @@ import {
 import type { ContentFieldDefinition } from "../../content";
 import type { MappingBinding, MappingTarget, MappingTransform } from "../../mapping";
 import { BindMenu } from "./bind-menu";
-import { followModel, keyedBy, memo } from "./signals";
 import {
   compatibleSourceGroups,
   fieldIcon,
@@ -35,6 +34,7 @@ import {
   type MappingBindingRow,
 } from "./presentation";
 import type { MappingEditorState } from "./controller";
+import { followModel, keyedBy, memo } from "../../components/reactive";
 
 // The binding board: ONE ROW PER BINDING. Source, transform and target used to
 // be three stacked card regions per binding, which put a three-binding Mapping

@@ -1,11 +1,10 @@
 import { computed, getScope, Show, signal, type Child, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
 import { Dialog } from "../../components/overlay";
-import { read, type MaybeSignal } from "../../components/reactive";
+import { followModel, read, type MaybeSignal } from "../../components/reactive";
 import { Keyed } from "../../runtime";
 import { Banner, Field, Input, isComposingKey, Select } from "../../components/ui";
 import type { MappingEditorState } from "./controller";
 import { refKey } from "./presentation";
-import { followModel } from "./signals";
 
 // Creating a Mapping: a name, the Content model it reads, the Composition it
 // writes. The two selects carry PROVIDER-QUALIFIED RECORD IDS rather than list

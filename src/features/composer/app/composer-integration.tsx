@@ -46,14 +46,13 @@ import { RecordTitle } from "../../../components/editor-chrome";
 import { ConfirmDialog, Menu, MenuItem, MenuSeparator } from "../../../components/overlay";
 import { Banner, Button, Chip } from "../../../components/ui";
 import { RefreshIcon } from "../../../components/icons";
-import { read, type MaybeSignal } from "../../../components/reactive";
+import { derive, memo, read, type MaybeSignal } from "../../../components/reactive";
 import { Rebuild } from "../../../components/rebuild";
 import { Keyed } from "../../../runtime";
 import type { ComposerComponentProvider } from "../active-pack";
 import { ComposerWorkspace, createComposerEditorChrome } from "../chrome/composer-workspace";
 import type { ComposerSaveStatus } from "../chrome/controller-model";
 import type { ComposerControllerOptions } from "../chrome/use-composer-controller";
-import { memo, memoOn } from "../reactive/memo";
 import { ComposerStructurePane, type SelectedSlot } from "../ui/tree/structure-pane";
 import { ComposerChooser } from "../ui/chooser/composer-chooser";
 import { QuickInsertPopover } from "../ui/quick-insert/quick-insert-popover";
@@ -150,7 +149,7 @@ function publicationChip(publication: CompositionPublication | undefined): Child
 export function ComposerIntegration(props: ComposerIntegrationProps): Child {
   const scope = getScope();
   const linkedRetryEpoch = signal(0);
-  const effectiveReuseResolution = memoOn(
+  const effectiveReuseResolution = derive(
     () => [read(props.reuseResolution), linkedRetryEpoch.value] as const,
     (reuseResolution, epoch) => reuseResolution
       ? {
@@ -195,17 +194,17 @@ export function ComposerIntegration(props: ComposerIntegrationProps): Child {
     return slot && slot.parentId === selectedId.value ? slot : null;
   });
 
-  const linkedView = memoOn(
+  const linkedView = derive(
     () => [api.reuseResolution.value, document.value] as const,
     (resolution, current) => resolution
       ? materializeGlobalTemplateView({ ...controller.record, document: current }, resolution)
       : null,
   );
-  const linkedPresentation = memoOn(
+  const linkedPresentation = derive(
     () => [linkedView.value] as const,
     (view) => (view ? linkedEditorPresentation(view) : LOCAL_PRESENTATION),
   );
-  const previewSnapshot = memoOn(
+  const previewSnapshot = derive(
     () => [linkedView.value, document.value] as const,
     (view, current): ComposerPreviewSnapshot => {
       if (view?.status !== "resolved") return localPreviewSnapshot(current, controller.record.id);
@@ -220,7 +219,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): Child {
       };
     },
   );
-  const linkedActions = memoOn(
+  const linkedActions = derive(
     () => [linkedView.value] as const,
     (view): LinkedEditorLifecycleActions | undefined => {
       if (!view || view.status === "local") return undefined;
@@ -239,7 +238,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): Child {
   const patternCatalog = signal<ReuseCatalogOutcome | undefined>(undefined);
   const patternCatalogLoading = signal(false);
   let patternCatalogRequest = 0;
-  const browserCopyOutcome = memoOn(
+  const browserCopyOutcome = derive(
     () => [exportState.exportDocument.value, api.reuseResolution.value] as const,
     (exportDocument, resolution) => exportDocument
       ? generateBrowserJsxExport({ record: { ...controller.record, document: exportDocument }, manifest, resolution })
@@ -369,7 +368,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): Child {
   const navigationRetrying = computed(() => Boolean(read(props.navigationRetrying)));
   const recoveryRetrying = computed(() => Boolean(read(props.recoveryRetrying)));
   const retryNavigation = computed(() => read(props.onRetryNavigation));
-  const banner = memoOn(
+  const banner = derive(
     () => [hasNavigationError.value, hasRecoveryNotice.value, Boolean(retryNavigation.value)] as const,
     (navigation, recovery, canRetryNavigation): Child => {
       if (!navigation && !recovery) return null;

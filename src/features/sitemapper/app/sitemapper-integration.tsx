@@ -12,7 +12,6 @@ import { DuplicateIcon, EditIcon, EllipsisIcon, MinusIcon, PlusIcon, TrashIcon }
 import { createLibraryConfirm } from "../../../components/library-page";
 import { ConfirmDialog, createMenu, Menu, MenuItem, MenuSeparator } from "../../../components/overlay";
 import { liveSlot, Rebuild } from "../../../components/rebuild";
-import { derive } from "../../mapping/signals";
 import { Banner, Button, SegmentedControl } from "../../../components/ui";
 import { cloneJson, createUuidIdFactory, type IdFactory } from "../../../shared";
 import { subscribePersistenceChanges } from "../../../shared/persistence-generation";
@@ -41,6 +40,7 @@ import { withSitemapperWorkspaceLock } from "./sitemapper-workspace-lock";
 import type { SitemapperSaveStatus } from "./controller-model";
 import { sitemapperHref, SITEMAPPER_ROUTE } from "./sitemapper-intent";
 import { createSitemapperController } from "./use-sitemapper-controller";
+import { derive } from "../../../components/reactive";
 
 const ZOOM_STEP = 0.1;
 

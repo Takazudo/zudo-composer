@@ -1,8 +1,7 @@
 import { computed, For, getScope, Show, signal, type Child, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
 import { SitemapperIcon } from "../../../../components/icons";
-import { toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { derive, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Button, EmptyState, SegmentedControl } from "../../../../components/ui";
-import { derive } from "../../../mapping/signals";
 import type { SitemapDocument, SitemapNode as SitemapNodeModel } from "../../../../sitemapper/model";
 import SitemapConnectors from "./connectors";
 import {

@@ -9,7 +9,7 @@ import type { ComposerComponentProvider } from "../composer/component-provider";
 import type { MappingEditorController, MappingEditorState } from "./controller";
 import { MappingPreviewHost } from "./preview-host";
 import { attachmentTargetKey } from "./attachments";
-import { memo } from "./signals";
+import { memo } from "../../components/reactive";
 
 type AttachmentTargets = NonNullable<MappingEditorState["attachments"]["snapshot"]>["targets"];
 

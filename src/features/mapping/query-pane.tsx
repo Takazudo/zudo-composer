@@ -1,6 +1,6 @@
 import { computed, For, Show, type Child, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
 import { CollectionIcon, FilterIcon, MinusIcon, PlusIcon, SortIcon } from "../../components/icons";
-import { read, type MaybeSignal } from "../../components/reactive";
+import { derive, followModel, memo, read, type MaybeSignal } from "../../components/reactive";
 import { Rebuild } from "../../components/rebuild";
 import { Keyed } from "../../runtime";
 import { Banner, Button, Chip, EmptyState, Field, Input, PaneSection, Select } from "../../components/ui";
@@ -10,7 +10,7 @@ import type { MappingCollectionCondition, MappingCollectionConditionOperator, Ma
 import type { MappingEditorState } from "./controller";
 import { ReferenceQueryValue } from "./reference-query-value";
 import { entryLabel, fieldKindLabel } from "./presentation";
-import { derive, followModel, memo, writeDomValue } from "./signals";
+import { writeDomValue } from "./signals";
 
 export interface CollectionQueryPaneProps {
   referenceEntries?: (target: { providerId: string; recordId: string }) => Promise<readonly { ref: { providerId: string; modelId: string; recordId: string }; label: string }[]>;

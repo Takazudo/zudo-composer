@@ -1,14 +1,13 @@
 import type { JsonValue } from "@zudo-composer/component-contract";
 import { computed, For, getScope, Show, signal, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import { ArrowRightIcon, PlusIcon, SearchIcon, WarningIcon } from "../../components/icons";
-import { read, toSignal, type MaybeSignal } from "../../components/reactive";
+import { keyedBy, read, toSignal, type MaybeSignal } from "../../components/reactive";
 import { Rebuild } from "../../components/rebuild";
 import { Button, Checkbox, Chip, DataTable, EmptyState, Input, SegmentedControl, type DataTableColumn } from "../../components/ui";
 import { formatIntent } from "../../app/route-intents";
 import type { ContentEntryRecord, ContentModelRecord, ContentValueSchema } from "../../content";
 import type { ContentAuthoringController, ContentAuthoringState } from "./controller";
 import { contentEntryLabel } from "./presentation";
-import { stableComputed } from "./reactive-draft";
 
 type LifecycleFilter = "all" | ContentEntryRecord["lifecycle"] | "incomplete";
 
@@ -63,7 +62,7 @@ export function ContentUsedByView({ state: suppliedState, controller }: { state:
   const state = toSignal(suppliedState);
   const inverseIds = computed(() => (state.value.model?.document.presentation?.inverses ?? []).map((inverse) => inverse.id));
   const inverseEditors = <For each={inverseIds} by={(id) => id}>{(id) => <InverseEditor state={state} controller={controller} inverseId={id.value} />}</For>;
-  const view = stableComputed(() => ({ status: state.value.graphStatus, message: state.value.graphMessage, incoming: state.value.incoming }), (current) => JSON.stringify(current));
+  const view = keyedBy(() => ({ status: state.value.graphStatus, message: state.value.graphMessage, incoming: state.value.incoming }), (current) => JSON.stringify(current));
   const summary = <Rebuild value={view}>{({ status, message, incoming }) => {
     if (status === "unavailable") return <EmptyState inline title="Usage is unavailable" description={message || "Connect every Content provider and retry the graph scan before making destructive claims."} />;
     return incoming.length ? <ul class="sg-content-used-by">{incoming.map(({ owner, ordered }) => { const topFieldId = typeof owner.path[0] === "string" ? owner.path[0] : owner.fieldId; return <li><a href={formatIntent({ route: "content", providerId: owner.entry.providerId, modelId: owner.entry.modelId, entryId: owner.entry.recordId, fieldId: topFieldId, ...(owner.path.length > 1 ? { valuePath: owner.path.slice(1) } : {}) })}><span><strong>{owner.entry.recordId}</strong><small>{ordered ? "Ordered reference" : "Reference"} · {owner.entry.providerId}</small></span><ArrowRightIcon size="sm" /></a></li>; })}</ul> : <EmptyState inline title="No incoming Content references" description="No canonical Content relationship currently points to this Entry." />;

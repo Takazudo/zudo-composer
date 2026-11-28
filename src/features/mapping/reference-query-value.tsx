@@ -1,10 +1,9 @@
 import { computed, getScope, Show, signal, type Child } from "@takazudo/zfb/zudo-react";
-import { read, type MaybeSignal } from "../../components/reactive";
+import { followModel, read, type MaybeSignal } from "../../components/reactive";
 import { Keyed } from "../../runtime";
 import { Button, Select } from "../../components/ui";
 import type { ContentEntryRef } from "../../content";
 import type { CollectionQueryPaneProps } from "./query-pane";
-import { followModel } from "./signals";
 const key = (ref: ContentEntryRef) => JSON.stringify([ref.providerId, ref.modelId, ref.recordId]);
 function reference(value: unknown): ContentEntryRef | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;

@@ -52,7 +52,7 @@ import {
 } from "../../../../composer/browser";
 import { RailCollapseButton, type EditorRailsController } from "../../../../components/editor-chrome";
 import { CopyIcon, DuplicateIcon, PlusIcon, SlotIcon, TrashIcon } from "../../../../components/icons";
-import { read, toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { memo, read, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Rebuild } from "../../../../components/rebuild";
 import { Keyed } from "../../../../runtime";
 import {
@@ -71,7 +71,6 @@ import type { PaneTab } from "../../../../components/ui";
 import type { ComponentDefinition } from "../../active-pack";
 import type { ComposerMode } from "../../chrome/controller-model";
 import type { PropPath, PropCoalescing } from "../../chrome/history-model";
-import { memo } from "../../reactive/memo";
 import { describeSlotRule, partitionCatalog, type SlotRule } from "../slot-rules";
 import type { SelectedSlot } from "../tree/structure-pane";
 import { ComposerCopyButton } from "../export/copy-button";

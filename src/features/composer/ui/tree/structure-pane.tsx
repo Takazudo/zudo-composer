@@ -24,11 +24,10 @@ import type {
 import { RailCollapseButton, type EditorChromeController, type EditorRailsController } from "../../../../components/editor-chrome";
 import { ArrowRightIcon, EllipsisIcon, PlusIcon, RefreshIcon } from "../../../../components/icons";
 import { OutlineTree, type OutlineInsertSession, type OutlineInsertTarget, type OutlineNode } from "../../../../components/outline-tree";
-import { read, toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { derive, memo, read, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Rebuild } from "../../../../components/rebuild";
 import { Banner, Button, Pane, PaneBody, PaneHeader } from "../../../../components/ui";
 import type { ComponentDefinition } from "../../active-pack";
-import { memo, memoOn } from "../../reactive/memo";
 import { buildCatalogById } from "./tree-helpers";
 import {
   ancestorRowIds,
@@ -160,10 +159,10 @@ export function ComposerStructurePane({
   const entries = toSignal(entriesProp);
   const selectedId = toSignal(selectedIdProp);
   const selectedSlot = toSignal(selectedSlotProp);
-  const catalogById = memoOn(() => [entries.value] as const, (current) => buildCatalogById(current));
+  const catalogById = derive(() => [entries.value] as const, (current) => buildCatalogById(current));
   // Cached on its inputs: a fresh outline gives every row new node identities,
   // which remounts each row's actions and drops focus from a menu trigger.
-  const outline = memoOn(
+  const outline = derive(
     () => [document.value, manifest.value, catalogById.value, entries.value, read(rootPolicyProp), read(readOnlyProp)] as const,
     (currentDocument, currentManifest, currentCatalogById, catalog, rootPolicy, readOnly): ComposerOutline =>
       buildComposerOutline({ document: currentDocument, manifest: currentManifest, catalogById: currentCatalogById, catalog, rootPolicy, readOnly }),

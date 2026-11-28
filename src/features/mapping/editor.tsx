@@ -18,7 +18,6 @@ import {
 import { createLibraryConfirm } from "../../components/library-page";
 import { ConfirmDialog, createMenu, Menu, MenuItem, MenuSeparator } from "../../components/overlay";
 import { liveSlot, Rebuild } from "../../components/rebuild";
-import { derive, memo } from "./signals";
 import { Banner, Button } from "../../components/ui";
 import type { MappingCollectionQuery } from "../../mapping";
 import { formatComposerRoute } from "../composer/routing";
@@ -32,6 +31,7 @@ import { buildBindingRows, firstCompatibleProjection, firstCompatibleTransform, 
 import { RecordPickerDialog } from "./record-picker-dialog";
 import { SourcePane } from "./source-pane";
 import { PinPickerDialog } from "./pin-picker-dialog";
+import { derive, memo } from "../../components/reactive";
 
 // The Mapping editor on the shared record chrome: back, an inline-editable
 // name, the source/target pair in the centre, and Test + Save on the right.

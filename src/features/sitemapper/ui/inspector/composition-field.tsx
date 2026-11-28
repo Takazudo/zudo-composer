@@ -1,8 +1,7 @@
 import { computed, getScope, Show, signal, type Child } from "@takazudo/zfb/zudo-react";
 import { formatIntent } from "../../../../app/route-intents";
-import { toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { keyedBy, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Rebuild } from "../../../../components/rebuild";
-import { keyedBy } from "../../../mapping/signals";
 import { ComposerIcon, EditIcon, ExternalLinkIcon } from "../../../../components/icons";
 import { Banner, Button, EmptyState } from "../../../../components/ui";
 import type { CompositionCatalog, ResolveOutcome } from "../../../../sitemapper/catalog";

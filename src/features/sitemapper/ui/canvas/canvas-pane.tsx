@@ -1,6 +1,5 @@
 import { computed, type Child } from "@takazudo/zfb/zudo-react";
-import { toSignal, type MaybeSignal } from "../../../../components/reactive";
-import { derive } from "../../../mapping/signals";
+import { derive, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { liveSlot, Rebuild, type LiveChild } from "../../../../components/rebuild";
 import { ComposerIcon, MappingIcon } from "../../../../components/icons";
 import { Chip, DataTable, Pane, PaneBody, PaneHeader, type DataTableColumn } from "../../../../components/ui";

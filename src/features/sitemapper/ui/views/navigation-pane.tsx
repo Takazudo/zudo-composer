@@ -1,8 +1,7 @@
 import { computed, For, Show, signal, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
-import { toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { derive, followModel, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { liveSlot, Rebuild, type LiveChild } from "../../../../components/rebuild";
 import { Keyed } from "../../../../runtime";
-import { derive, followModel } from "../../../mapping/signals";
 import { Button, Checkbox, Field, Input, Pane, PaneBody, PaneHeader, PaneSection, Select } from "../../../../components/ui";
 import { createUuidIdFactory } from "../../../../shared";
 import type { SitemapDocument, SitemapNavigationDestination, SitemapNavigationItem } from "../../../../sitemapper/model";

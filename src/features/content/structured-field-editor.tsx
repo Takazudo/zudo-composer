@@ -3,13 +3,13 @@ import type { JsonValue } from "@zudo-composer/component-contract";
 import { encodeContentValuePath } from "../../app/route-intents";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, TrashIcon, WarningIcon } from "../../components/icons";
 import { Rebuild } from "../../components/rebuild";
-import { toSignal, type MaybeSignal } from "../../components/reactive";
+import { keyedBy, toSignal, type MaybeSignal } from "../../components/reactive";
 import { Button, Checkbox, Field, Select, type FieldControl } from "../../components/ui";
 import type { ContentEntryRef, ContentFieldDefinition, ContentAssetRef, ContentAssetUse, ContentValueSchema } from "../../content";
 import type { ContentAuthoringController } from "./controller";
 import { ContentScalarControl } from "./scalar-control";
 import { AssetUseCard } from "./asset-use-card";
-import { externalDraft, stableComputed } from "./reactive-draft";
+import { externalDraft } from "./reactive-draft";
 
 type ContentAuthorRun = (action: () => void | Promise<void>) => void;
 export type ContentAssetPickerRenderer = (request: {
@@ -38,7 +38,7 @@ function ReferenceControl({ schema, value, path, label, multiple, controller, co
   const errorLine = <Show when={computed(() => error.value !== null)}>{() => <p class="sg-content-field-error"><WarningIcon size="xs" />{computed(() => error.value ?? "")}</p>}</Show>;
   if (!multiple) {
     // A select takes static options, so it is rebuilt whenever the choices change.
-    const choices = stableComputed(() => ({ options: options.value, stale: stale.value }), (current) => JSON.stringify([current.options.map((option) => [option.ref.recordId, option.label, option.lifecycle]), current.stale.map((ref) => ref.recordId)]));
+    const choices = keyedBy(() => ({ options: options.value, stale: stale.value }), (current) => JSON.stringify([current.options.map((option) => [option.ref.recordId, option.label, option.lifecycle]), current.stale.map((ref) => ref.recordId)]));
     return <div class="sg-content-reference">
       <Rebuild value={choices}>{(current) => <SingleReferenceSelect label={label} selected={selected} options={current.options} stale={current.stale} onChange={(recordId) => { const option = options.value.find((item) => item.ref.recordId === recordId); commit(option ? option.ref as unknown as JsonValue : undefined); }} />}</Rebuild>
       {errorLine}
@@ -95,7 +95,7 @@ export function StructuredValueEditor({ schema, field, path, controller, run, re
   }
   if (schema.kind === "list") {
     const list = computed(() => Array.isArray(value.value) ? value.value : []);
-    const indexes = stableComputed(() => list.value.map((_, index) => index), (items) => String(items.length));
+    const indexes = keyedBy(() => list.value.map((_, index) => index), (items) => String(items.length));
     return <div class="sg-content-list"><For each={indexes} by={(index) => index}>{(slot) => {
       const index = slot.value;
       return <div class="sg-content-list__item" data-content-value-path={encodeContentValuePath([...path, index])}><StructuredValueEditor schema={schema.item} field={field} value={computed(() => list.value[index])} path={[...path, index]} {...nested} commit={(next) => { const updated = [...list.value]; if (next === undefined) updated.splice(index, 1); else updated[index] = next; invoke(updated); }} /><Button iconOnly size="sm" aria-label={`Remove item ${index + 1}`} on:click={() => { const updated = [...list.value]; updated.splice(index, 1); invoke(updated); }}><TrashIcon size="xs" /></Button></div>;

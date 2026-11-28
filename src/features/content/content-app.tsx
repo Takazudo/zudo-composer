@@ -20,8 +20,9 @@ import { ContentPreviewPane } from "./content-preview-pane";
 import { createContentAuthoringController, type ContentAuthoringController, type ContentSaveStatus, type ContentWorkMode } from "./controller";
 import { contentEntryLabel, contentEntryTitleField } from "./presentation";
 import type { ContentPreviewSource } from "./preview-source";
-import { controllerState, stableComputed } from "./reactive-draft";
+import { controllerState } from "./reactive-draft";
 import type { ContentAssetPickerRenderer } from "./structured-field-editor";
+import { keyedBy } from "../../components/reactive";
 
 export interface ContentRouteContentProps {
   provider: ContentProvider;
@@ -243,7 +244,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
 
   const notReady = () => (
     <main class="sg-content-app sg-content-app--state" aria-busy={computed(() => state.value.phase === "loading")}>
-      <Rebuild value={stableComputed(() => ({ phase: state.value.phase, message: state.value.message, recoveryMessage: state.value.recoveryMessage }), (current) => JSON.stringify(current))}>{({ phase, message, recoveryMessage }) => <>
+      <Rebuild value={keyedBy(() => ({ phase: state.value.phase, message: state.value.message, recoveryMessage: state.value.recoveryMessage }), (current) => JSON.stringify(current))}>{({ phase, message, recoveryMessage }) => <>
         {phase === "error" ? (
           <EmptyState
             title="Content library unavailable"
@@ -423,7 +424,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
                 <Show when={computed(() => state.value.model !== null)}>{() => <Chip tone="plain">{computed(() => { const model = state.value.model; return model ? `${model.document.name} · ${model.document.kind}` : ""; })}</Chip>}</Show>
               </PaneHeader>
               <PaneBody padded>
-                <Rebuild value={stableComputed(() => { const current = state.value; return error.value || current.saveStatus === "error" ? { error: error.value, saveStatus: current.saveStatus, conflict: current.conflictRecovery, message: current.message } : null; }, (banner) => JSON.stringify(banner))}>{(banner) => banner ? (
+                <Rebuild value={keyedBy(() => { const current = state.value; return error.value || current.saveStatus === "error" ? { error: error.value, saveStatus: current.saveStatus, conflict: current.conflictRecovery, message: current.message } : null; }, (banner) => JSON.stringify(banner))}>{(banner) => banner ? (
                   <Banner
                     tone="err"
                     action={banner.conflict ? (

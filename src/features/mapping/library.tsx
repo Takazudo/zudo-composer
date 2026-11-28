@@ -24,10 +24,10 @@ import {
 import { ConfirmDialog } from "../../components/overlay";
 import { Banner, Button, type DataTableColumn } from "../../components/ui";
 import type { MappingSummary } from "../../mapping";
-import { memo } from "./signals";
 import type { MappingEditorController, MappingEditorState, MappingLibraryDetail } from "./controller";
 import { mappingDeepLinkHref } from "./deep-link";
 import { NewMappingDialog } from "./new-mapping-dialog";
+import { memo } from "../../components/reactive";
 
 // The Mapping library on the shared library pattern. It replaces a grid of
 // truncating cards: a Mapping is identified by the pair it joins, and a card

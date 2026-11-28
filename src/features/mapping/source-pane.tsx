@@ -9,7 +9,6 @@ import type { MappingTarget, MappingTargetDescriptor } from "../../mapping";
 import type { MappingEditorState } from "./controller";
 import { BindMenu } from "./bind-menu";
 import { CollectionQueryPane, type CollectionQueryPaneProps } from "./query-pane";
-import { followModel, memo } from "./signals";
 import {
   compatibleTargetGroups,
   entryLabel,
@@ -21,6 +20,7 @@ import {
   targetLabel,
   type MappingBindingRow,
 } from "./presentation";
+import { followModel, memo } from "../../components/reactive";
 
 // The navigator: every field the chosen Content model offers, whether it is
 // bound, and the sample Entry the preview is evaluated against. A field with

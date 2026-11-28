@@ -1,9 +1,8 @@
 import { computed, Show, signal, type Child, type ReadonlySignal, type Signal } from "@takazudo/zfb/zudo-react";
 import { RailCollapseButton, type EditorRailsController } from "../../../../components/editor-chrome";
-import { toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { derive, followModel, memo, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Rebuild } from "../../../../components/rebuild";
 import { Keyed } from "../../../../runtime";
-import { derive, followModel, memo } from "../../../mapping/signals";
 import { PageIcon, TrashIcon } from "../../../../components/icons";
 import {
   Button,

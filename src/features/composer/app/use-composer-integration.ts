@@ -18,8 +18,7 @@
 //   inspector/export/tree/chooser all receive.
 
 import { computed, signal, type ReadonlySignal, type Scope } from "@takazudo/zfb/zudo-react";
-import { read, type MaybeSignal } from "../../../components/reactive";
-import { memo } from "../reactive/memo";
+import { memo, read, type MaybeSignal } from "../../../components/reactive";
 import type {
   ComposerReuseResolutionOptions,
   CompositionRecord,

@@ -1,8 +1,7 @@
 import { computed, type Child } from "@takazudo/zfb/zudo-react";
 import { RailCollapseButton, type EditorChromeController, type EditorRailsController } from "../../../../components/editor-chrome";
 import { OutlineTree, type OutlineAddRequest, type OutlineInsertTarget } from "../../../../components/outline-tree";
-import { toSignal, type MaybeSignal } from "../../../../components/reactive";
-import { derive } from "../../../mapping/signals";
+import { derive, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Pane, PaneBody, PaneHeader } from "../../../../components/ui";
 import { indexDocument, type SitemapDocument } from "../../../../sitemapper/model";
 import type { SitemapOutline } from "./outline-model";

@@ -1,6 +1,6 @@
 import { computed, Show, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import { createEditorRails, RailCollapseButton, type EditorRailsController } from "../../components/editor-chrome";
-import { toSignal, type MaybeSignal } from "../../components/reactive";
+import { memo, toSignal, type MaybeSignal } from "../../components/reactive";
 import { Rebuild } from "../../components/rebuild";
 import { CheckCircleIcon, ComposerIcon, EntryIcon } from "../../components/icons";
 import { Banner, EmptyState, Pane, PaneBody, PaneHeader, PaneSection, PaneTabs, StatusChip } from "../../components/ui";
@@ -11,7 +11,6 @@ import type { MappingEditorController } from "./controller";
 import { MappingPreviewHost } from "./preview-host";
 import { diagnosticPath, entryLabel } from "./presentation";
 import { MappingAttachmentPane } from "./attachment-pane";
-import { memo } from "./signals";
 
 // The inspector: what the current sample Entry renders as, and everything the
 // resolver has to say about the Mapping. Diagnostics used to be drawn in three

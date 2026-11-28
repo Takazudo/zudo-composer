@@ -3,7 +3,7 @@ import { Rebuild } from "../components/rebuild";
 import { Select } from "../components/ui/form-controls";
 import { diagnoseContentEntryCompleteness } from "../content/library/helpers";
 import type { ContentCompletenessDiagnostic, ContentValueSchema } from "../content/model/types";
-import { externalDraft, stableComputed } from "../features/content/reactive-draft";
+import { externalDraft } from "../features/content/reactive-draft";
 import { COMPOSER_ROOT_BUILD, Keyed, mountOwnedChild } from "../runtime";
 import { canonicalSerialize } from "./canonical";
 import { HostedContentSession } from "./session";
@@ -12,6 +12,7 @@ import { hostedEditorLabels } from "./labels";
 import type { HostedEditorErrorCode, HostedEditorLabels } from "./labels";
 import type { HostedEditorSessionState, HostedSessionOptions } from "./session";
 import type { ContentEntryRef, ContentFieldDefinition, HostedFieldPermission, HostedPolicy, HostedResult, HostedState, JsonValue } from "./types";
+import { keyedBy } from "../components/reactive";
 
 export * from "./preview-browser";
 export type { HostedEditorSessionState, HostedPreviewFailure, HostedRecoveryCheckpoint, HostedPreviewAdapter, HostedSessionOptions } from "./session";
@@ -229,7 +230,7 @@ export function mountHostedContentEditor(container: HTMLElement, options: Hosted
         const field = model?.document.fields.find((field) => fieldEditable(field, permission(options, { entry: ref, fieldId: field.id })));
         return field && permittedRef(options, ref, content.value) ? [{ selection: { entry: ref, fieldId: field.id }, label: entryLabel(content.value, ref) }] : [];
       })));
-      const recordChoices = stableComputed(() => ({ records: records.value, current: refKey(selection.value.entry) }), (value) => JSON.stringify([value.current, value.records.map((record) => [refKey(record.selection.entry), record.label])]));
+      const recordChoices = keyedBy(() => ({ records: records.value, current: refKey(selection.value.entry) }), (value) => JSON.stringify([value.current, value.records.map((record) => [refKey(record.selection.entry), record.label])]));
 
       const form = () => {
         const current = selection.value;
@@ -238,7 +239,7 @@ export function mountHostedContentEditor(container: HTMLElement, options: Hosted
         const live = computed(() => { const next = item.value; if (next) lastItem = next; return lastItem; });
         const fields = computed(() => live.value.model.document.fields.filter((field) => (options.presentation !== "field" || field.id === current.fieldId) && fieldEditable(field, modelPermission.fields.find((permission) => permission.fieldId === field.id))));
         const completeness = computed(() => diagnoseContentEntryCompleteness(live.value.model, live.value.entry));
-        const slots = stableComputed(() => fields.value.map((field, index) => ({ field, index, key: `${refKey(current.entry)}/${field.id}/${state.value.presentationRevision}` })), (list) => list.map((slot) => slot.key).join("\u0000"));
+        const slots = keyedBy(() => fields.value.map((field, index) => ({ field, index, key: `${refKey(current.entry)}/${field.id}/${state.value.presentationRevision}` })), (list) => list.map((slot) => slot.key).join("\u0000"));
         const collections = options.policy.collections.filter((collection) => sameRef(collection.owner, current.entry));
 
         const fieldRow = (slot: { field: ContentFieldDefinition; index: number }): Child => {
@@ -296,7 +297,7 @@ export function mountHostedContentEditor(container: HTMLElement, options: Hosted
             if (mode === "form") return createForm(model, targetPermission);
             return <button type="button" disabled={blocked} on:click={() => { session.stageCreation(collection.id, {}); createValues.value = {}; creating.value = collection.id; }}>{labels.create}: {collectionLabel}</button>;
           }}</Rebuild> : null}
-          {collection.add ? <Rebuild value={stableComputed(() => candidates.value, (list) => JSON.stringify(list.map((candidate) => [candidate.id, entryLabel(content.value, { ...collection.target, recordId: candidate.id })])))}>{(list) => list.length ? (
+          {collection.add ? <Rebuild value={keyedBy(() => candidates.value, (list) => JSON.stringify(list.map((candidate) => [candidate.id, entryLabel(content.value, { ...collection.target, recordId: candidate.id })])))}>{(list) => list.length ? (
             <div class="hosted-content-editor__actions"><Select aria-label={`${labels.addExisting}: ${collectionLabel}`} modelValue={externalDraft(getScope(), computed(() => existing.value[collection.id] ?? ""))} on:change={(event) => { existing.value = { ...existing.value, [collection.id]: event.currentTarget.value }; }}><option value="">{labels.choose}</option>{list.map((candidate) => <option value={candidate.id}>{entryLabel(content.value, { ...collection.target, recordId: candidate.id })}</option>)}</Select><button type="button" disabled={computed(() => blocked.value || !existing.value[collection.id])} on:click={() => run(async () => { await session.addEntry(collection.id, { ...collection.target, recordId: existing.value[collection.id]! }); existing.value = { ...existing.value, [collection.id]: "" }; })}>{labels.addExisting}</button></div>
           ) : null}</Rebuild> : null}
           </fieldset>;
@@ -315,11 +316,11 @@ export function mountHostedContentEditor(container: HTMLElement, options: Hosted
           </div>
           <p role="status" aria-live="polite">{computed(() => labels[state.value.phase])}</p>
           {options.preview ? <Show when={computed(() => !!state.value.reviewedSnapshot || submission)}>{() => <p>{computed(() => state.value.reviewedSnapshot ? labels.previewCurrent : labels.previewRequired)}</p>}</Show> : null}
-          <Rebuild value={stableComputed(() => state.value.reviewedSnapshot?.diagnostics.length ? state.value.reviewedSnapshot.diagnostics : null, (diagnostics) => JSON.stringify(diagnostics))}>{(diagnostics) => diagnostics ? <div role="alert"><p>{labels.submissionIncomplete}</p><ul>{diagnostics.map((diagnostic) => <li>{diagnosticText(content.value, current.entry, diagnostic)}</li>)}</ul></div> : null}</Rebuild>
-          <Rebuild value={stableComputed(() => state.value.previewFailure ?? null, (failure) => failure ? JSON.stringify([messageFor(failure.error), errorCode(failure.error), String(failure.error), failure.diagnostics]) : "")}>{(failure) => failure ? <PreviewFailure error={failure.error} diagnostics={failure.diagnostics} content={content.value} /> : null}</Rebuild>
+          <Rebuild value={keyedBy(() => state.value.reviewedSnapshot?.diagnostics.length ? state.value.reviewedSnapshot.diagnostics : null, (diagnostics) => JSON.stringify(diagnostics))}>{(diagnostics) => diagnostics ? <div role="alert"><p>{labels.submissionIncomplete}</p><ul>{diagnostics.map((diagnostic) => <li>{diagnosticText(content.value, current.entry, diagnostic)}</li>)}</ul></div> : null}</Rebuild>
+          <Rebuild value={keyedBy(() => state.value.previewFailure ?? null, (failure) => failure ? JSON.stringify([messageFor(failure.error), errorCode(failure.error), String(failure.error), failure.diagnostics]) : "")}>{(failure) => failure ? <PreviewFailure error={failure.error} diagnostics={failure.diagnostics} content={content.value} /> : null}</Rebuild>
           <Show when={computed(() => message.value !== null)}>{() => <p role="alert">{computed(() => message.value ?? "")}</p>}</Show>
           <Show when={rejected}>{() => <div class="hosted-content-editor__recovery"><button type="button" on:click={() => run(async () => { review.value = await session.reviewAuthoritative(); })}>{labels.review}</button><Rebuild value={review}>{(authoritative) => authoritative ? <><ConflictReview review={authoritative} fields={fields.value} local={live.value.entry.values} /><div class="hosted-content-editor__actions"><button type="button" on:click={() => run(async () => { await session.reapply(authoritative); review.value = null; })}>{labels.reapply}</button><button type="button" on:click={() => run(async () => { await session.discard(authoritative); review.value = null; })}>{labels.discard}</button></div></> : null}</Rebuild></div>}</Show>
-          <Rebuild value={stableComputed(() => { const { publication, publicationStale, publicationError } = state.value; return publication ? { publication, stale: publicationStale, failed: !!publicationError } : null; }, (status) => JSON.stringify(status))}>{(status) => status ? <div class="hosted-content-editor__publication"><p role="status">{status.stale ? `${labels.lastKnownStatus}: ` : ""}{labels[status.publication.status]}</p>{status.publication.message ? <p>{status.publication.message}</p> : null}{status.failed ? <p role="alert">{labels.statusUnavailable}</p> : null}<button type="button" on:click={() => run(() => session.refreshPublication())}>{labels.refreshStatus}</button></div> : null}</Rebuild>
+          <Rebuild value={keyedBy(() => { const { publication, publicationStale, publicationError } = state.value; return publication ? { publication, stale: publicationStale, failed: !!publicationError } : null; }, (status) => JSON.stringify(status))}>{(status) => status ? <div class="hosted-content-editor__publication"><p role="status">{status.stale ? `${labels.lastKnownStatus}: ` : ""}{labels[status.publication.status]}</p>{status.publication.message ? <p>{status.publication.message}</p> : null}{status.failed ? <p role="alert">{labels.statusUnavailable}</p> : null}<button type="button" on:click={() => run(() => session.refreshPublication())}>{labels.refreshStatus}</button></div> : null}</Rebuild>
         </section>;
       };
 

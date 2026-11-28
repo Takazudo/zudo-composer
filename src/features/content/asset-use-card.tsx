@@ -7,8 +7,9 @@ import { Rebuild } from "../../components/rebuild";
 import { Button, Chip, Field, Input, Select, Switch, Textarea } from "../../components/ui";
 import type { ContentAssetUse } from "../../content";
 import type { ContentAssetCatalogItem, ContentAuthoringController } from "./controller";
-import { externalDraft, stableComputed } from "./reactive-draft";
+import { externalDraft } from "./reactive-draft";
 import type { ContentAssetPickerRenderer } from "./structured-field-editor";
+import { keyedBy } from "../../components/reactive";
 
 interface AssetUseCardProps {
   kind: ContentAssetUse["kind"];
@@ -95,13 +96,13 @@ export function AssetUseCard({ kind, value, controller, renderAssetPicker, asset
     catch { /* Clipboard access can be blocked by the browser. */ }
   };
   // The fallback select's options are static, so it is rebuilt with them.
-  const fallbackChoices = stableComputed(() => ({ active: activeAssets.value, unavailable: use.value && !selectedActive.value ? { value: unavailableOption.value, label: asset.value?.state === "trash" ? `In trash · ${asset.value.fileName}` : `Unavailable asset · ${use.value.asset.assetId}` } : null }), (current) => JSON.stringify([current.active.map((item) => [item.assetId, item.label]), current.unavailable]));
+  const fallbackChoices = keyedBy(() => ({ active: activeAssets.value, unavailable: use.value && !selectedActive.value ? { value: unavailableOption.value, label: asset.value?.state === "trash" ? `In trash · ${asset.value.fileName}` : `Unavailable asset · ${use.value.asset.assetId}` } : null }), (current) => JSON.stringify([current.active.map((item) => [item.assetId, item.label]), current.unavailable]));
   const fallback = () => <Rebuild value={fallbackChoices}>{(choices) => <FallbackSelect choices={choices} current={computed(() => selectedActive.value ? asset.value!.assetId : unavailableOption.value)} onChange={(next) => {
     if (next === "") { remove(); return; }
     const item = activeAssets.value.find((candidate) => candidate.assetId === next);
     if (item) select(makeUse(kind, item));
   }} />}</Rebuild>;
-  const thumbnailKey = stableComputed(() => ({ asset: asset.value, loading: loading.value, image: image.value, failed: failedPreview.value === asset.value?.url }), (current) => JSON.stringify([current.asset?.url ?? null, current.asset?.fileName ?? null, current.asset?.mimeType ?? null, current.loading, current.image, current.failed]));
+  const thumbnailKey = keyedBy(() => ({ asset: asset.value, loading: loading.value, image: image.value, failed: failedPreview.value === asset.value?.url }), (current) => JSON.stringify([current.asset?.url ?? null, current.asset?.fileName ?? null, current.asset?.mimeType ?? null, current.loading, current.image, current.failed]));
   const extension = (item: ContentAssetCatalogItem) => item.fileName.includes(".") ? item.fileName.split(".").pop()!.toUpperCase() || typeLabel.value : typeLabel.value;
   const label = (name: string) => computed(() => { const current = use.value as unknown as Record<string, unknown> | null; const text = current?.[name]; return typeof text === "string" ? text : ""; });
   const textField = (fieldLabel: string, name: string, multiline = false, extra: Record<string, unknown> = {}) => <TextUseField fieldLabel={fieldLabel} value={label(name)} multiline={multiline} extra={extra} onInput={(next) => update({ [name]: next })} />;

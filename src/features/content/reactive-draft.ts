@@ -1,4 +1,4 @@
-import { computed, signal, type ReadonlySignal, type Scope, type Signal } from "@takazudo/zfb/zudo-react";
+import { signal, type ReadonlySignal, type Scope, type Signal } from "@takazudo/zfb/zudo-react";
 import { storeSignal } from "../../runtime";
 import type { ContentAuthoringController, ContentAuthoringState } from "./controller";
 
@@ -30,20 +30,4 @@ export function externalDraft(scope: Scope, source: ReadonlySignal<string>): Sig
   const draft = signal(source.value);
   followExternal(scope, source, (next) => { draft.value = next; });
   return draft;
-}
-
-/**
- * A computed that keeps returning the same object while `key` of the new value
- * is unchanged, so a keyed rebuild (`Rebuild`, `DataTable` rows) follows only
- * structural changes and leaves focused controls mounted.
- */
-export function stableComputed<T>(read: () => T, key: (value: T) => string): ReadonlySignal<T> {
-  let last: { key: string; value: T } | null = null;
-  return computed(() => {
-    const value = read();
-    const next = key(value);
-    if (last && last.key === next) return last.value;
-    last = { key: next, value };
-    return value;
-  });
 }

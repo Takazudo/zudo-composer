@@ -18,11 +18,10 @@ import type {
 import { diagnoseDocument } from "../../../../composer/browser";
 import { ArrowRightIcon, ContainerIcon, RefreshIcon, SlotIcon, TrashIcon, XMarkIcon } from "../../../../components/icons";
 import { ConfirmDialog } from "../../../../components/overlay";
-import { read, toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { memo, read, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Rebuild } from "../../../../components/rebuild";
 import { Banner, Button, Field, Input, PaneSection } from "../../../../components/ui";
 import type { ComposerMode } from "../../chrome/controller-model";
-import { memo } from "../../reactive/memo";
 import type { SelectedSlot } from "../tree/structure-pane";
 import type { ReuseAuthoringActionResult } from "../shared/reuse-authoring-contract";
 import { createDomId } from "../../../../components/use-dom-id";

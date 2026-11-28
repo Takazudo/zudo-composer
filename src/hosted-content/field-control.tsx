@@ -1,12 +1,12 @@
 import { computed, For, getScope, Show, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
-import { read, toSignal, type MaybeSignal } from "../components/reactive";
+import { keyedBy, read, toSignal, type MaybeSignal } from "../components/reactive";
 import { Rebuild } from "../components/rebuild";
 import { createDomId } from "../components/use-dom-id";
 import { Input, Select, Switch, Textarea } from "../components/ui/form-controls";
 import { ContentScalarControl } from "../features/content/scalar-control";
 import type { MarkdownEditorController } from "../features/content/markdown-source";
 import { applyMarkdownFormat, type MarkdownFormat } from "../features/content/markdown-formatting";
-import { externalDraft, stableComputed } from "../features/content/reactive-draft";
+import { externalDraft } from "../features/content/reactive-draft";
 import type { ContentFieldDefinition, ContentValueSchema } from "../content/model/types";
 import type { ContentEntryRef, HostedFieldPermission, HostedPolicy, HostedState, JsonValue } from "./types";
 
@@ -119,7 +119,7 @@ export function HostedFieldControl(props: ControlProps) {
   }
   if (schema.kind === "list") {
     const items = computed(() => Array.isArray(value.value) ? value.value : []);
-    const slots = stableComputed(() => items.value.map((_, index) => index), (indexes) => String(indexes.length));
+    const slots = keyedBy(() => items.value.map((_, index) => index), (indexes) => String(indexes.length));
     const shapeAllowed = permission.replace && !protectedShape(schema.item);
     const incomplete = computed(() => !!props.hasIncompleteInput?.(identity));
     return <div class="hosted-content-editor__list"><For each={slots} by={(index) => index}>{(slot) => {
