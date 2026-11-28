@@ -9,7 +9,7 @@ import { createContentEntryRecord, createContentModelRecord } from "../../../con
 // auto-cleanup and a second render would query against both trees.
 afterEach(async () => {
   cleanup();
-  // Provider updates can schedule Preact's after-paint effects outside act().
+  // Provider updates can schedule after-paint work outside a flush.
   // Unmounting removes their components but does not cancel the queued RAF and
   // its timeout fallback. Let that frame and its posted effect task drain while
   // jsdom's cancelAnimationFrame still exists, before Vitest disposes the window.
@@ -174,7 +174,7 @@ describe("Content navigator and toolbar", () => {
     fireEvent.click(within(tree).getByRole("treeitem", { name: /^Articles/ }));
     const entry = await within(tree).findByRole("treeitem", { name: /^Hello/ });
     fireEvent.click(entry);
-    const title = await screen.findByRole("textbox", { name: "Title", exact: true });
+    const title = await screen.findByRole("textbox", { name: "Title" });
     fireEvent.input(title, { target: { value: "Failed edit" } });
 
     await waitFor(() => expect(controller.state.saveStatus).toBe("error"));

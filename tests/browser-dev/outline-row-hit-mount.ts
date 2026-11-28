@@ -1,8 +1,9 @@
 /// <reference types="vite/client" />
-import { h, render } from "preact";
+import { h } from "@takazudo/zfb/zudo-react";
 import { OutlineTree } from "../../src/components/outline-tree";
 import type { OutlineNode } from "../../src/components/outline-tree";
 import { Button } from "../../src/components/ui/button";
+import { mountOwnedChild } from "../../src/runtime/root";
 
 /**
  * The narrow structure rail from #989: a long slug, the slot-rule hint and a
@@ -42,12 +43,12 @@ const nodes: readonly OutlineNode[] = [
 ];
 
 export function mountOutlineHitProbe(host: HTMLElement): void {
-  render(
+  mountOwnedChild(
     h(OutlineTree, {
       label: "Structure",
       showToolbar: false,
       nodes,
-      renderActions: (node) => [
+      renderActions: (node: OutlineNode) => [
         h(
           Button,
           {
@@ -70,6 +71,6 @@ export function mountOutlineHitProbe(host: HTMLElement): void {
         ),
       ],
     }),
-    host,
+    { parent: host, identity: { component: "OutlineHitProbe", build: "composer-browser-probe" } },
   );
 }

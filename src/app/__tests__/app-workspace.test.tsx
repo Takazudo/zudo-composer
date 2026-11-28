@@ -100,7 +100,7 @@ describe("application workspace lifetime", () => {
     render(<App integration={integration as unknown as ProductionProviderIntegration} />);
     await screen.findByRole("heading", { name: "Content editor" });
     const contentProps = vi.mocked(ContentRouteContent).mock.lastCall![0];
-    const picker = contentProps.renderAssetPicker!({ kind: "card", current: { providerId: "asset-files", assetId: "hero" }, intent: "upload", onSelect: vi.fn(), onClose: vi.fn() }) as { type: unknown; props: { provider?: unknown; kind: string; current?: unknown; intent?: unknown } };
+    const picker = contentProps.renderAssetPicker!({ kind: "card", current: { providerId: "asset-files", assetId: "hero" }, intent: "upload", onSelect: vi.fn(), onClose: vi.fn() }) as unknown as { type: unknown; props: { provider?: unknown; kind: string; current?: unknown; intent?: unknown } };
     expect(picker.type).toBe(AssetFieldPicker);
     expect(picker.props).toMatchObject({ provider: assetProvider, kind: "card", current: { providerId: "asset-files", assetId: "hero" }, intent: "upload" });
     expect(contentProps.assetPickerCapabilities).toEqual({ upload: true });
