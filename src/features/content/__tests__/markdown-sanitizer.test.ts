@@ -1,5 +1,5 @@
-import { h } from "preact";
-import { render, waitFor } from "@testing-library/preact";
+import { h } from "@takazudo/zfb/zudo-react";
+import { render, waitFor } from "../../../test/render";
 import { ProseMd } from "@zudo-composer/ui";
 import { describe, expect, it } from "vitest";
 

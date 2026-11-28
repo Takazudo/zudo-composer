@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, settle, within } from "../../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CONTENT_FIELD_KINDS } from "../../../content";
 import { CONTENT_FIELD_KIND_PRESENTATIONS, FieldKindPicker } from "../field-kind-picker";
@@ -7,13 +7,14 @@ import { CONTENT_FIELD_KIND_PRESENTATIONS, FieldKindPicker } from "../field-kind
 // auto-cleanup and a second render would query against both trees.
 afterEach(cleanup);
 
-function openPicker(): HTMLElement {
+async function openPicker(): Promise<HTMLElement> {
   fireEvent.click(screen.getByRole("button", { name: "Type for Title" }));
+  await settle();
   return screen.getByRole("menu", { name: "Type for Title" });
 }
 
 describe("FieldKindPicker", () => {
-  it("shows the chosen kind by its friendly name, not its stored enum value", () => {
+  it("shows the chosen kind by its friendly name, not its stored enum value", async () => {
     render(<FieldKindPicker value="long-text" label="Type for Title" onChange={() => undefined} />);
     const trigger = screen.getByRole("button", { name: "Type for Title" });
     expect(trigger).toHaveTextContent("Long text");
@@ -24,9 +25,9 @@ describe("FieldKindPicker", () => {
     expect(screen.queryByRole("menuitemradio")).toBeNull();
   });
 
-  it("offers every stored kind with an explanation, and checks the current one", () => {
+  it("offers every stored kind with an explanation, and checks the current one", async () => {
     render(<FieldKindPicker value="text" label="Type for Title" onChange={() => undefined} />);
-    const menu = openPicker();
+    const menu = await openPicker();
     const options = within(menu).getAllByRole("menuitemradio");
 
     expect(CONTENT_FIELD_KIND_PRESENTATIONS.map(({ kind }) => kind)).toEqual(CONTENT_FIELD_KINDS);
@@ -40,33 +41,35 @@ describe("FieldKindPicker", () => {
     expect(within(menu).getByRole("menuitemradio", { name: /^Short text/ })).toHaveFocus();
   });
 
-  it("reports the chosen kind once and closes", () => {
+  it("reports the chosen kind once and closes", async () => {
     const change = vi.fn();
     render(<FieldKindPicker value="text" label="Type for Title" onChange={change} />);
-    const menu = openPicker();
+    const menu = await openPicker();
 
     fireEvent.click(within(menu).getByRole("menuitemradio", { name: /^Date/ }));
+    await settle();
     expect(change).toHaveBeenCalledOnce();
     expect(change).toHaveBeenCalledWith("date");
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("walks the options with the arrow keys without choosing as it goes", () => {
+  it("walks the options with the arrow keys without choosing as it goes", async () => {
     const change = vi.fn();
     render(<FieldKindPicker value="text" label="Type for Title" onChange={change} />);
-    const menu = openPicker();
+    const menu = await openPicker();
 
     fireEvent.keyDown(menu, { key: "ArrowDown" });
+    await settle();
     expect(within(menu).getByRole("menuitemradio", { name: /^Long text/ })).toHaveFocus();
     // Unlike the radiogroup it replaced, moving is not choosing.
     expect(change).not.toHaveBeenCalled();
   });
 
-  it("disables every other kind, with the reason, once stored Entries use the field", () => {
+  it("disables every other kind, with the reason, once stored Entries use the field", async () => {
     const change = vi.fn();
     render(<FieldKindPicker value="text" locked label="Type for Title" onChange={change} />);
     expect(screen.getByRole("button", { name: "Type for Title" }).getAttribute("title")).toMatch(/stored Entries hold values/);
-    const menu = openPicker();
+    const menu = await openPicker();
 
     expect(within(menu).getByText("Type locked · stored Entries use it")).toBeInTheDocument();
     expect(within(menu).getByRole("menuitemradio", { name: /^Short text/ })).not.toBeDisabled();

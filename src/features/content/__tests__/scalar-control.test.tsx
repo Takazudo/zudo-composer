@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/preact";
+import { fireEvent, render, screen } from "../../../test/render";
 import { describe, expect, it, vi } from "vitest";
 import { ContentScalarControl } from "../scalar-control";
 

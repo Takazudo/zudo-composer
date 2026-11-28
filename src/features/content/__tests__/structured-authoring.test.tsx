@@ -1,26 +1,24 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { getScope } from "@takazudo/zfb/zudo-react";
+import { cleanup, fireEvent, render, screen, settle, waitFor, within } from "../../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { JSX } from "preact";
-import { useEffect, useState } from "preact/hooks";
 import type { AssetSummary } from "../../../assets";
 import { createContentEntryRecord, createContentModelRecord, type ContentAssetUse, type ContentEntryRecord, type ContentFieldDefinition } from "../../../content";
 import { ContentEntryAuthor, ContentSchemaAuthor } from "../content-author";
 import { ContentRawView } from "../content-workspace";
 import { createContentAuthoringController, type ContentAuthoringController } from "../controller";
 import { createMemoryContentProvider } from "../fixtures";
+import { controllerState } from "../reactive-draft";
 import type { ContentAssetPickerRenderer } from "../structured-field-editor";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const stamp = "2026-01-01T00:00:00.000Z";
 const run = (action: () => void | Promise<void>) => void Promise.resolve(action());
-function Harness({ controller, renderAssetPicker, assetPickerCapabilities }: { controller: ContentAuthoringController; renderAssetPicker?: ContentAssetPickerRenderer; assetPickerCapabilities?: { upload: boolean } }): JSX.Element {
-  const [state, setState] = useState(controller.state);
-  useEffect(() => controller.subscribe(setState), [controller]);
+function Harness({ controller, renderAssetPicker, assetPickerCapabilities }: { controller: ContentAuthoringController; renderAssetPicker?: ContentAssetPickerRenderer; assetPickerCapabilities?: { upload: boolean } }) {
+  const state = controllerState(getScope(), controller);
   return <ContentEntryAuthor state={state} controller={controller} run={run} renderAssetPicker={renderAssetPicker} assetPickerCapabilities={assetPickerCapabilities} />;
 }
-function SchemaHarness({ controller }: { controller: ContentAuthoringController }): JSX.Element {
-  const [state, setState] = useState(controller.state);
-  useEffect(() => controller.subscribe(setState), [controller]);
+function SchemaHarness({ controller }: { controller: ContentAuthoringController }) {
+  const state = controllerState(getScope(), controller);
   return <ContentSchemaAuthor state={state} controller={controller} run={run} onRemove={() => undefined} />;
 }
 
@@ -56,10 +54,10 @@ describe("generic structured Content authoring", () => {
     render(<Harness controller={controller} />);
 
     await waitFor(() => expect(screen.getByRole("checkbox", { name: /^Person 30 draft$/ })).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("checkbox", { name: /^Person 1 draft$/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /^Person 2 draft$/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /^Person 1 draft$/ })); await settle();
+    fireEvent.click(screen.getByRole("checkbox", { name: /^Person 2 draft$/ })); await settle();
     await waitFor(() => expect(controller.state.entry?.values.authors).toHaveLength(2));
-    fireEvent.click(screen.getByRole("button", { name: "Move Person 2 up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move Person 2 up" })); await settle();
     expect((controller.state.entry?.values.authors as unknown as { recordId: string }[]).map((ref) => ref.recordId)).toEqual(["person-2", "person-1"]);
   });
 
@@ -77,15 +75,15 @@ describe("generic structured Content authoring", () => {
     await controller.initialize(); await controller.openModel("cards"); await controller.openEntry("card");
     render(<Harness controller={controller} />);
 
-    fireEvent.change(screen.getAllByRole("combobox")[0]!, { target: { value: "cool" } });
-    fireEvent.input(screen.getByRole("textbox", { name: "Caption" }), { target: { value: "Nested" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add item" }));
-    fireEvent.input(document.querySelector('[data-content-field-id="tags"] input')!, { target: { value: "first" } });
+    fireEvent.change(screen.getAllByRole("combobox")[0]!, { target: { value: "cool" } }); await settle();
+    fireEvent.input(screen.getByRole("textbox", { name: "Caption" }), { target: { value: "Nested" } }); await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Add item" })); await settle();
+    fireEvent.input(document.querySelector('[data-content-field-id="tags"] input')!, { target: { value: "first" } }); await settle();
     await waitFor(() => expect(screen.getByRole("combobox", { name: "Asset" })).toHaveTextContent("hero.png"));
     expect(screen.getByRole("combobox", { name: "Asset" })).not.toHaveTextContent("trashed.png");
-    fireEvent.change(screen.getByRole("combobox", { name: "Asset" }), { target: { value: "hero-image" } });
-    fireEvent.input(screen.getByRole("textbox", { name: "Alt text" }), { target: { value: "A descriptive hero" } });
-    fireEvent.input(screen.getByRole("textbox", { name: "Image caption" }), { target: { value: "Image caption text" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Asset" }), { target: { value: "hero-image" } }); await settle();
+    fireEvent.input(screen.getByRole("textbox", { name: "Alt text" }), { target: { value: "A descriptive hero" } }); await settle();
+    fireEvent.input(screen.getByRole("textbox", { name: "Image caption" }), { target: { value: "Image caption text" } }); await settle();
     await waitFor(() => expect(controller.state.entry?.values).toMatchObject({ tone: "cool", details: { caption: "Nested" }, tags: ["first"], hero: { kind: "image", alt: "A descriptive hero" } }));
   });
 
@@ -105,10 +103,10 @@ describe("generic structured Content authoring", () => {
     const controller = createContentAuthoringController(createMemoryContentProvider({ models: [model], entries: [entry] }));
     await controller.initialize(); await controller.openModel("cards"); await controller.openEntry("card");
     let pickerRequest: Parameters<ContentAssetPickerRenderer>[0] | undefined;
-    render(<ContentEntryAuthor state={controller.state} controller={controller} run={run} renderAssetPicker={(request) => { pickerRequest = request; return <div role="dialog" aria-label="Asset picker"><button onClick={() => request.onSelect({ kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "", decorative: false, caption: "" })}>Choose hero</button></div>; }} />);
-    fireEvent.click(screen.getByRole("button", { name: "Replace…" }));
+    render(<ContentEntryAuthor state={controller.state} controller={controller} run={run} renderAssetPicker={(request) => { pickerRequest = request; return <div role="dialog" aria-label="Asset picker"><button type="button" on:click={() => request.onSelect({ kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "", decorative: false, caption: "" })}>Choose hero</button></div>; }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Replace…" })); await settle();
     expect(pickerRequest?.current).toEqual({ providerId: "asset-files", assetId: "existing-hero" });
-    fireEvent.click(screen.getByRole("button", { name: "Choose hero" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose hero" })); await settle();
     expect(controller.state.entry?.values.hero).toEqual({ kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "Existing hero", decorative: false, caption: "Existing caption" });
   });
 
@@ -118,8 +116,8 @@ describe("generic structured Content authoring", () => {
     await controller.initialize(); await controller.openModel("cards"); render(<SchemaHarness controller={controller} />);
     expect(screen.getByRole("textbox", { name: "Value for option 1 in Tone" })).toHaveValue("warm|muted");
     expect(screen.getByRole("textbox", { name: "Label for option 1 in Tone" })).toHaveValue("Warm\nand muted");
-    fireEvent.input(screen.getByRole("textbox", { name: "Label for option 1 in Tone" }), { target: { value: "Warm | quiet\nline two" } });
-    fireEvent.click(screen.getByRole("button", { name: "Move option 1 down" }));
+    fireEvent.input(screen.getByRole("textbox", { name: "Label for option 1 in Tone" }), { target: { value: "Warm | quiet\nline two" } }); await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Move option 1 down" })); await settle();
     await waitFor(() => expect((controller.state.model!.document.fields[0] as Extract<ContentFieldDefinition, { kind: "choice" }>).options).toEqual([{ value: "cool", label: "Cool" }, { value: "warm|muted", label: "Warm | quiet\nline two" }]));
   });
 });
@@ -144,7 +142,7 @@ describe("Content asset-use cards", () => {
     expect(thumbnail).toHaveAttribute("src", imageAsset.url);
     expect(screen.getByText("WebP · 4.2 KB · uploaded Sep 12, 2026")).toBeVisible();
     Object.defineProperties(thumbnail, { naturalWidth: { value: 400 }, naturalHeight: { value: 400 } });
-    fireEvent.load(thumbnail);
+    fireEvent.load(thumbnail); await settle();
     expect(screen.getByText("WebP · 4.2 KB · 400 × 400 · uploaded Sep 12, 2026")).toBeVisible();
     expect(screen.getByRole("button", { name: "Replace…" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Remove" })).toBeVisible();
@@ -157,13 +155,13 @@ describe("Content asset-use cards", () => {
   it("chooses into an empty image field and preserves the picker's initial per-use text", async () => {
     const { controller } = await createAssetController(null, { assets: [] });
     let request: Parameters<ContentAssetPickerRenderer>[0] | undefined;
-    render(<Harness controller={controller} renderAssetPicker={(next) => { request = next; return <button onClick={() => next.onSelect(imageUse)}>Use image</button>; }} />);
+    render(<Harness controller={controller} renderAssetPicker={(next) => { request = next; return <button type="button" on:click={() => next.onSelect(imageUse)}>Use image</button>; }} />);
     expect(screen.getByText("No image chosen.")).toBeVisible();
     expect(screen.queryByRole("textbox", { name: "Alt text" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Choose from Assets" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose from Assets" })); await settle();
     expect(request?.current).toBeUndefined();
     expect(request?.kind).toBe("image");
-    fireEvent.click(screen.getByRole("button", { name: "Use image" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use image" })); await settle();
     expect(controller.state.entry?.values.hero).toEqual(imageUse);
   });
 
@@ -172,7 +170,7 @@ describe("Content asset-use cards", () => {
     let request: Parameters<ContentAssetPickerRenderer>[0] | undefined;
     render(<Harness controller={controller} assetPickerCapabilities={{ upload: true }} renderAssetPicker={(next) => { request = next; return <div role="dialog" aria-label="Asset picker" />; }} />);
     expect(screen.getByRole("button", { name: "Upload…" })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Upload…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Upload…" })); await settle();
     expect(request?.intent).toBe("upload");
     expect(request?.kind).toBe("image");
   });
@@ -199,9 +197,9 @@ describe("Content asset-use cards", () => {
     const title = await screen.findByText(`Unavailable asset · ${value.asset.assetId}`);
     expect(title.closest(".sg-content-asset-card")).toHaveAttribute("data-warning", "true");
     expect(screen.queryByAltText("")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Replace…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replace…" })); await settle();
     expect(screen.getByRole("dialog", { name: "Asset picker" })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove" })); await settle();
     expect(controller.state.entry?.values.hero).toBeUndefined();
     expect(screen.getByText("No image chosen.")).toBeVisible();
   });
@@ -220,30 +218,30 @@ describe("Content asset-use cards", () => {
     const { controller } = await createAssetController(imageUse, { assets: [{ ...imageAsset, state: "trash" }, { ...imageAsset, id: "replacement", fileName: "replacement.webp" }] });
     render(<Harness controller={controller} />);
     await screen.findByText("In trash");
-    fireEvent.click(screen.getByRole("button", { name: "Replace…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replace…" })); await settle();
     const select = screen.getByRole("combobox", { name: "Asset" });
     expect(within(select).getByRole("option", { name: "In trash · hero.webp" })).toBeDisabled();
-    fireEvent.change(select, { target: { value: "replacement" } });
+    fireEvent.change(select, { target: { value: "replacement" } }); await settle();
     expect(controller.state.entry?.values.hero).toEqual({ ...imageUse, asset: { providerId: "asset-files", assetId: "replacement" } });
   });
 
   it("forgets old pixel dimensions when a replacement thumbnail loads", async () => {
     const replacement = { ...imageAsset, id: "replacement", fileName: "replacement.webp", url: `/uploaded-assets/sha256-${"b".repeat(64)}.webp` };
     const { controller } = await createAssetController(imageUse, { assets: [imageAsset, replacement] });
-    render(<Harness controller={controller} renderAssetPicker={(request) => <button onClick={() => request.onSelect({ ...imageUse, asset: { providerId: "asset-files", assetId: replacement.id }, alt: "Picker default" })}>Use replacement</button>} />);
+    render(<Harness controller={controller} renderAssetPicker={(request) => <button type="button" on:click={() => request.onSelect({ ...imageUse, asset: { providerId: "asset-files", assetId: replacement.id }, alt: "Picker default" })}>Use replacement</button>} />);
     await screen.findByText("hero.webp");
     const original = screen.getByAltText("");
     Object.defineProperties(original, { naturalWidth: { value: 400 }, naturalHeight: { value: 400 } });
-    fireEvent.load(original);
+    fireEvent.load(original); await settle();
     expect(screen.getByText(/400 × 400/)).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Replace…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Use replacement" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replace…" })); await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Use replacement" })); await settle();
     await screen.findByText("replacement.webp");
     expect(screen.queryByText(/400 × 400/)).toBeNull();
     expect(screen.getByRole("textbox", { name: "Alt text" })).toHaveValue(imageUse.alt);
     const next = screen.getByAltText("");
     Object.defineProperties(next, { naturalWidth: { value: 800 }, naturalHeight: { value: 600 } });
-    fireEvent.load(next);
+    fireEvent.load(next); await settle();
     expect(screen.getByText(/800 × 600/)).toBeVisible();
   });
 
@@ -251,10 +249,10 @@ describe("Content asset-use cards", () => {
     const replacement = { ...imageAsset, id: "new-upload", fileName: "new-upload.webp" };
     const { controller, list } = await createAssetController();
     list.mockResolvedValueOnce([imageAsset]).mockResolvedValue([replacement]);
-    render(<Harness controller={controller} renderAssetPicker={(request) => <button onClick={() => request.onSelect({ ...imageUse, asset: { providerId: "asset-files", assetId: replacement.id } })}>Use upload</button>} />);
+    render(<Harness controller={controller} renderAssetPicker={(request) => <button type="button" on:click={() => request.onSelect({ ...imageUse, asset: { providerId: "asset-files", assetId: replacement.id } })}>Use upload</button>} />);
     await screen.findByText("hero.webp");
-    fireEvent.click(screen.getByRole("button", { name: "Replace…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Use upload" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replace…" })); await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Use upload" })); await settle();
     expect(await screen.findByText("new-upload.webp")).toBeVisible();
     expect(controller.state.entry?.values.hero).toEqual({ ...imageUse, asset: { providerId: "asset-files", assetId: replacement.id } });
   });
@@ -264,12 +262,12 @@ describe("Content asset-use cards", () => {
     let resolveOld!: (assets: readonly AssetSummary[]) => void;
     const oldResult = new Promise<readonly AssetSummary[]>((resolve) => { resolveOld = resolve; });
     list.mockImplementationOnce(() => oldResult);
-    render(<Harness controller={controller} renderAssetPicker={(request) => <button onClick={request.onClose}>Cancel picker</button>} />);
+    render(<Harness controller={controller} renderAssetPicker={(request) => <button type="button" on:click={request.onClose}>Cancel picker</button>} />);
     await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole("button", { name: "Replace…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel picker" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replace…" })); await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel picker" })); await settle();
     expect(await screen.findByText("hero.webp")).toBeVisible();
-    await act(async () => { resolveOld([]); await oldResult; });
+    resolveOld([]); await oldResult; await settle();
     expect(screen.getByText("hero.webp")).toBeVisible();
     expect(screen.queryByText(/Unavailable asset/)).toBeNull();
   });
@@ -277,10 +275,10 @@ describe("Content asset-use cards", () => {
   it("recovers a failed catalog read when returning from the picker", async () => {
     const { controller, list } = await createAssetController();
     list.mockRejectedValueOnce(new Error("Asset catalog unavailable."));
-    render(<Harness controller={controller} renderAssetPicker={(request) => <button onClick={request.onClose}>Cancel picker</button>} />);
+    render(<Harness controller={controller} renderAssetPicker={(request) => <button type="button" on:click={request.onClose}>Cancel picker</button>} />);
     expect(await screen.findByText("Asset catalog unavailable.")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Replace…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel picker" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replace…" })); await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel picker" })); await settle();
     expect(await screen.findByText("hero.webp")).toBeVisible();
     expect(screen.queryByText("Asset catalog unavailable.")).toBeNull();
   });
@@ -289,7 +287,7 @@ describe("Content asset-use cards", () => {
     const { controller } = await createAssetController();
     render(<Harness controller={controller} renderAssetPicker={() => null} />);
     await screen.findByText("hero.webp");
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove" })); await settle();
     expect(controller.state.entry?.values.hero).toBeUndefined();
     expect(screen.getByText("No image chosen.")).toBeVisible();
     expect(screen.queryByRole("textbox", { name: "Alt text" })).toBeNull();
@@ -300,7 +298,7 @@ describe("Content asset-use cards", () => {
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     const { controller } = await createAssetController();
     render(<Harness controller={controller} renderAssetPicker={() => null} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Copy authoring URL" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Copy authoring URL" })); await settle();
     expect(writeText).toHaveBeenCalledExactlyOnceWith(imageAsset.authoringUrl);
   });
 
@@ -308,7 +306,7 @@ describe("Content asset-use cards", () => {
     vi.stubGlobal("navigator", { clipboard });
     const { controller } = await createAssetController();
     render(<Harness controller={controller} renderAssetPicker={() => null} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Copy authoring URL" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Copy authoring URL" })); await settle();
     await waitFor(() => expect(controller.state.entry?.values.hero).toEqual(imageUse));
   });
 
@@ -320,13 +318,13 @@ describe("Content asset-use cards", () => {
     const alt = group.getByRole("textbox", { name: "Alt text" });
     expect(alt).toHaveAttribute("aria-invalid", "true");
     expect(alt).toHaveAccessibleDescription("Add alt text or mark the image decorative");
-    fireEvent.input(alt, { target: { value: "   " } });
+    fireEvent.input(alt, { target: { value: "   " } }); await settle();
     expect(screen.getByText("Add alt text or mark the image decorative")).toBeVisible();
-    fireEvent.click(group.getByRole("switch", { name: "Decorative image" }));
+    fireEvent.click(group.getByRole("switch", { name: "Decorative image" })); await settle();
     expect(alt).toBeDisabled();
     expect(alt).not.toHaveAttribute("aria-invalid");
     expect(screen.queryByText("Add alt text or mark the image decorative")).toBeNull();
-    fireEvent.input(group.getByRole("textbox", { name: "Image caption" }), { target: { value: "New image caption" } });
+    fireEvent.input(group.getByRole("textbox", { name: "Image caption" }), { target: { value: "New image caption" } }); await settle();
     expect(group.getByRole("textbox", { name: "Caption" })).toHaveValue("Nested text");
     expect(controller.state.entry?.values.details).toMatchObject({ caption: "Nested text", hero: { decorative: true, alt: "", caption: "New image caption" } });
   });
@@ -343,14 +341,14 @@ describe("Content asset-use cards", () => {
     expect(screen.getByText("PDF")).toBeVisible();
     expect(screen.queryByAltText("")).toBeNull();
     if (value.kind === "card") {
-      fireEvent.input(screen.getByRole("textbox", { name: "Card title" }), { target: { value: "Updated title" } });
-      fireEvent.input(screen.getByRole("textbox", { name: "Card description" }), { target: { value: "Updated description" } });
+      fireEvent.input(screen.getByRole("textbox", { name: "Card title" }), { target: { value: "Updated title" } }); await settle();
+      fireEvent.input(screen.getByRole("textbox", { name: "Card description" }), { target: { value: "Updated description" } }); await settle();
       expect(controller.state.entry?.values.hero).toMatchObject({ title: "Updated title", description: "Updated description" });
     } else {
-      fireEvent.input(screen.getByRole("textbox", { name: value.kind === "link" ? "Link label" : "Download label" }), { target: { value: "Updated label" } });
+      fireEvent.input(screen.getByRole("textbox", { name: value.kind === "link" ? "Link label" : "Download label" }), { target: { value: "Updated label" } }); await settle();
       if (value.kind === "download") {
-        fireEvent.click(screen.getByRole("switch", { name: "Show file size" }));
-        fireEvent.click(screen.getByRole("switch", { name: "Show file type" }));
+        fireEvent.click(screen.getByRole("switch", { name: "Show file size" })); await settle();
+        fireEvent.click(screen.getByRole("switch", { name: "Show file type" })); await settle();
         expect(controller.state.entry?.values.hero).toMatchObject({ showSize: false, showType: false });
       }
       expect(controller.state.entry?.values.hero).toMatchObject({ label: "Updated label" });
@@ -359,14 +357,14 @@ describe("Content asset-use cards", () => {
 
   it("keeps the card usable after a failed preview and retries when the asset is selected again", async () => {
     const { controller } = await createAssetController();
-    render(<Harness controller={controller} renderAssetPicker={(request) => <button onClick={() => request.onSelect(imageUse)}>Use image again</button>} />);
+    render(<Harness controller={controller} renderAssetPicker={(request) => <button type="button" on:click={() => request.onSelect(imageUse)}>Use image again</button>} />);
     await screen.findByText("hero.webp");
-    fireEvent.error(screen.getByAltText(""));
+    fireEvent.error(screen.getByAltText("")); await settle();
     expect(screen.getByText("Preview unavailable")).toBeVisible();
     expect(screen.getByRole("button", { name: "Replace…" })).toBeEnabled();
     expect(controller.state.entry?.values.hero).toEqual(imageUse);
-    fireEvent.click(screen.getByRole("button", { name: "Replace…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Use image again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replace…" })); await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Use image again" })); await settle();
     expect(screen.getByAltText("")).toHaveAttribute("src", imageAsset.url);
     expect(screen.queryByText("Preview unavailable")).toBeNull();
   });
