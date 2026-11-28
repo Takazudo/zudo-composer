@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { flush, getScope, signal } from "@takazudo/zfb/zudo-react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { computed, flush, getScope, Show, signal } from "@takazudo/zfb/zudo-react";
 import { COMPOSER_ROOT_BUILD, createOwnedRootHost, mountOwned, mountOwnedChild, type OwnedRoot } from "../root";
 
 const roots: OwnedRoot[] = [];
@@ -66,5 +66,25 @@ describe("owned roots", () => {
     roots.push(root);
     expect(root.handle).toBeNull();
     expect(root.diagnostics.map((diagnostic) => diagnostic.code)).toContain("ZR_CANCELLED");
+  });
+
+  // Without an explicit reporter an update-phase failure must stay visible:
+  // the zudo-react default logs it, so a root Composer owns does too.
+  it("logs an update-phase diagnostic to the console when no reporter is given", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const open = signal(false);
+      function Panel() {
+        return <Show when={open}>{() => <select><option>{computed(() => "a")}{"b"}</option></select>}</Show>;
+      }
+      const root = mountOwned(Panel, {});
+      roots.push(root);
+      open.value = true;
+      await flush();
+      expect(root.diagnostics.map((diagnostic) => diagnostic.code)).toContain("ZR_SUBSCRIBER_ERROR");
+      expect(errors).toHaveBeenCalledWith(expect.stringMatching(/^ZR_SUBSCRIBER_ERROR at .*\(Panel, update\)/), expect.objectContaining({ code: "ZR_SUBSCRIBER_ERROR" }));
+    } finally {
+      errors.mockRestore();
+    }
   });
 });
