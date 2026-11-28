@@ -1,23 +1,23 @@
 "use client";
 
-// The Composer's context-menu orchestration hook — the ONE place that turns a
+// The Composer's context-menu orchestration — the ONE place that turns a
 // "⋯" activation (from a structure row, a structure insert affordance, or the
 // canvas relay) into the shared `Menu` with the right items, wired EXCLUSIVELY
 // through the controller's copy/cut/paste/duplicate/reorder/remove actions.
 //
 // ── One menu, two kinds of trigger ──────────────────────────────────────────
-// The shared `useMenu` measures a real element. A structure row hands over the
+// The shared `createMenu` measures a real element. A structure row hands over the
 // button that was pressed, and that is the trigger; the canvas hands over a
 // rect in host coordinates, because the control that was pressed lives inside
 // the preview iframe and this document cannot hold it. For that case the host
-// renders one zero-size anchor element (`anchorProps`) which this hook parks at
+// renders one zero-size anchor element (`anchorRef`) which this controller parks at
 // the relayed rect before opening — so both origins position and dismiss
 // through exactly one implementation.
 //
 // ── Menu content is DERIVED, not stored ─────────────────────────────────────
 // Only WHICH menu is open (node vs insert, its subject, and how to restore
-// focus on close) is state. The item list is recomputed from the live
-// `controller.state` on every render, so an action elsewhere can never leave a
+// focus on close) is state. The item list is derived from the live
+// `controller.state` signal, so an action elsewhere can never leave a
 // menu showing stale affordances for a node that already changed.
 //
 // ── Two distinct "close" paths ──────────────────────────────────────────────
@@ -34,10 +34,10 @@
 // subject whose content is the `QuickInsertPopover`, not an item list. Its
 // rule is derived from live state like every other menu's items.
 
-import { useCallback, useMemo, useRef, useState } from "preact/hooks";
+import { computed, signal, type ReadonlySignal, type Ref, type Scope } from "@takazudo/zfb/zudo-react";
 import type { InsertionTarget } from "../../../composer/browser";
 import { findLocation, isNodeOpaque } from "../../../composer/browser";
-import { useMenu, type MenuController } from "../../../components/overlay";
+import { createMenu, type MenuController } from "../../../components/overlay";
 import { buildCatalogById, summarizeNode } from "../ui/tree/tree-helpers";
 import { describeSlotRule, type SlotRule } from "../ui/slot-rules";
 import { offersQuickInsert, quickInsertSlotLabel } from "../ui/quick-insert/quick-insert-popover";
@@ -99,14 +99,14 @@ export interface ComposerMenusApi {
   /** Drives the shared `<Menu>`; the host renders one instance. */
   controller: MenuController;
   /** Accessible name for the current menu. */
-  label: string;
-  items: readonly ComposerMenuItemSpec[];
+  label: ReadonlySignal<string>;
+  items: ReadonlySignal<readonly ComposerMenuItemSpec[]>;
   /** Set instead of `items` while the quick-insert popover is the open subject. */
-  quickInsert: QuickInsertView | null;
+  quickInsert: ReadonlySignal<QuickInsertView | null>;
   /** Changes with the subject kind, so a hand-off from one menu to another remounts and refocuses the panel. */
-  menuKey: string;
-  /** Spread onto the host's single zero-size canvas anchor element. */
-  anchorRef: (element: HTMLElement | null) => void;
+  menuKey: ReadonlySignal<string>;
+  /** The `ref` of the host's single zero-size canvas anchor element. */
+  anchorRef: Ref<HTMLElement>;
   /** Dismiss from an item. Every close restores focus to whatever opened it. */
   close: () => void;
 
@@ -127,166 +127,148 @@ export interface ComposerMenusApi {
   requestQuickInsert: (request: CanvasQuickInsertRequest) => boolean;
 }
 
-export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi {
+export function createComposerMenus(scope: Scope, api: ComposerIntegrationApi): ComposerMenusApi {
   const { controller, manifestEntries, titleFor } = api;
   const manifest = controller.manifest;
-  const [subject, setSubject] = useState<MenuSubject>(null);
+  const subject = signal<MenuSubject>(null);
 
-  // The element `useMenu` measures. It is whichever row button was pressed, or
+  // The element the menu measures. It is whichever row button was pressed, or
   // the canvas anchor parked at the relayed rect.
-  const triggerRef = useRef<HTMLElement | null>(null);
-  const canvasAnchor = useRef<HTMLElement | null>(null);
-  const subjectRef = useRef<MenuSubject>(null);
+  const triggerRef: Ref<HTMLElement> = { current: null };
+  const canvasAnchor: Ref<HTMLElement> = { current: null };
   /** Set only for the "Add component…" hand-off, which owns the focus itself. */
-  const skipRestore = useRef(false);
+  let skipRestore = false;
 
   // Focus restoration hangs off the CLOSE, not off the caller, because the
   // shared menu also closes itself — Escape, an outside pointer, a scroll. The
   // canvas origin is why that matters: its control lives in the iframe, and a
   // dismissal that skipped the round trip would strand focus in the host.
-  const menu = useMenu(triggerRef, {
+  const menu = createMenu(triggerRef, {
     align: "start",
     onOpenChange: (open) => {
       if (open) return;
-      const closing = subjectRef.current;
-      subjectRef.current = null;
-      setSubject(null);
-      if (skipRestore.current) {
-        skipRestore.current = false;
+      const closing = subject.value;
+      subject.value = null;
+      if (skipRestore) {
+        skipRestore = false;
         return;
       }
       closing?.restoreFocus();
     },
   });
   const { openMenu, closeMenu } = menu;
-  subjectRef.current = subject;
+  scope.onCleanup(() => {
+    subject.value = null;
+  });
 
-  const catalogById = useMemo(() => buildCatalogById(manifestEntries), [manifestEntries]);
+  const catalogById = buildCatalogById(manifestEntries);
 
   /** Clear the menu WITHOUT invoking `restoreFocus` — the "Add component…" hand-off. */
-  const closeSilently = useCallback(() => {
-    skipRestore.current = true;
+  const closeSilently = () => {
+    skipRestore = true;
     closeMenu({ restoreFocus: false });
-  }, [closeMenu]);
+  };
 
   /** The normal close path: the open-change handler restores focus and clears. */
-  const close = useCallback(() => {
+  const close = () => {
     closeMenu({ restoreFocus: false });
-  }, [closeMenu]);
+  };
 
-  const openAt = useCallback(
-    (next: NonNullable<MenuSubject>, trigger: HTMLElement | null, rect: MenuAnchorRect | null) => {
-      if (trigger) {
-        triggerRef.current = trigger;
-      } else if (canvasAnchor.current && rect) {
-        // Park the anchor before opening: the menu measures it in a layout
-        // effect on the very next render, so a later write would be too late.
-        const style = canvasAnchor.current.style;
-        style.left = `${rect.x}px`;
-        style.top = `${rect.y}px`;
-        style.width = `${rect.width}px`;
-        style.height = `${rect.height}px`;
-        triggerRef.current = canvasAnchor.current;
-      }
-      setSubject(next);
-      openMenu("first");
-    },
-    [openMenu],
-  );
+  const openAt = (next: NonNullable<MenuSubject>, trigger: HTMLElement | null, rect: MenuAnchorRect | null) => {
+    if (trigger) {
+      triggerRef.current = trigger;
+    } else if (canvasAnchor.current && rect) {
+      // Park the anchor before opening: the menu measures it as it opens, so a
+      // later write would be too late.
+      const style = canvasAnchor.current.style;
+      style.left = `${rect.x}px`;
+      style.top = `${rect.y}px`;
+      style.width = `${rect.width}px`;
+      style.height = `${rect.height}px`;
+      triggerRef.current = canvasAnchor.current;
+    }
+    subject.value = next;
+    openMenu("first");
+  };
 
-  const openNodeMenu = useCallback(
-    (nodeId: string, rect: MenuAnchorRect, restoreFocus: () => void) => {
-      openAt({ kind: "node", nodeId, restoreFocus }, null, rect);
-    },
-    [openAt],
-  );
+  const openNodeMenu = (nodeId: string, rect: MenuAnchorRect, restoreFocus: () => void) => {
+    openAt({ kind: "node", nodeId, restoreFocus }, null, rect);
+  };
 
-  const openInsertMenu = useCallback(
-    (target: InsertionTarget, rect: MenuAnchorRect, restoreFocus: () => void, addComponentOverride?: () => void) => {
-      openAt(
-        {
-          kind: "insert",
-          target,
-          restoreFocus,
-          addComponent: addComponentOverride ?? (() => api.openChooser(target)),
-        },
-        null,
-        rect,
-      );
-    },
-    [api, openAt],
-  );
-
-  const handleTreeOpenNodeMenu = useCallback(
-    (nodeId: string, trigger: HTMLElement) => {
-      openAt({ kind: "node", nodeId, restoreFocus: () => trigger.focus() }, trigger, null);
-    },
-    [openAt],
-  );
-
-  const handleTreeOpenInsertMenu = useCallback(
-    (target: InsertionTarget, trigger: HTMLElement, addComponentOverride?: () => void) => {
-      openAt(
-        {
-          kind: "insert",
-          target,
-          restoreFocus: () => trigger.focus(),
-          addComponent: addComponentOverride ?? (() => api.openChooser(target)),
-        },
-        trigger,
-        null,
-      );
-    },
-    [api, openAt],
-  );
-
-  const ruleFor = useCallback(
-    (target: InsertionTarget): SlotRule =>
-      describeSlotRule({
-        catalog: manifestEntries,
-        manifest,
-        document: controller.state.document,
+  const openInsertMenu = (target: InsertionTarget, rect: MenuAnchorRect, restoreFocus: () => void, addComponentOverride?: () => void) => {
+    openAt(
+      {
+        kind: "insert",
         target,
-        rootPolicy: controller.state.rootPolicy,
-      }),
-    [controller.state.document, controller.state.rootPolicy, manifest, manifestEntries],
-  );
+        restoreFocus,
+        addComponent: addComponentOverride ?? (() => api.openChooser(target)),
+      },
+      null,
+      rect,
+    );
+  };
 
-  const requestQuickInsert = useCallback(
-    ({ target, rect, restoreFocus, openChooser }: CanvasQuickInsertRequest): boolean => {
-      if (controller.state.mode !== "edit" || !offersQuickInsert(ruleFor(target))) return false;
-      openAt({ kind: "quick-insert", target, restoreFocus, openChooser }, null, rect);
-      return true;
-    },
-    [controller.state.mode, openAt, ruleFor],
-  );
+  const handleTreeOpenNodeMenu = (nodeId: string, trigger: HTMLElement) => {
+    openAt({ kind: "node", nodeId, restoreFocus: () => trigger.focus() }, trigger, null);
+  };
 
-  const quickInsert = useMemo((): QuickInsertView | null => {
-    if (subject?.kind !== "quick-insert") return null;
+  const handleTreeOpenInsertMenu = (target: InsertionTarget, trigger: HTMLElement, addComponentOverride?: () => void) => {
+    openAt(
+      {
+        kind: "insert",
+        target,
+        restoreFocus: () => trigger.focus(),
+        addComponent: addComponentOverride ?? (() => api.openChooser(target)),
+      },
+      trigger,
+      null,
+    );
+  };
+
+  const ruleFor = (target: InsertionTarget): SlotRule =>
+    describeSlotRule({
+      catalog: manifestEntries,
+      manifest,
+      document: controller.state.value.document,
+      target,
+      rootPolicy: controller.state.value.rootPolicy,
+    });
+
+  const requestQuickInsert = ({ target, rect, restoreFocus, openChooser }: CanvasQuickInsertRequest): boolean => {
+    if (controller.state.value.mode !== "edit" || !offersQuickInsert(ruleFor(target))) return false;
+    openAt({ kind: "quick-insert", target, restoreFocus, openChooser }, null, rect);
+    return true;
+  };
+
+  const quickInsert = computed((): QuickInsertView | null => {
+    const current = subject.value;
+    if (current?.kind !== "quick-insert") return null;
     const handOff = (initialTab?: ChooserTab) => {
       closeSilently();
-      subject.openChooser(initialTab);
+      current.openChooser(initialTab);
     };
     return {
-      rule: ruleFor(subject.target),
+      rule: ruleFor(current.target),
       onInsert: (componentId) => {
-        const result = api.handleChooserAdd(subject.target, componentId);
+        const result = api.handleChooserAdd(current.target, componentId);
         if (result.status === "inserted") api.revealNode(result.nodeId);
         close();
       },
       onOpenPatterns: () => handOff("patterns"),
       onOpenChooser: () => handOff(),
     };
-  }, [api, close, closeSilently, ruleFor, subject]);
+  });
 
-  const derived = useMemo((): { label: string; items: readonly ComposerMenuItemSpec[] } => {
-    if (subject === null) return { label: "Menu", items: [] };
-    if (subject.kind === "quick-insert") {
-      return { label: `${quickInsertSlotLabel(ruleFor(subject.target))} accepts`, items: [] };
+  const derived = computed((): { label: string; items: readonly ComposerMenuItemSpec[] } => {
+    const current = subject.value;
+    if (current === null) return { label: "Menu", items: [] };
+    const state = controller.state.value;
+    if (current.kind === "quick-insert") {
+      return { label: `${quickInsertSlotLabel(ruleFor(current.target))} accepts`, items: [] };
     }
 
-    if (subject.kind === "node") {
-      const location = findLocation(controller.state.document, manifest, subject.nodeId);
+    if (current.kind === "node") {
+      const location = findLocation(state.document, manifest, current.nodeId);
       // The node vanished from under an open menu (a rare race) — nothing to
       // show; Escape and outside-click still close it normally.
       if (!location) return { label: "Menu", items: [] };
@@ -295,16 +277,16 @@ export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi 
       const displayName = summary.subtitle ? `${summary.title} ${summary.subtitle}` : summary.title;
       const siblings =
         location.parentId === null
-          ? controller.state.document.root
-          : (findLocation(controller.state.document, manifest, location.parentId)?.node.slots[location.slotId] ?? []);
+          ? state.document.root
+          : (findLocation(state.document, manifest, location.parentId)?.node.slots[location.slotId] ?? []);
 
       const opaque = isNodeOpaque(location.node, manifest);
       const items: ComposerMenuItemSpec[] = [];
       if (!opaque) {
         items.push(
-          { id: "copy", label: "Copy", onSelect: () => { controller.copy(subject.nodeId); close(); } },
-          { id: "cut", label: "Cut", onSelect: () => { controller.cut(subject.nodeId); close(); } },
-          { id: "duplicate", label: "Duplicate", onSelect: () => { controller.duplicate(subject.nodeId); close(); } },
+          { id: "copy", label: "Copy", onSelect: () => { controller.copy(current.nodeId); close(); } },
+          { id: "cut", label: "Cut", onSelect: () => { controller.cut(current.nodeId); close(); } },
+          { id: "duplicate", label: "Duplicate", onSelect: () => { controller.duplicate(current.nodeId); close(); } },
         );
       }
       // Reorder has no row affordance of its own — the structure rows carry Add
@@ -315,26 +297,26 @@ export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi 
           id: "move-up",
           label: "Move up",
           disabled: location.index === 0,
-          onSelect: () => { controller.reorder(subject.nodeId, "up"); close(); },
+          onSelect: () => { controller.reorder(current.nodeId, "up"); close(); },
         },
         {
           id: "move-down",
           label: "Move down",
           disabled: location.index >= siblings.length - 1,
-          onSelect: () => { controller.reorder(subject.nodeId, "down"); close(); },
+          onSelect: () => { controller.reorder(current.nodeId, "down"); close(); },
         },
         {
           id: "delete",
           label: "Delete",
           danger: true,
-          onSelect: () => { controller.remove(subject.nodeId); close(); },
+          onSelect: () => { controller.remove(current.nodeId); close(); },
         },
       );
       return { label: `${displayName} menu`, items };
     }
 
     // Insert menu: "Add component…" AND "Paste here" are BOTH always present.
-    const clipboard = controller.state.clipboard;
+    const clipboard = state.clipboard;
     const clipboardLabel = clipboard ? (titleFor(clipboard.componentId) ?? clipboard.componentId) : null;
     return {
       label: "Insert menu",
@@ -343,7 +325,7 @@ export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi 
           id: "add",
           label: "Add component…",
           onSelect: () => {
-            const addComponent = subject.addComponent;
+            const addComponent = current.addComponent;
             closeSilently();
             addComponent();
           },
@@ -352,19 +334,19 @@ export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi 
           id: "paste",
           label: clipboardLabel ? `Paste "${clipboardLabel}" here` : "Paste here",
           disabled: clipboard === null,
-          onSelect: () => { controller.paste(subject.target); close(); },
+          onSelect: () => { controller.paste(current.target); close(); },
         },
       ],
     };
-  }, [catalogById, close, closeSilently, controller, manifest, ruleFor, subject, titleFor]);
+  });
 
   return {
     controller: menu,
-    label: derived.label,
-    items: derived.items,
+    label: computed(() => derived.value.label),
+    items: computed(() => derived.value.items),
     quickInsert,
-    menuKey: subject?.kind ?? "closed",
-    anchorRef: (element) => { canvasAnchor.current = element; },
+    menuKey: computed(() => subject.value?.kind ?? "closed"),
+    anchorRef: canvasAnchor,
     close,
     openNodeMenu,
     openInsertMenu,

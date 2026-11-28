@@ -1,21 +1,14 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../test-support/cleanup";
-// Referential-stability regression test (issue #286): `useComposerExport`
-// used to return a fresh object literal every render, and `handleEscape`
-// closed over that whole object — so every unrelated re-render of
-// `useComposerIntegration` produced a new `handleEscape` identity, which in
-// turn made `useComposerKeyboard`'s effect (deps include `onEscape`) tear
-// down and re-add the global `keydown` listener on every render. This file
-// proves `exportState` and `handleEscape` now stay referentially stable
-// across a rerender triggered by unrelated state (a canvas selection change,
-// or opening/closing the chooser).
+// Referential-stability regression test (issue #286): a fresh export object
+// or `handleEscape` identity per update made the keyboard binding tear down
+// and re-add the global `keydown` listener. This file proves `exportState`
+// and `handleEscape` stay referentially stable across unrelated state changes
+// (a canvas selection change, or opening/closing the chooser).
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { act, renderHook } from "@testing-library/preact";
+import { act, renderIntegration } from "../test-support/integration-harness";
 import { VIRTUAL_ROOT_SLOT_ID } from "../../../../composer/browser";
 import { fixtureComponentProvider, makeAbcDocument, resetFixtureIds } from "../../ui/tree/__tests__/fixtures";
-import { useComposerIntegration } from "../use-composer-integration";
 import { controllerOptions } from "../test-support/controller-fixtures";
 
 function setup() {
@@ -24,17 +17,15 @@ function setup() {
   // idFactory literal created inline in the render callback would reset its
   // counter on every re-render.
   const options = controllerOptions(makeAbcDocument());
-  return renderHook(() =>
-    useComposerIntegration({
+  return renderIntegration({
       componentProvider: fixtureComponentProvider,
       controllerOptions: options,
-    }),
-  );
+    });
 }
 
 beforeEach(() => localStorage.clear());
 
-describe("useComposerIntegration — referential stability (#286)", () => {
+describe("createComposerIntegration — referential stability (#286)", () => {
   it("passes the authoritative provider catalog to the controller by identity", () => {
     const { result } = setup();
     expect(result.current.controller.manifest).toBe(fixtureComponentProvider.catalog);
@@ -76,9 +67,12 @@ describe("useComposerIntegration — referential stability (#286)", () => {
     expect(result.current.handleEscape).toBe(handleEscapeBefore);
 
     const exportStateWhileOpen = result.current.exportState;
+    const openWhileOpen = result.current.exportState.open;
     act(() => result.current.exportState.closeExport());
     expect(result.current.exportState.open).toBe(false);
-    expect(result.current.exportState).not.toBe(exportStateWhileOpen); // `open` itself changed — expected
+    // The export controller is one stable object; what changes is its own `open` state.
+    expect(result.current.exportState).toBe(exportStateWhileOpen);
+    expect(result.current.exportState.open).not.toBe(openWhileOpen);
     expect(result.current.handleEscape).toBe(handleEscapeBefore);
   });
 });
