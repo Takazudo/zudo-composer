@@ -123,7 +123,7 @@ Manager must run the full integrated CI-equivalent gates without omissions:
 
 | Gate group | Required commands / evidence |
 | --- | --- |
-| Source and contracts | `lint`, `typecheck`, `headless:negative-scan`, `site-project:boundary`, `handoff:boundary`, `contract:negative-scan`, `contract:conformance`, `contract:external-install`, `styles:class-names` |
+| Source and contracts | `lint`, `typecheck`, `headless:negative-scan`, `runtime:negative-scan`, `site-project:boundary`, `handoff:boundary`, `contract:negative-scan`, `contract:conformance`, `contract:external-install`, `styles:class-names` |
 | Unit and artifact | `provider:boundary` (no build); full `test`; one production `build`; `dist:boundary` |
 | All three browser lanes | `test:browser:host`, `test:browser:dev`, `test:browser:site-project` through their configured guarded runners |
 | Host install | `smoke:host-install`: the packed package installed into a bare project outside this repository, booted, authored, restarted and then removed |
