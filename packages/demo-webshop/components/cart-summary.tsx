@@ -1,6 +1,7 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import { useCart } from "./cart-store";
-import { PriceTag } from "./price-tag";
+import { Show, computed } from "@takazudo/zfb/zudo-react";
+import { cartCount, cartSignal, cartSubtotal } from "./cart-store";
+import { LivePrice } from "./price-tag";
 import { PRIMARY_CTA } from "./tone";
 
 export interface CartSummaryProps {
@@ -16,29 +17,34 @@ export function cartTotals(subtotal: number, count: number, shipping: number) {
 }
 
 export function CartSummary({ shipping = 8, currency = "USD", checkoutHref = "/checkout", readOnly = false }: CartSummaryProps) {
-  const { count, subtotal } = useCart();
-  const totals = cartTotals(subtotal, count, shipping);
+  const cart = cartSignal();
+  const count = computed(() => cartCount(cart.value));
+  const totals = computed(() => cartTotals(cartSubtotal(cart.value), count.value, shipping));
   const row = "flex items-baseline justify-between gap-shop-hsp-md";
   return (
     <section aria-label="Order summary" class="flex flex-col gap-shop-vsp-md bg-shop-surface p-shop-hsp-md">
       <h2 class="text-shop-h3 font-shop-semibold text-shop-fg-strong">
-        Summary <span class="text-shop-body font-shop-normal text-shop-muted">({count} {count === 1 ? "item" : "items"})</span>
+        Summary <span class="text-shop-body font-shop-normal text-shop-muted">{computed(() => `(${count.value} ${count.value === 1 ? "item" : "items"})`)}</span>
       </h2>
       <dl class="flex flex-col gap-shop-vsp-xs text-shop-body text-shop-fg">
         <div class={row}>
           <dt>Subtotal</dt>
-          <dd data-total="subtotal"><PriceTag price={totals.subtotal} currency={currency} size="body" /></dd>
+          <dd data-total="subtotal"><LivePrice price={computed(() => totals.value.subtotal)} currency={currency} size="body" /></dd>
         </div>
         <div class={row}>
           <dt>Shipping</dt>
-          <dd data-total="shipping"><PriceTag price={totals.shipping} currency={currency} size="body" /></dd>
+          <dd data-total="shipping"><LivePrice price={computed(() => totals.value.shipping)} currency={currency} size="body" /></dd>
         </div>
         <div class={`${row} border-t border-shop-border pt-shop-vsp-sm`}>
           <dt class="text-shop-h2 font-shop-semibold text-shop-fg-strong">Total</dt>
-          <dd data-total="total"><PriceTag price={totals.total} currency={currency} size="h2" /></dd>
+          <dd data-total="total"><LivePrice price={computed(() => totals.value.total)} currency={currency} size="h2" /></dd>
         </div>
       </dl>
-      {!readOnly && count > 0 && <a href={checkoutHref} class={`${PRIMARY_CTA} justify-center`}>Checkout</a>}
+      {!readOnly && (
+        <Show when={computed(() => count.value > 0)}>
+          {() => <a href={checkoutHref} class={`${PRIMARY_CTA} justify-center`}>Checkout</a>}
+        </Show>
+      )}
     </section>
   );
 }

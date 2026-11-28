@@ -3,6 +3,7 @@ import { lstat, readFile } from "node:fs/promises";
 import { relative } from "node:path";
 import type { TrustedComponentPack } from "@zudo-composer/component-contract";
 import { resolveComponentPack, type ResolvedComponentPack } from "../../plugins/component-pack.mjs";
+import { ZUDO_REACT_JSX_IMPORT_SOURCE } from "../../plugins/module-resolution.mjs";
 import type { ResolvedComposerConfig } from "../config/config";
 import { resolveLocalReleaseToolchain } from "../site-project-local/toolchain-config";
 import { collectPackSourceGraph } from "../site-project-local/pack-source-graph";
@@ -17,7 +18,7 @@ export async function resolveAuthoringRendererIdentity({ composerConfig: config 
   if (!config.hostDocument) throw new Error("Renderer identity requires a configured hostDocument module.");
   const resolved = resolveComponentPack(config.workspaceRoot, config.hostDocument.module);
   const policyRoots = config.contentValidation ? [resolveComponentPack(config.workspaceRoot, config.contentValidation.module).entryPath] : [];
-  const jsxRuntimes = ["jsx-runtime", "jsx-dev-runtime"].map(runtime => resolveComponentPack(config.workspaceRoot, `${config.hostDocument!.jsxImportSource ?? "preact"}/${runtime}`).entryPath);
+  const jsxRuntimes = ["jsx-runtime", "jsx-dev-runtime"].map(runtime => resolveComponentPack(config.workspaceRoot, `${config.hostDocument!.jsxImportSource ?? ZUDO_REACT_JSX_IMPORT_SOURCE}/${runtime}`).entryPath);
   const graph = await collectPackSourceGraph({ hostRoot: config.workspaceRoot, entryPath: resolved.entryPath, sourceModules: [], extraRoots: [config.paths.styles, config.configPath, ...jsxRuntimes, ...policyRoots], attestExternalFiles: true });
   enforceComputedLoadBoundary(graph);
   const files = await Promise.all((graph.attestedFiles ?? []).map(async path => {

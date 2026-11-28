@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../../test/workspace-providers";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, settleTasks, waitFor } from "../../../test/render";
 import { createProductionProviderIntegration, type ProductionProviderIntegration } from "../../../app/provider-integration";
 import { createEmptySiteProject } from "../../../app/empty-site-project";
 import { activeComponentProvider } from "../../composer/active-pack";
@@ -16,7 +16,6 @@ import { validateActivatedDeliveryArtifact } from "../source";
 import { toDeliveryHref } from "../routing";
 import { providerFixture, PNG } from "../../assets/__tests__/versioned-fixture";
 
-afterEach(cleanup);
 const hosts: TemporaryWorkspaceProviders[] = [];
 afterEach(async () => { await Promise.all(hosts.splice(0).map((value) => value.dispose())); });
 async function host(): Promise<TemporaryWorkspaceProviders> {
@@ -451,7 +450,7 @@ function announcePending(workspaceId: string, value: boolean, sender = "editor-t
 /**
  * A peer that only listens. The reader queries the channel the moment it
  * subscribes, so a counted query is the signal that its effect has run —
- * Preact flushes effects after paint, and a bare `findBy*` can return first.
+ * effects run after the DOM commit, and a bare `findBy*` can return first.
  */
 function observeQueries(): { count(): number; close(): void } {
   const peer = new FakePendingChannel(PENDING_CHANNEL);
@@ -489,13 +488,13 @@ describe("SiteDelivery working-preview pending broadcast", () => {
     await waitFor(() => expect(listening.count()).toBe(1));
     expect(strip().textContent).not.toContain(PREVIEW_PENDING_COPY);
 
-    await act(async () => { announcePending("another-workspace", true, "foreign-tab"); });
+    announcePending("another-workspace", true, "foreign-tab"); await settleTasks();
     expect(strip().textContent).not.toContain(PREVIEW_PENDING_COPY);
 
-    await act(async () => { announcePending(id, true); });
+    announcePending(id, true); await settleTasks();
     expect(strip().textContent).toContain(PREVIEW_PENDING_COPY);
 
-    await act(async () => { announcePending(id, false); });
+    announcePending(id, false); await settleTasks();
     expect(strip().textContent).not.toContain(PREVIEW_PENDING_COPY);
     listening.close();
   });
@@ -512,7 +511,7 @@ describe("SiteDelivery working-preview pending broadcast", () => {
     await waitFor(() => expect(listening.count()).toBe(1));
     expect(strip().textContent).not.toContain(PREVIEW_PENDING_COPY);
 
-    await act(async () => { announcePending(id, true); });
+    announcePending(id, true); await settleTasks();
     expect(strip().textContent).toContain(PREVIEW_PENDING_COPY);
     listening.close();
   });

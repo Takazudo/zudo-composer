@@ -1,4 +1,5 @@
 import { defineComponent } from "@zudo-composer/component-contract";
+import { For, computed, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import { HOVER_INVERT } from "./tone";
 
 export interface PaginationProps {
@@ -10,36 +11,54 @@ export interface PaginationProps {
 
 const ITEM = `inline-flex items-center justify-center min-w-[2.75rem] h-shop-control-h px-shop-hsp-xs border text-shop-body font-shop-mono tabular-nums`;
 
-export function Pagination({ page = 1, pageCount = 1, onPage }: PaginationProps) {
-  const count = Math.max(1, Math.floor(pageCount));
-  const current = Math.min(Math.max(1, Math.floor(page)), count);
-  const control = (target: number, label: string, text: string, disabled = false) => {
-    const tone = target === current && text !== "Prev" && text !== "Next"
-      ? "border-shop-fg-strong text-shop-fg-strong"
-      : disabled
-        ? "border-shop-border text-shop-faint"
-        : `border-shop-border text-shop-fg-strong ${HOVER_INVERT}`;
-    const ariaCurrent = target === current && text === String(target) ? "page" : undefined;
+export interface PaginationControlsProps {
+  page: ReadonlySignal<number>;
+  pageCount: ReadonlySignal<number>;
+  onPage?: ((page: number) => void) | undefined;
+}
+
+/** The live form `shop.product-grid` renders: retained page buttons keep focus while the page changes. */
+export function PaginationControls({ page, pageCount, onPage }: PaginationControlsProps) {
+  const count = computed(() => Math.max(1, Math.floor(pageCount.value)));
+  const current = computed(() => Math.min(Math.max(1, Math.floor(page.value)), count.value));
+  const targets = computed(() => Array.from({ length: count.value }, (_, index) => index + 1));
+  const control = (target: ReadonlySignal<number>, label: ReadonlySignal<string>, text: ReadonlySignal<string>, disabled: ReadonlySignal<boolean>, step: boolean) => {
+    const isCurrent = computed(() => !step && target.value === current.value);
+    const tone = computed(() =>
+      isCurrent.value
+        ? "border-shop-fg-strong text-shop-fg-strong"
+        : disabled.value
+          ? "border-shop-border text-shop-faint"
+          : `border-shop-border text-shop-fg-strong ${HOVER_INVERT}`,
+    );
+    const ariaCurrent = computed(() => (isCurrent.value ? "page" : null));
+    const itemClass = computed(() => `${ITEM} ${tone.value}`);
     if (onPage) {
       return (
-        <button type="button" class={`${ITEM} ${tone}`} aria-label={label} aria-current={ariaCurrent} disabled={disabled} onClick={() => onPage(target)}>
+        <button type="button" class={itemClass} aria-label={label} aria-current={ariaCurrent} disabled={disabled} on:click={() => onPage(target.value)}>
           {text}
         </button>
       );
     }
-    return disabled
-      ? <span class={`${ITEM} ${tone}`} aria-disabled="true">{text}</span>
-      : <a class={`${ITEM} ${tone}`} href={`?page=${target}`} aria-label={label} aria-current={ariaCurrent}>{text}</a>;
+    // Standalone (authored) pagination is static: its props never change without a remount.
+    return disabled.value
+      ? <span class={itemClass} aria-disabled="true">{text}</span>
+      : <a class={itemClass} href={`?page=${target.value}`} aria-label={label} aria-current={ariaCurrent}>{text}</a>;
   };
+  const fixed = <T,>(value: T) => computed(() => value);
   return (
     <nav aria-label="Pagination" class="flex flex-wrap items-center gap-shop-hsp-xs">
-      {control(current - 1, "Previous page", "Prev", current === 1)}
-      {Array.from({ length: count }, (_, index) => index + 1).map((target) => (
-        <span key={target}>{control(target, `Page ${target}`, String(target))}</span>
-      ))}
-      {control(current + 1, "Next page", "Next", current === count)}
+      {control(computed(() => current.value - 1), fixed("Previous page"), fixed("Prev"), computed(() => current.value === 1), true)}
+      <For each={targets} by={(target) => target}>
+        {(target) => <span>{control(target, computed(() => `Page ${target.value}`), computed(() => String(target.value)), fixed(false), false)}</span>}
+      </For>
+      {control(computed(() => current.value + 1), fixed("Next page"), fixed("Next"), computed(() => current.value === count.value), true)}
     </nav>
   );
+}
+
+export function Pagination({ page = 1, pageCount = 1, onPage }: PaginationProps) {
+  return <PaginationControls page={computed(() => page)} pageCount={computed(() => pageCount)} onPage={onPage} />;
 }
 
 export const paginationComponent = defineComponent<PaginationProps>()(Pagination, {

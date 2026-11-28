@@ -480,3 +480,5 @@
 @media (prefers-reduced-motion: reduce) {
   .sg-assets-picker-library, .sg-assets-picker-details { transition: none; }
 }
+/* The footer after the body holds its Close action only in the error phase; otherwise it carries just zudo-react comment anchors, which :empty ignores. */
+.sg-assets-image-editor-dialog .cms-dialog__body + :empty { display: none; }

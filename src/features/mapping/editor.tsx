@@ -1,11 +1,8 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
-import { useCallback, useMemo, useRef, useState } from "preact/hooks";
-import { useBreadcrumb, type EditorStatus } from "../../app/chrome-context";
+import { computed, getScope, signal, type Child, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
+import { bindBreadcrumb, type EditorStatus } from "../../app/chrome-context";
+import type { AppServices } from "../../app/services";
 import { formatIntent } from "../../app/route-intents";
-import { EditorBody, EditorChrome, RecordTitle } from "../../components/editor-chrome";
+import { createEditorChrome, createEditorRails, EditorBody, EditorChrome, RecordTitle } from "../../components/editor-chrome";
 import type { EditorPane } from "../../components/editor-chrome";
 import {
   ArrowRightIcon,
@@ -18,8 +15,9 @@ import {
   SaveIcon,
   TrashIcon,
 } from "../../components/icons";
-import { useLibraryConfirm } from "../../components/library-page";
-import { ConfirmDialog, Menu, MenuItem, MenuSeparator, useMenu } from "../../components/overlay";
+import { createLibraryConfirm } from "../../components/library-page";
+import { ConfirmDialog, createMenu, Menu, MenuItem, MenuSeparator } from "../../components/overlay";
+import { liveSlot, Rebuild } from "../../components/rebuild";
 import { Banner, Button } from "../../components/ui";
 import type { MappingCollectionQuery } from "../../mapping";
 import { formatComposerRoute } from "../composer/routing";
@@ -28,10 +26,12 @@ import { BindingsPane } from "./bindings-pane";
 import type { MappingEditorController, MappingEditorState, MappingSaveStatus } from "./controller";
 import { MAPPING_ROUTE, mappingDeepLinkHref } from "./deep-link";
 import { InspectorPane, type MappingInspectorTab } from "./inspector-pane";
+import type { MappingRecord } from "../../mapping";
 import { buildBindingRows, firstCompatibleProjection, firstCompatibleTransform, refKey } from "./presentation";
 import { RecordPickerDialog } from "./record-picker-dialog";
 import { SourcePane } from "./source-pane";
 import { PinPickerDialog } from "./pin-picker-dialog";
+import { derive, memo } from "../../components/reactive";
 
 // The Mapping editor on the shared record chrome: back, an inline-editable
 // name, the source/target pair in the centre, and Test + Save on the right.
@@ -41,14 +41,16 @@ import { PinPickerDialog } from "./pin-picker-dialog";
 type PickerKind = "content" | "composition";
 
 export interface MappingEditorProps {
-  state: MappingEditorState;
+  state: ReadonlySignal<MappingEditorState>;
   controller: MappingEditorController;
   componentProvider: ComposerComponentProvider;
   /** Route transitions this editor owns: back, duplicate and delete. */
   navigate: (href: string) => void;
   /** Reports a rejected action without unmounting the editor. */
-  error: string | null;
+  error: ReadonlySignal<string | null>;
   run: (action: () => void | Promise<void>) => void;
+  /** Publishes the breadcrumb and save state into the shell chrome. */
+  services?: AppServices;
 }
 
 /** The queue's vocabulary translated into the chrome's four states. */
@@ -61,6 +63,20 @@ function statusOf(status: MappingSaveStatus, detail: string, onRetry: () => void
   }
 }
 
+/**
+ * The open record. The editor is mounted per record id, so `mapping` is set
+ * for its whole life; the last record is kept across the one flush in which a
+ * delete has cleared it and the route has not yet switched to the library.
+ */
+export function openMapping(state: ReadonlySignal<MappingEditorState>): ReadonlySignal<MappingRecord> {
+  let last = state.value.mapping!;
+  return computed(() => {
+    const current = state.value.mapping;
+    if (current) last = current;
+    return last;
+  });
+}
+
 export function MappingEditor({
   state,
   controller,
@@ -68,40 +84,45 @@ export function MappingEditor({
   navigate,
   error,
   run,
-}: MappingEditorProps): JSX.Element {
-  const mapping = state.mapping!;
-  const [pane, setPane] = useState<EditorPane>("main");
-  const [tab, setTab] = useState<MappingInspectorTab>("preview");
-  const [picker, setPicker] = useState<PickerKind | null>(null);
-  const [pinPickerOpen, setPinPickerOpen] = useState(false);
-  const confirm = useLibraryConfirm();
-  const overflowRef = useRef<HTMLButtonElement | null>(null);
-  const overflow = useMenu(overflowRef, { align: "end" });
+  services,
+}: MappingEditorProps): Child {
+  const scope = getScope();
+  const mapping = openMapping(state);
+  const pane = signal<EditorPane>("main");
+  const tab = signal<MappingInspectorTab>("preview");
+  const picker = signal<PickerKind | null>(null);
+  const pinPickerOpen = signal(false);
+  const confirm = createLibraryConfirm();
+  const overflowRef: Ref<HTMLButtonElement> = { current: null };
+  const overflow = createMenu(overflowRef, { align: "end" });
+  const chrome = createEditorChrome({ editorKey: "mapping", activePane: pane, onActivePaneChange: (next) => { pane.value = next; } });
+  const rails = createEditorRails({ chrome, navLabel: "Source fields", inspectorLabel: "Inspector" });
 
-  useBreadcrumb([{ label: "Mappings", href: MAPPING_ROUTE }, { label: mapping.document.name }]);
+  bindBreadcrumb(scope, services?.chrome ?? null, computed(() => [{ label: "Mappings", href: MAPPING_ROUTE }, { label: mapping.value.document.name }]));
 
-  const rows = useMemo(() => buildBindingRows(mapping, state.definition), [mapping, state.definition]);
-  const modelName = state.definition?.contentModel?.document.name
-    ?? state.contentModels.find((entry) => refKey(entry.ref) === refKey(mapping.document.contentModel))?.summary.name
-    ?? mapping.document.contentModel.recordId;
-  const compositionName = state.definition?.composition?.document.name
-    ?? state.compositions.find((entry) => refKey(entry.ref) === refKey(mapping.document.composition))?.summary.name
-    ?? mapping.document.composition.recordId;
+  const definition = computed(() => state.value.definition);
+  const rows = derive(() => [mapping.value, definition.value] as const, buildBindingRows);
+  const modelName = computed(() => definition.value?.contentModel?.document.name
+    ?? state.value.contentModels.find((entry) => refKey(entry.ref) === refKey(mapping.value.document.contentModel))?.summary.name
+    ?? mapping.value.document.contentModel.recordId);
+  const compositionName = computed(() => definition.value?.composition?.document.name
+    ?? state.value.compositions.find((entry) => refKey(entry.ref) === refKey(mapping.value.document.composition))?.summary.name
+    ?? mapping.value.document.composition.recordId);
 
   /** Show the answer where it lives: re-evaluate, then bring Diagnostics forward. */
   const test = () => run(async () => {
     await controller.testDefinition();
-    setTab("diagnostics");
-    setPane("insp");
+    tab.value = "diagnostics";
+    pane.value = "insp";
   });
 
   const bind = (sourceFieldId: string, target: { nodeId: string; prop: string }) =>
     run(() => sourceFieldId === "entry:identity" ? controller.bindEntryIdentity(target) : controller.addBinding(sourceFieldId, target));
 
   const rebind = (bindingId: string, sourceFieldId: string) => run(() => {
-    const row = rows.find((candidate) => candidate.binding.id === bindingId);
+    const row = rows.value.find((candidate) => candidate.binding.id === bindingId);
     if (sourceFieldId === "entry:identity" && row) return controller.bindEntryIdentity(row.binding.target, bindingId);
-    const field = state.definition?.contentModel?.document.fields.find((candidate) => candidate.id === sourceFieldId);
+    const field = definition.value?.contentModel?.document.fields.find((candidate) => candidate.id === sourceFieldId);
     // The menu only ever offers compatible sources, so a transform exists;
     // keeping the stored one would leave the row broken in a new way.
     const projection = row?.target && field ? firstCompatibleProjection(field, row.target) : null;
@@ -110,37 +131,38 @@ export function MappingEditor({
   });
 
   const askDelete = () => confirm.request({
-    title: `Delete ${mapping.document.name}?`,
+    title: `Delete ${mapping.value.document.name}?`,
     message: "Its bindings go with it. The Content model and the Composition are untouched. This cannot be undone.",
     confirmLabel: "Delete",
     tone: "danger",
     onConfirm: () => run(async () => {
-      await controller.delete(mapping.id);
+      await controller.delete(mapping.value.id);
       navigate(MAPPING_ROUTE);
     }),
   });
 
-  const referenceEntries = useCallback((target: { providerId: string; recordId: string }) => controller.referenceQueryEntries(target), [controller]);
+  const referenceEntries = (target: { providerId: string; recordId: string }) => controller.referenceQueryEntries(target);
+  const recordLinks = memo(() => [mapping.value.document.contentModel, mapping.value.document.composition] as const);
+  const collectionQuery = computed(() => mapping.value.document.mode.kind === "collection" ? mapping.value.document.mode.query : null);
   return (
     <EditorChrome
-      editorKey="mapping"
+      chrome={chrome}
+      appChrome={services?.chrome ?? null}
       class="cms-mapping-editor"
       back={{ href: MAPPING_ROUTE, label: "Back to Mappings" }}
-      title={<RecordTitle value={mapping.document.name} label="Mapping name" onCommit={(name) => controller.rename(name)} />}
-      status={statusOf(state.saveStatus, state.message, () => run(() => controller.retrySave()))}
-      dirty={state.saveStatus !== "saved"}
+      title={<RecordTitle value={computed(() => mapping.value.document.name)} label="Mapping name" onCommit={(name) => controller.rename(name)} />}
+      status={computed(() => statusOf(state.value.saveStatus, state.value.message, () => run(() => controller.retrySave())))}
+      dirty={computed(() => state.value.saveStatus !== "saved")}
       paneLabels={{ nav: "Fields", main: "Bindings", insp: "Inspector" }}
-      activePane={pane}
-      onActivePaneChange={setPane}
       center={
         <>
-          <Button size="sm" aria-label={`Content model: ${modelName}`} onClick={() => setPicker("content")}>
+          <Button size="sm" aria-label={computed(() => `Content model: ${modelName.value}`)} on:click={() => { picker.value = "content"; }}>
             <ContentIcon size="sm" />
             <span class="cms-mapping-pick__name">{modelName}</span>
             <ChevronDownIcon size="xs" />
           </Button>
           <ArrowRightIcon size="sm" class="cms-mapping-pick__arrow" aria-hidden="true" />
-          <Button size="sm" aria-label={`Composition: ${compositionName}`} onClick={() => setPicker("composition")}>
+          <Button size="sm" aria-label={computed(() => `Composition: ${compositionName.value}`)} on:click={() => { picker.value = "composition"; }}>
             <ComposerIcon size="sm" />
             <span class="cms-mapping-pick__name">{compositionName}</span>
             <ChevronDownIcon size="xs" />
@@ -149,14 +171,14 @@ export function MappingEditor({
       }
       right={
         <>
-          <Button onClick={test}>
+          <Button on:click={test}>
             <PlayIcon size="sm" />
             Test
           </Button>
           <Button
             variant="primary"
-            disabled={state.saveStatus === "saved" || state.saveStatus === "saving"}
-            onClick={() => run(() => controller.flush())}
+            disabled={computed(() => state.value.saveStatus === "saved" || state.value.saveStatus === "saving")}
+            on:click={() => run(() => controller.flush())}
           >
             <SaveIcon size="sm" />
             Save
@@ -170,27 +192,32 @@ export function MappingEditor({
             {/* `.cms-editor__center` is hidden below 64rem, so the two picker
              * buttons are unreachable there. Repairing a drifted Mapping is
              * exactly what a narrow screen must still be able to do. */}
-            <MenuItem icon={ContentIcon} onSelect={() => setPicker("content")}>Change Content model…</MenuItem>
-            <MenuItem icon={ComposerIcon} onSelect={() => setPicker("composition")}>Change Composition…</MenuItem>
+            <MenuItem icon={ContentIcon} onSelect={() => { picker.value = "content"; }}>Change Content model…</MenuItem>
+            <MenuItem icon={ComposerIcon} onSelect={() => { picker.value = "composition"; }}>Change Composition…</MenuItem>
             <MenuSeparator />
             <MenuItem
               icon={DuplicateIcon}
               onSelect={() => run(async () => {
-                const id = await controller.duplicate(mapping.id);
+                const id = await controller.duplicate(mapping.value.id);
                 navigate(mappingDeepLinkHref({ providerId: controller.provider.descriptor.id, mappingId: id }));
               })}
             >
               Duplicate mapping
             </MenuItem>
-            <MenuItem icon={ContentIcon} href={formatIntent({ route: "content", providerId: mapping.document.contentModel.providerId, modelId: mapping.document.contentModel.recordId })}>
-              Open in Content
-            </MenuItem>
-            <MenuItem
-              icon={ComposerIcon}
-              href={formatComposerRoute({ kind: "detail", providerId: mapping.document.composition.providerId, recordId: mapping.document.composition.recordId })}
-            >
-              Open composition
-            </MenuItem>
+            {/* The two links follow the record's current source and target. */}
+            <Rebuild value={recordLinks}>{([contentModel, composition]) => (
+              <>
+                <MenuItem icon={ContentIcon} href={formatIntent({ route: "content", providerId: contentModel.providerId, modelId: contentModel.recordId })}>
+                  Open in Content
+                </MenuItem>
+                <MenuItem
+                  icon={ComposerIcon}
+                  href={formatComposerRoute({ kind: "detail", providerId: composition.providerId, recordId: composition.recordId })}
+                >
+                  Open composition
+                </MenuItem>
+              </>
+            )}</Rebuild>
             <MenuSeparator />
             <MenuItem icon={TrashIcon} tone="danger" onSelect={askDelete}>
               Delete…
@@ -200,29 +227,30 @@ export function MappingEditor({
       }
     >
       <EditorBody
-        navLabel="Source fields"
-        inspectorLabel="Inspector"
+        chrome={chrome}
+        rails={rails}
         nav={
           <SourcePane
             state={state}
             rows={rows}
+            rails={rails}
             onBind={bind}
             onSelectEntry={(entryId) => run(() => controller.selectEntry(entryId))}
             onModeChange={(kind) => run(() => controller.setMode(kind))}
             onQueryChange={(change: Partial<MappingCollectionQuery> | ((query: MappingCollectionQuery) => MappingCollectionQuery)) => run(() => controller.updateCollectionQuery(change))}
             referenceEntries={referenceEntries}
-            onOpenPins={() => setPinPickerOpen(true)}
+            onOpenPins={() => { pinPickerOpen.value = true; }}
           />
         }
         main={
           <BindingsPane
             state={state}
             rows={rows}
-            notice={error ? <Banner tone="err">{error}</Banner> : null}
+            notice={liveSlot(computed(() => (error.value ? <Banner tone="err">{error.value}</Banner> : null)))}
             onBind={bind}
             onRebind={rebind}
             onProjection={(bindingId, projection) => run(() => {
-              const row = rows.find((candidate) => candidate.binding.id === bindingId);
+              const row = rows.value.find((candidate) => candidate.binding.id === bindingId);
               const transform = row?.target ? firstCompatibleTransform(row.projections.find((candidate) => JSON.stringify(candidate.projection) === JSON.stringify(projection))?.kind ?? "text", row.target) : null;
               return controller.updateBinding(bindingId, { projection, ...(transform ? { transform } : {}) });
             })}
@@ -235,62 +263,64 @@ export function MappingEditor({
           <InspectorPane
             state={state}
             componentProvider={componentProvider}
+            rails={rails}
             tab={tab}
-            onTabChange={setTab}
+            onTabChange={(next) => { tab.value = next; }}
             onPreviewCurrent={() => controller.setPreviewCurrent()}
             onPreviewError={(message) => controller.setPreviewError(message)}
             controller={controller}
             run={run}
+            assetStore={services?.workspace.integration.assetProvider?.store}
           />
         }
       />
       <RecordPickerDialog
-        open={picker === "content"}
+        open={computed(() => picker.value === "content")}
         title="Choose a Content model"
         description="Bindings keep their source field ids; any that the new model does not carry are reported rather than dropped."
         searchLabel="Filter Content models"
-        currentKey={refKey(mapping.document.contentModel)}
+        currentKey={computed(() => refKey(mapping.value.document.contentModel))}
         emptyMessage="No Content models are available."
-        entries={state.contentModels.map((entry) => ({
+        entries={derive(() => [state.value.contentModels] as const, (contentModels) => contentModels.map((entry) => ({
           key: refKey(entry.ref),
           name: entry.summary.name,
           detail: `${entry.summary.kind} · ${entry.providerLabel} · ${entry.ref.recordId}`,
           icon: ContentIcon,
-        }))}
+        })))}
         onSelect={(key) => run(() => {
-          const entry = state.contentModels.find((candidate) => refKey(candidate.ref) === key);
+          const entry = state.value.contentModels.find((candidate) => refKey(candidate.ref) === key);
           return entry ? controller.selectContentModel(entry.ref) : Promise.resolve();
         })}
-        onClose={() => setPicker(null)}
+        onClose={() => { picker.value = null; }}
       />
       <RecordPickerDialog
-        open={picker === "composition"}
+        open={computed(() => picker.value === "composition")}
         title="Choose a Composition"
         description="Bindings keep their target props; any the new Composition does not carry are reported rather than dropped."
         searchLabel="Filter Compositions"
-        currentKey={refKey(mapping.document.composition)}
+        currentKey={computed(() => refKey(mapping.value.document.composition))}
         emptyMessage="No Compositions are available."
-        entries={state.compositions.map((entry) => ({
+        entries={derive(() => [state.value.compositions] as const, (compositions) => compositions.map((entry) => ({
           key: refKey(entry.ref),
           name: entry.summary.name,
           detail: `${entry.providerLabel} · ${entry.ref.recordId}`,
           icon: ComposerIcon,
-        }))}
+        })))}
         onSelect={(key) => run(() => {
-          const entry = state.compositions.find((candidate) => refKey(candidate.ref) === key);
+          const entry = state.value.compositions.find((candidate) => refKey(candidate.ref) === key);
           return entry ? controller.selectComposition(entry.ref) : Promise.resolve();
         })}
-        onClose={() => setPicker(null)}
+        onClose={() => { picker.value = null; }}
       />
       <PinPickerDialog
         open={pinPickerOpen}
-        entries={state.entries}
-        model={state.definition?.contentModel ?? null}
-        providerId={mapping.document.contentModel.providerId}
-        currentPins={mapping.document.mode.kind === "collection" ? mapping.document.mode.query.pins : []}
-        publication={mapping.document.mode.kind === "collection" ? mapping.document.mode.query.publication : "published-only"}
+        entries={computed(() => state.value.entries)}
+        model={computed(() => definition.value?.contentModel ?? null)}
+        providerId={computed(() => mapping.value.document.contentModel.providerId)}
+        currentPins={computed(() => collectionQuery.value?.pins ?? [])}
+        publication={computed(() => collectionQuery.value?.publication ?? "published-only")}
         onSave={(pins) => run(() => controller.setCollectionPins(pins))}
-        onClose={() => setPinPickerOpen(false)}
+        onClose={() => { pinPickerOpen.value = false; }}
       />
       <ConfirmDialog {...confirm.dialogProps} />
     </EditorChrome>

@@ -1,5 +1,4 @@
-import type { JSX } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { computed, getScope, signal, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
 import {
   BoldIcon,
   HeadingIcon,
@@ -10,27 +9,30 @@ import {
   MarkdownIcon,
   QuoteIcon,
 } from "../../components/icons";
+import { read, toSignal, type MaybeSignal } from "../../components/reactive";
 import { Button, SegmentedControl } from "../../components/ui";
+import { createDomId } from "../../components/use-dom-id";
+import { Keyed } from "../../runtime";
 import type { ResolvedTheme } from "../../theme/theme";
-import { useResolvedTheme } from "../../theme/use-resolved-theme";
+import { resolvedThemeSignal } from "../../theme/use-resolved-theme";
 import { applyMarkdownFormat, type MarkdownFormat } from "./markdown-formatting";
-import { createMarkdownEditor, type MarkdownEditorController } from "./markdown-source";
+import type { MarkdownEditorController } from "./markdown-source";
 export { createMarkdownEditor } from "./markdown-source";
 export type { CreateMarkdownEditorOptions, MarkdownEditorController } from "./markdown-source";
 import { MarkdownPreview } from "./markdown-preview";
-import { useDomId } from "../../components/use-dom-id";
 
 export type MarkdownEditorMode = "edit" | "preview" | "split";
 
 export interface MarkdownEditorProps {
   /** Stable Entry/field identity. Changing it creates a fresh EditorView and history. */
-  identity: string;
-  value: string;
+  identity: MaybeSignal<string>;
+  value: MaybeSignal<string>;
   label: string;
   required?: boolean;
-  onChange(value: string): void;
+  /** A signal of the callback always reaches the newest handler. */
+  onChange: MaybeSignal<(value: string) => void>;
   initialMode?: MarkdownEditorMode;
-  theme?: ResolvedTheme;
+  theme?: MaybeSignal<ResolvedTheme>;
 }
 
 const actions: readonly {
@@ -53,54 +55,69 @@ const MODE_OPTIONS = [
   { value: "preview" as const, label: "Preview" },
 ];
 
+interface SourceMountProps {
+  value: ReadonlySignal<string>;
+  theme: ReadonlySignal<ResolvedTheme>;
+  labelId: string;
+  required: boolean;
+  /** Receives the live controller while this identity's editor exists. */
+  attach(controller: MarkdownEditorController | null): void;
+  onChange(value: string): void;
+}
+
+/**
+ * One CodeMirror lifetime. The module is imported late, on activation, so a
+ * visit that is left before it arrives creates nothing; otherwise the editor is
+ * created exactly once and destroyed exactly once, with the scope.
+ */
+function SourceMount({ value, theme, labelId, required, attach, onChange }: SourceMountProps) {
+  const scope = getScope();
+  const parent: Ref<HTMLDivElement> = { current: null };
+  let controller: MarkdownEditorController | null = null;
+  scope.onCleanup(() => {
+    if (!controller) return;
+    attach(null);
+    controller.destroy();
+    controller = null;
+  });
+  scope.onActivate(() => {
+    void import("./markdown-source").then(({ createMarkdownEditor }) => {
+      if (scope.abortSignal.aborted || !parent.current) return;
+      controller = createMarkdownEditor({ parent: parent.current, value: value.value, labelledBy: labelId, required, theme: theme.value, onChange });
+      attach(controller);
+    });
+  });
+  scope.effect(() => {
+    const next = value.value;
+    controller?.setValue(next);
+  });
+  scope.effect(() => {
+    const next = theme.value;
+    controller?.setTheme(next);
+  });
+  return <div class="sg-content-markdown-editor__mount" ref={parent} />;
+}
+
 export function MarkdownEditor({
   identity,
-  value,
+  value: suppliedValue,
   label,
   required = false,
   onChange,
   initialMode = "split",
   theme: suppliedTheme,
-}: MarkdownEditorProps): JSX.Element {
-  const observedTheme = useResolvedTheme();
-  const theme = suppliedTheme ?? observedTheme;
-  const uid = useDomId();
+}: MarkdownEditorProps) {
+  const scope = getScope();
+  const theme = suppliedTheme === undefined ? resolvedThemeSignal(scope) : toSignal(suppliedTheme);
+  const value = toSignal(suppliedValue);
+  const identitySignal = toSignal(identity);
   // Just the label, the way every `Field` in this form names its control: the
   // kind hint beside it is a visual aid, not part of the control's name.
-  const labelId = `sg-content-markdown-label-${uid}`;
-  const mountRef = useRef<HTMLDivElement | null>(null);
-  const controllerRef = useRef<MarkdownEditorController | null>(null);
-  const callbackRef = useRef(onChange);
-  const [mode, setMode] = useState<MarkdownEditorMode>(initialMode);
-  callbackRef.current = onChange;
-
-  useEffect(() => {
-    const parent = mountRef.current;
-    if (!parent) return;
-    const controller = createMarkdownEditor({
-      parent,
-      value,
-      labelledBy: labelId,
-      required,
-      theme,
-      onChange: (next) => callbackRef.current(next),
-    });
-    controllerRef.current = controller;
-    return () => {
-      controllerRef.current = null;
-      controller.destroy();
-    };
-    // One editor/history lifetime belongs to exactly one Entry/field identity;
-    // value, callback, and theme updates flow through the refs/effects below.
-    // `required` joins them because it is a static content attribute — and it
-    // can only change in Schema mode, which closes the Entry this editor is on.
-  }, [identity, labelId, required]);
-
-  useEffect(() => controllerRef.current?.setValue(value), [identity, value]);
-  useEffect(() => controllerRef.current?.setTheme(theme), [identity, theme]);
+  const labelId = `sg-content-markdown-label-${createDomId()}`;
+  const mode = signal<MarkdownEditorMode>(initialMode);
+  let controller: MarkdownEditorController | null = null;
 
   const runFormat = (format: MarkdownFormat): void => {
-    const controller = controllerRef.current;
     if (controller) applyMarkdownFormat(controller.view, format);
   };
 
@@ -120,7 +137,6 @@ export function MarkdownEditor({
         <div class="sg-content-markdown-editor__toolbar" role="toolbar" aria-label="Format Markdown">
           {actions.map(({ format, label: actionLabel, icon: Icon }) => (
             <Button
-              key={format}
               variant="ghost"
               size="xs"
               iconOnly
@@ -128,9 +144,9 @@ export function MarkdownEditor({
               title={actionLabel}
               // Preview hides the source, so a formatting edit would land where
               // the author cannot see it happen.
-              disabled={mode === "preview"}
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={() => runFormat(format)}
+              disabled={computed(() => mode.value === "preview")}
+              on:pointerdown={(event) => event.preventDefault()}
+              on:click={() => runFormat(format)}
             >
               <Icon size="sm" />
             </Button>
@@ -142,14 +158,24 @@ export function MarkdownEditor({
             size="sm"
             value={mode}
             options={MODE_OPTIONS}
-            onChange={setMode}
+            onChange={(next) => { mode.value = next; }}
           />
         </div>
         <div class="sg-content-markdown-editor__workspace">
-          <div class="sg-content-markdown-editor__source" hidden={mode === "preview"}>
-            <div class="sg-content-markdown-editor__mount" ref={mountRef} />
+          <div class="sg-content-markdown-editor__source" hidden={computed(() => mode.value === "preview")}>
+            {/* One editor/history lifetime belongs to exactly one Entry/field identity. */}
+            <Keyed value={identitySignal} by={(id) => id}>{() => (
+              <SourceMount
+                value={value}
+                theme={theme}
+                labelId={labelId}
+                required={required}
+                attach={(next) => { controller = next; }}
+                onChange={(next) => read(onChange)(next)}
+              />
+            )}</Keyed>
           </div>
-          <div class="sg-content-markdown-editor__preview" hidden={mode === "edit"} aria-label={`${label} formatted preview`}>
+          <div class="sg-content-markdown-editor__preview" hidden={computed(() => mode.value === "edit")} aria-label={`${label} formatted preview`}>
             <div class="sg-content-markdown-editor__preview-label">Formatted text</div>
             <MarkdownPreview markdown={value} />
           </div>

@@ -98,12 +98,15 @@ export async function startBrowserFixture(filename) {
 }
 export async function buildBrowserFixture({ requireBroadControls = true } = {}) {
   const built = await build({ entryPoints: [join(root, "browser-checkpoint.ts")], outfile: join(rendererRoot, "dist/browser-checkpoint.js"),
-    bundle: true, format: "esm", platform: "browser", jsx: "automatic", jsxImportSource: "preact", target: "es2022", metafile: true });
+    bundle: true, format: "esm", platform: "browser", jsx: "automatic", jsxImportSource: "@takazudo/zfb/zudo-react", target: "es2022", metafile: true });
   const inputs = Object.keys(built.metafile.inputs);
-  const hostLeaks = inputs.filter(input => /@takazudo[+/](?:zfb|zudo-doc|zudo-sg)|@zudo-composer[+/]ui|marked(?:@|[/\\])|renderer[/\\](?:src|public)|node:|virtual:|zudo-composer[/\\]src[/\\]|[/\\]src[/\\]app[/\\]|(?:buffer|process|crypto-browserify|path-browserify|stream-browserify|node-polyfills)[/\\]/.test(input));
+  // The editor's own runtime is the zudo-react peer inside @takazudo/zfb; any other ZFB path is host code.
+  const editorRuntime = /@takazudo[/\\]zfb[/\\]dist[/\\]zudo-react[/\\]/;
+  const hostLeaks = inputs.filter(input => !editorRuntime.test(input)).filter(input => /@takazudo[+/](?:zfb|zudo-doc|zudo-sg)|@zudo-composer[+/]ui|marked(?:@|[/\\])|renderer[/\\](?:src|public)|node:|virtual:|zudo-composer[/\\]src[/\\]|[/\\]src[/\\]app[/\\]|(?:buffer|process|crypto-browserify|path-browserify|stream-browserify|node-polyfills)[/\\]/.test(input));
   assert.deepEqual(hostLeaks, [], "The editor graph must not include host runtime/CSS, Node/polyfills, private application sources or virtual providers");
   for (const detail of Object.values(built.metafile.outputs)) assert.deepEqual(detail.imports.filter(item => item.external), [], "A complete browser bundle cannot leave runtime imports external");
-  assert(inputs.some(input => /preact[/\\]dist|preact\+|preact@/.test(input)), "Real public editor must emit its Preact runtime");
+  assert(inputs.some(input => editorRuntime.test(input)), "Real public editor must emit its zudo-react runtime");
+  assert(!inputs.some(input => /(?:^|[/\\+])preact(?:[/\\@]|$)/.test(input)), "Real public editor must not emit a Preact runtime");
   assert(inputs.some(input => /hosted-content[/\\]editor\.mjs$/.test(input)), "Real public mount API must contribute the editor graph");
   const sourceMarkdown = inputs.some(input => /@codemirror[+/]lang-markdown|@codemirror[+/]view/.test(input));
   if (requireBroadControls) assert(sourceMarkdown, "Broad editor must emit actual source Markdown controls without ProseMd or a host pack");

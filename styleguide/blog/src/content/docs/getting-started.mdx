@@ -10,4 +10,4 @@ Only each preview iframe's history changes for these fixtures. The catalog's own
 
 The [design tokens](/tokens) are generated from Blog's `styles/base.css`: paper-like neutrals, oxblood accents, serif and sans typography, and the reading measure. Preview documents load that host stylesheet and set their canvas color from Blog semantic tokens. The raw `--blog-palette-*` variables appear beside semantic colors.
 
-`gen` bundles the actual Blog TypeScript pack, leaves Preact and the component contract external to resolve from this standalone host, and copies published uploaded images to their real URLs. It derives story article, author, and comment fixtures from the committed host CMS records.
+`gen` bundles the actual Blog TypeScript pack, leaves zudo-react and the component contract external to resolve from this standalone host, and copies published uploaded images to their real URLs. It derives story article, author, and comment fixtures from the committed host CMS records.

@@ -1,30 +1,34 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import type { ComponentChildren } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { Show, computed, getScope, signal, type Child, type Ref } from "@takazudo/zfb/zudo-react";
 import { HOVER_INVERT } from "./tone";
 
 export interface HeaderProps {
   brand: string;
   brandHref: string;
-  nav?: ComponentChildren;
-  actions?: ComponentChildren;
+  nav?: Child | object;
+  // A single slot: the contract types it framework-neutrally, bigint included.
+  actions?: Child | object | bigint;
 }
 
 const FOCUSABLE = "a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex='-1'])";
 const DESKTOP = "(min-width: 48rem)";
 
-function useDrawer() {
-  const [open, setOpen] = useState(false);
-  const toggle = useRef<HTMLButtonElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
+export function Header({ brand = "Nightjar Supply", brandHref = "/", nav, actions }: HeaderProps) {
+  const scope = getScope();
+  const open = signal(false);
+  const closed = computed(() => !open.value);
+  const toggle: Ref<HTMLButtonElement> = { current: null };
+  const panel: Ref<HTMLDivElement> = { current: null };
 
-  useEffect(() => {
-    if (!open) return;
+  scope.effect(() => {
+    if (!open.value) return;
     const media = matchMedia(DESKTOP);
-    const closeOnDesktop = () => media.matches && setOpen(false);
+    const closeOnDesktop = () => {
+      if (media.matches) open.value = false;
+    };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setOpen(false);
+        open.value = false;
         toggle.current?.focus();
         return;
       }
@@ -48,13 +52,8 @@ function useDrawer() {
       media.removeEventListener("change", closeOnDesktop);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  });
 
-  return { open, setOpen, toggle, panel };
-}
-
-export function Header({ brand = "Nightjar Supply", brandHref = "/", nav, actions }: HeaderProps) {
-  const { open, setOpen, toggle, panel } = useDrawer();
   return (
     <header class="sticky top-[0px] z-10 border-b border-shop-border bg-shop-bg">
       <div class="mx-auto flex h-shop-nav-h max-w-shop-page items-center justify-between gap-shop-hsp-md px-shop-hsp-md shop-md:px-shop-hsp-lg shop-xl:px-shop-hsp-2xl">
@@ -62,36 +61,46 @@ export function Header({ brand = "Nightjar Supply", brandHref = "/", nav, action
           {brand}
         </a>
         {/* Nav children render in exactly one place: inline from `md`, otherwise in the open drawer. */}
-        {!open && <nav aria-label="Primary" class="hidden items-center gap-shop-hsp-xs shop-md:flex">{nav}</nav>}
+        <Show when={closed}>{() => <nav aria-label="Primary" class="hidden items-center gap-shop-hsp-xs shop-md:flex">{nav as Child}</nav>}</Show>
         <div class="flex items-center gap-shop-hsp-xs">
-          {actions}
+          {actions as Child}
           <button
             ref={toggle}
             type="button"
             aria-expanded={open}
             aria-controls="shop-nav-drawer"
-            onClick={() => setOpen(!open)}
+            on:click={() => {
+              open.value = !open.value;
+            }}
             class={`h-shop-control-h px-shop-hsp-xs text-shop-body text-shop-fg-strong shop-md:hidden ${HOVER_INVERT}`}
           >
-            {open ? "Close" : "Menu"}
+            {computed(() => (open.value ? "Close" : "Menu"))}
           </button>
         </div>
       </div>
-      {open && (
-        <div
-          ref={panel}
-          id="shop-nav-drawer"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Navigation"
-          class="fixed inset-y-[0px] right-[0px] z-20 flex w-[min(20rem,85vw)] flex-col gap-shop-vsp-sm border-l border-shop-border bg-shop-bg px-shop-hsp-md py-shop-vsp-md shadow-shop-drawer shop-md:hidden"
-        >
-          <button type="button" onClick={() => setOpen(false)} class={`self-end h-shop-control-h px-shop-hsp-xs text-shop-body text-shop-fg-strong ${HOVER_INVERT}`}>
-            Close
-          </button>
-          <nav aria-label="Primary" class="flex flex-col items-start gap-shop-vsp-xs">{nav}</nav>
-        </div>
-      )}
+      <Show when={open}>
+        {() => (
+          <div
+            ref={panel}
+            id="shop-nav-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation"
+            class="fixed inset-y-[0px] right-[0px] z-20 flex w-[min(20rem,85vw)] flex-col gap-shop-vsp-sm border-l border-shop-border bg-shop-bg px-shop-hsp-md py-shop-vsp-md shadow-shop-drawer shop-md:hidden"
+          >
+            <button
+              type="button"
+              on:click={() => {
+                open.value = false;
+              }}
+              class={`self-end h-shop-control-h px-shop-hsp-xs text-shop-body text-shop-fg-strong ${HOVER_INVERT}`}
+            >
+              Close
+            </button>
+            <nav aria-label="Primary" class="flex flex-col items-start gap-shop-vsp-xs">{nav as Child}</nav>
+          </div>
+        )}
+      </Show>
     </header>
   );
 }

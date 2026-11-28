@@ -1,7 +1,5 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
+import { computed, Show, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
+import { Rebuild } from "../../components/rebuild";
 import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, ErrorIcon, MappingIcon, TrashIcon } from "../../components/icons";
 import { RowMenu } from "../../components/library-page";
 import {
@@ -18,6 +16,7 @@ import {
   type ChipTone,
   type DataTableColumn,
 } from "../../components/ui";
+import type { ContentFieldDefinition } from "../../content";
 import type { MappingBinding, MappingTarget, MappingTransform } from "../../mapping";
 import { BindMenu } from "./bind-menu";
 import {
@@ -35,6 +34,7 @@ import {
   type MappingBindingRow,
 } from "./presentation";
 import type { MappingEditorState } from "./controller";
+import { followModel, keyedBy } from "../../components/reactive";
 
 // The binding board: ONE ROW PER BINDING. Source, transform and target used to
 // be three stacked card regions per binding, which put a three-binding Mapping
@@ -43,9 +43,9 @@ import type { MappingEditorState } from "./controller";
 // own.
 
 export interface BindingsPaneProps {
-  state: MappingEditorState;
-  rows: readonly MappingBindingRow[];
-  notice?: JSX.Element | null;
+  state: ReadonlySignal<MappingEditorState>;
+  rows: ReadonlySignal<readonly MappingBindingRow[]>;
+  notice?: Child;
   onBind: (sourceFieldId: string, target: MappingTarget) => void;
   onRebind: (bindingId: string, sourceFieldId: string) => void;
   onProjection: (bindingId: string, projection: NonNullable<MappingBinding["projection"]>) => void;
@@ -67,7 +67,7 @@ function rowName(row: MappingBindingRow): string {
   return `${source} → ${target}`;
 }
 
-function SourceCell({ row }: { row: MappingBindingRow }): JSX.Element {
+function SourceCell({ row }: { row: MappingBindingRow }): Child {
   const Icon = row.source ? fieldIcon(row.source.kind) : row.binding.source ? fieldIcon("text") : ErrorIcon;
   return (
     <span class="cms-mapping-cell">
@@ -80,7 +80,7 @@ function SourceCell({ row }: { row: MappingBindingRow }): JSX.Element {
   );
 }
 
-function TargetCell({ row }: { row: MappingBindingRow }): JSX.Element {
+function TargetCell({ row }: { row: MappingBindingRow }): Child {
   const Icon = row.target ? targetKindIcon(row.target.kind) : ErrorIcon;
   return (
     <span class="cms-mapping-cell">
@@ -96,6 +96,99 @@ function TargetCell({ row }: { row: MappingBindingRow }): JSX.Element {
   );
 }
 
+/**
+ * What the table is built from. The projection, the transform and its prefix
+ * and the status are bound live per row, so editing a binding never rebuilds
+ * the table under the control the author is using.
+ */
+function structureKey(rows: readonly MappingBindingRow[]): string {
+  return JSON.stringify(rows.map((row) => [
+    row.binding.id,
+    row.index,
+    rows.length,
+    row.binding.source ?? null,
+    row.binding.sourceFieldId,
+    row.binding.target,
+    row.source ? [row.source.label, row.source.key, row.source.kind] : null,
+    row.target ? [row.target.componentLabel, row.target.kind, row.target.target] : null,
+    row.projections.map((projection) => [projectionKey(projection.projection), projection.label]),
+    // The fallback option names the current projection only when there is no list.
+    row.binding.source || row.projections.length > 0 ? null : projectionLabel(row.binding.projection, row.source),
+    row.transforms,
+    row.diagnostics.map((diagnostic) => [diagnostic.code, diagnostic.message]),
+  ]));
+}
+
+function TransformCell({ row, live, onProjection, onTransform }: {
+  row: MappingBindingRow;
+  live: ReadonlySignal<MappingBindingRow>;
+  onProjection: BindingsPaneProps["onProjection"];
+  onTransform: BindingsPaneProps["onTransform"];
+}): Child {
+  if (row.binding.source) return <span>Entry identity · unchanged</span>;
+  const authored = row.binding.projection;
+  const projection = followModel(() => projectionKey(live.value.binding.projection ?? authored));
+  const transformKind = followModel<string>(() => live.value.binding.transform.kind);
+  const prefix = followModel(() => {
+    const transform = live.value.binding.transform;
+    return transform.kind === "prefix" ? transform.prefix : "";
+  });
+  return (
+    <span class="cms-mapping-transform">
+      <Select
+        size="sm"
+        modelValue={projection}
+        aria-label={`Projection for ${rowName(row)}`}
+        on:change={(event) => onProjection(row.binding.id, parseProjectionKey(event.currentTarget.value, row.projections))}
+      >
+        {row.projections.length === 0 ? <option value={projectionKey(row.binding.projection)}>{projectionLabel(row.binding.projection, row.source)}</option> : null}
+        {row.projections.map((option) => (
+          <option key={projectionKey(option.projection)} value={projectionKey(option.projection)}>
+            {option.label}
+          </option>
+        ))}
+      </Select>
+      <Select
+        size="sm"
+        modelValue={transformKind}
+        aria-label={`Transform for ${rowName(row)}`}
+        on:change={(event) =>
+          onTransform(row.binding.id, transformValue(event.currentTarget.value as MappingTransform["kind"], live.value.binding.transform))
+        }
+      >
+        {row.transforms.map((kind) => (
+          <option key={kind} value={kind}>
+            {transformLabel(kind)}
+          </option>
+        ))}
+      </Select>
+      <Show when={computed(() => live.value.binding.transform.kind === "prefix")}>{() => (
+        <Input
+          size="sm"
+          modelValue={prefix}
+          maxlength={80}
+          aria-label={`Prefix for ${rowName(row)}`}
+          on:input={(event) => onTransform(row.binding.id, { kind: "prefix", prefix: event.currentTarget.value })}
+        />
+      )}</Show>
+    </span>
+  );
+}
+
+function StatusCell({ live }: { live: ReadonlySignal<MappingBindingRow> }): Child {
+  // The wrapper carries the state as data, so a browser spec can count
+  // broken rows without reading a chip's wording.
+  return (
+    <Rebuild value={computed(() => live.value.status)}>{(status) => (
+      <span class="cms-mapping-status" data-status={status}>
+        <Chip tone={STATUS[status].tone} dot={status === "ready"}>
+          {STATUS[status].label}
+        </Chip>
+      </span>
+    )}</Rebuild>
+  );
+}
+
 export function BindingsPane({
   state,
   rows,
@@ -106,14 +199,21 @@ export function BindingsPane({
   onTransform,
   onMove,
   onRemove,
-}: BindingsPaneProps): JSX.Element {
-  const mapping = state.mapping!;
-  const fields = state.definition?.contentModel?.document.fields ?? [];
-  const unbound = unboundTargets(mapping, state.definition);
+}: BindingsPaneProps): Child {
+  // Re-resolving the definition (after every edit) yields equal fields in a new
+  // array; rebuilding the table for that would close an open row menu.
+  const fields = keyedBy(() => state.value.definition?.contentModel?.document.fields ?? [], (current) => JSON.stringify(current));
+  const tableRows = keyedBy(() => rows.value, structureKey);
+  // Keyed by content like `fields`: an equal re-resolve must not close an open chip menu.
+  const unboundView = keyedBy(() => {
+    const { mapping, definition } = state.value;
+    return { unbound: mapping ? unboundTargets(mapping, definition) : [], bindable: (definition?.targets.length ?? 0) > 0, fields: fields.value };
+  }, (view) => JSON.stringify(view));
+  const liveRow = (row: MappingBindingRow) => computed(() => rows.value.find((candidate) => candidate.binding.id === row.binding.id) ?? row);
 
   /** The bind menu for one target, shared by an unbound chip and a Fix action. */
-  const sourceGroups = (target: NonNullable<MappingBindingRow["target"]>) =>
-    [...(target.kind === "text" ? [{ id: "entry-metadata", label: "Read-only metadata", items: [{ id: "entry:identity", label: "Entry identity", detail: "Selected record ID · text" }] }] : []), ...compatibleSourceGroups(target, fields).map((group) => ({
+  const sourceGroups = (target: NonNullable<MappingBindingRow["target"]>, currentFields: readonly ContentFieldDefinition[]) =>
+    [...(target.kind === "text" ? [{ id: "entry-metadata", label: "Read-only metadata", items: [{ id: "entry:identity", label: "Entry identity", detail: "Selected record ID · text" }] }] : []), ...compatibleSourceGroups(target, currentFields).map((group) => ({
       id: group.id,
       label: group.label,
       items: group.items.map((field) => ({
@@ -132,155 +232,105 @@ export function BindingsPane({
       width: "1.5rem",
       cell: () => <ArrowRightIcon size="sm" class="cms-mapping-arrow" aria-hidden="true" />,
     },
-    {
-      key: "transform",
-      header: "Transform",
-      cell: (row) => row.binding.source ? <span>Entry identity · unchanged</span> : (
-        <span class="cms-mapping-transform">
-          <Select
-            size="sm"
-            value={projectionKey(row.binding.projection)}
-            aria-label={`Projection for ${rowName(row)}`}
-            onChange={(event) => onProjection(row.binding.id, parseProjectionKey(event.currentTarget.value, row.projections))}
-          >
-            {row.projections.length === 0 ? <option value={projectionKey(row.binding.projection)}>{projectionLabel(row.binding.projection, row.source)}</option> : null}
-            {row.projections.map((projection) => (
-              <option key={projectionKey(projection.projection)} value={projectionKey(projection.projection)}>
-                {projection.label}
-              </option>
-            ))}
-          </Select>
-          <Select
-            size="sm"
-            value={row.binding.transform.kind}
-            aria-label={`Transform for ${rowName(row)}`}
-            onChange={(event) =>
-              onTransform(row.binding.id, transformValue(event.currentTarget.value as MappingTransform["kind"], row.binding.transform))
-            }
-          >
-            {row.transforms.map((kind) => (
-              <option key={kind} value={kind}>
-                {transformLabel(kind)}
-              </option>
-            ))}
-          </Select>
-          {row.binding.transform.kind === "prefix" ? (
-            <Input
-              size="sm"
-              value={row.binding.transform.prefix}
-              maxLength={80}
-              aria-label={`Prefix for ${rowName(row)}`}
-              onInput={(event) => onTransform(row.binding.id, { kind: "prefix", prefix: event.currentTarget.value })}
-            />
-          ) : null}
-        </span>
-      ),
-    },
+    { key: "transform", header: "Transform", cell: (row) => <TransformCell row={row} live={liveRow(row)} onProjection={onProjection} onTransform={onTransform} /> },
     { key: "target", header: "Target", variant: "name", cell: (row) => <TargetCell row={row} /> },
-    {
-      key: "status",
-      header: "Status",
-      width: "7rem",
-      // The wrapper carries the state as data, so a browser spec can count
-      // broken rows without reading a chip's wording.
-      cell: (row) => (
-        <span class="cms-mapping-status" data-status={row.status}>
-          <Chip tone={STATUS[row.status].tone} dot={row.status === "ready"}>
-            {STATUS[row.status].label}
-          </Chip>
-        </span>
-      ),
-    },
+    { key: "status", header: "Status", width: "7rem", cell: (row) => <StatusCell live={liveRow(row)} /> },
   ];
 
   return (
     <Pane variant="main" label="Bindings" class="cms-mapping-main">
-      <PaneHeader title="Bindings" count={rows.length} />
+      <PaneHeader title="Bindings" count={computed(() => rows.value.length)} />
       <PaneBody padded class="cms-mapping-main__body">
         {notice}
-        {rows.length === 0 ? (
+        <Show when={computed(() => rows.value.length === 0)}>{() => (
           <EmptyState
             icon={MappingIcon}
             title="No bindings yet"
             description="Bind a Composition prop to a Content field with the + chips below. Unbound props keep the value the Composition was authored with."
           />
-        ) : (
-          <DataTable
-            class="cms-mapping-table"
-            caption="Bindings"
-            density="compact"
-            columns={columns}
-            rows={rows}
-            rowKey={(row) => row.binding.id}
-            rowActions={(row) => (
-              <RowMenu
-                label={rowName(row)}
-                triggerLabel={`Binding actions for ${rowName(row)}`}
-                actions={[
-                  { id: "up", label: "Move up", icon: ArrowUpIcon, disabled: row.index === 0, onSelect: () => onMove(row.binding.id, -1) },
-                  { id: "down", label: "Move down", icon: ArrowDownIcon, disabled: row.index === rows.length - 1, onSelect: () => onMove(row.binding.id, 1) },
-                ]}
-                destructive={[{ id: "remove", label: "Remove binding", icon: TrashIcon, onSelect: () => onRemove(row.binding.id) }]}
-              />
-            )}
-            rowDetail={(row) =>
-              row.diagnostics.length === 0 ? null : (
-                <Banner
-                  tone="err"
-                  class="cms-mapping-row-banner"
-                  action={
-                    row.target ? (
-                      <BindMenu
-                        triggerVariant="default"
-                        menuLabel={`Rebind ${targetLabel(row.target)} to…`}
-                        triggerLabel={`Fix ${rowName(row)}`}
-                        emptyLabel="No compatible source field"
-                        groups={sourceGroups(row.target)}
-                        onSelect={(fieldId) => onRebind(row.binding.id, fieldId)}
-                      >
-                        Fix
-                      </BindMenu>
-                    ) : undefined
-                  }
-                >
-                  {row.diagnostics.map((diagnostic) => (
-                    <p key={`${diagnostic.code}:${diagnostic.message}`}>{diagnostic.message}</p>
-                  ))}
-                </Banner>
-              )
-            }
-          />
-        )}
-        <PaneSection title="Unbound targets" class="cms-mapping-unbound">
-          {unbound.length === 0 ? (
-            <p class="cms-mapping-unbound__empty">
-              {/* Nothing left to bind and nothing bindable at all look the same
-               * from the list alone, and they need opposite answers. */}
-              {(state.definition?.targets.length ?? 0) > 0
-                ? "Every bindable prop of this Composition has a binding."
-                : "This Composition offers no bindable props. Check the Diagnostics tab."}
-            </p>
-          ) : (
-            <>
-              <div class="cms-mapping-unbound__chips">
-                {unbound.map((target) => (
-                  <BindMenu
-                    key={targetKey(target.target)}
-                    triggerVariant="default"
-                    triggerClass="cms-mapping-unbound__chip"
-                    menuLabel={`Bind ${targetLabel(target)} to…`}
-                    triggerLabel={`Bind ${targetLabel(target)} on ${target.target.nodeId}`}
-                    emptyLabel={`No ${target.kind} source field is compatible`}
-                    groups={sourceGroups(target)}
-                    onSelect={(fieldId) => onBind(fieldId, target.target)}
+        )}</Show>
+        <Show when={computed(() => rows.value.length > 0)}>{() => (
+          <Rebuild value={fields}>{(currentFields) => (
+            <DataTable
+              class="cms-mapping-table"
+              caption="Bindings"
+              density="compact"
+              columns={columns}
+              rows={tableRows}
+              rowKey={(row) => row.binding.id}
+              rowActions={(row) => (
+                <RowMenu
+                  label={rowName(row)}
+                  triggerLabel={`Binding actions for ${rowName(row)}`}
+                  actions={[
+                    { id: "up", label: "Move up", icon: ArrowUpIcon, disabled: row.index === 0, onSelect: () => onMove(row.binding.id, -1) },
+                    { id: "down", label: "Move down", icon: ArrowDownIcon, disabled: row.index === tableRows.value.length - 1, onSelect: () => onMove(row.binding.id, 1) },
+                  ]}
+                  destructive={[{ id: "remove", label: "Remove binding", icon: TrashIcon, onSelect: () => onRemove(row.binding.id) }]}
+                />
+              )}
+              rowDetail={(row) =>
+                row.diagnostics.length === 0 ? null : (
+                  <Banner
+                    tone="err"
+                    class="cms-mapping-row-banner"
+                    action={
+                      row.target ? (
+                        <BindMenu
+                          triggerVariant="default"
+                          menuLabel={`Rebind ${targetLabel(row.target)} to…`}
+                          triggerLabel={`Fix ${rowName(row)}`}
+                          emptyLabel="No compatible source field"
+                          groups={sourceGroups(row.target, currentFields)}
+                          onSelect={(fieldId) => onRebind(row.binding.id, fieldId)}
+                        >
+                          Fix
+                        </BindMenu>
+                      ) : undefined
+                    }
                   >
-                    {targetLabel(target)}
-                  </BindMenu>
-                ))}
-              </div>
-              <p class="cms-mapping-unbound__help">Choose a prop to bind it to a compatible source field.</p>
-            </>
-          )}
+                    {row.diagnostics.map((diagnostic) => (
+                      <p key={`${diagnostic.code}:${diagnostic.message}`}>{diagnostic.message}</p>
+                    ))}
+                  </Banner>
+                )
+              }
+            />
+          )}</Rebuild>
+        )}</Show>
+        <PaneSection title="Unbound targets" class="cms-mapping-unbound">
+          <Rebuild value={unboundView}>{({ unbound, bindable, fields: currentFields }) => {
+            // Nothing left to bind and nothing bindable at all look the same
+            // from the list alone, and they need opposite answers.
+            if (unbound.length === 0) return (
+              <p class="cms-mapping-unbound__empty">
+                {bindable
+                  ? "Every bindable prop of this Composition has a binding."
+                  : "This Composition offers no bindable props. Check the Diagnostics tab."}
+              </p>
+            );
+            return (
+              <>
+                <div class="cms-mapping-unbound__chips">
+                  {unbound.map((target) => (
+                    <BindMenu
+                      key={targetKey(target.target)}
+                      triggerVariant="default"
+                      triggerClass="cms-mapping-unbound__chip"
+                      menuLabel={`Bind ${targetLabel(target)} to…`}
+                      triggerLabel={`Bind ${targetLabel(target)} on ${target.target.nodeId}`}
+                      emptyLabel={`No ${target.kind} source field is compatible`}
+                      groups={sourceGroups(target, currentFields)}
+                      onSelect={(fieldId) => onBind(fieldId, target.target)}
+                    >
+                      {targetLabel(target)}
+                    </BindMenu>
+                  ))}
+                </div>
+                <p class="cms-mapping-unbound__help">Choose a prop to bind it to a compatible source field.</p>
+              </>
+            );
+          }}</Rebuild>
         </PaneSection>
       </PaneBody>
     </Pane>

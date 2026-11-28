@@ -8,15 +8,14 @@
 //   persistence/save-queue.ts — serialized, revision-aware record writes
 //   navigation-guard.ts   — the native beforeunload dirty-record guard
 //
-// A supported CompositionRecord is loaded before this hook is mounted; the
-// record-scoped path performs no provider read.
+// A supported CompositionRecord is loaded before this controller is created;
+// the record-scoped path performs no provider read.
 //
-// State is kept in a ref (not just `useState`) so `dispatch` can always act
-// on the latest value without depending on `state` (which would otherwise
-// force a new `dispatch` identity — and a new navigation-guard/effect
-// teardown — on every action).
+// The controller is created once per mounted record. Its state is a signal,
+// so every command reads and writes the latest value and keeps one stable
+// identity for the controller's lifetime.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { computed, signal, type ReadonlySignal, type Scope } from "@takazudo/zfb/zudo-react";
 import type {
   ComponentCatalog,
   CompositionDocument,
@@ -83,16 +82,16 @@ interface PendingProps {
  * the action union is an implementation detail; this is the seam.
  */
 export interface ComposerController {
-  state: ComposerControllerState;
+  state: ReadonlySignal<ComposerControllerState>;
   /** The live record draft. Its id/createdAt stay fixed for this mounted controller. */
-  record: CompositionRecord;
+  readonly record: CompositionRecord;
   manifest: ComponentCatalog;
   /** Non-null right after a rejected command (e.g. cardinality/accepts) until the next successful action. */
-  lastError: string | null;
+  lastError: ReadonlySignal<string | null>;
   undo: () => void;
   redo: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
+  canUndo: ReadonlySignal<boolean>;
+  canRedo: ReadonlySignal<boolean>;
   add: (target: InsertionTarget, componentId: string) => ComposerInsertionOutcome;
   rename: (name: string) => void;
   updateProps: (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing, removeProps?: readonly string[]) => void;
@@ -113,9 +112,9 @@ export interface ComposerController {
   updatePropsDebounced: (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing) => void;
   /**
    * Synchronously dispatch any `updatePropsDebounced` patches still pending.
-   * Returns the post-flush document read from the live state ref — fresh in
-   * the SAME tick, which is what export needs (a re-render hasn't happened
-   * yet when export generates JSX right after flushing).
+   * Returns the post-flush document read from the live state — fresh in the
+   * SAME tick, which is what export needs (no DOM update has happened yet
+   * when export generates JSX right after flushing).
    */
   flushPropUpdates: () => CompositionDocument;
   /** Commit pending props synchronously, then await persistence of the newest record revision. */
@@ -172,7 +171,7 @@ export type ComposerForestInsertionOutcome =
 
 export type ComposerInsertionOutcome = ComposerForestInsertionOutcome;
 
-export interface UseComposerControllerOptions {
+export interface ComposerControllerOptions {
   manifest: ComponentCatalog;
   /** Already-loaded supported record. */
   record: CompositionRecord;
@@ -218,18 +217,21 @@ function sameRootPolicy(left: RootPolicy, right: RootPolicy): boolean {
   return leftAccepts.length === rightAccepts.length && leftAccepts.every((value, index) => value === rightAccepts[index]);
 }
 
-export function useComposerController(options: UseComposerControllerOptions): ComposerController {
+export function createComposerController(scope: Scope, options: ComposerControllerOptions): ComposerController {
   const manifest = options.manifest;
-  const idFactory = useMemo(() => options.idFactory ?? createUuidIdFactory(), [options.idFactory]);
+  const idFactory = options.idFactory ?? createUuidIdFactory();
   const now = options.now ?? (() => new Date().toISOString());
   const historyNow = options.historyNow ?? (() => performance.now());
+  const queue = options.saveQueue;
 
-  const queueRef = useRef<CompositionSaveQueue>(options.saveQueue);
-  const nowRef = useRef(now);
-  const historyNowRef = useRef(historyNow);
-  const recordRef = useRef<CompositionRecord | null>(null);
-  const stateRef = useRef<ComposerControllerState | null>(null);
-  const historyRef = useRef<ComposerHistory>(createHistory());
+  let history: ComposerHistory = createHistory();
+  // Undo/redo availability follows the history, which is a plain value; this
+  // revision makes every history change observable.
+  const historyRevision = signal(0);
+  const setHistory = (next: ComposerHistory): void => {
+    history = next;
+    historyRevision.value += 1;
+  };
   /**
    * The last root policy this controller actually KNEW, which is not the same
    * as the last one it was told. `unresolved` means the resolver has not
@@ -238,41 +240,37 @@ export function useComposerController(options: UseComposerControllerOptions): Co
    * against the last known policy is what keeps a round trip through
    * `unresolved` from counting as two material changes.
    */
-  const lastKnownRootPolicyRef = useRef<RootPolicy | null>(null);
-  if (stateRef.current === null) {
-    const record = cloneJson(options.record);
-    if (record.id !== record.document.id || options.saveQueue.ref.recordId !== record.id) {
-      throw new Error("The loaded Composition record does not match its save queue identity.");
-    }
-    recordRef.current = record;
-    const document = record.document;
-    stateRef.current = createInitialControllerState({
-      document,
-      manifest,
-      selectedId: consumeReturnSelection(record.id),
-      rootPolicy: options.rootPolicy,
-      saveStatus: saveStatusFromQueue(options.saveQueue.state),
-      derivedOutput: derivedOutputFromQueue(options.saveQueue.state),
-    });
-    if (stateRef.current.rootPolicy.kind !== "unresolved") lastKnownRootPolicyRef.current = stateRef.current.rootPolicy;
+  let lastKnownRootPolicy: RootPolicy | null = null;
+  const initialRecord = cloneJson(options.record);
+  if (initialRecord.id !== initialRecord.document.id || queue.ref.recordId !== initialRecord.id) {
+    throw new Error("The loaded Composition record does not match its save queue identity.");
   }
+  let record: CompositionRecord = initialRecord;
+  const initialState = createInitialControllerState({
+    document: initialRecord.document,
+    manifest,
+    selectedId: consumeReturnSelection(initialRecord.id),
+    rootPolicy: options.rootPolicy,
+    saveStatus: saveStatusFromQueue(queue.state),
+    derivedOutput: derivedOutputFromQueue(queue.state),
+  });
+  if (initialState.rootPolicy.kind !== "unresolved") lastKnownRootPolicy = initialState.rootPolicy;
 
-  const [state, setState] = useState<ComposerControllerState>(stateRef.current);
-  const [lastError, setLastError] = useState<string | null>(null);
-  const pendingPropsRef = useRef<Map<string, PendingProps>>(new Map());
-  const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingBaseSaveStatusRef = useRef<ComposerSaveStatus | null>(null);
+  const state = signal<ComposerControllerState>(initialState);
+  const lastError = signal<string | null>(null);
+  let pendingProps = new Map<string, PendingProps>();
+  let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingBaseSaveStatus: ComposerSaveStatus | null = null;
 
-  const persistDocumentState = useCallback((stateWithDocument: ComposerControllerState): ComposerControllerState => {
-    recordRef.current = {
-      ...recordRef.current!,
-      updatedAt: nowRef.current(),
+  const persistDocumentState = (stateWithDocument: ComposerControllerState): ComposerControllerState => {
+    record = {
+      ...record,
+      updatedAt: now(),
       document: stateWithDocument.document,
     };
 
-    const queue = queueRef.current;
     try {
-      queue.edit(queue.ref, recordRef.current);
+      queue.edit(queue.ref, record);
       return {
         ...stateWithDocument,
         saveStatus: saveStatusFromQueue(queue.state),
@@ -288,148 +286,130 @@ export function useComposerController(options: UseComposerControllerOptions): Co
         derivedOutput: null,
       };
     }
-  }, []);
+  };
 
-  const applyAction = useCallback(
-    (action: ComposerAction): string | null => {
-      const current = stateRef.current!;
-      const result = applyComposerAction(current, action, { manifest, idFactory });
-      setLastError(result.error);
-      if (result.error) {
-        historyRef.current = breakHistoryCoalescing(historyRef.current);
-        const restoredStatus = queueRef.current
-          ? saveStatusFromQueue(queueRef.current.state)
-          : pendingBaseSaveStatusRef.current;
-        if (restoredStatus && current.saveStatus.kind === "dirty") {
-          const next = { ...current, saveStatus: restoredStatus };
-          stateRef.current = next;
-          setState(next);
-        }
-        return result.error;
+  const applyAction = (action: ComposerAction): string | null => {
+    const current = state.value;
+    const result = applyComposerAction(current, action, { manifest, idFactory });
+    lastError.value = result.error;
+    if (result.error) {
+      setHistory(breakHistoryCoalescing(history));
+      const restoredStatus = saveStatusFromQueue(queue.state);
+      if (current.saveStatus.kind === "dirty") {
+        state.value = { ...current, saveStatus: restoredStatus };
       }
+      return result.error;
+    }
 
-      let next = result.state;
-      if (result.documentChanged) {
-        if (!isDocumentMutation(action)) {
-          throw new Error(`Document-changing Composer action "${action.type}" is not classified as a mutation.`);
-        }
-        const policy = DOCUMENT_MUTATION_HISTORY_POLICY[action.type];
-        if (policy === "barrier") {
-          historyRef.current = clearHistory();
-        } else {
-          const coalesceKey: CoalesceKey | null = action.type === "updateProps"
-            ? action.coalescePaths === null || (action.removeProps?.length ?? 0) > 0
-              ? null
-              : {
-                  kind: "updateProps",
-                  nodeId: action.nodeId,
-                  propPaths: action.coalescePaths ?? Object.keys(action.patch).map((prop) => [prop]),
-                }
-            : null;
-          historyRef.current = pushHistory(
-            historyRef.current,
-            { document: current.document, selectedId: current.selectedId },
-            { coalesceKey, atMs: historyNowRef.current() },
-          );
-        }
-        next = persistDocumentState(next);
-      } else if (action.type === "updateProps" && pendingBaseSaveStatusRef.current) {
-        next = {
-          ...next,
-          saveStatus: saveStatusFromQueue(queueRef.current.state),
-        };
-        historyRef.current = breakHistoryCoalescing(historyRef.current);
+    let next = result.state;
+    if (result.documentChanged) {
+      if (!isDocumentMutation(action)) {
+        throw new Error(`Document-changing Composer action "${action.type}" is not classified as a mutation.`);
+      }
+      const policy = DOCUMENT_MUTATION_HISTORY_POLICY[action.type];
+      if (policy === "barrier") {
+        setHistory(clearHistory());
       } else {
-        if (action.type === "setRootPolicy") {
-          // Losing sight of the contract is not a change to it. A resolver read
-          // that fails transiently reports `unresolved` and then reports the
-          // same contract again a moment later; clearing on each leg destroyed
-          // the author's undo stack for a round trip they never asked for.
-          const known = next.rootPolicy.kind === "unresolved" ? null : next.rootPolicy;
-          const previouslyKnown = lastKnownRootPolicyRef.current;
-          historyRef.current = known !== null && previouslyKnown !== null && !sameRootPolicy(previouslyKnown, known)
-            ? clearHistory()
-            : breakHistoryCoalescing(historyRef.current);
-          if (known !== null) lastKnownRootPolicyRef.current = known;
-        } else {
-          historyRef.current = breakHistoryCoalescing(historyRef.current);
-        }
+        const coalesceKey: CoalesceKey | null = action.type === "updateProps"
+          ? action.coalescePaths === null || (action.removeProps?.length ?? 0) > 0
+            ? null
+            : {
+                kind: "updateProps",
+                nodeId: action.nodeId,
+                propPaths: action.coalescePaths ?? Object.keys(action.patch).map((prop) => [prop]),
+              }
+          : null;
+        setHistory(pushHistory(
+          history,
+          { document: current.document, selectedId: current.selectedId },
+          { coalesceKey, atMs: historyNow() },
+        ));
       }
-      stateRef.current = next;
-      setState(next);
-      return null;
-    },
-    [manifest, idFactory, persistDocumentState],
-  );
+      next = persistDocumentState(next);
+    } else if (action.type === "updateProps" && pendingBaseSaveStatus) {
+      next = {
+        ...next,
+        saveStatus: saveStatusFromQueue(queue.state),
+      };
+      setHistory(breakHistoryCoalescing(history));
+    } else {
+      if (action.type === "setRootPolicy") {
+        // Losing sight of the contract is not a change to it. A resolver read
+        // that fails transiently reports `unresolved` and then reports the
+        // same contract again a moment later; clearing on each leg destroyed
+        // the author's undo stack for a round trip they never asked for.
+        const known = next.rootPolicy.kind === "unresolved" ? null : next.rootPolicy;
+        const previouslyKnown = lastKnownRootPolicy;
+        setHistory(known !== null && previouslyKnown !== null && !sameRootPolicy(previouslyKnown, known)
+          ? clearHistory()
+          : breakHistoryCoalescing(history));
+        if (known !== null) lastKnownRootPolicy = known;
+      } else {
+        setHistory(breakHistoryCoalescing(history));
+      }
+    }
+    state.value = next;
+    return null;
+  };
 
   // ── Debounced updateProps channel (issue Takazudo/zudo-sg#291) ─────────────────────────────
   // Per-keystroke inspector commits are coalesced here: the pending patch map
   // holds the latest merged patch per node, and only the trailing edge of a
   // typing burst dispatches (→ record snapshot + save queue + preview render).
-  const flushPropUpdates = useCallback((): CompositionDocument => {
-    if (pendingTimerRef.current !== null) {
-      clearTimeout(pendingTimerRef.current);
-      pendingTimerRef.current = null;
+  const flushPropUpdates = (): CompositionDocument => {
+    if (pendingTimer !== null) {
+      clearTimeout(pendingTimer);
+      pendingTimer = null;
     }
-    if (pendingPropsRef.current.size > 0) {
-      const pending = pendingPropsRef.current;
-      pendingPropsRef.current = new Map();
+    if (pendingProps.size > 0) {
+      const pending = pendingProps;
+      pendingProps = new Map();
       for (const [nodeId, item] of pending) {
         applyAction({ type: "updateProps", nodeId, patch: item.patch, coalescePaths: item.coalescePaths });
       }
-      pendingBaseSaveStatusRef.current = null;
+      pendingBaseSaveStatus = null;
     }
-    return stateRef.current!.document;
-  }, [applyAction]);
+    return state.value.document;
+  };
 
   // Every non-debounced action flushes pending keystroke patches FIRST, so the
   // reducer always sees user events in real order — a pending text edit lands
   // BEFORE the remove/reorder/mode-switch/reset that followed it, and a patch
   // can never target a node an interleaved action already removed.
-  const dispatch = useCallback(
-    (action: ComposerAction) => {
-      flushPropUpdates();
-      return applyAction(action);
-    },
-    [flushPropUpdates, applyAction],
-  );
-
-  const updatePropsDebounced = useCallback(
-    (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing) => {
-      const pending = pendingPropsRef.current;
-      if (pending.size === 0) pendingBaseSaveStatusRef.current = stateRef.current!.saveStatus;
-      const previous = pending.get(nodeId);
-      const nextPaths = coalescePaths ?? Object.keys(patch).map((prop) => [prop] as PropPath);
-      pending.set(nodeId, {
-        patch: { ...previous?.patch, ...patch },
-        coalescePaths: mergePropCoalescing(
-          previous === undefined ? [] : previous.coalescePaths,
-          nextPaths,
-        ),
-      });
-      const current = stateRef.current!;
-      if (current.saveStatus.kind !== "dirty") {
-        const next = { ...current, saveStatus: { kind: "dirty" } as const, derivedOutput: null };
-        stateRef.current = next;
-        setState(next);
-      }
-      if (pendingTimerRef.current !== null) clearTimeout(pendingTimerRef.current);
-      pendingTimerRef.current = setTimeout(() => {
-        pendingTimerRef.current = null;
-        flushPropUpdates();
-      }, INSPECTOR_COMMIT_DEBOUNCE_MS);
-    },
-    [flushPropUpdates],
-  );
-
-  const flushPersistence = useCallback(async (): Promise<void> => {
+  const dispatch = (action: ComposerAction): string | null => {
     flushPropUpdates();
-    const queue = queueRef.current;
-    if (queue) await queue.flush();
-  }, [flushPropUpdates]);
+    return applyAction(action);
+  };
 
-  const restoreHistoryEntry = useCallback((entry: { document: CompositionDocument; selectedId: string | null }) => {
-    const current = stateRef.current!;
+  const updatePropsDebounced = (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing): void => {
+    if (pendingProps.size === 0) pendingBaseSaveStatus = state.value.saveStatus;
+    const previous = pendingProps.get(nodeId);
+    const nextPaths = coalescePaths ?? Object.keys(patch).map((prop) => [prop] as PropPath);
+    pendingProps.set(nodeId, {
+      patch: { ...previous?.patch, ...patch },
+      coalescePaths: mergePropCoalescing(
+        previous === undefined ? [] : previous.coalescePaths,
+        nextPaths,
+      ),
+    });
+    const current = state.value;
+    if (current.saveStatus.kind !== "dirty") {
+      state.value = { ...current, saveStatus: { kind: "dirty" } as const, derivedOutput: null };
+    }
+    if (pendingTimer !== null) clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(() => {
+      pendingTimer = null;
+      flushPropUpdates();
+    }, INSPECTOR_COMMIT_DEBOUNCE_MS);
+  };
+
+  const flushPersistence = async (): Promise<void> => {
+    flushPropUpdates();
+    await queue.flush();
+  };
+
+  const restoreHistoryEntry = (entry: { document: CompositionDocument; selectedId: string | null }): void => {
+    const current = state.value;
     const selectedId = repairSelection(entry.document, manifest, entry.selectedId);
     const expandedIds = new Set(current.expandedIds);
     if (selectedId !== null) {
@@ -445,72 +425,62 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       selectedId,
       expandedIds,
     });
-    stateRef.current = next;
-    setLastError(null);
-    setState(next);
-  }, [manifest, persistDocumentState]);
+    lastError.value = null;
+    state.value = next;
+  };
 
-  const undo = useCallback((): void => {
-    if (stateRef.current!.mode === "preview") return;
+  const undo = (): void => {
+    if (state.value.mode === "preview") return;
     flushPropUpdates();
-    const current = stateRef.current!;
-    const transition = undoHistory(historyRef.current, {
+    const current = state.value;
+    const transition = undoHistory(history, {
       document: current.document,
       selectedId: current.selectedId,
     });
     if (!transition) return;
-    historyRef.current = transition.history;
+    setHistory(transition.history);
     restoreHistoryEntry(transition.restore);
-  }, [flushPropUpdates, restoreHistoryEntry]);
+  };
 
-  const redo = useCallback((): void => {
-    if (stateRef.current!.mode === "preview") return;
+  const redo = (): void => {
+    if (state.value.mode === "preview") return;
     flushPropUpdates();
-    const current = stateRef.current!;
-    const transition = redoHistory(historyRef.current, {
+    const current = state.value;
+    const transition = redoHistory(history, {
       document: current.document,
       selectedId: current.selectedId,
     });
     if (!transition) return;
-    historyRef.current = transition.history;
+    setHistory(transition.history);
     restoreHistoryEntry(transition.restore);
-  }, [flushPropUpdates, restoreHistoryEntry]);
+  };
 
-  const flushPropUpdatesRef = useRef(flushPropUpdates);
-  flushPropUpdatesRef.current = flushPropUpdates;
-
-  const retrySave = useCallback((): void => {
+  const retrySave = (): void => {
     flushPropUpdates();
-    const queue = queueRef.current;
-    if (!queue) return;
     try {
       queue.retry();
     } catch (error) {
-      const current = stateRef.current!;
-      const next = {
+      const current = state.value;
+      state.value = {
         ...current,
         saveStatus: {
           kind: "error" as const,
           reason: error instanceof Error ? error.message : "Composition persistence failed.",
         },
       };
-      stateRef.current = next;
-      setState(next);
     }
-  }, [flushPropUpdates]);
+  };
 
   // Queue state is provider-neutral. Pending debounce input remains visibly
   // dirty even if an older revision finishes while the 200ms timer is open.
   // On unmount, land pending props, detach immediately, and explicitly consume
   // close() so teardown can neither claim a late success nor leak a rejection.
-  useEffect(() => {
-    const queue = queueRef.current;
-    if (!queue) return () => void flushPropUpdatesRef.current();
+  scope.onActivate(() => {
     const unsubscribe = queue.subscribe((queueState) => {
-      const current = stateRef.current!;
+      const current = state.value;
       const saveStatus: ComposerSaveStatus =
-        pendingPropsRef.current.size > 0 ? { kind: "dirty" } : saveStatusFromQueue(queueState);
-      const derivedOutput = pendingPropsRef.current.size > 0 ? null : derivedOutputFromQueue(queueState);
+        pendingProps.size > 0 ? { kind: "dirty" } : saveStatusFromQueue(queueState);
+      const derivedOutput = pendingProps.size > 0 ? null : derivedOutputFromQueue(queueState);
       if (
         current.saveStatus.kind === saveStatus.kind &&
         (saveStatus.kind !== "error" ||
@@ -519,100 +489,89 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       ) {
         return;
       }
-      const next = { ...current, saveStatus, derivedOutput };
-      stateRef.current = next;
-      setState(next);
+      state.value = { ...current, saveStatus, derivedOutput };
     });
     return () => {
-      flushPropUpdatesRef.current();
+      flushPropUpdates();
       unsubscribe();
       void queue.close().catch(() => undefined);
     };
-  }, []);
+  });
 
   // SPA-router + native beforeunload guard while the document is not "saved".
   // The guard flushes first: a debounce-pending keystroke is LANDED before
   // deciding, then async dirty/in-flight work synchronously blocks navigation.
-  useEffect(
-    () =>
-      installComposerNavigationGuard(() => {
-        flushPropUpdates();
-        const queue = queueRef.current;
-        return (
-          pendingPropsRef.current.size > 0 ||
-          hasUnsavedChanges(stateRef.current!) ||
-          (queue ? queue.state.dirty || queue.state.saving : false)
-        );
-      }),
-    [flushPropUpdates],
+  scope.onActivate(() =>
+    installComposerNavigationGuard(() => {
+      flushPropUpdates();
+      return (
+        pendingProps.size > 0 ||
+        hasUnsavedChanges(state.value) ||
+        queue.state.dirty || queue.state.saving
+      );
+    }),
   );
 
-  return useMemo<ComposerController>(
-    () => ({
-      state,
-      record: recordRef.current!,
-      manifest,
-      lastError,
-      undo,
-      redo,
-      canUndo: state.mode !== "preview" && historyCanUndo(historyRef.current),
-      canRedo: state.mode !== "preview" && historyCanRedo(historyRef.current),
-      add: (target, componentId) => {
-        const error = dispatch({ type: "add", target, componentId });
-        const nodeId = stateRef.current?.selectedId;
-        return error || !nodeId
-          ? { status: "rejected", message: error ?? "The inserted component could not be selected." }
-          : { status: "inserted", nodeId };
-      },
-      rename: (name) => dispatch({ type: "rename", name }),
-      updateProps: (nodeId, patch, coalescePaths, removeProps) => dispatch({ type: "updateProps", nodeId, patch, coalescePaths, removeProps }),
-      updatePropsDebounced,
-      flushPropUpdates,
-      flushPersistence,
-      retrySave,
-      reorder: (nodeId, direction) => dispatch({ type: "reorder", nodeId, direction }),
-      remove: (nodeId) => dispatch({ type: "remove", nodeId }),
-      copy: (nodeId) => dispatch({ type: "copy", nodeId }),
-      cut: (nodeId) => dispatch({ type: "cut", nodeId }),
-      paste: (target) => dispatch({ type: "paste", target }),
-      insertForest: (sourceRoots, target) => {
-        const error = dispatch({ type: "insertForest", sourceRoots, target });
-        const nodeId = stateRef.current?.selectedId;
-        return error || !nodeId
-          ? { status: "rejected", message: error ?? "The inserted Pattern could not be selected." }
-          : { status: "inserted", nodeId };
-      },
-      duplicate: (nodeId) => dispatch({ type: "duplicate", nodeId }),
-      drop: (sourceNodeId, target, copy) => dispatch({ type: "drop", sourceNodeId, target, copy }),
-      publishPattern: () => dispatch({ type: "publishPattern" }),
-      publishGlobalTemplate: (target, label) => dispatch({ type: "publishGlobalTemplate", target, label }),
-      setGlobalTemplateOutlet: (target, label) => dispatch({ type: "setGlobalTemplateOutlet", target, label }),
-      renameGlobalTemplateOutlet: (label) => dispatch({ type: "renameGlobalTemplateOutlet", label }),
-      reassignGlobalTemplateOutlet: (target) => dispatch({ type: "reassignGlobalTemplateOutlet", target }),
-      clearPublication: (dependencyGuard) => dispatch({ type: "clearPublication", dependencyGuard }),
-      bindConsumer: (contract) => dispatch({ type: "bindConsumer", contract }),
-      removeBinding: () => dispatch({ type: "removeBinding" }),
-      setRootPolicy: (rootPolicy) => dispatch({ type: "setRootPolicy", rootPolicy }),
-      select: (nodeId) => dispatch({ type: "select", nodeId }),
-      reveal: (nodeId) => dispatch({ type: "reveal", nodeId }),
-      toggleExpanded: (nodeId) => dispatch({ type: "toggleExpanded", nodeId }),
-      setExpanded: (nodeId, expanded) => dispatch({ type: "setExpanded", nodeId, expanded }),
-      setMode: (mode) => dispatch({ type: "setMode", mode }),
-      setViewport: (viewport) => dispatch({ type: "setViewport", viewport }),
-    }),
-    [
-      state,
-      manifest,
-      lastError,
-      dispatch,
-      updatePropsDebounced,
-      flushPropUpdates,
-      flushPersistence,
-      retrySave,
-      undo,
-      redo,
-    ],
-  );
+  const historyAvailable = (check: (current: ComposerHistory) => boolean) =>
+    computed(() => {
+      void historyRevision.value;
+      return state.value.mode !== "preview" && check(history);
+    });
+
+  return {
+    state,
+    get record() {
+      return record;
+    },
+    manifest,
+    lastError,
+    undo,
+    redo,
+    canUndo: historyAvailable(historyCanUndo),
+    canRedo: historyAvailable(historyCanRedo),
+    add: (target, componentId) => {
+      const error = dispatch({ type: "add", target, componentId });
+      const nodeId = state.value.selectedId;
+      return error || !nodeId
+        ? { status: "rejected", message: error ?? "The inserted component could not be selected." }
+        : { status: "inserted", nodeId };
+    },
+    rename: (name) => void dispatch({ type: "rename", name }),
+    updateProps: (nodeId, patch, coalescePaths, removeProps) => void dispatch({ type: "updateProps", nodeId, patch, coalescePaths, removeProps }),
+    updatePropsDebounced,
+    flushPropUpdates,
+    flushPersistence,
+    retrySave,
+    reorder: (nodeId, direction) => void dispatch({ type: "reorder", nodeId, direction }),
+    remove: (nodeId) => void dispatch({ type: "remove", nodeId }),
+    copy: (nodeId) => void dispatch({ type: "copy", nodeId }),
+    cut: (nodeId) => void dispatch({ type: "cut", nodeId }),
+    paste: (target) => void dispatch({ type: "paste", target }),
+    insertForest: (sourceRoots, target) => {
+      const error = dispatch({ type: "insertForest", sourceRoots, target });
+      const nodeId = state.value.selectedId;
+      return error || !nodeId
+        ? { status: "rejected", message: error ?? "The inserted Pattern could not be selected." }
+        : { status: "inserted", nodeId };
+    },
+    duplicate: (nodeId) => void dispatch({ type: "duplicate", nodeId }),
+    drop: (sourceNodeId, target, copy) => void dispatch({ type: "drop", sourceNodeId, target, copy }),
+    publishPattern: () => void dispatch({ type: "publishPattern" }),
+    publishGlobalTemplate: (target, label) => void dispatch({ type: "publishGlobalTemplate", target, label }),
+    setGlobalTemplateOutlet: (target, label) => void dispatch({ type: "setGlobalTemplateOutlet", target, label }),
+    renameGlobalTemplateOutlet: (label) => void dispatch({ type: "renameGlobalTemplateOutlet", label }),
+    reassignGlobalTemplateOutlet: (target) => void dispatch({ type: "reassignGlobalTemplateOutlet", target }),
+    clearPublication: (dependencyGuard) => void dispatch({ type: "clearPublication", dependencyGuard }),
+    bindConsumer: (contract) => void dispatch({ type: "bindConsumer", contract }),
+    removeBinding: () => void dispatch({ type: "removeBinding" }),
+    setRootPolicy: (rootPolicy) => void dispatch({ type: "setRootPolicy", rootPolicy }),
+    select: (nodeId) => void dispatch({ type: "select", nodeId }),
+    reveal: (nodeId) => void dispatch({ type: "reveal", nodeId }),
+    toggleExpanded: (nodeId) => void dispatch({ type: "toggleExpanded", nodeId }),
+    setExpanded: (nodeId, expanded) => void dispatch({ type: "setExpanded", nodeId, expanded }),
+    setMode: (mode) => void dispatch({ type: "setMode", mode }),
+    setViewport: (viewport) => void dispatch({ type: "setViewport", viewport }),
+  };
 }
 
 /** One-shot handoff written by the AI Assistant's "← Composer" link; ignored for any other record. */

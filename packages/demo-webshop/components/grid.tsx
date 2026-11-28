@@ -1,10 +1,10 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 
 export interface GridProps {
   columns: "2" | "3" | "4";
   gap: "md" | "lg";
-  items?: ComponentChildren;
+  items?: Child | object;
 }
 
 // Literal strings so Tailwind's scanner sees every class: 1 / 2 / 3 / 4 columns at sm / lg / xl.
@@ -16,7 +16,7 @@ const COLUMNS = {
 const GAP = { md: "gap-x-shop-hsp-md gap-y-shop-vsp-md", lg: "gap-x-shop-hsp-lg gap-y-shop-vsp-lg" } as const;
 
 export function Grid({ columns = "3", gap = "md", items }: GridProps) {
-  return <div class={`grid ${COLUMNS[columns] ?? COLUMNS["3"]} ${GAP[gap] ?? GAP.md}`}>{items}</div>;
+  return <div class={`grid ${COLUMNS[columns] ?? COLUMNS["3"]} ${GAP[gap] ?? GAP.md}`}>{items as Child}</div>;
 }
 
 export const gridComponent = defineComponent<GridProps>()(Grid, {

@@ -24,7 +24,9 @@ describe("standalone Sitemapper boundary", () => {
       const source = boundarySource(raw, { fileName: file });
       const code = boundarySource(raw, { fileName: file, strings: false });
       const name = relative(repositoryRoot, file);
-      if (/@\/|@takazudo\/zudo-doc|\bzfb\b|@zudo-composer\/ui|styleguide/i.test(source)) {
+      // The zudo-react runtime is the tool's own UI runtime; any other ZFB coupling is host code.
+      const hostSource = source.replace(/["']@takazudo\/zfb\/zudo-react(?:\/[a-z-]+)?["']/g, '""');
+      if (/@\/|@takazudo\/zudo-doc|\bzfb\b|@zudo-composer\/ui|styleguide/i.test(hostSource)) {
         violations.push(`${name}: forbidden host dependency`);
       }
       if (/\b(?:legacy|migrat(?:e|ion)|compatibility|alias|adapter|SITEMAP_SCHEMA_V0|ready-with-recovery)\b/i.test(code)) {

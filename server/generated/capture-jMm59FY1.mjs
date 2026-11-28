@@ -5431,7 +5431,7 @@ function toIdentifier(name, fallback) {
 	return /^[A-Za-z_]/.test(pascal) ? pascal : fallback;
 }
 /**
-* Generate a deterministic Preact JSX module. See the file header for the full
+* Generate a deterministic zudo-react JSX module. See the file header for the full
 * determinism/escaping contract.
 */
 function generateJsx(document, manifest, options = {}) {
@@ -5523,7 +5523,7 @@ function generateJsx(document, manifest, options = {}) {
 					}, true) : [];
 					if (!part.block.resolved) return ["<span role=\"status\">Download unavailable</span>"];
 					hasDownloads = true;
-					return [`<a onClick={(event) => { void ${downloadHandlerName}(event, ${ASSET_MAX_BYTE_LENGTH}); }} ${renderScalarAttr("aria-label", assetDownloadLabel(part.block))} ${renderScalarAttr("href", part.block.resolved.url)} ${renderScalarAttr("download", part.block.resolved.fileName)}>{${JSON.stringify(assetDownloadLabel(part.block))}}</a>`];
+					return [`<a on:click={(event) => { void ${downloadHandlerName}(event, ${ASSET_MAX_BYTE_LENGTH}); }} ${renderScalarAttr("aria-label", assetDownloadLabel(part.block))} ${renderScalarAttr("href", part.block.resolved.url)} ${renderScalarAttr("download", part.block.resolved.fileName)}>{${JSON.stringify(assetDownloadLabel(part.block))}}</a>`];
 				}), 2),
 				"</>"
 			];
@@ -5633,7 +5633,7 @@ function generateJsx(document, manifest, options = {}) {
 			...hasDownloads ? [`const ${downloadHandlerName}: (event: MouseEvent, maxBytes: number) => Promise<void> = ${downloadAsset.toString()};`, ""] : [],
 			...linkedOutlet ? [
 				"export type CompositionOutlets = {",
-				`  ${JSON.stringify(linkedOutlet.id)}?: import("preact").ComponentChildren;`,
+				`  ${JSON.stringify(linkedOutlet.id)}?: import("@takazudo/zfb/zudo-react").Child;`,
 				"};",
 				""
 			] : [],

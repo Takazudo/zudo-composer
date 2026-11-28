@@ -41,7 +41,7 @@ describe("create-only init arguments", () => {
   ].map((args) => ({ args })))("rejects incomplete, ambiguous or upgrading invocation $args", ({ args }) => {
     expect(parseArguments(args)).toHaveProperty("error");
   });
-  it.each(["Uppercase", "../outside", "two words", "@scope", ".hidden", "zudo-composer", "preact", "node_modules", "src"])("rejects unsafe or colliding package name %s", (name) => {
+  it.each(["Uppercase", "../outside", "two words", "@scope", ".hidden", "zudo-composer", "@takazudo/zfb", "node_modules", "src"])("rejects unsafe or colliding package name %s", (name) => {
     expect(() => validateHostName(name)).toThrow("Invalid host package name");
   });
 });
@@ -76,14 +76,15 @@ describe("creator templates and written-version parity", () => {
     }
     const manifest = JSON.parse(await readFile(join(host, "package.json"), "utf8"));
     expect(manifest.exports).toEqual({ "./components": "./components/pack.ts" });
-    expect(manifest.dependencies.preact).toBe(metadata.tool.peerDependencies.preact);
+    expect(manifest.dependencies["@takazudo/zfb"]).toBe(metadata.tool.peerDependencies["@takazudo/zfb"]);
+    expect(manifest.dependencies).not.toHaveProperty("preact");
     expect(manifest.dependencies).not.toHaveProperty("tailwindcss");
     expect(scanConsumerHost({ root, hostRoot: host })).toEqual([]);
     expect(await readFile(join(host, "vitest.config.ts"), "utf8")).not.toContain("virtual:");
     expect(await readFile(join(host, ".gitignore"), "utf8")).not.toMatch(/^(?:cms\/|public\/|site-project\.json)$/m);
   });
 
-  it.each(["zudo-composer", "@zudo-composer/component-contract", "preact"])("fails when a written runtime version drifts: %s", async (name) => {
+  it.each(["zudo-composer", "@zudo-composer/component-contract", "@takazudo/zfb"])("fails when a written runtime version drifts: %s", async (name) => {
     const metadata = await readCreatorMetadata();
     const manifest = createHostManifest("creator-example", metadata);
     const dependencies: Record<string, string> = manifest.dependencies;
@@ -91,7 +92,7 @@ describe("creator templates and written-version parity", () => {
     expect(() => assertCreatorVersionParity(manifest, metadata)).toThrow(`Creator version mismatch: dependencies.${name}`);
   });
 
-  it.each(["@types/node", "preact-render-to-string", "typescript", "vitest"])("fails when a written development version drifts: %s", async (name) => {
+  it.each(["@types/node", "typescript", "vitest"])("fails when a written development version drifts: %s", async (name) => {
     const metadata = await readCreatorMetadata();
     const manifest = createHostManifest("creator-example", metadata);
     delete manifest.devDependencies[name];

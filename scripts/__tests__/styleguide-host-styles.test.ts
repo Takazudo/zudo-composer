@@ -19,7 +19,7 @@ describe("sample styleguide host styles", () => {
     expect(page).toContain('class="sg-home__link"');
   });
 
-  it("keeps published Wind shell styles separate from actual Preact pack CSS", () => {
+  it("keeps published Wind shell styles separate from actual zudo-react pack CSS", () => {
     const css = readFileSync(
       resolve(repositoryRoot, "styleguide/sample/src/styles/global.css"),
       "utf8",
@@ -31,7 +31,7 @@ describe("sample styleguide host styles", () => {
     );
 
     // SG 0.5/doc 7 use Wind in the shell; the actual Git-installed UI's
-    // Tailwind stylesheet is compiled separately for the Preact iframe.
+    // Tailwind stylesheet is compiled separately for the zudo-react preview iframe.
     for (const stylesheet of [
       "@takazudo/zudo-doc/theme.css",
       "@takazudo/zudo-doc/content.css",

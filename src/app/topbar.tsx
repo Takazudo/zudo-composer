@@ -1,5 +1,4 @@
-import type { ComponentChildren, JSX } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { computed, getScope, Show, signal, type Child, type Ref } from "@takazudo/zfb/zudo-react";
 import {
   BellIcon,
   ChevronDownIcon,
@@ -10,7 +9,9 @@ import {
   XMarkIcon,
   type IconComponent,
 } from "../components/icons";
-import { Menu, MenuRadioItem, useMenu } from "../components/overlay";
+import { createMenu, Menu, MenuRadioItem } from "../components/overlay";
+import { read, toSignal, type MaybeSignal } from "../components/reactive";
+import { Rebuild } from "../components/rebuild";
 import { StatusChip } from "../components/ui";
 import type { BreadcrumbItem, EditorStatus } from "./chrome-context";
 import type { ThemeController, ThemePreference, ThemeSnapshot } from "../theme/theme";
@@ -29,7 +30,7 @@ const THEME_OPTIONS: readonly {
   { preference: "dark", label: "Dark", icon: DarkThemeIcon },
 ] as const;
 
-function Breadcrumb({ items }: { items: readonly BreadcrumbItem[] }): JSX.Element | null {
+function Breadcrumb({ items }: { items: readonly BreadcrumbItem[] }): Child {
   if (items.length === 0) return null;
   return (
     <nav class="cms-crumbs" aria-label="Breadcrumb">
@@ -52,33 +53,31 @@ function Breadcrumb({ items }: { items: readonly BreadcrumbItem[] }): JSX.Elemen
   );
 }
 
-function ThemeMenu({ controller, snapshot }: { controller: ThemeController; snapshot: ThemeSnapshot }): JSX.Element {
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menu = useMenu(triggerRef, { align: "end" });
-  const current = THEME_OPTIONS.find((option) => option.preference === snapshot.preference) ?? THEME_OPTIONS[0]!;
-  const CurrentIcon = current.icon;
+function ThemeMenu({ controller, snapshot }: { controller: ThemeController; snapshot: MaybeSignal<ThemeSnapshot> }): Child {
+  const triggerRef: Ref<HTMLButtonElement> = { current: null };
+  const menu = createMenu(triggerRef, { align: "end" });
+  const current = computed(() => THEME_OPTIONS.find((option) => option.preference === read(snapshot).preference) ?? THEME_OPTIONS[0]!);
 
   return (
     <>
-      {/* The shared `Button` takes no ref (Preact forwards none), and `useMenu`
-          needs one to anchor and restore focus, so the trigger wears its
-          classes directly. */}
+      {/* `createMenu` needs the trigger's element to anchor and restore focus,
+          so the trigger wears the button classes directly. */}
       <button
         ref={triggerRef}
         type="button"
         class="cms-btn cms-btn--ghost cms-topbar__control"
-        aria-label={`Theme: ${current.label}`}
+        aria-label={computed(() => `Theme: ${current.value.label}`)}
         {...menu.triggerProps}
       >
-        <CurrentIcon size="sm" />
-        <span class="cms-topbar__control-label">{current.label}</span>
+        <Rebuild value={computed(() => current.value.icon)}>{(CurrentIcon) => <CurrentIcon size="sm" />}</Rebuild>
+        <span class="cms-topbar__control-label">{computed(() => current.value.label)}</span>
         <ChevronDownIcon size="xs" />
       </button>
       <Menu controller={menu} label="Theme preference">
         {THEME_OPTIONS.map((option) => (
           <MenuRadioItem
             key={option.preference}
-            checked={option.preference === snapshot.preference}
+            checked={computed(() => option.preference === current.value.preference)}
             onSelect={() => controller.setPreference(option.preference)}
           >
             {option.label}
@@ -94,46 +93,61 @@ function ThemeMenu({ controller, snapshot }: { controller: ThemeController; snap
  * delivery service behind it, so this panel states what is planned rather than
  * collecting an address it could not use.
  */
-function NotificationDisclosure(): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
+function NotificationDisclosure(): Child {
+  const open = signal(false);
+  const triggerRef: Ref<HTMLButtonElement> = { current: null };
+  const panelRef: Ref<HTMLElement> = { current: null };
+  const closeRef: Ref<HTMLButtonElement> = { current: null };
 
   const close = (restore = true): void => {
-    setOpen(false);
+    open.value = false;
     if (restore) triggerRef.current?.focus();
   };
 
-  useEffect(() => {
-    if (!open) return;
-    closeRef.current?.focus();
-    const onPointerDown = (event: PointerEvent): void => {
-      const target = event.target as Node;
-      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
-      close(false);
-    };
-    const onMouseDown = (event: MouseEvent): void => {
-      const target = event.target as Node;
-      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
-      close(false);
-    };
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
-      event.preventDefault();
-      close();
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("mousedown", onMouseDown);
-    document.addEventListener("click", onMouseDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("mousedown", onMouseDown);
-      document.removeEventListener("click", onMouseDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
+  function Panel(): Child {
+    getScope().onActivate(() => {
+      closeRef.current?.focus();
+      const onPointerDown = (event: PointerEvent): void => {
+        const target = event.target as Node;
+        if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+        close(false);
+      };
+      const onMouseDown = (event: MouseEvent): void => {
+        const target = event.target as Node;
+        if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+        close(false);
+      };
+      const onKeyDown = (event: KeyboardEvent): void => {
+        if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+        event.preventDefault();
+        close();
+      };
+      document.addEventListener("pointerdown", onPointerDown);
+      document.addEventListener("mousedown", onMouseDown);
+      document.addEventListener("click", onMouseDown);
+      document.addEventListener("keydown", onKeyDown);
+      return () => {
+        document.removeEventListener("pointerdown", onPointerDown);
+        document.removeEventListener("mousedown", onMouseDown);
+        document.removeEventListener("click", onMouseDown);
+        document.removeEventListener("keydown", onKeyDown);
+      };
+    });
+    return (
+      <section ref={panelRef} id="app-notifications-panel" class="app-popover app-notification-panel" role="dialog" aria-labelledby="app-notifications-title">
+        <header class="app-notification-panel__header">
+          <div>
+            <p class="app-notification-panel__eyebrow">Workspace signals</p>
+            <h2 id="app-notifications-title">Notifications</h2>
+          </div>
+          <button ref={closeRef} type="button" class="app-icon-button" aria-label="Close notifications" on:click={() => close()}>
+            <XMarkIcon size="sm" />
+          </button>
+        </header>
+        <p class="app-notification-panel__intro">This standalone workspace runs in your browser. Composer never sends email or other notifications; the host project owns delivery.</p>
+      </section>
+    );
+  }
 
   return (
     <div class="app-disclosure app-notification-disclosure">
@@ -143,51 +157,46 @@ function NotificationDisclosure(): JSX.Element {
         class="cms-btn cms-btn--ghost cms-btn--icon cms-topbar__control"
         aria-label="Notifications"
         aria-haspopup="dialog"
-        aria-expanded={open}
+        aria-expanded={computed(() => (open.value ? "true" : "false"))}
         aria-controls="app-notifications-panel"
-        onClick={() => (open ? close() : setOpen(true))}
+        on:click={() => {
+          if (open.value) close();
+          else open.value = true;
+        }}
       >
         <BellIcon size="sm" />
       </button>
-      {open && (
-        <section ref={panelRef} id="app-notifications-panel" class="app-popover app-notification-panel" role="dialog" aria-labelledby="app-notifications-title">
-          <header class="app-notification-panel__header">
-            <div>
-              <p class="app-notification-panel__eyebrow">Workspace signals</p>
-              <h2 id="app-notifications-title">Notifications</h2>
-            </div>
-            <button ref={closeRef} type="button" class="app-icon-button" aria-label="Close notifications" onClick={() => close()}>
-              <XMarkIcon size="sm" />
-            </button>
-          </header>
-          <p class="app-notification-panel__intro">This standalone workspace runs in your browser. Composer never sends email or other notifications; the host project owns delivery.</p>
-        </section>
-      )}
+      <Show when={open}>{() => <Panel />}</Show>
     </div>
   );
 }
 
 export interface TopbarProps {
-  navigationControl?: ComponentChildren;
-  breadcrumb: readonly BreadcrumbItem[];
-  editorStatus: EditorStatus | null;
+  navigationControl?: Child;
+  breadcrumb: MaybeSignal<readonly BreadcrumbItem[]>;
+  editorStatus: MaybeSignal<EditorStatus | null>;
   themeController: ThemeController;
-  themeSnapshot: ThemeSnapshot;
+  themeSnapshot: MaybeSignal<ThemeSnapshot>;
 }
 
-export function Topbar({ breadcrumb, editorStatus, themeController, themeSnapshot, navigationControl }: TopbarProps): JSX.Element {
+export function Topbar({ breadcrumb, editorStatus, themeController, themeSnapshot, navigationControl }: TopbarProps): Child {
+  const status = toSignal(editorStatus);
   return (
     <header class="cms-topbar">
       {navigationControl}
-      <Breadcrumb items={breadcrumb} />
-      {editorStatus ? (
-        <StatusChip
-          class="cms-topbar__status"
-          state={editorStatus.state}
-          {...(editorStatus.detail === undefined ? {} : { detail: editorStatus.detail })}
-          {...(editorStatus.onRetry === undefined ? {} : { onRetry: editorStatus.onRetry })}
-        />
-      ) : null}
+      <Rebuild value={toSignal(breadcrumb)}>{(items) => <Breadcrumb items={items} />}</Rebuild>
+      <Rebuild value={status}>
+        {(current) =>
+          current ? (
+            <StatusChip
+              class="cms-topbar__status"
+              state={current.state}
+              {...(current.detail === undefined ? {} : { detail: current.detail })}
+              {...(current.onRetry === undefined ? {} : { onRetry: current.onRetry })}
+            />
+          ) : null
+        }
+      </Rebuild>
       <div class="cms-topbar__right">
         <ThemeMenu controller={themeController} snapshot={themeSnapshot} />
         <NotificationDisclosure />

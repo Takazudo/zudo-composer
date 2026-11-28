@@ -1,4 +1,4 @@
-import { render } from "preact-render-to-string";
+import { renderToString as render } from "@takazudo/zfb/zudo-react/server";
 import { describe, expect, it } from "vitest";
 import {
   ArticleCard, ArticleHeader, ArticleList, AuthorCard, AuthorGrid, Avatar, Callout, Comment, CommentForm, CommentList, Container, DemoNote,
@@ -115,7 +115,7 @@ describe("demo-blog component rendering", () => {
     const html = render(<ArticleHeader eyebrow="craft" title="Sharpen" authorName="Teodor Lindqvist" authorHref="/authors/teodor-lindqvist" avatar={[<Avatar key="a" src="/a.webp" alt="Avatar" />]} date="Mar 18, 2026" bodyLength={5000} src="/c.webp" alt="Cover" caption="Stone" />);
     expect(html).toContain("5 min read");
     expect(html).toContain('href="/authors/teodor-lindqvist"');
-    expect(html).toContain('<img class="size-blog-avatar-sm rounded-blog-avatar object-cover" src="/a.webp" alt="Avatar"/>');
+    expect(html).toContain('<img class="size-blog-avatar-sm rounded-blog-avatar object-cover" src="/a.webp" alt="Avatar">');
     expect(html).toContain("<figcaption");
     expect(render(<Avatar />)).toBe("");
     expect(readingMinutes(1100)).toBe(1);
@@ -196,7 +196,7 @@ describe("prose body", () => {
     expect(html).toContain("<h2");
     expect(html).toContain("<ol");
     expect(html).toContain("<blockquote");
-    expect(html).toContain("&lt;b>raw&lt;/b>");
+    expect(html).toContain("&lt;b&gt;raw&lt;/b&gt;");
     expect(html).toContain("<figcaption");
     expect(html).toContain("The stone");
     expect(html).not.toContain("javascript:");

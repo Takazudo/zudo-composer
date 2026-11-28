@@ -1,8 +1,7 @@
 import "../../../test-support/cleanup";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act } from "preact/test-utils";
-import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
-import { createRef } from "preact";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { fireEvent, render, screen, settle, waitFor } from "../../../../../test/render";
 import { ChooserThumb, type ChooserThumbProps } from "../chooser-thumb";
 import { ChooserCardGrid } from "../chooser-card-grid";
 import { fixtureCatalog, fixtureComponentProvider } from "../../tree/__tests__/fixtures";
@@ -25,7 +24,7 @@ function harness() {
   return { instances, createBridge };
 }
 function props(overrides: Partial<ChooserThumbProps> = {}): ChooserThumbProps {
-  return { entry: fixtureCatalog[0]!, componentProvider: fixtureComponentProvider, catalogById, scrollerRef: createRef<HTMLUListElement>(), index: 0, location, ...overrides };
+  return { entry: fixtureCatalog[0]!, componentProvider: fixtureComponentProvider, catalogById, scrollerRef: { current: null }, index: 0, location, ...overrides };
 }
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -45,23 +44,26 @@ describe("ChooserThumb", () => {
     expect(container.firstElementChild).toHaveAttribute("aria-hidden", "true");
     expect(container.querySelector("iframe")).toHaveAttribute("tabindex", "-1");
     expect(container.querySelector(".sg-composer-chooser-thumb-stage")).toHaveStyle({ visibility: "hidden" });
-    act(() => bridge.instances[0]!.options.onReady?.());
+    bridge.instances[0]!.options.onReady?.();
+    await settle();
     expect(container.querySelector(".sg-composer-chooser-thumb-stage")).toHaveStyle({ visibility: "visible" });
     expect(screen.queryByText("Loading preview…")).toBeNull();
     unmount();
     expect(bridge.instances[0]!.dispose).toHaveBeenCalledOnce();
   });
 
-  it.each([ ["Actions", 400], ["Typography", 400], ["Media", 400], ["Layout", 720], ["Content", 720] ])("measures actual content width for %s's %ipx viewport", (category, viewport) => {
+  it.each([ ["Actions", 400], ["Typography", 400], ["Media", 400], ["Layout", 720], ["Content", 720] ])("measures actual content width for %s's %ipx viewport", async (category, viewport) => {
     vi.stubGlobal("IntersectionObserver", undefined);
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300);
     let resize: (() => void) | undefined;
     vi.stubGlobal("ResizeObserver", class { constructor(callback: () => void) { resize = callback; } observe() {} disconnect() {} });
     const { container } = render(<ChooserThumb {...props({ entry: { ...fixtureCatalog[0]!, category: String(category) } })} />);
+    await settle();
     const tile = container.firstElementChild as HTMLElement;
     expect(tile.style.getPropertyValue("--chooser-thumb-scale")).toBe(String(300 / Number(viewport)));
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(900);
-    act(() => resize?.());
+    resize?.();
+    await settle();
     expect(tile.style.getPropertyValue("--chooser-thumb-scale")).toBe("1");
   });
 
@@ -81,13 +83,16 @@ describe("ChooserThumb", () => {
     await waitFor(() => expect(observe).toHaveBeenCalled());
     expect(constructor).toHaveBeenCalledWith({ root, rootMargin: "160px 0px" });
     expect(container.querySelector("iframe")).toBeNull();
-    const update = (isIntersecting: boolean) => act(() => notify([{ target: container.firstElementChild!, isIntersecting } as IntersectionObserverEntry], {} as IntersectionObserver));
-    update(true);
+    const update = async (isIntersecting: boolean) => {
+      notify([{ target: container.firstElementChild!, isIntersecting } as IntersectionObserverEntry], {} as IntersectionObserver);
+      await settle();
+    };
+    await update(true);
     await waitFor(() => expect(bridge.instances).toHaveLength(1));
-    update(false);
+    await update(false);
     await waitFor(() => expect(bridge.instances[0]!.dispose).toHaveBeenCalledOnce());
     expect(container.querySelector("iframe")).toBeNull();
-    update(true);
+    await update(true);
     await waitFor(() => expect(bridge.instances).toHaveLength(2));
     unmount();
     expect(bridge.instances[1]!.dispose).toHaveBeenCalledOnce();
@@ -96,12 +101,13 @@ describe("ChooserThumb", () => {
 
   it("caps no-observer frames at four filtered tiles, including after filtering", async () => {
     vi.stubGlobal("IntersectionObserver", undefined);
-    const grid = (entries: typeof fixtureCatalog) => <ChooserCardGrid entries={entries} componentProvider={fixtureComponentProvider} catalogById={catalogById} onPreview={() => {}} onConfirm={() => {}} location={location} />;
-    const { container, rerender } = render(grid(fixtureCatalog));
+    const entries = signal<typeof fixtureCatalog>(fixtureCatalog);
+    const { container } = render(<ChooserCardGrid entries={entries} componentProvider={fixtureComponentProvider} catalogById={catalogById} onPreview={() => {}} onConfirm={() => {}} location={location} />);
     await waitFor(() => expect(container.querySelectorAll("iframe")).toHaveLength(4));
     expect(screen.getAllByRole("button")).toHaveLength(6);
     expect(screen.getAllByText("Preview on focus")).toHaveLength(2);
-    rerender(grid(fixtureCatalog.slice(3)));
+    entries.value = fixtureCatalog.slice(3);
+    await settle();
     await waitFor(() => expect(container.querySelectorAll("iframe")).toHaveLength(3));
   });
 
@@ -110,12 +116,11 @@ describe("ChooserThumb", () => {
     const bridge = harness();
     const { container } = render(<ChooserThumb {...props({ createBridge: bridge.createBridge })} />);
     await waitFor(() => expect(bridge.instances).toHaveLength(1));
-    act(() => {
-      const instance = bridge.instances[0]!;
-      if (failure === "renderer") instance.options.onError?.("Renderer threw", false, 0);
-      else if (failure === "pack") instance.options.onRejected?.("pack-mismatch");
-      else fireEvent.error(container.querySelector("iframe")!);
-    });
+    const instance = bridge.instances[0]!;
+    if (failure === "renderer") instance.options.onError?.("Renderer threw", false, 0);
+    else if (failure === "pack") instance.options.onRejected?.("pack-mismatch");
+    else fireEvent.error(container.querySelector("iframe")!);
+    await settle();
     expect(screen.getByText("Preview unavailable")).toBeInTheDocument();
     expect(container.querySelector("iframe")).toBeNull();
     expect(bridge.instances[0]!.dispose).toHaveBeenCalledOnce();
@@ -137,8 +142,9 @@ it("retains the named selection button when an iframe fails", async () => {
   const { container } = render(<ChooserCardGrid entries={fixtureCatalog.slice(0, 1)} componentProvider={fixtureComponentProvider} catalogById={catalogById} onPreview={() => {}} onConfirm={confirm} location={location} />);
   await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
   fireEvent.error(container.querySelector("iframe")!);
+  await settle();
   expect(screen.getByText("Preview unavailable")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Split Layout", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "Split Layout" }));
   expect(confirm).toHaveBeenCalledWith(fixtureCatalog[0]!.id);
 });
 
@@ -154,10 +160,13 @@ it("keeps a forty-item catalog bounded while moving the near-visible region", as
   const provider = { ...fixtureComponentProvider, catalog: createComponentCatalog({ ...fixtureComponentProvider.manifest, components: entries }) };
   const { container, unmount } = render(<ChooserCardGrid entries={entries} componentProvider={provider} catalogById={new Map(entries.map((entry) => [entry.id, entry]))} onPreview={() => {}} onConfirm={() => {}} location={location} />);
   await waitFor(() => expect(observers).toHaveLength(40));
-  const showRegion = (start: number) => act(() => observers.forEach(({ callback, element }, index) => callback([{ target: element!, isIntersecting: index >= start && index < start + 4 } as IntersectionObserverEntry], {} as IntersectionObserver)));
-  showRegion(0);
+  const showRegion = async (start: number) => {
+    observers.forEach(({ callback, element }, index) => callback([{ target: element!, isIntersecting: index >= start && index < start + 4 } as IntersectionObserverEntry], {} as IntersectionObserver));
+    await settle();
+  };
+  await showRegion(0);
   await waitFor(() => expect(container.querySelectorAll("iframe")).toHaveLength(4));
-  showRegion(20);
+  await showRegion(20);
   await waitFor(() => expect(container.querySelectorAll("iframe")).toHaveLength(4));
   expect(container.querySelector('[title="Tile 0 thumbnail"]')).toBeNull();
   expect(container.querySelector('[title="Tile 20 thumbnail"]')).not.toBeNull();
@@ -180,25 +189,29 @@ it("turns rejected media resolution into a thumbnail fallback without an unhandl
 });
 
 
-it("keeps a measured safe scale without ResizeObserver and updates on resize", () => {
+it("keeps a measured safe scale without ResizeObserver and updates on resize", async () => {
   vi.stubGlobal("IntersectionObserver", undefined);
   vi.stubGlobal("ResizeObserver", undefined);
   const measure = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(240);
   const { container } = render(<ChooserThumb {...props()} />);
+  await settle();
   const tile = container.firstElementChild as HTMLElement;
   expect(tile.style.getPropertyValue("--chooser-thumb-scale")).toBe(String(240 / 720));
   measure.mockReturnValue(360);
   fireEvent(window, new Event("resize"));
+  await settle();
   expect(tile.style.getPropertyValue("--chooser-thumb-scale")).toBe("0.5");
 });
 
-it("bounds loading when a frame never handshakes", () => {
+it("bounds loading when a frame never handshakes", async () => {
   vi.useFakeTimers();
   vi.stubGlobal("IntersectionObserver", undefined);
   const bridge = harness();
   const { container } = render(<ChooserThumb {...props({ createBridge: bridge.createBridge })} />);
+  await settle();
   expect(screen.getByText("Loading preview…")).toBeInTheDocument();
-  act(() => { vi.advanceTimersByTime(15000); });
+  vi.advanceTimersByTime(15000);
+  await settle();
   expect(screen.getByText("Preview unavailable")).toBeInTheDocument();
   expect(container.querySelector("iframe")).toBeNull();
   expect(bridge.instances[0]!.dispose).toHaveBeenCalledOnce();

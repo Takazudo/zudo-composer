@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { getScope, signal, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 
 /** Last non-empty path segment of the current page; "" outside a browser. */
 export function currentRouteSegment(): string {
@@ -20,54 +20,21 @@ export function isCurrentHref(href: string, pathname: string): boolean {
 }
 
 /**
- * Items (materialised child nodes) report whether their own rules let them
- * show; the list host keeps them in mount order, which is DOM order, and
- * derives counts and an optional "first N visible" cap from that.
+ * List hosts (article lists, related articles, comment lists) decide each
+ * materialised item's visibility from its registered data: own rules first,
+ * then an optional "first N visible" cap in DOM order. `measured` turns true
+ * once the host has activated, so counts and empty states only show then.
  */
-export interface VisibilityRegistry {
-  register(key: string, visible: boolean): void;
-  unregister(key: string): void;
-  /** False until the host has seen its items; caps only apply once measured. */
-  measured: boolean;
-  visibleCount: number;
-  allowed(key: string): boolean;
-}
-
-export function useVisibilityRegistry(limit?: number): VisibilityRegistry {
-  const entries = useRef(new Map<string, boolean>());
-  const [version, setVersion] = useState(0);
-  const [measured, setMeasured] = useState(false);
-  useEffect(() => { setMeasured(true); }, []);
-  const register = useCallback((key: string, visible: boolean) => {
-    if (entries.current.get(key) === visible) return;
-    entries.current.set(key, visible);
-    setVersion((value) => value + 1);
-  }, []);
-  const unregister = useCallback((key: string) => {
-    if (entries.current.delete(key)) setVersion((value) => value + 1);
-  }, []);
-  void version;
-  const visibleKeys = [...entries.current].filter(([, visible]) => visible).map(([key]) => key);
-  const capped = new Set(limit !== undefined && limit > 0 ? visibleKeys.slice(0, limit) : visibleKeys);
-  return {
-    register,
-    unregister,
-    measured,
-    visibleCount: capped.size,
-    allowed: (key: string) => !measured || limit === undefined || limit <= 0 || capped.has(key),
-  };
-}
-
-let nextItemKey = 0;
-
-/** Registers one item's own visibility with a host registry, when there is one. */
-export function useRegisteredVisibility(registry: VisibilityRegistry | null, visible: boolean): boolean {
-  const key = useMemo(() => `item-${nextItemKey++}`, []);
-  const register = registry?.register;
-  const unregister = registry?.unregister;
-  useLayoutEffect(() => { register?.(key, visible); }, [register, key, visible]);
-  useLayoutEffect(() => () => unregister?.(key), [unregister, key]);
-  return visible && (registry ? registry.allowed(key) : true);
+export function visibilityView<T>(ordered: readonly (readonly [string, T])[], visible: (data: T) => boolean, limit?: number): { visible: ReadonlyMap<string, boolean>; count: number } {
+  const capped = limit !== undefined && limit > 0;
+  const views = new Map<string, boolean>();
+  let count = 0;
+  for (const [id, data] of ordered) {
+    const shown = visible(data) && (!capped || count < limit);
+    if (shown) count += 1;
+    views.set(id, shown);
+  }
+  return { visible: views, count };
 }
 
 export interface LocalComment {
@@ -79,7 +46,7 @@ export interface LocalComment {
 }
 
 // Session-only store: the comment form and the comment list are sibling
-// nodes, so they meet here rather than through a context. Nothing persists.
+// nodes, neither hosting the other, so they meet here. Nothing persists.
 const localComments = new Map<string, LocalComment[]>();
 const commentListeners = new Set<() => void>();
 
@@ -93,14 +60,19 @@ export function resetLocalComments(): void {
   for (const listener of commentListeners) listener();
 }
 
-export function useLocalComments(pathname: string): readonly LocalComment[] {
-  const [comments, setComments] = useState(() => localComments.get(pathname) ?? []);
-  useEffect(() => {
-    const listener = () => setComments(localComments.get(pathname) ?? []);
+/** This page's session comments as a signal for one component scope. */
+export function localCommentsSignal(pathname: string): ReadonlySignal<readonly LocalComment[]> {
+  const comments = signal<readonly LocalComment[]>(localComments.get(pathname) ?? []);
+  getScope().onActivate(() => {
+    const listener = () => {
+      comments.value = localComments.get(pathname) ?? [];
+    };
     commentListeners.add(listener);
     listener();
-    return () => { commentListeners.delete(listener); };
-  }, [pathname]);
+    return () => {
+      commentListeners.delete(listener);
+    };
+  });
   return comments;
 }
 

@@ -1,22 +1,23 @@
-import { h, type ComponentChildren, type FunctionComponent } from "preact";
+import { h, type Child } from "@takazudo/zfb/zudo-react";
 import { defineComponentPack } from "@zudo-composer/component-contract";
 import { createComposerComponentProvider } from "../component-provider";
 import { COMPOSITION_SCHEMA_VERSION, type CompositionDocument } from "../headless-api";
 
-type Props = Record<string, unknown> & { children?: ComponentChildren };
-const component = (tag: "section" | "div" | "p" | "button", className: string): FunctionComponent<Props> =>
-  function Fixture({ children, ...props }) { return h(tag, { ...props, class: className }, children); };
+type Props = Record<string, unknown> & { children?: Child };
+type FixtureComponent = (props: Props) => Child;
+const component = (tag: "section" | "div" | "p" | "button", className: string): FixtureComponent =>
+  function Fixture({ children, ...props }: Props) { return h(tag, { ...props, class: className }, children); };
 
 const Section = component("section", "composer-fixture-section");
 const Stack = component("div", "composer-fixture-stack");
 const Text = component("p", "composer-fixture-text");
 const Button = component("button", "composer-fixture-button");
 const Prose = component("div", "composer-fixture-prose");
-const Split: FunctionComponent<Props> = ({ left, right }) => h(
+const Split: FixtureComponent = ({ left, right }) => h(
   "div",
   { class: "composer-fixture-split" },
-  h("div", { class: "composer-fixture-split-column" }, left as ComponentChildren),
-  h("div", { class: "composer-fixture-split-column" }, right as ComponentChildren),
+  h("div", { class: "composer-fixture-split-column" }, left as Child),
+  h("div", { class: "composer-fixture-split-column" }, right as Child),
 );
 
 /** Comprehensive synthetic contract surface for focused UI tests only. */

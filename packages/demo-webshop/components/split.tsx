@@ -1,10 +1,11 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 
 export interface SplitProps {
   ratio: "1/1" | "2/3" | "3/2";
-  left?: ComponentChildren;
-  right?: ComponentChildren;
+  // A single slot: the contract types it framework-neutrally, bigint included.
+  left?: Child | object | bigint;
+  right?: Child | object;
 }
 
 const RATIO = {
@@ -16,8 +17,8 @@ const RATIO = {
 export function Split({ ratio = "1/1", left, right }: SplitProps) {
   return (
     <div class={`grid grid-cols-1 gap-shop-vsp-md ${RATIO[ratio] ?? RATIO["1/1"]} shop-md:gap-shop-hsp-xl`}>
-      <div>{left}</div>
-      <div class="flex flex-col gap-shop-vsp-md">{right}</div>
+      <div>{left as Child}</div>
+      <div class="flex flex-col gap-shop-vsp-md">{right as Child}</div>
     </div>
   );
 }

@@ -1,4 +1,6 @@
-import { h, type ComponentType } from "preact";
+import { h, type Child, type Component, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
+import { toSignal, type MaybeSignal } from "../../components/reactive";
+import { Keyed } from "../../runtime";
 import { activeComponentProvider } from "../composer/active-pack";
 
 /**
@@ -14,9 +16,12 @@ import { activeComponentProvider } from "../composer/active-pack";
  */
 const proseMd = activeComponentProvider.runtimeEntries.find(
   ({ manifest }) => manifest.source.exportName === "ProseMd",
-)?.runtime.component as ComponentType<{ markdown: string }> | undefined;
+)?.runtime.component as Component<{ markdown: string }> | undefined;
 
-export function MarkdownPreview({ markdown }: { markdown: string }) {
-  if (!proseMd) return <pre class="sg-content-markdown-editor__plain">{markdown}</pre>;
-  return h(proseMd, { markdown });
+/** Pack components take plain props, so each new Markdown value remounts the renderer. */
+export function MarkdownPreview({ markdown }: { markdown: MaybeSignal<string> }): Child {
+  const source = toSignal(markdown);
+  if (!proseMd) return <pre class="sg-content-markdown-editor__plain">{source}</pre>;
+  const renderer = proseMd;
+  return <Keyed value={source} by={(value: string) => value}>{(value: ReadonlySignal<string>) => h(renderer, { markdown: value.value })}</Keyed>;
 }

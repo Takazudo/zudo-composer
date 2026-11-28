@@ -1,4 +1,4 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import type { IconComponent } from "../icons";
 import { cx } from "../ui";
 
@@ -11,16 +11,16 @@ export interface LibraryPageProps {
   icon?: IconComponent;
   title: string;
   /** One line saying what the records on this page are for. */
-  purpose?: ComponentChildren;
+  purpose?: Child;
   /** Secondary header controls — the provider switch, a view menu. */
-  actions?: ComponentChildren;
+  actions?: Child;
   /** The single call to action, rendered last in the header. */
-  primaryAction?: ComponentChildren;
-  children?: ComponentChildren;
+  primaryAction?: Child;
+  children?: Child;
   class?: string;
 }
 
-export function LibraryPage({ icon: Icon, title, purpose, actions, primaryAction, children, class: className }: LibraryPageProps) {
+export function LibraryPage({ icon: Icon, title, purpose, actions, primaryAction, children, class: className }: LibraryPageProps): Child {
   const hasActions = Boolean(actions) || Boolean(primaryAction);
   return (
     <div class={cx("cms-library", className)}>

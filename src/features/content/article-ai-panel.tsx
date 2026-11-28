@@ -1,9 +1,11 @@
-import type { JSX } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { computed, getScope, Show, signal, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
+import type { ProductionProviderIntegration } from "../../app/provider-integration";
+import { read, toSignal, type MaybeSignal } from "../../components/reactive";
+import { Rebuild } from "../../components/rebuild";
 import { Button, Field, Textarea } from "../../components/ui";
 import type { ContentEntryRecord, ContentFieldDefinition } from "../../content";
 import { EditorialError, type ContentAiInference, type ContentAiProposal, type EditorialField } from "../../content/editorial";
-import { useWorkspace } from "../../app/workspace-context";
+import { Keyed } from "../../runtime";
 import { ContentAiCandidateFrame } from "./ai-candidate-frame";
 import { aiProposalStale, type ContentAiSession, type ContentAuthoringController, type ContentAuthoringState } from "./controller";
 
@@ -13,9 +15,12 @@ function text(value: unknown): string {
 
 export interface ArticleAiPanelProps {
   controller: ContentAuthoringController;
-  state: ContentAuthoringState;
-  entry: ContentEntryRecord;
-  fields: readonly ContentFieldDefinition[];
+  state: ReadonlySignal<ContentAuthoringState>;
+  /** The open Entry; its id and model are fixed for this panel's lifetime. */
+  entry: MaybeSignal<ContentEntryRecord>;
+  fields: MaybeSignal<readonly ContentFieldDefinition[]>;
+  /** The site project the candidate is rendered in; without it a fresh Apply stays blocked. */
+  integration?: ProductionProviderIntegration;
 }
 
 type AiPhase = "preparing" | "rendering" | "ready" | "stale" | "expired" | "render-failed" | "blocked" | "applying" | "undoing" | "applied" | "undone";
@@ -54,90 +59,106 @@ function phaseText(phase: AiPhase, session: ContentAiSession): string {
  * own components before Apply. Apply and Undo each append one revision, and
  * a reload reads back what the backend committed.
  */
-export function ArticleAiPanel({ controller, state, entry, fields }: ArticleAiPanelProps): JSX.Element | null {
+export function ArticleAiPanel({ controller, state, entry: suppliedEntry, fields, integration }: ArticleAiPanelProps) {
   const contentAi = controller.contentAi;
-  // The site project the candidate is rendered in; without it a fresh Apply stays blocked.
-  const integration = useWorkspace()?.integration;
-  const [scope, setScope] = useState<{ fields: EditorialField[]; provider: string; canApply: boolean; inference: ContentAiInference } | null>(null);
-  const [instruction, setInstruction] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"prepare" | "act" | null>(null);
+  if (!contentAi) return null;
+  const scope = getScope();
+  const entry = toSignal(suppliedEntry);
+  const entryId = entry.value.id;
+  const aiScope = signal<{ fields: EditorialField[]; provider: string; canApply: boolean; inference: ContentAiInference } | null>(null);
+  const instruction = signal("");
+  const error = signal<string | null>(null);
+  const busy = signal<"prepare" | "act" | null>(null);
 
-  useEffect(() => {
-    if (!contentAi) return;
-    let current = true;
-    setScope(null);
+  scope.onActivate(() => {
     void (async () => {
       const status = await contentAi.status();
       if (!status.configured) return;
-      const scoped = await contentAi.scope(controller.entryRef(entry));
-      if (!current) return;
+      const scoped = await contentAi.scope(controller.entryRef(entry.value));
+      if (scope.abortSignal.aborted) return;
       // A provider that cannot run now still leaves saved proposals and their committed results readable.
-      setScope({ fields: scoped, provider: status.provider, canApply: status.canApply, inference: status.inference });
+      aiScope.value = { fields: scoped, provider: status.provider, canApply: status.canApply, inference: status.inference };
       await controller.restoreAiProposal();
     })().catch(() => { /* No title/body in this model, or no provider: the panel stays hidden. */ });
-    return () => { current = false; };
-  }, [contentAi, entry.id, entry.modelId]);
+  });
 
-  if (!contentAi || !scope) return null;
-  const session = state.aiSession?.entryId === entry.id ? state.aiSession : null;
-  const label = (fieldId: string) => fields.find((field) => field.id === fieldId)?.label ?? fieldId;
+  const session = computed(() => { const current = state.value.aiSession; return current?.entryId === entryId ? current : null; });
+  const label = (fieldId: string) => read(fields).find((field) => field.id === fieldId)?.label ?? fieldId;
   const act = async (kind: "prepare" | "act", work: () => Promise<unknown>) => {
-    setBusy(kind); setError(null);
+    busy.value = kind; error.value = null;
     try { await work(); }
-    catch (reason) { setError(reason instanceof EditorialError || reason instanceof Error ? reason.message : "Content-AI failed."); }
-    finally { setBusy(null); }
+    catch (reason) { if (!scope.abortSignal.aborted) error.value = reason instanceof EditorialError || reason instanceof Error ? reason.message : "Content-AI failed."; }
+    finally { if (!scope.abortSignal.aborted) busy.value = null; }
   };
-  const prepare = () => void act("prepare", () => controller.prepareAiProposal(instruction));
-  const proposal = session?.result.status === "proposed" ? session.result.proposal : null;
-  const phase = session && proposal ? phaseOf(session, proposal, entry, busy === "prepare", Boolean(integration)) : null;
+  const prepare = () => void act("prepare", () => controller.prepareAiProposal(instruction.value));
+  const proposal = computed<ContentAiProposal | null>(() => { const current = session.value; return current?.result.status === "proposed" ? current.result.proposal : null; });
+  const phase = computed(() => { const current = session.value, open = proposal.value; return current && open ? phaseOf(current, open, entry.value, busy.value === "prepare", Boolean(integration)) : null; });
+  const headingId = `content-ai-${entryId}`;
 
   return (
-    <section class="sg-content-group sg-content-ai" aria-labelledby={`content-ai-${entry.id}`}>
-      <h3 class="sg-content-group__title" id={`content-ai-${entry.id}`}>AI proposal</h3>
-      <p class="sg-content-ai__note">Edits only {scope.fields.map((field) => field.label).join(" and ")}. Nothing is written until you apply it, and publishing stays separate. Provider: {scope.provider}.</p>
-      {scope.inference.state !== "ready" ? <p class="sg-content-history__refusal" role="status" data-ai-inference={scope.inference.state}>New proposals are unavailable: {scope.inference.message}</p> : null}
-      <Field controlId={`content-ai-instruction-${entry.id}`} label="Instruction">
-        <Textarea rows={2} value={instruction} onInput={(event) => setInstruction(event.currentTarget.value)} />
-      </Field>
-      <div class="sg-content-history__actions">
-        <Button variant="primary" size="sm" disabled={busy !== null || !instruction.trim() || scope.inference.state === "unavailable"} onClick={prepare}>{phase === "stale" || phase === "expired" ? "Prepare again" : "Prepare proposal"}</Button>
-        {session ? <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => controller.discardAiProposal()}>Discard</Button> : null}
-      </div>
-      {error ? <p class="sg-content-history__refusal" role="alert">{error}</p> : null}
-      {session?.result.status === "refused" ? <p class="sg-content-history__refusal" role="alert">Declined: {session.result.message}</p> : null}
-      {proposal && session && phase ? (
-        <div class="sg-content-ai__proposal" data-proposal-id={proposal.id} data-ai-phase={phase}>
-          <p role="status">{phaseText(phase, session)} {proposal.summary}</p>
-          <table class="sg-content-history__diff" aria-label="Proposed changes">
-            <thead><tr><th scope="col">Field</th><th scope="col">Current</th><th scope="col">Proposed</th></tr></thead>
-            <tbody>{proposal.differences.map((difference) => (
-              <tr key={difference.fieldId} data-field-id={difference.fieldId}><th scope="row">{label(difference.fieldId)}</th><td>{text(difference.before)}</td><td>{text(difference.after)}</td></tr>
-            ))}</tbody>
-          </table>
-          {!session.applied && integration ? (
-            <div aria-label="Rendered candidate" role="group">
-              <ContentAiCandidateFrame key={proposal.id} controller={controller} proposal={proposal} integration={integration} />
-            </div>
-          ) : null}
-          <div class="sg-content-ai__candidate" aria-label="Candidate text" role="group">
-            {scope.fields.map((field) => (
-              <div key={field.id} data-candidate-field={field.id}>
-                <strong>{field.label}</strong>
-                <pre class="sg-content-ai__value">{text(proposal.candidate[field.id])}</pre>
-              </div>
-            ))}
-          </div>
+    <Show when={computed(() => aiScope.value !== null)}>{() => {
+      const loaded = aiScope.value!;
+      return (
+        <section class="sg-content-group sg-content-ai" aria-labelledby={headingId}>
+          <h3 class="sg-content-group__title" id={headingId}>AI proposal</h3>
+          <p class="sg-content-ai__note">Edits only {loaded.fields.map((field) => field.label).join(" and ")}. Nothing is written until you apply it, and publishing stays separate. Provider: {loaded.provider}.</p>
+          {loaded.inference.state !== "ready" ? <p class="sg-content-history__refusal" role="status" data-ai-inference={loaded.inference.state}>New proposals are unavailable: {loaded.inference.message}</p> : null}
+          <Field controlId={`content-ai-instruction-${entryId}`} label="Instruction">
+            {(control) => <Textarea field={control} rows={2} modelValue={instruction} />}
+          </Field>
           <div class="sg-content-history__actions">
-            {!session.applied ? (
-              <Button variant="primary" size="sm" disabled={busy !== null || !scope.canApply || phase !== "ready"} onClick={() => void act("act", () => controller.runAiProposal("apply", proposal.id))}>Apply proposal</Button>
-            ) : !session.undone ? (
-              <Button variant="default" size="sm" disabled={busy !== null} onClick={() => void act("act", () => controller.runAiProposal("undo", proposal.id))}>Undo AI change</Button>
-            ) : null}
+            <Button variant="primary" size="sm" disabled={computed(() => busy.value !== null || !instruction.value.trim() || loaded.inference.state === "unavailable")} on:click={prepare}>{computed(() => phase.value === "stale" || phase.value === "expired" ? "Prepare again" : "Prepare proposal")}</Button>
+            <Show when={computed(() => session.value !== null)}>{() => <Button variant="ghost" size="sm" disabled={computed(() => busy.value !== null)} on:click={() => controller.discardAiProposal()}>Discard</Button>}</Show>
           </div>
-          {!scope.canApply ? <p class="sg-content-ai__note">This host permits proposals but not Apply.</p> : null}
-        </div>
-      ) : null}
-    </section>
+          <Show when={computed(() => error.value !== null)}>{() => <p class="sg-content-history__refusal" role="alert">{computed(() => error.value ?? "")}</p>}</Show>
+          <Rebuild value={computed(() => { const current = session.value; return current?.result.status === "refused" ? current.result.message : null; })}>{(message) => message === null ? null : <p class="sg-content-history__refusal" role="alert">Declined: {message}</p>}</Rebuild>
+          <Keyed value={computed(() => phase.value === null ? null : proposal.value)} by={(open) => open?.id ?? ""}>{(open) => {
+            const current = open.value;
+            if (!current) return null;
+            const applied = computed(() => Boolean(session.value?.applied));
+            const undone = computed(() => Boolean(session.value?.undone));
+            return (
+              <div class="sg-content-ai__proposal" data-proposal-id={current.id} data-ai-phase={computed(() => phase.value ?? "")}>
+                <p role="status">{computed(() => { const live = session.value, now = phase.value; return live && now ? `${phaseText(now, live)} ${current.summary}` : ""; })}</p>
+                <table class="sg-content-history__diff" aria-label="Proposed changes">
+                  <thead><tr><th scope="col">Field</th><th scope="col">Current</th><th scope="col">Proposed</th></tr></thead>
+                  <tbody>{current.differences.map((difference) => (
+                    <tr data-field-id={difference.fieldId}><th scope="row">{label(difference.fieldId)}</th><td>{text(difference.before)}</td><td>{text(difference.after)}</td></tr>
+                  ))}</tbody>
+                </table>
+                {integration ? (
+                  <Show when={computed(() => !applied.value)}>{() => (
+                    <div aria-label="Rendered candidate" role="group">
+                      <ContentAiCandidateFrame controller={controller} proposal={current} integration={integration} />
+                    </div>
+                  )}</Show>
+                ) : null}
+                <div class="sg-content-ai__candidate" aria-label="Candidate text" role="group">
+                  {loaded.fields.map((field) => (
+                    <div data-candidate-field={field.id}>
+                      <strong>{field.label}</strong>
+                      <pre class="sg-content-ai__value">{text(current.candidate[field.id])}</pre>
+                    </div>
+                  ))}
+                </div>
+                <div class="sg-content-history__actions">
+                  <Show
+                    when={computed(() => !applied.value)}
+                    fallback={() => (
+                      <Show when={computed(() => !undone.value)}>{() => (
+                        <Button variant="default" size="sm" disabled={computed(() => busy.value !== null)} on:click={() => void act("act", () => controller.runAiProposal("undo", current.id))}>Undo AI change</Button>
+                      )}</Show>
+                    )}
+                  >{() => (
+                    <Button variant="primary" size="sm" disabled={computed(() => busy.value !== null || !loaded.canApply || phase.value !== "ready")} on:click={() => void act("act", () => controller.runAiProposal("apply", current.id))}>Apply proposal</Button>
+                  )}</Show>
+                </div>
+                {!loaded.canApply ? <p class="sg-content-ai__note">This host permits proposals but not Apply.</p> : null}
+              </div>
+            );
+          }}</Keyed>
+        </section>
+      );
+    }}</Show>
   );
 }

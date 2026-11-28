@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, render, screen, waitFor } from "../../../test/render";
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { App } from "../../../App";

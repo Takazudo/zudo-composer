@@ -1,8 +1,6 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
-import { useState } from "preact/hooks";
+import { computed, Show, signal, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
+import type { AppServices } from "../../app/services";
+import { Rebuild } from "../../components/rebuild";
 import { DuplicateIcon, MappingIcon, PlusIcon, TrashIcon } from "../../components/icons";
 import {
   BulkBar,
@@ -15,9 +13,9 @@ import {
   LibraryTable,
   LibraryToolbar,
   LibraryUnavailableBanner,
-  useLibraryConfirm,
-  useLibraryQuery,
-  useLibrarySelection,
+  createLibraryConfirm,
+  createLibraryQuery,
+  createLibrarySelection,
   type LibraryFacet,
   type LibraryKindTag,
   type LibraryRowContract,
@@ -29,6 +27,7 @@ import type { MappingSummary } from "../../mapping";
 import type { MappingEditorController, MappingEditorState, MappingLibraryDetail } from "./controller";
 import { mappingDeepLinkHref } from "./deep-link";
 import { NewMappingDialog } from "./new-mapping-dialog";
+import { memo } from "../../components/reactive";
 
 // The Mapping library on the shared library pattern. It replaces a grid of
 // truncating cards: a Mapping is identified by the pair it joins, and a card
@@ -36,13 +35,14 @@ import { NewMappingDialog } from "./new-mapping-dialog";
 // an author came here for.
 
 export interface MappingLibraryProps {
-  state: MappingEditorState;
+  state: ReadonlySignal<MappingEditorState>;
   controller: MappingEditorController;
   /** Route transitions: opening, creating and duplicating are real navigations. */
   navigate: (href: string) => void;
   /** A deep link that could not be opened, reported above the table. */
-  notice?: JSX.Element | null;
-  error: string | null;
+  notice?: Child;
+  error: ReadonlySignal<string | null>;
+  services?: AppServices;
   run: (action: () => void | Promise<void>) => void;
 }
 
@@ -71,28 +71,41 @@ const SORTS: readonly LibrarySort<MappingSummary>[] = [
   { id: "bindings", label: "Bindings", compare: (a, b) => b.bindingCount - a.bindingCount },
 ];
 
-export function MappingLibrary({ state, controller, navigate, notice, error, run }: MappingLibraryProps): JSX.Element {
-  const [creating, setCreating] = useState(false);
-  const [clearing, setClearing] = useState(false);
-  const confirm = useLibraryConfirm();
-  const summaries = state.mappings;
-  const details = state.libraryDetails;
+export function MappingLibrary({ state, controller, navigate, notice, error, run }: MappingLibraryProps): Child {
+  const creating = signal(false);
+  const clearing = signal(false);
+  const confirm = createLibraryConfirm();
+  const summaries = computed(() => state.value.mappings);
+  const details = computed(() => state.value.libraryDetails);
+  const phase = computed(() => state.value.phase);
   const providerId = controller.provider.descriptor.id;
 
-  const query = useLibraryQuery({
+  const query = createLibraryQuery({
     rows: summaries,
     searchText: (row) => `${row.name} ${row.id}`,
     facets: FACETS,
     sorts: SORTS,
   });
-  const selection = useLibrarySelection({ rows: summaries, visibleRows: query.rows, rowId: (row) => row.id });
+  const selection = createLibrarySelection({ rows: summaries, visibleRows: query.rows, rowId: (row) => row.id });
+
+  // Cells read the readiness details, which arrive after the summaries; the
+  // table is rebuilt when either changes, and only then.
+  const tableInputs = memo(() => [query.rows.value, details.value] as const);
+  let builtFrom: typeof tableInputs.value | null = null;
+  let builtRows: readonly MappingSummary[] = [];
+  const tableRows = computed(() => {
+    const inputs = tableInputs.value;
+    if (inputs !== builtFrom) { builtFrom = inputs; builtRows = inputs[0].slice(); }
+    return builtRows;
+  });
+  const detailOf = (row: MappingSummary) => tableInputs.value[1][row.id];
 
   const contract: LibraryRowContract<MappingSummary> = {
     id: (row) => row.id,
     name: (row) => row.name,
     icon: () => MappingIcon,
     href: (row) => mappingDeepLinkHref({ providerId, mappingId: row.id }),
-    kind: (row) => readiness(details[row.id]),
+    kind: (row) => readiness(detailOf(row)),
     updatedAt: (row) => row.updatedAt,
   };
 
@@ -101,13 +114,13 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
       key: "source",
       header: "Source model",
       variant: "muted",
-      cell: (row) => details[row.id] ? details[row.id].definition.contentModel?.document.name ?? "Missing Content model" : "Checking…",
+      cell: (row) => { const detail = detailOf(row); return detail ? detail.definition.contentModel?.document.name ?? "Missing Content model" : "Checking…"; },
     },
     {
       key: "target",
       header: "Target composition",
       variant: "muted",
-      cell: (row) => details[row.id] ? details[row.id].definition.composition?.document.name ?? "Missing Composition" : "Checking…",
+      cell: (row) => { const detail = detailOf(row); return detail ? detail.definition.composition?.document.name ?? "Missing Composition" : "Checking…"; },
     },
     { key: "bindings", header: "Bindings", variant: "num", cell: (row) => row.bindingCount },
   ];
@@ -130,27 +143,42 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
   });
 
   const clearLibrary = () => {
-    if (clearing) return;
-    setClearing(true);
+    if (clearing.value) return;
+    clearing.value = true;
     run(async () => {
       try {
         await controller.clear();
       } finally {
-        setClearing(false);
+        clearing.value = false;
       }
     });
   };
 
   const askClear = () => confirm.request({
     title: "Clear library?",
-    message: `Delete all ${summaries.length} mappings? This cannot be undone.`,
+    message: `Delete all ${summaries.value.length} mappings? This cannot be undone.`,
     confirmLabel: "Clear library",
     tone: "danger",
     onConfirm: clearLibrary,
   });
 
-  const canCreate = state.contentModels.length > 0 && state.compositions.length > 0;
-  const ready = state.phase === "ready" || state.phase === "recovery";
+  const canCreate = computed(() => state.value.contentModels.length > 0 && state.value.compositions.length > 0);
+  const ready = computed(() => phase.value === "ready" || phase.value === "recovery");
+  const hasSelection = computed(() => selection.selectedCount.value > 0);
+  const bulkBar = (
+    <BulkBar
+      count={selection.selectedCount}
+      describeCount={(count) => `${count} ${count === 1 ? "mapping" : "mappings"} selected`}
+      actions={[{
+        id: "delete",
+        label: "Delete",
+        icon: TrashIcon,
+        tone: "danger",
+        onSelect: () => askDelete(selection.selectedRows.value.map((row) => row.name), selection.selectedRows.value.map((row) => row.id)),
+      }]}
+      onClear={selection.clear}
+    />
+  );
 
   return (
     <LibraryPage
@@ -159,32 +187,32 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
       title="Mappings"
       purpose="Drive a Composition's props from a Content model's fields, one Entry at a time."
       primaryAction={
-        <Button variant="primary" disabled={!canCreate} onClick={() => setCreating(true)}>
+        <Button variant="primary" disabled={computed(() => !canCreate.value)} on:click={() => { creating.value = true; }}>
           <PlusIcon size="sm" />
           New mapping
         </Button>
       }
     >
       {notice}
-      {error && !creating ? <Banner tone="err">{error}</Banner> : null}
-      {state.catalogFailures.length > 0 ? (
+      <Show when={computed(() => Boolean(error.value) && !creating.value)}>{() => <Banner tone="err">{computed(() => error.value ?? "")}</Banner>}</Show>
+      <Rebuild value={computed(() => state.value.catalogFailures)}>{(failures) => failures.length > 0 ? (
         <Banner tone="warn" title="Some providers are unavailable.">
-          {state.catalogFailures.map((failure) => (
+          {failures.map((failure) => (
             <p key={failure}>{failure}</p>
           ))}
         </Banner>
-      ) : null}
-      {state.phase === "error" ? (
+      ) : null}</Rebuild>
+      <Show when={computed(() => phase.value === "error")}>{() => (
         <LibraryUnavailableBanner
           title="Mapping library unavailable."
-          description={state.message}
+          description={computed(() => state.value.message)}
           onRetry={() => run(() => controller.retryInitialization())}
         />
-      ) : null}
-      {state.phase === "recovery" ? (
+      )}</Show>
+      <Show when={computed(() => phase.value === "recovery")}>{() => (
         <LibraryRecoveryBanner
           title="Stored mappings need recovery."
-          description={state.recoveryMessage ?? state.message}
+          description={computed(() => state.value.recoveryMessage ?? state.value.message)}
           onRetry={() => run(() => controller.retryInitialization())}
           onStartFresh={() => confirm.request({
             title: "Start fresh?",
@@ -194,31 +222,31 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
             onConfirm: () => run(() => controller.startFresh()),
           })}
         />
-      ) : null}
-      {state.phase === "idle" || state.phase === "loading" ? (
+      )}</Show>
+      <Show when={computed(() => phase.value === "idle" || phase.value === "loading")}>{() => (
         <LibrarySkeleton columns={6} label="Loading mappings…" />
-      ) : null}
-      {ready && summaries.length === 0 ? (
+      )}</Show>
+      <Show when={computed(() => ready.value && summaries.value.length === 0)}>{() => (
         <LibraryEmpty
           icon={MappingIcon}
           title="No mappings yet"
           description="A mapping joins one Content model to one Composition and says which field drives which prop."
           action={
-            <Button variant="primary" disabled={!canCreate} onClick={() => setCreating(true)}>
+            <Button variant="primary" disabled={computed(() => !canCreate.value)} on:click={() => { creating.value = true; }}>
               <PlusIcon size="sm" />
-              {canCreate ? "Create your first mapping" : "A Content model and a Composition are needed first"}
+              {computed(() => (canCreate.value ? "Create your first mapping" : "A Content model and a Composition are needed first"))}
             </Button>
           }
         />
-      ) : null}
-      {ready && summaries.length > 0 ? (
+      )}</Show>
+      <Show when={computed(() => ready.value && summaries.value.length > 0)}>{() => (
         <>
           <LibraryToolbar
             query={query}
             searchLabel="Filter mappings"
             searchPlaceholder="Filter by name or ID"
             end={
-              <Button size="sm" variant="ghost" disabled={clearing} onClick={askClear}>
+              <Button size="sm" variant="ghost" disabled={clearing} on:click={askClear}>
                 <TrashIcon size="sm" />
                 Clear library
               </Button>
@@ -226,26 +254,13 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
           />
           <LibraryTable
             caption="Mappings"
-            rows={query.rows}
+            rows={tableRows}
             contract={contract}
             columns={columns}
             selection={selection}
             kindHeader="Status"
             empty={<LibraryNoMatch search={query.search} onClearFilters={query.clearFilters} />}
-            bulkBar={selection.selectedCount > 0 ? (
-              <BulkBar
-                count={selection.selectedCount}
-                describeCount={(count) => `${count} ${count === 1 ? "mapping" : "mappings"} selected`}
-                actions={[{
-                  id: "delete",
-                  label: "Delete",
-                  icon: TrashIcon,
-                  tone: "danger",
-                  onSelect: () => askDelete(selection.selectedRows.map((row) => row.name), selection.selectedRows.map((row) => row.id)),
-                }]}
-                onClear={selection.clear}
-              />
-            ) : undefined}
+            bulkBar={computed(() => (hasSelection.value ? bulkBar : null))}
             rowMenu={(row) => ({
               label: row.name,
               open: { id: "open", label: "Open", kbd: "↵", href: mappingDeepLinkHref({ providerId, mappingId: row.id }) },
@@ -262,21 +277,21 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
             })}
           />
           <LibraryPagination
-            summary={`${query.rows.length} of ${summaries.length} mappings · ${controller.provider.descriptor.label}`}
+            summary={computed(() => `${query.rows.value.length} of ${summaries.value.length} mappings · ${controller.provider.descriptor.label}`)}
           />
         </>
-      ) : null}
+      )}</Show>
       <NewMappingDialog
         open={creating}
-        contentModels={state.contentModels}
-        compositions={state.compositions}
-        error={creating ? error : null}
+        contentModels={computed(() => state.value.contentModels)}
+        compositions={computed(() => state.value.compositions)}
+        error={computed(() => (creating.value ? error.value : null))}
         onSubmit={(name, contentModel, composition) => run(async () => {
           const id = await controller.create(name, contentModel, composition);
-          setCreating(false);
+          creating.value = false;
           navigate(mappingDeepLinkHref({ providerId, mappingId: id }));
         })}
-        onClose={() => setCreating(false)}
+        onClose={() => { creating.value = false; }}
       />
       <ConfirmDialog {...confirm.dialogProps} />
     </LibraryPage>

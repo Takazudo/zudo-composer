@@ -1,10 +1,11 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 
 export interface ProductHeroProps {
   ratio: "1/1" | "3/2";
-  media?: ComponentChildren;
-  copy?: ComponentChildren;
+  // A single slot: the contract types it framework-neutrally, bigint included.
+  media?: Child | object | bigint;
+  copy?: Child | object;
 }
 
 const RATIO = { "1/1": "shop-lg:grid-cols-[1fr_1fr]", "3/2": "shop-lg:grid-cols-[3fr_2fr]" } as const;
@@ -12,8 +13,8 @@ const RATIO = { "1/1": "shop-lg:grid-cols-[1fr_1fr]", "3/2": "shop-lg:grid-cols-
 export function ProductHero({ ratio = "1/1", media, copy }: ProductHeroProps) {
   return (
     <section class={`grid grid-cols-1 gap-shop-vsp-lg ${RATIO[ratio] ?? RATIO["1/1"]} shop-lg:gap-shop-hsp-xl`}>
-      <div>{media}</div>
-      <div class="flex flex-col gap-shop-vsp-md">{copy}</div>
+      <div>{media as Child}</div>
+      <div class="flex flex-col gap-shop-vsp-md">{copy as Child}</div>
     </section>
   );
 }

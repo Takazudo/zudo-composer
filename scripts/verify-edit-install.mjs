@@ -43,7 +43,7 @@ try {
   await writeFile(join(host, "package.json"), JSON.stringify({
     name: "native-edit-host", version: "0.0.0", private: true, type: "module", packageManager: manifest.packageManager,
     exports: { "./components": "./components/pack.mjs" },
-    dependencies: { "zudo-composer": tool, "@zudo-composer/component-contract": contract, preact: manifest.dependencies.preact ?? manifest.peerDependencies?.preact ?? manifest.devDependencies.preact },
+    dependencies: { "zudo-composer": tool, "@zudo-composer/component-contract": contract, "@takazudo/zfb": manifest.peerDependencies["@takazudo/zfb"] },
   }, null, 2));
   await writeFile(join(host, "pnpm-workspace.yaml"), `packages: []\nstrictPeerDependencies: true\noverrides:\n  zudo-composer: '${tool}'\n  '@zudo-composer/component-contract': '${contract}'\n`);
   await run("corepack", ["pnpm", "install"], host, { env });

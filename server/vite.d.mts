@@ -893,7 +893,7 @@ interface HostDocumentConfig {
     module: string;
     rendererId: string;
     rendererVersion: string;
-    /** Trusted host JSX runtime package; defaults to Preact. Evaluated in an isolated server graph. */
+    /** Trusted host JSX runtime package; defaults to zudo-react (`@takazudo/zfb/zudo-react`). Evaluated in an isolated server graph. */
     jsxImportSource?: string;
     /** Explicit host-relative public document assets; never inferred from a parent directory. */
     publicDir?: string;

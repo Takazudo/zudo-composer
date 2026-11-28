@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { fireEvent, render, screen, waitFor } from "../../../../test/render";
 import { describe, expect, it, vi } from "vitest";
 import type { CompositionRecord } from "../../../../composer/library";
 import {
@@ -40,7 +40,8 @@ describe("Asset Markdown consumption", () => {
     // The Markdown reference lives in the detail panel, so the asset has to be
     // the one the panel is showing before it can be copied.
     fireEvent.click(await screen.findByRole("button", { name: "Inspect hero image.png" }));
-    fireEvent.click(screen.getByRole("button", { name: "Copy Markdown" }));
+    // zudo-react commits the detail panel on its next flush, not inside the click.
+    fireEvent.click(await screen.findByRole("button", { name: "Copy Markdown" }));
     await waitFor(() => expect(writeClipboard).toHaveBeenCalledOnce());
     library.unmount();
 

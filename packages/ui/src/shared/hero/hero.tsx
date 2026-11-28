@@ -1,4 +1,4 @@
-import type { ComponentChildren, JSX } from "preact";
+import type { CSSProperties, Child } from "@takazudo/zfb/zudo-react";
 import { cx } from "../../lib/cx";
 import { Container } from "../container/container";
 import { CtaButton, type CtaButtonVariant } from "../cta-button/cta-button";
@@ -8,8 +8,8 @@ export type HeroVariant = "primary" | "secondary";
 
 // Soft accent wash (6% accent mixed into bg) so the band reads as a distinct
 // section without a hard-coded color — follows the active color scheme.
-const HERO_STYLE: JSX.CSSProperties = {
-  backgroundColor: "color-mix(in srgb, var(--color-accent) 6%, var(--color-bg))",
+const HERO_STYLE: CSSProperties = {
+  "background-color": "color-mix(in srgb, var(--color-accent) 6%, var(--color-bg))",
 };
 
 // Heading max-width and clamp ceiling are literal per variant — Tailwind v4
@@ -27,8 +27,8 @@ const HEADING_CLAMP_MAX: Record<HeroVariant, string> = {
 
 export type HeroProps = {
   eyebrow?: string;
-  heading?: ComponentChildren;
-  lead?: ComponentChildren;
+  heading?: Child;
+  lead?: Child;
   actions?: HeroAction[];
   /** Heading scale: `primary` for a page's main hero, `secondary` for a smaller section hero. */
   variant?: HeroVariant;
@@ -58,8 +58,8 @@ export function Hero({
           <h1
             class={cx("mt-vsp-sm", HEADING_MAXW[variant], "font-bold leading-tight text-fg")}
             style={{
-              fontSize: `clamp(var(--text-display), 1.6rem + 3.4vw, ${HEADING_CLAMP_MAX[variant]})`,
-              textWrap: "balance",
+              "font-size": `clamp(var(--text-display), 1.6rem + 3.4vw, ${HEADING_CLAMP_MAX[variant]})`,
+              "text-wrap": "balance",
             }}
           >
             {heading}
@@ -68,7 +68,7 @@ export function Hero({
         {lead && (
           <p
             class="mt-vsp-md max-w-[44rem] text-title leading-relaxed text-fg"
-            style={{ textWrap: "pretty" }}
+            style={{ "text-wrap": "pretty" }}
           >
             {lead}
           </p>

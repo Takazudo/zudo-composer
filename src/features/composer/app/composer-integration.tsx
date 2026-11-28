@@ -1,10 +1,8 @@
 "use client";
 
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 // The production Composer app fills `ComposerWorkspace`'s slots with the real
 // surfaces and drives them all from one controller via
-// `useComposerIntegration` — no second renderer/source mapping, one document
+// `createComposerIntegration` — no second renderer/source mapping, one document
 // snapshot everywhere:
 //
 //   toolbar   → back / RecordTitle / view controls / history + Export + overflow
@@ -18,39 +16,43 @@
 // target on open so a later selection change cannot redirect an in-flight add.
 // The export dialog reads the same document/manifest the canvas does.
 //
-// The context menu is likewise mounted once: `useComposerMenus` owns which menu
-// is open and its derived items, the structure rows open it with the button
-// that was pressed, and `ComposerCanvasHost` opens it with an iframe-relayed
-// rect translated to host coordinates — one menu, one positioning and
-// dismissal implementation, regardless of origin.
+// The context menu is likewise mounted once: `createComposerMenus` owns which
+// menu is open and its derived items, the structure rows open it with the
+// button that was pressed, and `ComposerCanvasHost` opens it with an
+// iframe-relayed rect translated to host coordinates — one menu, one
+// positioning and dismissal implementation, regardless of origin.
 //
 // Two pieces of selection live here rather than in the controller. The selected
 // SLOT has no node id to hold — it is a `{parentId, slotId}` pair the structure
 // rail and the Reuse tab share — and the record-level dialogs are chrome, not
 // document state.
 
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { ComponentChildren, JSX } from "preact";
+import { computed, For, getScope, Show, signal, type Child } from "@takazudo/zfb/zudo-react";
 import {
   generateBrowserJsxExport,
   linkedEditorPresentation,
   materializeGlobalTemplateView,
   type ComposerReuseResolutionOptions,
   type LinkedEditorLifecycleActions,
+  type LinkedEditorPresentation,
   type ReuseCatalogOutcome,
   type ReuseSelectionOutcome,
   type CompositionPublication,
   type CompositionRecordRef,
 } from "../../../composer/browser";
-import { useBreadcrumb, type EditorStatus } from "../../../app/chrome-context";
+import { bindBreadcrumb, type ChromeStore, type EditorStatus } from "../../../app/chrome-context";
+import type { VersionedAssetStore } from "../../../assets/library";
 import { RecordTitle } from "../../../components/editor-chrome";
 import { ConfirmDialog, Menu, MenuItem, MenuSeparator } from "../../../components/overlay";
 import { Banner, Button, Chip } from "../../../components/ui";
 import { RefreshIcon } from "../../../components/icons";
+import { derive, memo, read, type MaybeSignal } from "../../../components/reactive";
+import { Rebuild } from "../../../components/rebuild";
+import { Keyed } from "../../../runtime";
 import type { ComposerComponentProvider } from "../active-pack";
-import { ComposerWorkspace } from "../chrome/composer-workspace";
+import { ComposerWorkspace, createComposerEditorChrome } from "../chrome/composer-workspace";
 import type { ComposerSaveStatus } from "../chrome/controller-model";
-import type { UseComposerControllerOptions } from "../chrome/use-composer-controller";
+import type { ComposerControllerOptions } from "../chrome/use-composer-controller";
 import { ComposerStructurePane, type SelectedSlot } from "../ui/tree/structure-pane";
 import { ComposerChooser } from "../ui/chooser/composer-chooser";
 import { QuickInsertPopover } from "../ui/quick-insert/quick-insert-popover";
@@ -68,9 +70,9 @@ import {
 } from "../preview";
 import { ComposerCanvasHost } from "./composer-canvas-host";
 import { formatComposerRoute } from "../routing";
-import { useComposerIntegration } from "./use-composer-integration";
-import { useComposerKeyboard } from "./use-composer-keyboard";
-import { useComposerMenus } from "./use-composer-menus";
+import { createComposerIntegration } from "./use-composer-integration";
+import { bindComposerKeyboard } from "./use-composer-keyboard";
+import { createComposerMenus } from "./use-composer-menus";
 import type {
   ReuseAuthoringActionResult,
   ReuseDependencyCheck,
@@ -80,9 +82,9 @@ export interface ComposerIntegrationProps {
   /** One validated provider view shared by controller, canvas, and chooser. */
   componentProvider: ComposerComponentProvider;
   /** Forwarded to the record-scoped controller. */
-  controllerOptions: Omit<UseComposerControllerOptions, "manifest">;
+  controllerOptions: Omit<ComposerControllerOptions, "manifest">;
   /** Parent-owned, provider-scoped resolver used for linked preview/Copy behavior. */
-  reuseResolution?: ComposerReuseResolutionOptions;
+  reuseResolution?: MaybeSignal<ComposerReuseResolutionOptions | undefined>;
   /**
    * Read the active provider's saved-Pattern catalog for this mounted record.
    * The owner binds its current provider and record identity into this callback,
@@ -96,6 +98,10 @@ export interface ComposerIntegrationProps {
     LinkedEditorLifecycleActions,
     "onOpenSource" | "onDetach" | "onRemoveBrokenBinding"
   >;
+  /** The app chrome store the breadcrumb and save state are published into. */
+  appChrome?: ChromeStore | null;
+  /** The workspace's versioned Asset store, for resolving managed Asset references. */
+  assetStore?: VersionedAssetStore;
 
   // ── Canvas bridge test seams (production defaults) ────────────────────────
   createBridge?: typeof createComposerPreviewBridge;
@@ -104,21 +110,23 @@ export interface ComposerIntegrationProps {
   /** Production route coordinator seam for landing debounced props before transitions. */
   registerFlushPendingProps?: (flush: (() => void) | null) => void;
   onDuplicateComposition?: () => void;
-  duplicatingComposition?: boolean;
+  duplicatingComposition?: MaybeSignal<boolean>;
   /** Record-level delete; the owner navigates away once the record is gone. */
   onDeleteComposition?: () => void;
-  navigationError?: string | null;
-  onRetryNavigation?: () => void;
-  navigationRetrying?: boolean;
-  recoveryNotice?: string | null;
+  navigationError?: MaybeSignal<string | null | undefined>;
+  onRetryNavigation?: MaybeSignal<(() => void) | undefined>;
+  navigationRetrying?: MaybeSignal<boolean>;
+  recoveryNotice?: MaybeSignal<string | null | undefined>;
   onRetryRecovery?: () => void;
-  recoveryRetrying?: boolean;
+  recoveryRetrying?: MaybeSignal<boolean>;
   /** Parent-owned provider relationship query used before changing a published source. */
   getPublicationDependencies?: (sourceRecordId: string) => Promise<ReuseDependencyCheck>;
 }
 
 /** The library index this editor came from, and returns to. */
 const LIBRARY_HREF = formatComposerRoute({ kind: "index" });
+
+const LOCAL_PRESENTATION: LinkedEditorPresentation = { state: "local" };
 
 /** The queue's own vocabulary, translated into the chrome's four states. */
 function statusOf(status: ComposerSaveStatus, onRetry: () => void): EditorStatus {
@@ -131,145 +139,150 @@ function statusOf(status: ComposerSaveStatus, onRetry: () => void): EditorStatus
 }
 
 /** The Pattern / Global template chip that sits beside the record's name. */
-function publicationChip(publication: CompositionPublication | undefined): ComponentChildren {
+function publicationChip(publication: CompositionPublication | undefined): Child {
   if (publication === undefined) return null;
   if (publication.kind === "pattern") return <Chip tone="accent">Pattern</Chip>;
   const label = publication.outlet.label;
   return <Chip tone="accent">{label ? `Global template · ${label}` : "Global template"}</Chip>;
 }
 
-export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Element {
-  const [linkedRetryEpoch, setLinkedRetryEpoch] = useState(0);
-  const effectiveReuseResolution = useMemo(() => {
-    if (!props.reuseResolution) return undefined;
-    return {
-      ...props.reuseResolution,
-      // Retrying a broken link is a fresh provider read even when its parent
-      // record/ref is unchanged. Keep the parent's refresh token intact.
-      refreshKey: [props.reuseResolution.refreshKey, linkedRetryEpoch],
-    };
-  }, [linkedRetryEpoch, props.reuseResolution]);
-  const api = useComposerIntegration({
+export function ComposerIntegration(props: ComposerIntegrationProps): Child {
+  const scope = getScope();
+  const linkedRetryEpoch = signal(0);
+  const effectiveReuseResolution = derive(
+    () => [read(props.reuseResolution), linkedRetryEpoch.value] as const,
+    (reuseResolution, epoch) => reuseResolution
+      ? {
+        ...reuseResolution,
+        // Retrying a broken link is a fresh provider read even when its parent
+        // record/ref is unchanged. Keep the parent's refresh token intact.
+        refreshKey: [reuseResolution.refreshKey, epoch],
+      }
+      : undefined,
+  );
+  const api = createComposerIntegration(scope, {
     componentProvider: props.componentProvider,
     controllerOptions: props.controllerOptions,
     reuseResolution: effectiveReuseResolution,
   });
-  const {
-    controller,
-    manifestEntries,
-    session,
-    viewport,
-    setViewport,
-    chooser,
-    exportState,
-    titleFor,
-    handleUndo,
-    handleRedo,
-    canUndo,
-    canRedo,
-  } = api;
+  const { controller, manifestEntries, chooser, exportState, titleFor, handleUndo, handleRedo, canUndo, canRedo } = api;
   const { state } = controller;
+  const manifest = controller.manifest;
+  const { chrome, rails } = createComposerEditorChrome();
 
-  const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
-  const [renaming, setRenaming] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const document = computed(() => state.value.document);
+  const documentName = computed(() => state.value.document.name);
+  const mode = computed(() => state.value.mode);
+  const selectedId = computed(() => state.value.selectedId);
+  const rootPolicy = computed(() => state.value.rootPolicy);
+  const readOnly = computed(() => state.value.mode === "preview");
 
-  useBreadcrumb([{ label: "Compositions", href: LIBRARY_HREF }, { label: state.document.name }]);
+  const selectedSlot = signal<SelectedSlot | null>(null);
+  const renaming = signal(false);
+  const deleting = signal(false);
+
+  bindBreadcrumb(
+    scope,
+    props.appChrome ?? null,
+    memo(() => [{ label: "Compositions", href: LIBRARY_HREF }, { label: documentName.value }], (left, right) => left[1]!.label === right[1]!.label),
+  );
 
   // A slot selection only means something while its owner is still selected and
   // still has that slot; a delete or an undo can take either away.
-  const activeSlot =
-    selectedSlot && selectedSlot.parentId === state.selectedId ? selectedSlot : null;
+  const activeSlot = computed(() => {
+    const slot = selectedSlot.value;
+    return slot && slot.parentId === selectedId.value ? slot : null;
+  });
 
-  const linkedView = useMemo(() => {
-    if (!api.reuseResolution) return null;
-    return materializeGlobalTemplateView(
-      { ...controller.record, document: state.document },
-      api.reuseResolution,
-    );
-  }, [api.reuseResolution, controller.record, state.document]);
-  const linkedPresentation = useMemo(
-    () => (linkedView ? linkedEditorPresentation(linkedView) : undefined),
-    [linkedView],
+  const linkedView = derive(
+    () => [api.reuseResolution.value, document.value] as const,
+    (resolution, current) => resolution
+      ? materializeGlobalTemplateView({ ...controller.record, document: current }, resolution)
+      : null,
   );
-  const previewSnapshot = useMemo<ComposerPreviewSnapshot>(() => {
-    if (linkedView?.status !== "resolved") {
-      return localPreviewSnapshot(state.document, controller.record.id);
-    }
-    return {
-      document: linkedView.localDocument,
-      localRecordId: linkedView.localRuntime.recordId,
-      linked: {
-        sourceRecordId: linkedView.sourceRuntime.sourceRecordId,
-        sourceDocument: linkedView.sourceDocument,
-        outlet: linkedView.outlet,
-      },
-    };
-  }, [controller.record.id, linkedView, state.document]);
-  const linkedActions = useMemo<LinkedEditorLifecycleActions | undefined>(() => {
-    if (!linkedView || linkedView.status === "local") return undefined;
-    const onOpenSource = props.linkedActions?.onOpenSource;
-    if (linkedView.status === "blocked") {
+  const linkedPresentation = derive(
+    () => [linkedView.value] as const,
+    (view) => (view ? linkedEditorPresentation(view) : LOCAL_PRESENTATION),
+  );
+  const previewSnapshot = derive(
+    () => [linkedView.value, document.value] as const,
+    (view, current): ComposerPreviewSnapshot => {
+      if (view?.status !== "resolved") return localPreviewSnapshot(current, controller.record.id);
       return {
-        onOpenSource,
-        onRetry: () => setLinkedRetryEpoch((epoch) => epoch + 1),
-        onRemoveBrokenBinding: props.linkedActions?.onRemoveBrokenBinding,
+        document: view.localDocument,
+        localRecordId: view.localRuntime.recordId,
+        linked: {
+          sourceRecordId: view.sourceRuntime.sourceRecordId,
+          sourceDocument: view.sourceDocument,
+          outlet: view.outlet,
+        },
       };
-    }
-    return {
-      onOpenSource,
-      onDetach: props.linkedActions?.onDetach,
-    };
-  }, [linkedView, props.linkedActions]);
-  const [patternCatalog, setPatternCatalog] = useState<ReuseCatalogOutcome | undefined>(undefined);
-  const [patternCatalogLoading, setPatternCatalogLoading] = useState(false);
-  const patternCatalogRequest = useRef(0);
-  const browserCopyOutcome = useMemo(() => {
-    const exportDocument = exportState.exportDocument;
-    if (!exportDocument) return null;
-    return generateBrowserJsxExport({
-      record: { ...controller.record, document: exportDocument },
-      manifest: controller.manifest,
-      resolution: api.reuseResolution,
-    });
-  }, [api.reuseResolution, controller.manifest, controller.record, exportState.exportDocument]);
-  const readOnly = state.mode === "preview";
-  const menus = useComposerMenus(api);
+    },
+  );
+  const linkedActions = derive(
+    () => [linkedView.value] as const,
+    (view): LinkedEditorLifecycleActions | undefined => {
+      if (!view || view.status === "local") return undefined;
+      const onOpenSource = props.linkedActions?.onOpenSource;
+      if (view.status === "blocked") {
+        return {
+          onOpenSource,
+          onRetry: () => { linkedRetryEpoch.value += 1; },
+          onRemoveBrokenBinding: props.linkedActions?.onRemoveBrokenBinding,
+        };
+      }
+      return { onOpenSource, onDetach: props.linkedActions?.onDetach };
+    },
+  );
+
+  const patternCatalog = signal<ReuseCatalogOutcome | undefined>(undefined);
+  const patternCatalogLoading = signal(false);
+  let patternCatalogRequest = 0;
+  const browserCopyOutcome = derive(
+    () => [exportState.exportDocument.value, api.reuseResolution.value] as const,
+    (exportDocument, resolution) => exportDocument
+      ? generateBrowserJsxExport({ record: { ...controller.record, document: exportDocument }, manifest, resolution })
+      : null,
+  );
+  const menus = createComposerMenus(scope, api);
 
   // A catalog is intentionally re-read for every chooser session. A source
   // can be unpublished/deleted or changed to another reusable role while the
   // editor remains mounted; selection still performs a second, full-record
   // read before the atomic controller command runs.
-  useEffect(() => {
-    const request = ++patternCatalogRequest.current;
-    if (!chooser.open || !props.listPatternCatalog) {
-      setPatternCatalog(undefined);
-      setPatternCatalogLoading(false);
+  let seenChooserOpen: boolean | null = null;
+  scope.effect(() => {
+    const open = chooser.value.open;
+    if (seenChooserOpen === open) return;
+    seenChooserOpen = open;
+    const request = ++patternCatalogRequest;
+    const listPatternCatalog = props.listPatternCatalog;
+    if (!open || !listPatternCatalog) {
+      patternCatalog.value = undefined;
+      patternCatalogLoading.value = false;
       return;
     }
-
-    setPatternCatalog(undefined);
-    setPatternCatalogLoading(true);
-    void props.listPatternCatalog().then(
+    patternCatalog.value = undefined;
+    patternCatalogLoading.value = true;
+    void listPatternCatalog().then(
       (outcome) => {
-        if (request !== patternCatalogRequest.current) return;
-        setPatternCatalog(outcome);
-        setPatternCatalogLoading(false);
+        if (request !== patternCatalogRequest || scope.abortSignal.aborted) return;
+        patternCatalog.value = outcome;
+        patternCatalogLoading.value = false;
       },
       (reason) => {
-        if (request !== patternCatalogRequest.current) return;
-        setPatternCatalog({
+        if (request !== patternCatalogRequest || scope.abortSignal.aborted) return;
+        patternCatalog.value = {
           status: "load-error",
           message: reason instanceof Error ? reason.message : "Patterns could not be loaded.",
-        });
-        setPatternCatalogLoading(false);
+        };
+        patternCatalogLoading.value = false;
       },
     );
-
-    return () => {
-      patternCatalogRequest.current += 1;
-    };
-  }, [chooser.open, props.listPatternCatalog]);
+  });
+  scope.onCleanup(() => {
+    patternCatalogRequest += 1;
+  });
 
   const checkPublicationDependencies = async (): Promise<ReuseDependencyCheck> => {
     if (!props.getPublicationDependencies) {
@@ -289,7 +302,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
   };
 
   const clearPublication = async (): Promise<ReuseAuthoringActionResult> => {
-    if (state.document.publication?.kind === "pattern") {
+    if (state.value.document.publication?.kind === "pattern") {
       controller.clearPublication({ dependentCount: 0 });
       return { status: "applied" };
     }
@@ -309,7 +322,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
     target: { parentId: string; slotId: string },
     label: string,
   ): Promise<ReuseAuthoringActionResult> => {
-    const current = state.document.publication;
+    const current = state.value.document.publication;
     const reassigning = current?.kind === "global-template"
       && (current.outlet.target.parentId !== target.parentId || current.outlet.target.slotId !== target.slotId);
     if (reassigning) {
@@ -327,14 +340,14 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
     return { status: "applied" };
   };
 
-  useEffect(() => {
+  scope.onActivate(() => {
     props.registerFlushPendingProps?.(controller.flushPropUpdates);
-    return () => props.registerFlushPendingProps?.(null);
-  }, [controller.flushPropUpdates, props.registerFlushPendingProps]);
+  });
+  scope.onCleanup(() => props.registerFlushPendingProps?.(null));
 
-  useComposerKeyboard({
-    mode: state.mode,
-    selectedId: state.selectedId,
+  bindComposerKeyboard(scope, {
+    mode,
+    selectedId,
     onRemoveSelected: api.handleRemoveSelected,
     onEscape: api.handleEscape,
     onUndo: handleUndo,
@@ -344,32 +357,79 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
     menuOpen: menus.controller.open,
   });
 
-  const publication = state.document.publication;
-  const dangerItems = menus.items.filter((item) => item.danger === true);
-  const plainItems = menus.items.filter((item) => item.danger !== true);
+  const status = computed(() => statusOf(state.value.saveStatus, controller.retrySave));
+  const dirty = computed(() => state.value.saveStatus.kind !== "saved");
+  const publication = computed(() => state.value.document.publication);
+  const dangerItems = computed(() => menus.items.value.filter((item) => item.danger === true));
+  const plainItems = computed(() => menus.items.value.filter((item) => item.danger !== true));
+
+  const hasNavigationError = computed(() => Boolean(read(props.navigationError)));
+  const hasRecoveryNotice = computed(() => Boolean(read(props.recoveryNotice)));
+  const navigationRetrying = computed(() => Boolean(read(props.navigationRetrying)));
+  const recoveryRetrying = computed(() => Boolean(read(props.recoveryRetrying)));
+  const retryNavigation = computed(() => read(props.onRetryNavigation));
+  const banner = derive(
+    () => [hasNavigationError.value, hasRecoveryNotice.value, Boolean(retryNavigation.value)] as const,
+    (navigation, recovery, canRetryNavigation): Child => {
+      if (!navigation && !recovery) return null;
+      return (
+        <>
+          {navigation ? (
+            <Banner
+              tone="err"
+              action={canRetryNavigation ? (
+                <Button size="sm" disabled={navigationRetrying} on:click={() => retryNavigation.value?.()}>
+                  <RefreshIcon size="sm" />
+                  {computed(() => (navigationRetrying.value ? "Retrying navigation…" : "Retry navigation"))}
+                </Button>
+              ) : null}
+            >
+              {computed(() => read(props.navigationError) ?? "")}
+            </Banner>
+          ) : null}
+          {recovery ? (
+            <Banner
+              tone="warn"
+              action={props.onRetryRecovery ? (
+                <Button size="sm" disabled={recoveryRetrying} on:click={() => props.onRetryRecovery?.()}>
+                  <RefreshIcon size="sm" />
+                  {computed(() => (recoveryRetrying.value ? "Retrying recovery…" : "Retry recovery"))}
+                </Button>
+              ) : null}
+            >
+              {computed(() => read(props.recoveryNotice) ?? "")}
+            </Banner>
+          ) : null}
+        </>
+      );
+    },
+  );
 
   return (
     <ComposerWorkspace
       back={{ href: LIBRARY_HREF, label: "Back to Compositions" }}
+      chrome={chrome}
+      rails={rails}
+      appChrome={props.appChrome ?? null}
       title={
         <>
           <RecordTitle
-            value={state.document.name}
+            value={documentName}
             label="Composition name"
             disabled={readOnly}
             onCommit={(name) => controller.rename(name)}
           />
-          {publicationChip(publication)}
+          <Rebuild value={publication}>{(current) => publicationChip(current)}</Rebuild>
         </>
       }
-      status={statusOf(state.saveStatus, controller.retrySave)}
-      dirty={state.saveStatus.kind !== "saved"}
+      status={status}
+      dirty={dirty}
       center={
         <ComposerViewControls
-          mode={state.mode}
-          viewport={viewport}
+          mode={mode}
+          viewport={api.viewport}
           onSetMode={controller.setMode}
-          onSetViewport={setViewport}
+          onSetViewport={api.setViewport}
         />
       }
       right={({ toggleRail }) => (
@@ -379,62 +439,29 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
           canUndo={canUndo}
           canRedo={canRedo}
           onExport={exportState.openExport}
-          derivedOutput={state.derivedOutput}
-          clipboard={state.clipboard}
+          derivedOutput={computed(() => state.value.derivedOutput)}
+          clipboard={computed(() => state.value.clipboard)}
           titleFor={titleFor}
           onDuplicateComposition={props.onDuplicateComposition}
           duplicatingComposition={props.duplicatingComposition}
-          onRenameComposition={() => setRenaming(true)}
-          onDeleteComposition={props.onDeleteComposition ? () => setDeleting(true) : undefined}
+          onRenameComposition={() => { renaming.value = true; }}
+          onDeleteComposition={props.onDeleteComposition ? () => { deleting.value = true; } : undefined}
           onToggleStructure={() => toggleRail("nav")}
           onToggleInspector={() => toggleRail("insp")}
         />
       )}
-      banner={
-        <>
-          {props.navigationError && (
-            <Banner
-              tone="err"
-              action={
-                props.onRetryNavigation && (
-                  <Button size="sm" disabled={props.navigationRetrying} onClick={props.onRetryNavigation}>
-                    <RefreshIcon size="sm" />
-                    {props.navigationRetrying ? "Retrying navigation…" : "Retry navigation"}
-                  </Button>
-                )
-              }
-            >
-              {props.navigationError}
-            </Banner>
-          )}
-          {props.recoveryNotice && (
-            <Banner
-              tone="warn"
-              action={
-                props.onRetryRecovery && (
-                  <Button size="sm" disabled={props.recoveryRetrying} onClick={props.onRetryRecovery}>
-                    <RefreshIcon size="sm" />
-                    {props.recoveryRetrying ? "Retrying recovery…" : "Retry recovery"}
-                  </Button>
-                )
-              }
-            >
-              {props.recoveryNotice}
-            </Banner>
-          )}
-        </>
-      }
+      banner={banner}
       tree={
         <ComposerStructurePane
-          document={state.document}
-          manifest={controller.manifest}
+          document={document}
+          manifest={manifest}
           entries={manifestEntries}
-          rootPolicy={state.rootPolicy}
-          selectedId={state.selectedId}
+          rootPolicy={rootPolicy}
+          selectedId={selectedId}
           revealEpoch={api.revealEpoch}
           selectedSlot={activeSlot}
           onSelectNode={api.revealNode}
-          onSelectSlot={setSelectedSlot}
+          onSelectSlot={(slot) => { selectedSlot.value = slot; }}
           onSelectDocument={() => controller.select(null)}
           onOpenChooser={api.openChooser}
           onOpenNodeMenu={menus.handleTreeOpenNodeMenu}
@@ -442,14 +469,16 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
           readOnly={readOnly}
           linkedPresentation={linkedPresentation}
           linkedActions={linkedActions}
+          chrome={chrome}
+          rails={rails}
         />
       }
       canvas={
         <ComposerCanvasHost
           componentProvider={props.componentProvider}
-          document={state.document}
-          session={session}
-          viewport={viewport}
+          document={document}
+          session={api.session}
+          viewport={api.viewport}
           onSelect={api.handleCanvasSelect}
           onRequestAdd={api.handleCanvasRequestAdd}
           onRequestQuickInsert={menus.requestQuickInsert}
@@ -463,25 +492,27 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
           location={props.previewLocation}
           hostWindow={props.hostWindow}
           snapshot={previewSnapshot}
-          onOpenSource={linkedActions?.onOpenSource}
+          onOpenSource={(sourceRecordId) => linkedActions.value?.onOpenSource?.(sourceRecordId)}
+          assetStore={props.assetStore}
         />
       }
       inspector={
         <InspectorPanel
-          document={state.document}
-          manifest={controller.manifest}
+          document={document}
+          manifest={manifest}
           entries={manifestEntries}
-          selectedId={state.selectedId}
+          selectedId={selectedId}
           selectedSlot={activeSlot}
-          rootPolicy={state.rootPolicy}
-          mode={state.mode}
+          rootPolicy={rootPolicy}
+          mode={mode}
+          rails={rails}
           onUpdateProps={controller.updateProps}
           onUpdatePropsDebounced={controller.updatePropsDebounced}
           onFlushPendingProps={controller.flushPropUpdates}
           onRemove={controller.remove}
           onCopy={api.handleCopy}
           onDuplicate={api.handleDuplicate}
-          onJumpToSlot={setSelectedSlot}
+          onJumpToSlot={(slot) => { selectedSlot.value = slot; }}
           onPublishPattern={controller.publishPattern}
           onClearPublication={clearPublication}
           onSetGlobalTemplateOutlet={setGlobalTemplateOutlet}
@@ -495,70 +526,95 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
       {/* The canvas menu has no host-side trigger to measure, so it is anchored
           to this zero-size element, parked at the iframe-relayed rect. */}
       <span ref={menus.anchorRef} class="sg-composer-menu-anchor" aria-hidden="true" />
-      <Menu key={menus.menuKey} controller={menus.controller} label={menus.label}>
-        {menus.quickInsert && <QuickInsertPopover {...menus.quickInsert} />}
-        {plainItems.map((item) => (
-          <MenuItem key={item.id} disabled={item.disabled} closeOnSelect={false} onSelect={item.onSelect}>
-            {item.label}
-          </MenuItem>
-        ))}
-        {dangerItems.length > 0 && <MenuSeparator />}
-        {dangerItems.map((item) => (
-          <MenuItem key={item.id} tone="danger" disabled={item.disabled} closeOnSelect={false} onSelect={item.onSelect}>
-            {item.label}
-          </MenuItem>
-        ))}
-      </Menu>
+      {/* The key carries the label too: a menu's accessible name is fixed per mount. */}
+      <Keyed value={computed(() => `${menus.menuKey.value}\u0000${menus.label.value}`)} by={(key) => key}>
+        {() => (
+          <Menu controller={menus.controller} label={menus.label.value}>
+            <Rebuild value={menus.quickInsert}>{(quickInsert) => (quickInsert ? <QuickInsertPopover {...quickInsert} /> : null)}</Rebuild>
+            <For each={plainItems} by={(item) => item.id}>
+              {(item) => (
+                <MenuItem
+                  disabled={computed(() => item.value.disabled === true)}
+                  closeOnSelect={false}
+                  onSelect={() => item.value.onSelect()}
+                >
+                  {computed(() => item.value.label)}
+                </MenuItem>
+              )}
+            </For>
+            <Show when={computed(() => dangerItems.value.length > 0)}>
+              {() => <MenuSeparator />}
+            </Show>
+            <For each={dangerItems} by={(item) => item.id}>
+              {(item) => (
+                <MenuItem
+                  tone="danger"
+                  disabled={computed(() => item.value.disabled === true)}
+                  closeOnSelect={false}
+                  onSelect={() => item.value.onSelect()}
+                >
+                  {computed(() => item.value.label)}
+                </MenuItem>
+              )}
+            </For>
+          </Menu>
+        )}
+      </Keyed>
 
       <ComposerChooser
         componentProvider={props.componentProvider}
-        open={chooser.open}
-        target={chooser.target}
-        initialTab={chooser.initialTab}
-        document={state.document}
-        manifest={controller.manifest}
+        open={computed(() => chooser.value.open)}
+        target={computed(() => chooser.value.target)}
+        initialTab={computed(() => chooser.value.initialTab ?? "components")}
+        document={document}
+        manifest={manifest}
         entries={manifestEntries}
         onAdd={api.handleChooserAdd}
         onExpandAncestors={api.handleExpandAncestors}
         onClose={api.closeChooser}
-        resolveTarget={chooser.session?.resolveTarget}
+        // The tree's insert session owns the live target; a canvas add keeps the one captured on open.
+        resolveTarget={() => {
+          const current = chooser.value;
+          return current.session ? current.session.resolveTarget() : current.target;
+        }}
         onComplete={api.completeChooser}
         patternCatalog={patternCatalog}
         patternCatalogLoading={patternCatalogLoading}
         loadPattern={props.loadPattern}
-        rootPolicy={state.rootPolicy}
+        rootPolicy={rootPolicy}
         onInsertPattern={(target, sourceRoots) => controller.insertForest(sourceRoots, target)}
+        assetStore={props.assetStore}
       />
 
       <ComposerExportDialog
         open={exportState.open}
         onClose={exportState.closeExport}
-        documentName={state.document.name}
+        documentName={documentName}
         result={exportState.result}
         copyOutcome={browserCopyOutcome}
       />
 
       <ComposerRenameDialog
         open={renaming}
-        value={state.document.name}
+        value={documentName}
         onSubmit={(name) => {
           controller.rename(name);
-          setRenaming(false);
+          renaming.value = false;
         }}
-        onClose={() => setRenaming(false)}
+        onClose={() => { renaming.value = false; }}
       />
 
       <ConfirmDialog
         open={deleting}
-        title={`Delete ${state.document.name}?`}
+        title={computed(() => `Delete ${documentName.value}?`)}
         message="The composition and its components are deleted. This cannot be undone."
         confirmLabel="Delete"
         tone="danger"
         onConfirm={() => {
-          setDeleting(false);
+          deleting.value = false;
           props.onDeleteComposition?.();
         }}
-        onClose={() => setDeleting(false)}
+        onClose={() => { deleting.value = false; }}
       />
     </ComposerWorkspace>
   );

@@ -1,43 +1,42 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 // The editor's Rename… dialog. The toolbar title is inline-editable, so this
 // exists for the overflow menu's explicit entry — the discoverable route for
 // anyone who never notices the name is a field.
 
-import type { JSX } from "preact";
-import { useRef, useState } from "preact/hooks";
+import { computed, getScope, signal, type Child, type Ref } from "@takazudo/zfb/zudo-react";
 import { Dialog } from "../../../../components/overlay";
-import { Field, Input } from "../../../../components/ui";
+import { read, type MaybeSignal } from "../../../../components/reactive";
+import { Field, Input, isComposingKey } from "../../../../components/ui";
 
 export interface ComposerRenameDialogProps {
-  open: boolean;
+  open: MaybeSignal<boolean>;
   /** The current name; the field is reset to it whenever the dialog opens. */
-  value: string;
+  value: MaybeSignal<string>;
   onSubmit: (name: string) => void;
   onClose: () => void;
 }
 
-export function ComposerRenameDialog({ open, value, onSubmit, onClose }: ComposerRenameDialogProps): JSX.Element {
-  const fieldRef = useRef<HTMLInputElement | null>(null);
-  const [draft, setDraft] = useState(value);
-  const [missing, setMissing] = useState(false);
+export function ComposerRenameDialog({ open, value, onSubmit, onClose }: ComposerRenameDialogProps): Child {
+  const fieldRef: Ref<HTMLInputElement> = { current: null };
+  const draft = signal(read(value));
+  const missing = signal(false);
 
-  // Reset during render, not in an effect: an effect runs after paint, so the
-  // dialog would be visible and typeable for a frame before the reset landed,
-  // and anything typed in that window would be silently replaced.
-  const wasOpen = useRef(open);
-  if (open !== wasOpen.current) {
-    wasOpen.current = open;
-    if (open) {
-      setDraft(value);
-      setMissing(false);
+  // Reset on the closed → open transition, in the same flush that mounts the
+  // dialog's panel, so nothing typed into the opened field is replaced.
+  let wasOpen = read(open);
+  getScope().effect(() => {
+    const isOpen = read(open);
+    if (isOpen === wasOpen) return;
+    wasOpen = isOpen;
+    if (isOpen) {
+      draft.value = read(value);
+      missing.value = false;
     }
-  }
+  });
 
   function submit(): void {
-    const next = draft.trim();
+    const next = draft.value.trim();
     if (next === "") {
-      setMissing(true);
+      missing.value = true;
       return;
     }
     onSubmit(next);
@@ -51,29 +50,31 @@ export function ComposerRenameDialog({ open, value, onSubmit, onClose }: Compose
       onClose={onClose}
       footer={
         <>
-          <button type="button" class="cms-dialog__action" onClick={onClose}>
+          <button type="button" class="cms-dialog__action" on:click={() => onClose()}>
             Cancel
           </button>
-          <button type="button" class="cms-dialog__action cms-dialog__action--primary" onClick={submit}>
+          <button type="button" class="cms-dialog__action cms-dialog__action--primary" on:click={submit}>
             Save name
           </button>
         </>
       }
     >
-      <Field label="Name" error={missing ? "Enter a composition name." : undefined}>
-        <Input
-          elementRef={fieldRef}
-          value={draft}
-          onInput={(event) => {
-            setMissing(false);
-            setDraft(event.currentTarget.value);
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter") return;
-            event.preventDefault();
-            submit();
-          }}
-        />
+      <Field label="Name" error={computed(() => (missing.value ? "Enter a composition name." : undefined))}>
+        {(field) => (
+          <Input
+            field={field}
+            elementRef={fieldRef}
+            modelValue={draft}
+            on:input={() => {
+              missing.value = false;
+            }}
+            on:keydown={(event: KeyboardEvent) => {
+              if (event.key !== "Enter" || isComposingKey(event)) return;
+              event.preventDefault();
+              submit();
+            }}
+          />
+        )}
       </Field>
     </Dialog>
   );

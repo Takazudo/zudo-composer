@@ -1,5 +1,5 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/preact";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { render, screen, waitFor } from "../../../test/render";
 import { activeComponentProvider } from "../../composer/active-pack";
 import { loadSampleSiteProjectWithAssetLock } from "../../../test/sample-asset-lock";
 import { compileSiteProject, type SiteBuildPlan } from "../../../site-project/compiler";
@@ -8,7 +8,6 @@ import { deliveryRoutePathname, matchDeliveryRoute, normalizeDeliveryLinks, safe
 import { SiteDelivery } from "../site-delivery";
 import type { DeliverySourceContract } from "../source";
 
-afterEach(cleanup);
 let project: SiteProject;
 let build: SiteBuildPlan;
 beforeAll(async () => {

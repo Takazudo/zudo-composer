@@ -2,7 +2,7 @@ import { readFile, readdir, realpath } from "node:fs/promises";
 import { isBuiltin } from "node:module";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { BuildEnvironment, createIdResolver, parseAst, resolveConfig, transformWithOxc } from "vite";
-import { resolveComposerModules } from "../../plugins/module-resolution.mjs";
+import { resolveComposerModules, zudoReactOxc } from "../../plugins/module-resolution.mjs";
 import { tailwindResolverAlias } from "../../plugins/tailwind-plugin.mjs";
 
 export interface PackSourceDependency {
@@ -287,7 +287,7 @@ async function scriptSpecifiers(file: string, hostRoot: string): Promise<{ speci
   const where = relative(hostRoot, file).split(sep).join("/");
   const code = extension === ".js" || extension === ".mjs" || extension === ".cjs"
     ? source
-    : (await transformWithOxc(source, file, { jsx: { runtime: "automatic", importSource: "preact" } })).code;
+    : (await transformWithOxc(source, file, zudoReactOxc())).code;
   let program: Node;
   try {
     program = parseAst(code) as unknown as Node;

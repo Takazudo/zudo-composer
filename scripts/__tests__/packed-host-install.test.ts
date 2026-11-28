@@ -36,7 +36,7 @@ const declared = () => ({
   name: "demo-proof", version: "0.0.0", private: true, type: "module",
   exports: { "./components": "./components/pack.ts" },
   scripts: { test: "vitest run", seed: "zudo-composer seed" },
-  devDependencies: { "zudo-composer": "workspace:*", "@zudo-composer/component-contract": "workspace:*", preact: "^10.29.8" },
+  devDependencies: { "zudo-composer": "workspace:*", "@zudo-composer/component-contract": "workspace:*", "@takazudo/zfb": "7.2.0" },
 });
 const archiveSpecs = { "zudo-composer": "file:/tmp/tool.tgz", "@zudo-composer/component-contract": "file:/tmp/contract.tgz", "@zudo-composer/ui": "file:/tmp/ui.tgz" };
 const { "@zudo-composer/ui": uiArchive, ...mandatoryArchives } = archiveSpecs;
@@ -277,8 +277,8 @@ describe("real bounded package/install and negative mechanics", () => {
     }
     const host = join(workspace, "host");
     const manifest = declared();
-    const { preact: _preact, ...dependencies } = manifest.devDependencies;
-    void _preact;
+    const { "@takazudo/zfb": _runtime, ...dependencies } = manifest.devDependencies;
+    void _runtime;
     await put(host, "package.json", JSON.stringify({ ...manifest, devDependencies: dependencies }));
     await put(host, "pnpm-lock.yaml", "stale workspace lockfile");
     const configured = await configurePackedHost(host, tarballs, packageManager);

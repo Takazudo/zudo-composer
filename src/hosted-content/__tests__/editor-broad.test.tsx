@@ -1,5 +1,5 @@
 import { EditorView } from "@codemirror/view";
-import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
+import { fireEvent, screen, settle, settleTasks, waitFor, within } from "../../test/render";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { mountHostedContentEditor } from "../editor";
 import type { HostedContentEditorHandle, HostedContentEditorOptions } from "../editor";
@@ -36,7 +36,7 @@ describe("hosted permitted record controls", () => {
     const number = screen.getByRole("spinbutton", { name: "price" });
     fireEvent.input(number, { target: { value: "" } });
     await waitFor(() => expect(number).toHaveValue(null)); expect(handle.state.dirty).toBe(true); expect(handle.state.reviewedSnapshot).toBeNull();
-    expect(screen.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     await expect(handle.flush()).rejects.toThrow("incomplete number"); await expect(handle.preview()).rejects.toThrow("incomplete number");
     await expect(handle.navigate({ entry: { providerId: "content", modelId: "faq", recordId: "faq-a" }, fieldId: "question" })).rejects.toThrow("incomplete number");
     expect(values(fixture).price).toBe(9);
@@ -48,7 +48,7 @@ describe("hosted permitted record controls", () => {
     const { handle } = mount(fixture); await handle.ready;
     expect(screen.queryByRole("textbox", { name: "講座名" })).toBeNull(); expect(screen.getByLabelText("講座名")).toHaveTextContent("日本語の講座");
     expect(screen.queryByRole("textbox", { name: "details: label" })).toBeNull(); expect(screen.getByLabelText("details: label")).toHaveTextContent("Visible");
-    expect(screen.queryByRole("button", { name: "Clear: details", exact: true })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Clear: details" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Clear: details: label" })); fireEvent.click(screen.getByRole("button", { name: "Clear: 講座名" })); await handle.flush();
     expect(values(fixture)).not.toHaveProperty("title"); expect(values(fixture).details).toEqual({ secret: "Locked" }); expect(values(fixture).slug).toBe("fixed-route");
   });
@@ -56,21 +56,21 @@ describe("hosted permitted record controls", () => {
     const fixture = editorFixture({ nestedNumeric: true }); const { handle } = mount(fixture); await handle.ready;
     const number = screen.getByRole("spinbutton", { name: "details: nested: number" });
     Object.defineProperty(number, "validity", { configurable: true, value: { badInput: true } });
-    fireEvent.input(number, { target: { value: "" } });
-    const clear = screen.getByRole("button", { name: "Clear: details: nested", exact: true });
+    fireEvent.input(number, { target: { value: "" } }); await settle();
+    const clear = screen.getByRole("button", { name: "Clear: details: nested" });
     expect(clear).toBeDisabled(); fireEvent.click(clear); expect(handle.state.content!.providers[0]!.entries.find((entry) => entry.id === "home")!.values.details).toMatchObject({ nested: { number: 9 }, secret: "Locked" }); expect(values(fixture).details).toMatchObject({ nested: { number: 9 }, secret: "Locked" });
     await expect(handle.flush()).rejects.toThrow("incomplete number"); expect(handle.state.invalidInputs).toHaveLength(1);
     Object.defineProperty(number, "validity", { configurable: true, value: { badInput: false } });
-    fireEvent.input(number, { target: { value: "0" } }); expect(clear).not.toBeDisabled();
+    fireEvent.input(number, { target: { value: "0" } }); await settle(); expect(clear).not.toBeDisabled();
     fireEvent.click(clear); await handle.flush(); expect(values(fixture).details).toEqual({ label: "Visible", secret: "Locked" });
     expect(handle.state.invalidInputs).toEqual([]); expect(handle.state.dirty).toBe(false);
   });
   it("blocks numeric list shape actions during incomplete input and leaves no orphan marker after correction", async () => {
     const fixture = editorFixture({ numericResults: true }); const { handle } = mount(fixture); await handle.ready;
-    const number = screen.getByRole("spinbutton", { name: "results: Item 2" }); fireEvent.input(number, { target: { value: "" } });
-    expect(number).toHaveAttribute("aria-invalid", "true"); expect(handle.state.dirty).toBe(true); await expect(handle.flush()).rejects.toThrow("incomplete number"); expect(values(fixture).results).toEqual([9, 5]);
+    const number = screen.getByRole("spinbutton", { name: "results: Item 2" }); fireEvent.input(number, { target: { value: "" } }); await settle();
+    expect(number).toHaveAttribute("aria-invalid", "true"); expect(handle.state.dirty).toBe(true); await expect(handle.flush()).rejects.toThrow("incomplete number"); expect(values(fixture).results).toEqual([9, 5]); await settle();
     expect(screen.getByRole("button", { name: "Remove item: results 1" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Remove item: results 2" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Move up: results 2" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Add item: results" })).toBeDisabled();
-    fireEvent.input(number, { target: { value: "-2.5" } }); await handle.flush(); expect(values(fixture).results).toEqual([9, -2.5]); expect(handle.state.invalidInputs).toEqual([]);
+    fireEvent.input(number, { target: { value: "-2.5" } }); await handle.flush(); expect(values(fixture).results).toEqual([9, -2.5]); expect(handle.state.invalidInputs).toEqual([]); await settle();
     fireEvent.click(screen.getByRole("button", { name: "Remove item: results 2" })); await handle.flush(); expect(values(fixture).results).toEqual([9]); expect(handle.state.dirty).toBe(false);
   });
   it("distinguishes an empty replacement from a clear and keeps incomplete drafts savable", async () => {
@@ -125,13 +125,13 @@ describe("hosted permitted record controls", () => {
   it("creates with server IDs, navigates new members, adds existing entries and preserves reorder membership", async () => {
     const fixture = editorFixture(); const { handle } = mount(fixture); await handle.ready;
     fireEvent.click(screen.getByRole("button", { name: "Create item: questions" })); await input("question", "新しい質問"); await input("answer", "新しい回答");
-    fireEvent.click(screen.getByRole("button", { name: "Create item", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Create item" }));
     await waitFor(() => expect(fixture.database().state.providers[0]!.entries.some((entry) => entry.id === "server-1")).toBe(true));
     await screen.findByRole("textbox", { name: "question" }); await input("question", "作成後の編集"); await handle.flush();
     expect(fixture.database().state.providers[0]!.entries.find((entry) => entry.id === "server-1")!.values.question).toBe("作成後の編集");
     expect(fixture.policy.models[1]!.entryIds).not.toContain("server-1");
     await handle.navigate({ entry: page, fieldId: "title" }); await screen.findByRole("textbox", { name: "講座名" });
-    fireEvent.change(screen.getByRole("combobox", { name: "Add existing item: questions" }), { target: { value: "faq-detached" } }); fireEvent.click(screen.getByRole("button", { name: "Add existing item", exact: true }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Add existing item: questions" }), { target: { value: "faq-detached" } }); fireEvent.click(screen.getByRole("button", { name: "Add existing item" }));
     await waitFor(() => expect(values(fixture).questions).toHaveLength(3));
     fireEvent.click(screen.getByRole("button", { name: "Move up: Detached question" }));
     await waitFor(() => expect((values(fixture).questions as unknown as { recordId: string }[]).map((ref) => ref.recordId)).toEqual(["faq-a", "faq-detached", "server-1"]));
@@ -152,14 +152,14 @@ describe("hosted permitted record controls", () => {
     let release!: () => void; const gate = new Promise<void>((ready) => { release = ready; }); let lose = true;
     fixture.transport.execute = async (request) => { const result = await execute(request); if (request.kind === "create-entry" && lose) { lose = false; await gate; throw new Error("lost creation response"); } return result; };
     const first = mount(fixture, { persistRecovery: (saved) => { checkpoint = saved; } }); await first.handle.ready;
-    fireEvent.click(screen.getByRole("button", { name: "Create item: questions" })); await input("question", "質問A"); fireEvent.click(screen.getByRole("button", { name: "Create item", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Create item: questions" })); await input("question", "質問A"); fireEvent.click(screen.getByRole("button", { name: "Create item" }));
     await waitFor(() => expect(fixture.database().state.providers[0]!.entries.some((entry) => entry.id === "server-1")).toBe(true));
     await input("question", "質問B"); release(); await waitFor(() => expect(first.handle.state.phase).toBe("recovering"));
     await waitFor(() => expect(checkpoint.creationDraft?.values.question).toBe("質問B"));
     const original = checkpoint.pending!.request; first.handle.dispose();
     const reopened = mount(fixture, { recovery: checkpoint }); await reopened.handle.ready;
-    expect(screen.getByRole("button", { name: "Create item", exact: true })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Save", exact: true })); await waitFor(() => expect(reopened.handle.state.pending).toBeNull());
+    expect(screen.getByRole("button", { name: "Create item" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" })); await waitFor(() => expect(reopened.handle.state.pending).toBeNull());
     await waitFor(() => expect(reopened.handle.state.dirty).toBe(false));
     const creates = fixture.requests.filter((request) => request.kind === "create-entry"); expect(creates).toHaveLength(2); expect(creates[0]).toEqual(original); expect(creates[1]).toEqual(original);
     expect(fixture.database().state.providers[0]!.entries.filter((entry) => entry.id.startsWith("server-"))).toHaveLength(1);
@@ -170,11 +170,11 @@ describe("hosted permitted record controls", () => {
     const fixture = editorFixture(); const { handle } = mount(fixture); await handle.ready;
     fireEvent.click(screen.getByRole("button", { name: "Create item: questions" })); await input("question", "Retained question");
     const state = await fixture.service.readState(fixture.actor); await fixture.service.execute(fixture.actor, { kind: "set-fields", operationKey: "other", expected: { draftRevision: state.draftRevision, definition: state.definition, baseline: state.baseline }, entry: page, values: { title: "Changed by another editor" }, clear: [] });
-    fireEvent.click(screen.getByRole("button", { name: "Create item", exact: true })); await waitFor(() => expect(handle.state.phase).toBe("conflict"));
+    fireEvent.click(screen.getByRole("button", { name: "Create item" })); await waitFor(() => expect(handle.state.phase).toBe("conflict"));
     fireEvent.click(screen.getByRole("button", { name: "Review current content" })); await screen.findByRole("button", { name: "Reapply my changes" });
-    fireEvent.click(screen.getByRole("button", { name: "Reapply my changes" })); await waitFor(() => expect(handle.state.pending).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Reapply my changes" })); await waitFor(() => expect(handle.state.pending).toBeNull()); await settleTasks();
     expect(handle.state.phase).toBe("dirty"); expect(handle.state.dirty).toBe(true); expect(screen.getByRole("textbox", { name: "question" })).toHaveValue("Retained question");
-    fireEvent.click(screen.getByRole("button", { name: "Create item", exact: true })); await waitFor(() => expect(fixture.database().state.providers[0]!.entries.some((entry) => entry.id.startsWith("server-") && entry.modelId === "faq")).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "Create item" })); await waitFor(() => expect(fixture.database().state.providers[0]!.entries.some((entry) => entry.id.startsWith("server-") && entry.modelId === "faq")).toBe(true));
   });
   it("shows refreshed publication facts and restores last-confirmed status when the host is unavailable", async () => {
     const fixture = editorFixture(); let checkpoint!: HostedRecoveryCheckpoint;
@@ -187,7 +187,7 @@ describe("hosted permitted record controls", () => {
     const reopened = mount(fixture, { recovery: checkpoint, preview: { render: async () => undefined }, routeId: "home" }); await reopened.handle.ready;
     expect(screen.getByText("Last confirmed status: Building")).toBeInTheDocument();
     expect(screen.getByText("Submission status is unavailable. The saved draft is retained.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Submit", exact: true })).toBeDisabled(); expect(screen.queryByText("Deployed", { exact: true })).toBeNull();
+    expect(screen.getByRole("button", { name: "Submit" })).toBeDisabled(); expect(screen.queryByText("Deployed", { exact: true })).toBeNull();
   });
   it("requires explicit conflict review/reapply and refreshes a clean durable revision", async () => {
     const fixture = editorFixture(); const { handle } = mount(fixture); await handle.ready; await input("講座名", "私の変更");

@@ -1,7 +1,5 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../test-support/cleanup";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { fireEvent, render, screen, settle, waitFor, within } from "../../../../test/render";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   COMPOSITION_PROVIDERS,
@@ -129,6 +127,8 @@ describe("CompositionLibrary data and capability states", () => {
     await waitForLibrary();
 
     fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+
+    await settle();
     const cards = screen.getByLabelText("Composition cards");
     const card = within(cards).getByRole("article");
     await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "alpha" }));
@@ -138,11 +138,16 @@ describe("CompositionLibrary data and capability states", () => {
     expect(frame).toHaveClass("sg-composition-preview__frame");
 
     fireEvent.click(within(card).getByRole("button", { name: "Preview" }));
+
+    await settle();
     const dialog = screen.getByRole("dialog", { name: "Preview — Alpha layout" });
     fireEvent.click(within(dialog).getByRole("radio", { name: "Phone" }));
+    await settle();
     expect(within(dialog).getByRole("radio", { name: "Phone" })).toHaveAttribute("aria-checked", "true");
     fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
+    await settle();
     fireEvent.click(screen.getByRole("radio", { name: "List" }));
+    await settle();
     expect(screen.getByRole("table", { name: "Compositions" })).toBeInTheDocument();
   });
 
@@ -158,13 +163,16 @@ describe("CompositionLibrary data and capability states", () => {
     renderLibrary(intents);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+    await settle();
 
     expect(intents.resolvePreview).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Composition cards").querySelector("iframe")).toBeNull();
-    act(() => report([{ isIntersecting: true }]));
+    report([{ isIntersecting: true }]);
+    await settle();
     await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledOnce());
     expect(screen.getByLabelText("Composition cards").querySelector("iframe")).not.toBeNull();
-    act(() => report([{ isIntersecting: false }]));
+    report([{ isIntersecting: false }]);
+    await settle();
     expect(screen.getByLabelText("Composition cards").querySelector("iframe")).toBeNull();
   });
 
@@ -175,6 +183,7 @@ describe("CompositionLibrary data and capability states", () => {
     renderLibrary(intents);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+    await settle();
 
     await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledTimes(COMPOSITION_PREVIEW_FALLBACK_LIMIT));
     expect(screen.getByLabelText("Composition cards").querySelectorAll("iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
@@ -182,19 +191,24 @@ describe("CompositionLibrary data and capability states", () => {
 
     const firstCard = screen.getByRole("heading", { name: "Row 0" }).closest("article")!;
     fireEvent.click(within(firstCard).getByRole("button", { name: "Preview" }));
+    await settle();
     let dialog = screen.getByRole("dialog", { name: "Preview — Row 0" });
     expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
     fireEvent.click(within(dialog).getByRole("radio", { name: "Phone" }));
+    await settle();
     expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
     fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
+    await settle();
     expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
 
     const deferredCard = screen.getByRole("heading", { name: "Row 5" }).closest("article")!;
     fireEvent.click(within(deferredCard).getByRole("button", { name: "Preview" }));
+    await settle();
     dialog = screen.getByRole("dialog", { name: "Preview — Row 5" });
     await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "row-5" }));
     expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
     fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
+    await settle();
     expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
   });
 
@@ -215,16 +229,21 @@ describe("CompositionLibrary data and capability states", () => {
     renderLibrary(intents, providers);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+    await settle();
     await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "shared" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Provider: Alternate storage" }));
+
+    await settle();
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Local files" }));
+    await settle();
     expect(await screen.findByText("Files provider preview.")).toBeInTheDocument();
-    act(() => resolveBrowser({
+    resolveBrowser({
       status: "blocked",
       ref: { providerId: ALTERNATE_PROVIDER.id, recordId: "shared" },
       message: "Stale browser preview.",
-    }));
+    });
+    await settle();
     await Promise.resolve();
     expect(screen.queryByText("Stale browser preview.")).toBeNull();
     expect(screen.getByText("Files provider preview.")).toBeInTheDocument();
@@ -242,6 +261,7 @@ describe("CompositionLibrary data and capability states", () => {
     renderLibrary(intents);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+    await settle();
 
     expect(await screen.findByText("The provider returned a preview for a different Composition.")).toBeInTheDocument();
     expect(screen.queryByText("Wrong-provider payload.")).toBeNull();
@@ -265,7 +285,7 @@ describe("CompositionLibrary data and capability states", () => {
     expect(screen.getAllByText("3").length).toBeGreaterThan(0);
   });
 
-  it("shows a semantic loading state while initialization is pending", () => {
+  it("shows a semantic loading state while initialization is pending", async () => {
     renderLibrary(fakeIntents({ initialize: vi.fn(() => new Promise<CompositionInitializationOutcome>(() => undefined)) }));
     expect(screen.getByRole("status")).toHaveTextContent("Loading compositions…");
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
@@ -287,10 +307,14 @@ describe("CompositionLibrary data and capability states", () => {
     await waitForLibrary();
 
     fireEvent.input(screen.getByRole("searchbox", { name: "Filter compositions" }), { target: { value: "alpha" } });
+
+    await settle();
     expect(dataRows()).toHaveLength(1);
     fireEvent.input(screen.getByRole("searchbox", { name: "Filter compositions" }), { target: { value: "nothing here" } });
+    await settle();
     expect(screen.getByText("No matches for “nothing here”")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    await settle();
     expect(dataRows()).toHaveLength(2);
   });
 
@@ -318,6 +342,7 @@ describe("CompositionLibrary data and capability states", () => {
     renderLibrary();
     await waitForLibrary();
     fireEvent.click(screen.getByRole("button", { name: "Provider: Alternate storage" }));
+    await settle();
     expect(screen.queryByRole("menuitemradio", { name: "Local files" })).not.toBeInTheDocument();
   });
 
@@ -333,7 +358,10 @@ describe("CompositionLibrary data and capability states", () => {
     await screen.findByRole("link", { name: "Alpha layout" });
 
     fireEvent.click(screen.getByRole("button", { name: "Provider: Alternate storage" }));
+
+    await settle();
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Local files" }));
+    await settle();
     await screen.findByRole("link", { name: "File composition" });
     expect(screen.getByText("1 of 1 compositions · Local files")).toBeInTheDocument();
     expect(intents.initialize).toHaveBeenCalledTimes(2);
@@ -356,7 +384,10 @@ describe("CompositionLibrary data and capability states", () => {
     await screen.findByRole("link", { name: "Alpha layout" });
 
     fireEvent.click(screen.getByRole("button", { name: "Provider: Alternate storage" }));
+
+    await settle();
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Local files" }));
+    await settle();
     await screen.findByRole("alert");
     expect(screen.getByText("Files could not be listed.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Alpha layout" })).toBeInTheDocument();
@@ -381,7 +412,10 @@ describe("CompositionLibrary data and capability states", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Start fresh…" }));
+
+    await settle();
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Start fresh?" })).getByRole("button", { name: "Start fresh" }));
+    await settle();
     await screen.findByText("No compositions yet");
     expect(intents.startFresh).toHaveBeenCalledWith(ALTERNATE_PROVIDER.id);
   });
@@ -394,6 +428,7 @@ describe("CompositionLibrary data and capability states", () => {
     expect(await screen.findByText("Composition library unavailable.")).toBeInTheDocument();
     expect(screen.queryByRole("table")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await settle();
     expect(await screen.findByRole("link", { name: "Alpha layout" })).toBeInTheDocument();
   });
 });
@@ -405,9 +440,11 @@ describe("CompositionLibrary row and bulk actions", () => {
     renderLibrary(intents);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("button", { name: "New composition" }));
+    await settle();
 
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
+    await settle();
 
     await waitFor(() => expect(intents.create).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, name: "Untitled composition" }));
     await waitFor(() => expect(intents.open).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "created" }));
@@ -419,11 +456,15 @@ describe("CompositionLibrary row and bulk actions", () => {
     renderLibrary(intents);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("button", { name: "New composition" }));
+    await settle();
 
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Bound page" } });
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: /Site shell/ }));
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
+    await settle();
 
     await waitFor(() => expect(intents.create).toHaveBeenCalledWith({
       providerId: ALTERNATE_PROVIDER.id,
@@ -437,11 +478,15 @@ describe("CompositionLibrary row and bulk actions", () => {
     renderLibrary(intents);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("button", { name: "More actions for Alpha layout" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("menu", { name: "Alpha layout actions" })).getByRole("menuitem", { name: "Rename…" }));
+    await settle();
 
     const dialog = screen.getByRole("dialog", { name: "Rename composition" });
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Alpha renamed" } });
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: "Save name" }));
+    await settle();
 
     await waitFor(() => expect(intents.rename).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "alpha" }, "Alpha renamed"));
     expect(await screen.findByRole("link", { name: "Alpha renamed" })).toBeInTheDocument();
@@ -452,11 +497,15 @@ describe("CompositionLibrary row and bulk actions", () => {
     renderLibrary(intents);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("button", { name: "More actions for Alpha layout" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Rename…" }));
+    await settle();
 
     const dialog = screen.getByRole("dialog", { name: "Rename composition" });
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Alpha renamed" } });
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: "Save name" }));
+    await settle();
 
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("Storage quota exceeded.");
     expect(within(dialog).getByRole("textbox", { name: "Name" })).toHaveValue("Alpha renamed");
@@ -467,7 +516,9 @@ describe("CompositionLibrary row and bulk actions", () => {
     renderLibrary(intents);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("button", { name: "More actions for Alpha layout" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
+    await settle();
 
     await waitFor(() => expect(intents.open).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "copy" }));
     expect(await screen.findByRole("link", { name: "Alpha layout copy" })).toBeInTheDocument();
@@ -478,7 +529,9 @@ describe("CompositionLibrary row and bulk actions", () => {
     renderLibrary(intents);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("button", { name: "More actions for Alpha layout" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Export JSX" }));
+    await settle();
 
     expect(await screen.findByRole("dialog", { name: "Export — Alpha layout" })).toBeInTheDocument();
     await waitFor(() => expect(intents.exportJsx).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "alpha" }));
@@ -490,10 +543,13 @@ describe("CompositionLibrary row and bulk actions", () => {
     renderLibrary(intents);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("button", { name: "More actions for Alpha layout" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    await settle();
 
     const dialog = screen.getByRole("alertdialog", { name: "Delete Alpha layout?" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await settle();
 
     await screen.findByText("No compositions yet");
     expect(intents.delete).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "alpha" });
@@ -505,17 +561,27 @@ describe("CompositionLibrary row and bulk actions", () => {
     await waitForLibrary();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Alpha layout" }));
+
+    await settle();
     fireEvent.click(screen.getByRole("checkbox", { name: "Bravo layout" }));
+    await settle();
     expect(screen.getByText("2 compositions selected")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    await settle();
     await waitFor(() => expect(intents.duplicate).toHaveBeenCalledTimes(2));
+    await settle();
     expect(intents.open).not.toHaveBeenCalled();
     expect(screen.queryByText("2 compositions selected")).toBeNull();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Alpha layout" }));
+
+    await settle();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Delete Alpha layout?" })).getByRole("button", { name: "Delete" }));
+    await settle();
     await waitFor(() => expect(intents.delete).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "alpha" }));
   });
 
@@ -524,7 +590,9 @@ describe("CompositionLibrary row and bulk actions", () => {
     renderLibrary(intents);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("button", { name: "Clear library" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Clear library?" })).getByRole("button", { name: "Clear library" }));
+    await settle();
 
     await waitFor(() => expect(intents.clear).toHaveBeenCalledWith(ALTERNATE_PROVIDER.id));
     expect(await screen.findByText("No compositions yet")).toBeInTheDocument();
@@ -535,7 +603,9 @@ describe("CompositionLibrary row and bulk actions", () => {
     renderLibrary(intents);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("button", { name: "Clear library" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Clear library?" })).getByRole("button", { name: "Clear library" }));
+    await settle();
 
     await screen.findByText("Clear failed safely.");
     expect(screen.getByRole("link", { name: "Alpha layout" })).toBeInTheDocument();

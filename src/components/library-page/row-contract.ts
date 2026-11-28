@@ -1,4 +1,4 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import type { IconComponent } from "../icons";
 import type { ChipTone } from "../ui";
 import type { LibraryTimestamp } from "./library-format";
@@ -12,7 +12,7 @@ import type { LibraryTimestamp } from "./library-format";
 
 /** The chip in the built-in `Kind` column. */
 export interface LibraryKindTag {
-  readonly label: ComponentChildren;
+  readonly label: Child;
   readonly tone?: ChipTone;
 }
 

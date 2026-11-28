@@ -1,21 +1,24 @@
-import type { JSX } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { batch, computed, For, getScope, Show, signal, type Child, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
+import type { AppServices } from "../../app/services";
 import { ASSET_ACCEPT, ASSET_MAX_BYTE_LENGTH, ASSET_TYPES, ASSET_UPLOAD_HINT, assetFolderPath, assetKindForMime, summarizeAsset, type AssetFolder, type AssetProvider, type AssetSummary } from "../../assets";
 import type { AssetUse } from "../../assets/integration/content";
 import type { ContentAssetRef } from "../../content";
 import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, FolderIcon, GridIcon, ListIcon, SearchIcon, UploadIcon, XMarkIcon } from "../../components/icons";
 import { Dialog } from "../../components/overlay";
 import { Banner, Button, Chip, Input, SegmentedControl, Select } from "../../components/ui";
-import { nextEscapeAction, useAssetPickerPanes } from "./asset-picker-panes";
-import { useAssetDimensions, type AssetDimensionStore } from "./assets-dimensions";
+import { nextEscapeAction, createAssetPickerPanes } from "./asset-picker-panes";
+import { createAssetDimensions, type AssetDimensionStore } from "./assets-dimensions";
 import { assetTypeLabel, formatBytes, formatPixelSize, isAssetImage } from "./assets-format";
 import { ASSET_SORTS, ASSET_TYPE_FACET } from "./assets-library";
 import { AssetThumb } from "./assets-thumb";
 import { versionedAssetStore } from "./controller";
 import { normalizedFilesFromTransfer } from "./upload-input";
-import { useDomId } from "../../components/use-dom-id";
+import { createDomId } from "../../components/use-dom-id";
+import { AssetView, LiveIcon } from "./live";
 
 export interface AssetPickerDialogProps {
+  /** Passed by the shell with every field picker; the picker itself needs none of it. */
+  services?: AppServices;
   provider?: AssetProvider;
   kind: AssetUse["kind"];
   current?: ContentAssetRef;
@@ -49,29 +52,32 @@ function assetMeta(record: AssetSummary, dimensions: AssetDimensionStore): strin
   return [assetTypeLabel(record.mimeType), formatBytes(record.byteLength), pixels ? formatPixelSize(pixels) : undefined].filter(Boolean).join(" · ");
 }
 
-export function AssetPickerDialog({ provider, kind, current, intent, onSelect, onClose }: AssetPickerDialogProps): JSX.Element {
-  const [records, setRecords] = useState<readonly AssetSummary[]>([]);
-  const [folders, setFolders] = useState<readonly AssetFolder[] | null>(null);
-  const [selectedId, setSelectedId] = useState("");
-  const [scope, setScope] = useState("all");
-  const [search, setSearch] = useState("");
-  const [type, setType] = useState("all");
-  const [sort, setSort] = useState("name");
-  const [view, setView] = useState<"grid" | "list">("grid");
-  const [loading, setLoading] = useState(Boolean(provider));
-  const [busy, setBusy] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const submitting = useRef(false);
-  const uploading = useRef(false);
-  const searchRef = useRef<HTMLInputElement>(null);
-  const uploadInputRef = useRef<HTMLInputElement>(null);
-  const itemRefs = useRef(new Map<string, HTMLButtonElement>());
-  const scrollAfterUpload = useRef<string | null>(null);
-  const libraryRequest = useRef(0);
-  const dimensions = useAssetDimensions();
-  const panes = useAssetPickerPanes();
-  const id = useDomId();
+type DragOn = DragEvent & { currentTarget: HTMLElement };
+
+export function AssetPickerDialog({ provider, kind, current, intent, onSelect, onClose }: AssetPickerDialogProps): Child {
+  const scope = getScope();
+  const records = signal<readonly AssetSummary[]>([]);
+  const folders = signal<readonly AssetFolder[] | null>(null);
+  const selectedId = signal("");
+  const pickerScope = signal("all");
+  const search = signal("");
+  const type = signal("all");
+  const sort = signal("name");
+  const view = signal<"grid" | "list">("grid");
+  const loading = signal(Boolean(provider));
+  const busy = signal(false);
+  const dragActive = signal(false);
+  const error = signal<string | null>(null);
+  let submitting = false;
+  let uploading = false;
+  const searchRef: Ref<HTMLInputElement> = { current: null };
+  const uploadInputRef: Ref<HTMLInputElement> = { current: null };
+  const itemRefs = new Map<string, HTMLButtonElement>();
+  let scrollAfterUpload: string | null = null;
+  let libraryRequest = 0;
+  const dimensions = createAssetDimensions();
+  const panes = createAssetPickerPanes();
+  const id = createDomId();
   const sideId = `sg-assets-picker-library-${id}`;
   const detailId = `sg-assets-picker-details-${id}`;
   const title = kind === "image" ? "Choose an image" : "Choose an asset";
@@ -79,23 +85,26 @@ export function AssetPickerDialog({ provider, kind, current, intent, onSelect, o
   const canUpload = uploadStore?.capabilities.replace === true && typeof uploadStore.upload === "function";
   const uploadAccept = kind === "image" ? IMAGE_ASSET_ACCEPT : ASSET_ACCEPT;
   const uploadHint = kind === "image" ? IMAGE_ASSET_HINT : ASSET_UPLOAD_HINT;
+  const live = () => !scope.abortSignal.aborted;
 
   async function refreshLibrary(selectId?: string): Promise<readonly AssetSummary[]> {
     if (!provider) return [];
-    const request = ++libraryRequest.current;
-    setLoading(true);
+    const request = ++libraryRequest;
+    loading.value = true;
     try {
       const store = versionedAssetStore(provider);
       const [listed, snapshot] = await Promise.all([provider.store.list(), store?.snapshot()]);
-      if (request !== libraryRequest.current) return [];
+      if (!live() || request !== libraryRequest) return [];
       const available = listed.filter((record) => record.state === "active" && (kind !== "image" || isAssetImage(record)));
       const mapped = available.map((record) => ({ ...record, url: provider.previewUrl?.(record.url) ?? record.url }));
-      setRecords(mapped);
-      setFolders(snapshot?.folders ?? null);
-      if (selectId !== undefined && mapped.some(({ id: recordId }) => recordId === selectId)) setSelectedId(selectId);
+      batch(() => {
+        records.value = mapped;
+        folders.value = snapshot?.folders ?? null;
+        if (selectId !== undefined && mapped.some(({ id: recordId }) => recordId === selectId)) selectedId.value = selectId;
+      });
       return mapped;
     } finally {
-      if (request === libraryRequest.current) setLoading(false);
+      if (live() && request === libraryRequest) loading.value = false;
     }
   }
 
@@ -108,109 +117,124 @@ export function AssetPickerDialog({ provider, kind, current, intent, onSelect, o
   }
 
   async function uploadFile(file: File): Promise<void> {
-    if (!canUpload || !uploadStore || uploading.current || submitting.current) return;
+    if (!canUpload || !uploadStore || uploading || submitting) return;
     const validationError = uploadValidationError(file);
-    if (validationError) { setError(validationError); return; }
-    uploading.current = true;
-    setBusy(true);
-    setError(null);
+    if (validationError) { error.value = validationError; return; }
+    uploading = true;
+    busy.value = true;
+    error.value = null;
     try {
-      const uploaded = await uploadStore.upload(file, { folderId: scope === "all" || scope === "unfiled" ? null : scope });
-      scrollAfterUpload.current = uploaded.id;
+      const folder = pickerScope.value;
+      const uploaded = await uploadStore.upload(file, { folderId: folder === "all" || folder === "unfiled" ? null : folder });
+      if (!live()) return;
+      scrollAfterUpload = uploaded.id;
       await refreshLibrary(uploaded.id);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "This file could not be uploaded. Try again.");
+      if (live()) error.value = reason instanceof Error ? reason.message : "This file could not be uploaded. Try again.";
     } finally {
-      uploading.current = false;
-      setBusy(false);
+      uploading = false;
+      if (live()) busy.value = false;
     }
   }
 
-  useEffect(() => {
-    let live = true;
-    const request = ++libraryRequest.current;
-    setRecords([]); setFolders(null); setSelectedId(""); setScope("all"); setError(null);
-    setLoading(Boolean(provider));
-    if (provider) {
-      const store = versionedAssetStore(provider);
-      void Promise.all([provider.store.list(), store?.snapshot()]).then(([listed, snapshot]) => {
-        if (!live || request !== libraryRequest.current) return;
-        const available = listed.filter((record) => record.state === "active" && (kind !== "image" || isAssetImage(record)));
-        setRecords(available.map((record) => ({ ...record, url: provider.previewUrl?.(record.url) ?? record.url })));
-        setFolders(snapshot?.folders ?? null);
-        setSelectedId(current?.providerId === provider.descriptor.id && available.some(({ id }) => id === current.assetId) ? current.assetId : "");
-      }).catch((reason: unknown) => {
-        if (live && request === libraryRequest.current) setError(reason instanceof Error ? reason.message : "The Assets library could not be loaded.");
-      }).finally(() => { if (live && request === libraryRequest.current) setLoading(false); });
-    }
-    return () => { live = false; };
-  }, [provider, kind, current?.providerId, current?.assetId]);
+  scope.onActivate(() => {
+    if (!provider) return;
+    const request = ++libraryRequest;
+    const store = versionedAssetStore(provider);
+    void Promise.all([provider.store.list(), store?.snapshot()]).then(([listed, snapshot]) => {
+      if (!live() || request !== libraryRequest) return;
+      const available = listed.filter((record) => record.state === "active" && (kind !== "image" || isAssetImage(record)));
+      batch(() => {
+        records.value = available.map((record) => ({ ...record, url: provider.previewUrl?.(record.url) ?? record.url }));
+        folders.value = snapshot?.folders ?? null;
+        selectedId.value = current?.providerId === provider.descriptor.id && available.some(({ id }) => id === current.assetId) ? current.assetId : "";
+      });
+    }).catch((reason: unknown) => {
+      if (live() && request === libraryRequest) error.value = reason instanceof Error ? reason.message : "The Assets library could not be loaded.";
+    }).finally(() => { if (live() && request === libraryRequest) loading.value = false; });
+  });
 
-  useEffect(() => {
+  scope.onActivate(() => {
     if (intent === "upload" && canUpload) uploadInputRef.current?.click();
-  }, [canUpload, intent]);
+  });
 
-  useEffect(() => {
-    const idToScroll = scrollAfterUpload.current;
-    if (idToScroll === null || idToScroll !== selectedId) return;
-    itemRefs.current.get(idToScroll)?.scrollIntoView?.({ block: "nearest" });
-    scrollAfterUpload.current = null;
-  }, [records, selectedId]);
+  // After an upload, bring the new item into view once both its row and its
+  // selection exist; whichever lands last (the row's activation or this
+  // effect) performs the scroll.
+  function scrollToUploaded(): void {
+    const idToScroll = scrollAfterUpload;
+    if (idToScroll === null || idToScroll !== selectedId.value) return;
+    const element = itemRefs.get(idToScroll);
+    if (!element) return;
+    element.scrollIntoView?.({ block: "nearest" });
+    scrollAfterUpload = null;
+  }
+  scope.effect(() => { void records.value; void selectedId.value; scrollToUploaded(); });
 
-  const selected = records.find(({ id }) => id === selectedId);
+  const selected = computed(() => records.value.find(({ id }) => id === selectedId.value));
   const isCurrent = (record: AssetSummary) => current?.providerId === provider?.descriptor.id && current?.assetId === record.id;
-  const folderItems = (folders ?? []).filter((folder) => folder.state === "active").map((folder) => ({ folder, path: assetFolderPath(folders ?? [], folder.id) }))
-    .sort((a, b) => a.path.join("/").localeCompare(b.path.join("/")));
-  const scopeLabel = scope === "all" ? "All assets" : scope === "unfiled" ? "Unfiled" : folderItems.find(({ folder }) => folder.id === scope)?.path.join(" / ") ?? "Folder";
-  const typeFacet = ASSET_TYPE_FACET.options.find(({ id }) => id === type);
-  const query = search.trim().toLocaleLowerCase();
-  const visible = records.filter((record) => (scope === "all" || (scope === "unfiled" ? record.folderId === null : record.folderId === scope))
-    && `${record.fileName} ${record.note}`.toLocaleLowerCase().includes(query)
-    && (kind === "image" || !typeFacet?.match || typeFacet.match(record)))
-    .sort(PICKER_SORTS.find(({ id }) => id === sort)?.compare);
+  const folderItems = computed(() => (folders.value ?? []).filter((folder) => folder.state === "active").map((folder) => ({ folder, path: assetFolderPath(folders.value ?? [], folder.id) }))
+    .sort((a, b) => a.path.join("/").localeCompare(b.path.join("/"))));
+  const scopeLabel = computed(() => {
+    const value = pickerScope.value;
+    return value === "all" ? "All assets" : value === "unfiled" ? "Unfiled" : folderItems.value.find(({ folder }) => folder.id === value)?.path.join(" / ") ?? "Folder";
+  });
+  const query = computed(() => search.value.trim().toLocaleLowerCase());
+  const visible = computed(() => {
+    const folder = pickerScope.value;
+    const typeFacet = ASSET_TYPE_FACET.options.find(({ id }) => id === type.value);
+    return records.value.filter((record) => (folder === "all" || (folder === "unfiled" ? record.folderId === null : record.folderId === folder))
+      && `${record.fileName} ${record.note}`.toLocaleLowerCase().includes(query.value)
+      && (kind === "image" || !typeFacet?.match || typeFacet.match(record)))
+      .sort(PICKER_SORTS.find(({ id }) => id === sort.value)?.compare);
+  });
+  const filtering = computed(() => Boolean(query.value) || type.value !== "all");
 
-  async function useSelection(record: AssetSummary | undefined = selected) {
-    if (!provider || !record || submitting.current) return;
-    submitting.current = true; setBusy(true); setError(null);
+  async function useSelection(record: AssetSummary | undefined = selected.value) {
+    if (!provider || !record || submitting) return;
+    submitting = true; busy.value = true; error.value = null;
     try {
       const loaded = await provider.store.get(record.id);
+      if (!live()) return;
       if (loaded.status !== "loaded" || loaded.record.document.state !== "active") throw new Error("This asset is no longer available. Choose another asset.");
       const latest = summarizeAsset(loaded.record);
       if (kind === "image" && !isAssetImage(latest)) throw new Error("The selected asset is no longer an image.");
       await onSelect(freshUse(kind, provider.descriptor.id, latest));
+      if (!live()) return;
       onClose();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "This asset could not be selected. Try again.");
-    } finally { submitting.current = false; setBusy(false); }
+      if (live()) error.value = reason instanceof Error ? reason.message : "This asset could not be selected. Try again.";
+    } finally { submitting = false; if (live()) busy.value = false; }
   }
 
   function chooseScope(value: string) {
-    setScope(value);
-    if (panes.tier.sideOverlay) panes.closeSide();
+    pickerScope.value = value;
+    if (panes.tier.value.sideOverlay) panes.closeSide();
   }
 
-  function handleUploadDragOver(event: JSX.TargetedDragEvent<HTMLElement>) {
+  function handleUploadDragOver(event: DragOn) {
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-    setDragActive(true);
+    dragActive.value = true;
   }
 
-  function handleUploadDragLeave(event: JSX.TargetedDragEvent<HTMLElement>) {
+  function handleUploadDragLeave(event: DragOn) {
     if (event.relatedTarget && event.currentTarget.contains(event.relatedTarget as Node)) return;
-    setDragActive(false);
+    dragActive.value = false;
   }
 
-  function handleUploadDrop(event: JSX.TargetedDragEvent<HTMLElement>) {
+  function handleUploadDrop(event: DragOn) {
     event.preventDefault();
-    setDragActive(false);
+    dragActive.value = false;
     const file = event.dataTransfer ? normalizedFilesFromTransfer(event.dataTransfer)[0] : undefined;
     if (file) void uploadFile(file);
   }
 
-  function handleKeyDown(event: JSX.TargetedKeyboardEvent<HTMLElement>) {
+  function handleKeyDown(event: KeyboardEvent) {
     if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
     if (event.key === "Escape") {
-      const action = nextEscapeAction({ ...panes.tier, sideOpen: panes.panes.side, detailOpen: panes.panes.detail });
+      const state = panes.panes.value;
+      const action = nextEscapeAction({ ...panes.tier.value, sideOpen: state.side, detailOpen: state.detail });
       if (action === "dialog") return;
       event.preventDefault();
       event.stopPropagation();
@@ -223,108 +247,151 @@ export function AssetPickerDialog({ provider, kind, current, intent, onSelect, o
     }
   }
 
-  const SideChevron = panes.panes.side ? ChevronLeftIcon : ChevronRightIcon;
-  const DetailChevron = panes.tier.detailDrawer ? (panes.panes.detail ? ChevronDownIcon : ChevronUpIcon)
-    : (panes.panes.detail ? ChevronRightIcon : ChevronLeftIcon);
+  const sideOpen = computed(() => panes.panes.value.side);
+  const detailOpen = computed(() => panes.panes.value.detail);
+  const sideChevron = computed(() => (sideOpen.value ? ChevronLeftIcon : ChevronRightIcon));
+  const detailChevron = computed(() => (panes.tier.value.detailDrawer ? (detailOpen.value ? ChevronDownIcon : ChevronUpIcon)
+    : (detailOpen.value ? ChevronRightIcon : ChevronLeftIcon)));
+  const count = (match: (record: AssetSummary) => boolean) => computed(() => String(records.value.filter(match).length));
 
   return (
     <Dialog open size="wide" label={title} class="sg-assets-picker-dialog" initialFocusRef={searchRef} onClose={onClose} dismissOnBackdrop={false}
-      header={<header class="sg-assets-picker-header" onKeyDown={handleKeyDown}>
+      header={<header class="sg-assets-picker-header" on:keydown={handleKeyDown}>
         <h2>{title}</h2><Chip>for {kind}</Chip>
-        <Button variant="ghost" size="sm" iconOnly aria-label="Close" class="sg-assets-picker-close" onClick={onClose}><XMarkIcon size="sm" /></Button>
+        <Button variant="ghost" size="sm" iconOnly aria-label="Close" class="sg-assets-picker-close" on:click={onClose}><XMarkIcon size="sm" /></Button>
       </header>}>
-      <div ref={panes.bodyRef} class="sg-assets-picker" data-side-open={panes.panes.side} data-detail-open={panes.panes.detail}
-        style={{ "--sg-assets-picker-side-w": `${panes.panes.sideWidth}px` }} onKeyDown={handleKeyDown}>
-        {!provider || error ? <div class="sg-assets-picker-notices">
+      <div ref={panes.bodyRef} class="sg-assets-picker" data-side-open={computed(() => String(sideOpen.value))} data-detail-open={computed(() => String(detailOpen.value))}
+        style={computed(() => ({ "--sg-assets-picker-side-w": `${panes.panes.value.sideWidth}px` }))} on:keydown={handleKeyDown}>
+        <Show when={computed(() => !provider || Boolean(error.value))}>{() => <div class="sg-assets-picker-notices">
           {!provider ? <Banner tone="info">The Assets library and upload authoring are available only under the local development server (<code>pnpm dev</code>). Committed files under <code>publicAssetsDir</code> are still served from <code>/uploaded-assets/</code>.</Banner> : null}
-          {error ? <Banner tone="err">{error}</Banner> : null}
-        </div> : null}
+          <Show when={computed(() => Boolean(error.value))}>{() => <Banner tone="err">{computed(() => error.value ?? "")}</Banner>}</Show>
+        </div>}</Show>
         <div class="sg-assets-picker-workspace">
-          <aside ref={panes.sideRef} id={sideId} class="sg-assets-picker-library" aria-label="Library" inert={!panes.panes.side} aria-hidden={!panes.panes.side}>
+          <aside ref={panes.sideRef} id={sideId} class="sg-assets-picker-library" aria-label="Library" inert={computed(() => !sideOpen.value)} aria-hidden={computed(() => String(!sideOpen.value))}>
             <h3>Library</h3>
-            {canUpload ? <Button variant="ghost" class="sg-assets-picker-upload-action" disabled={busy} onClick={() => uploadInputRef.current?.click()}><UploadIcon size="sm" />Upload new file…</Button> : null}
-            <Button variant="ghost" class="sg-assets-picker-facet" aria-pressed={scope === "all"} onClick={() => chooseScope("all")}><span>All assets</span>{" "}<span>{records.length}</span></Button>
-            <Button variant="ghost" class="sg-assets-picker-facet" aria-pressed={scope === "unfiled"} onClick={() => chooseScope("unfiled")}><span>Unfiled</span>{" "}<span>{records.filter(({ folderId }) => folderId === null).length}</span></Button>
-            {folders !== null ? <section class="sg-assets-picker-folders" aria-label="Folders">
+            {canUpload ? <Button variant="ghost" class="sg-assets-picker-upload-action" disabled={busy} on:click={() => uploadInputRef.current?.click()}><UploadIcon size="sm" />Upload new file…</Button> : null}
+            <Button variant="ghost" class="sg-assets-picker-facet" aria-pressed={computed(() => pickerScope.value === "all")} on:click={() => chooseScope("all")}><span>All assets</span>{" "}<span>{count(() => true)}</span></Button>
+            <Button variant="ghost" class="sg-assets-picker-facet" aria-pressed={computed(() => pickerScope.value === "unfiled")} on:click={() => chooseScope("unfiled")}><span>Unfiled</span>{" "}<span>{count(({ folderId }) => folderId === null)}</span></Button>
+            <Show when={computed(() => folders.value !== null)}>{() => <section class="sg-assets-picker-folders" aria-label="Folders">
               <h3>Folders</h3>
-              {folderItems.map(({ folder, path }) => <Button key={folder.id} variant="ghost" class="sg-assets-picker-facet" aria-pressed={scope === folder.id}
-                title={path.join(" / ")} style={{ "--sg-assets-picker-folder-depth": path.length - 1 }} onClick={() => chooseScope(folder.id)}>
-                <FolderIcon size="sm" /><span class="sg-assets-picker-folder-name">{folder.name}</span>{" "}<span>{records.filter(({ folderId }) => folderId === folder.id).length}</span>
-              </Button>)}
-            </section> : null}
+              <For each={folderItems} by={({ folder }) => folder.id}>{(item) => {
+                const folderId = item.value.folder.id;
+                const path = computed(() => item.value.path);
+                return <Button variant="ghost" class="sg-assets-picker-facet" aria-pressed={computed(() => pickerScope.value === folderId)}
+                  title={computed(() => path.value.join(" / "))} style={computed(() => ({ "--sg-assets-picker-folder-depth": path.value.length - 1 }))} on:click={() => chooseScope(folderId)}>
+                  <FolderIcon size="sm" /><span class="sg-assets-picker-folder-name">{computed(() => item.value.folder.name)}</span>{" "}<span>{count(({ folderId: recordFolder }) => recordFolder === folderId)}</span>
+                </Button>;
+              }}</For>
+            </section>}</Show>
             <p class="sg-assets-picker-library-note">Assets are global. Metadata changes keep stable asset IDs and every byte version.</p>
           </aside>
           <div {...panes.separatorProps} class="sg-assets-picker-separator" aria-controls={sideId} />
           <section class="sg-assets-picker-main" aria-label="Choose from assets">
             <div class="sg-assets-picker-toolbar">
-              <Input elementRef={searchRef} type="search" aria-label="Search assets" placeholder="Search assets" icon={SearchIcon} class="sg-assets-picker-search" value={search} onInput={(event) => setSearch(event.currentTarget.value)} />
-              {kind !== "image" ? <Select aria-label="Asset type" value={type} onChange={(event) => setType(event.currentTarget.value)}>
-                {ASSET_TYPE_FACET.options.map((option) => <option key={option.id} value={option.id}>{option.id === "all" ? "All types" : option.label}</option>)}
+              <Input elementRef={searchRef} type="search" aria-label="Search assets" placeholder="Search assets" icon={SearchIcon} class="sg-assets-picker-search" modelValue={search} />
+              {kind !== "image" ? <Select aria-label="Asset type" modelValue={type}>
+                {ASSET_TYPE_FACET.options.map((option) => <option value={option.id}>{option.id === "all" ? "All types" : option.label}</option>)}
               </Select> : null}
-              <Select aria-label="Sort assets" value={sort} onChange={(event) => setSort(event.currentTarget.value)}>
-                {PICKER_SORTS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+              <Select aria-label="Sort assets" modelValue={sort}>
+                {PICKER_SORTS.map((option) => <option value={option.id}>{option.label}</option>)}
               </Select>
-              <SegmentedControl label="Asset view" size="sm" value={view} onChange={setView} options={[
+              <SegmentedControl label="Asset view" size="sm" value={view} onChange={(next) => { view.value = next; }} options={[
                 { value: "grid", ariaLabel: "Grid view", icon: GridIcon },
                 { value: "list", ariaLabel: "List view", icon: ListIcon },
               ]} />
             </div>
-            <p class="sg-assets-picker-scope" role="status">{scopeLabel} · {visible.length} shown</p>
-            {canUpload ? <div class={`sg-assets-picker-drop${dragActive ? " sg-assets-picker-drop--drag-active" : ""}`} onDragOver={handleUploadDragOver} onDragLeave={handleUploadDragLeave} onDrop={handleUploadDrop}>
+            <p class="sg-assets-picker-scope" role="status">{computed(() => `${scopeLabel.value} · ${visible.value.length} shown`)}</p>
+            {canUpload ? <div class={computed(() => `sg-assets-picker-drop${dragActive.value ? " sg-assets-picker-drop--drag-active" : ""}`)} on:dragover={handleUploadDragOver} on:dragleave={handleUploadDragLeave} on:drop={handleUploadDrop}>
               <UploadIcon size="sm" />
               <span>Drop a file here to upload and use it</span>
               <small>{` · ${uploadHint} · up to ${formatBytes(ASSET_MAX_BYTE_LENGTH)}`}</small>
             </div> : null}
             <div class="sg-assets-picker-results">
-              {loading ? <p class="sg-assets-picker-empty" role="status">Loading assets…</p> : visible.length ? <ul class="sg-assets-picker-items" data-view={view} aria-label="Assets">
-                {visible.map((record) => <li key={record.id}>
-                  <button ref={(element) => { if (element) itemRefs.current.set(record.id, element); else itemRefs.current.delete(record.id); }} type="button" class="sg-assets-picker-item" aria-label={record.fileName} aria-pressed={selectedId === record.id} disabled={busy}
-                    onClick={() => setSelectedId(record.id)} onDblClick={() => { setSelectedId(record.id); void useSelection(record); }}>
-                    <span class="sg-assets-picker-thumb"><AssetThumb record={record} dimensions={dimensions} /></span>
-                    <span class="sg-assets-picker-item-copy"><strong>{record.fileName}</strong><small>{assetMeta(record, dimensions)}</small></span>
-                    {isCurrent(record) ? <Chip class="sg-assets-picker-current">Current</Chip> : null}
-                    {selectedId === record.id ? <span class="sg-assets-picker-check"><CheckIcon size="sm" /></span> : null}
-                  </button>
-                </li>)}
-              </ul> : <div class="sg-assets-picker-empty">
-                <p>{query || type !== "all" ? "No assets match these filters." : "No assets in this location."}</p>
-                {query || type !== "all" ? <Button onClick={() => { setSearch(""); setType("all"); searchRef.current?.focus(); }}>Clear search</Button> : null}
-              </div>}
+              <Show when={loading} fallback={() => (
+                <Show when={computed(() => visible.value.length > 0)} fallback={() => <div class="sg-assets-picker-empty">
+                  <p>{computed(() => (filtering.value ? "No assets match these filters." : "No assets in this location."))}</p>
+                  <Show when={filtering}>{() => <Button on:click={() => { batch(() => { search.value = ""; type.value = "all"; }); searchRef.current?.focus(); }}>Clear search</Button>}</Show>
+                </div>}>
+                  {() => <ul class="sg-assets-picker-items" data-view={view} aria-label="Assets">
+                    <For each={visible} by={(record) => record.id}>{(item) => <PickerItem record={item} dimensions={dimensions} selectedId={selectedId} busy={busy} current={isCurrent(item.value)}
+                      register={(recordId, element) => { if (element) { itemRefs.set(recordId, element); scrollToUploaded(); } else itemRefs.delete(recordId); }}
+                      onChoose={(record) => { selectedId.value = record.id; }}
+                      onUse={(record) => { selectedId.value = record.id; void useSelection(record); }} />}</For>
+                  </ul>}
+                </Show>
+              )}>{() => <p class="sg-assets-picker-empty" role="status">Loading assets…</p>}</Show>
             </div>
           </section>
-          <aside ref={panes.detailRef} id={detailId} class="sg-assets-picker-details" aria-label="Asset details" inert={!panes.panes.detail} aria-hidden={!panes.panes.detail} tabIndex={-1}>
+          <aside ref={panes.detailRef} id={detailId} class="sg-assets-picker-details" aria-label="Asset details" inert={computed(() => !detailOpen.value)} aria-hidden={computed(() => String(!detailOpen.value))} tabindex={-1}>
             <h3>Asset details</h3>
-            {selected ? <>
-              <div class="sg-assets-picker-preview"><AssetThumb record={selected} dimensions={dimensions} detail /></div>
-              <h4>{selected.fileName}</h4>
-              <dl class="sg-assets-picker-facts">
-                <div><dt>Type</dt><dd>{assetTypeLabel(selected.mimeType)} <span>({selected.mimeType})</span></dd></div>
-                <div><dt>Size</dt><dd>{formatBytes(selected.byteLength)}</dd></div>
-                <div><dt>Pixels</dt><dd>{dimensions.get(selected.versionId) ? formatPixelSize(dimensions.get(selected.versionId)!) : isAssetImage(selected) ? "Not decoded" : "—"}</dd></div>
-                <div><dt>Uploaded</dt><dd><time dateTime={selected.createdAt}>{new Date(selected.createdAt).toLocaleString()}</time></dd></div>
-                <div><dt>Asset ID</dt><dd><code>{selected.id}</code></dd></div>
-                {selected.note.trim() ? <div><dt>Note</dt><dd>{selected.note}</dd></div> : null}
-              </dl>
-            </> : <p class="sg-assets-picker-detail-empty">Select an asset to see its details.</p>}
+            <Show when={computed(() => selected.value !== undefined)} fallback={() => <p class="sg-assets-picker-detail-empty">Select an asset to see its details.</p>}>
+              {() => <AssetView record={selected as ReadonlySignal<AssetSummary>}>{(record) => <>
+                <div class="sg-assets-picker-preview"><AssetThumb record={record} dimensions={dimensions} detail /></div>
+                <h4>{record.fileName}</h4>
+                <dl class="sg-assets-picker-facts">
+                  <div><dt>Type</dt><dd>{assetTypeLabel(record.mimeType)} <span>({record.mimeType})</span></dd></div>
+                  <div><dt>Size</dt><dd>{formatBytes(record.byteLength)}</dd></div>
+                  <div><dt>Pixels</dt><dd>{computed(() => { const pixels = dimensions.get(record.versionId); return pixels ? formatPixelSize(pixels) : isAssetImage(record) ? "Not decoded" : "—"; })}</dd></div>
+                  <div><dt>Uploaded</dt><dd><time datetime={record.createdAt}>{new Date(record.createdAt).toLocaleString()}</time></dd></div>
+                  <div><dt>Asset ID</dt><dd><code>{record.id}</code></dd></div>
+                  {record.note.trim() ? <div><dt>Note</dt><dd>{record.note}</dd></div> : null}
+                </dl>
+              </>}</AssetView>}
+            </Show>
           </aside>
-          <Button elementRef={panes.sideTabRef} iconOnly size="sm" class="sg-assets-picker-side-tab" aria-label={panes.panes.side ? "Hide library" : "Show library"}
-            aria-expanded={panes.panes.side} aria-controls={sideId} onClick={panes.toggleSide}><SideChevron size="sm" /></Button>
-          <Button elementRef={panes.detailTabRef} iconOnly size="sm" class="sg-assets-picker-detail-tab" aria-label={panes.panes.detail ? "Hide asset details" : "Show asset details"}
-            aria-expanded={panes.panes.detail} aria-controls={detailId} onClick={panes.toggleDetail}><DetailChevron size="sm" /></Button>
+          <Button elementRef={panes.sideTabRef} iconOnly size="sm" class="sg-assets-picker-side-tab" aria-label={computed(() => (sideOpen.value ? "Hide library" : "Show library"))}
+            aria-expanded={computed(() => String(sideOpen.value))} aria-controls={sideId} on:click={panes.toggleSide}><LiveIcon icon={sideChevron} size="sm" /></Button>
+          <Button elementRef={panes.detailTabRef} iconOnly size="sm" class="sg-assets-picker-detail-tab" aria-label={computed(() => (detailOpen.value ? "Hide asset details" : "Show asset details"))}
+            aria-expanded={computed(() => String(detailOpen.value))} aria-controls={detailId} on:click={panes.toggleDetail}><LiveIcon icon={detailChevron} size="sm" /></Button>
         </div>
         <footer class="sg-assets-picker-footer">
-          <div class="sg-assets-picker-selection">{selected ? <><span class="sg-assets-picker-selection-thumb"><AssetThumb record={selected} dimensions={dimensions} /></span><span>{selected.fileName}</span></> : "Nothing selected"}</div>
+          <div class="sg-assets-picker-selection"><Show when={computed(() => selected.value !== undefined)} fallback={() => "Nothing selected"}>
+            {() => <AssetView record={selected as ReadonlySignal<AssetSummary>}>{(record) => <><span class="sg-assets-picker-selection-thumb"><AssetThumb record={record} dimensions={dimensions} /></span><span>{record.fileName}</span></>}</AssetView>}
+          </Show></div>
           <span class="sg-assets-picker-hints"><kbd>Enter</kbd> use · <kbd>Esc</kbd> close</span>
-          <div class="sg-assets-picker-actions"><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!selected} busy={busy} onClick={() => { void useSelection(); }}>
-            {kind === "image" ? selected && isCurrent(selected) ? "Keep this image" : "Use this image" : "Use this asset"}
+          <div class="sg-assets-picker-actions"><Button on:click={onClose}>Cancel</Button><Button variant="primary" disabled={computed(() => !selected.value)} busy={busy} on:click={() => { void useSelection(); }}>
+            {computed(() => (kind === "image" ? selected.value && isCurrent(selected.value) ? "Keep this image" : "Use this image" : "Use this asset"))}
           </Button></div>
         </footer>
-        {canUpload ? <input ref={uploadInputRef} class="sg-assets-picker-upload-input" aria-label="Upload new file" type="file" accept={uploadAccept} onChange={(event) => {
-          const file = event.currentTarget.files?.[0];
-          event.currentTarget.value = "";
+        {canUpload ? <input ref={uploadInputRef} class="sg-assets-picker-upload-input" aria-label="Upload new file" type="file" accept={uploadAccept} on:change={(event) => {
+          const input = event.currentTarget;
+          const file = input.files?.[0];
+          input.value = "";
           if (file) void uploadFile(file);
         }} /> : null}
       </div>
     </Dialog>
   );
+}
+
+interface PickerItemProps {
+  record: ReadonlySignal<AssetSummary>;
+  dimensions: AssetDimensionStore;
+  selectedId: ReadonlySignal<string>;
+  busy: ReadonlySignal<boolean>;
+  current: boolean;
+  register(recordId: string, element: HTMLButtonElement | null): void;
+  onChoose(record: AssetSummary): void;
+  onUse(record: AssetSummary): void;
+}
+
+function PickerItem({ record, dimensions, selectedId, busy, current, register, onChoose, onUse }: PickerItemProps): Child {
+  const recordId = record.value.id;
+  const button: Ref<HTMLButtonElement> = { current: null };
+  getScope().onActivate(() => {
+    register(recordId, button.current);
+    return () => register(recordId, null);
+  });
+  const isSelected = computed(() => selectedId.value === recordId);
+  return <li>
+    <button ref={button} type="button" class="sg-assets-picker-item" aria-label={computed(() => record.value.fileName)} aria-pressed={computed(() => String(isSelected.value))} disabled={busy}
+      on:click={() => onChoose(record.value)} on:dblclick={() => onUse(record.value)}>
+      <AssetView record={record}>{(value) => <>
+        <span class="sg-assets-picker-thumb"><AssetThumb record={value} dimensions={dimensions} /></span>
+        <span class="sg-assets-picker-item-copy"><strong>{value.fileName}</strong><small>{computed(() => assetMeta(value, dimensions))}</small></span>
+      </>}</AssetView>
+      {current ? <Chip class="sg-assets-picker-current">Current</Chip> : null}
+      <Show when={isSelected}>{() => <span class="sg-assets-picker-check"><CheckIcon size="sm" /></span>}</Show>
+    </button>
+  </li>;
 }

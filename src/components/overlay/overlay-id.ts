@@ -1,4 +1,4 @@
-// Preact useId is root-local; every OverlayPortal is a separate rendering root.
+// Every overlay layer is a separate root and zudo-react has no useId.
 // Reserve IDs for the lifetime of this module, including closed menu controllers.
 let nextOverlayId = 0;
 

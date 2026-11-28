@@ -1,9 +1,7 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../test-support/cleanup";
 import type { ComponentManifest } from "@zudo-composer/component-contract";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
-import { useState } from "preact/hooks";
+import { fireEvent, render, screen, settle, waitFor, within } from "../../../../test/render";
+import { signal } from "@takazudo/zfb/zudo-react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createComponentCatalog } from "../../../../composer/browser";
 import type { ReuseCatalogEntry } from "../../../../composer/browser";
@@ -129,16 +127,15 @@ describe("NewCompositionDialog", () => {
     document.body.append(trigger);
     trigger.focus();
     const onClose = vi.fn();
-    function Harness() {
-      const [open, setOpen] = useState(true);
-      return <NewCompositionDialog {...baseProps({ open, onClose: () => { onClose(); setOpen(false); } })} />;
-    }
-    render(<Harness />);
+    const open = signal(true);
+    render(<NewCompositionDialog {...baseProps({ open, onClose: () => { onClose(); open.value = false; } })} />);
 
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     expect(within(dialog).getByRole("textbox", { name: "Name" })).toHaveFocus();
 
     fireEvent.keyDown(dialog, { key: "Escape" });
+
+    await settle();
     expect(onClose).toHaveBeenCalledOnce();
     await waitFor(() => expect(trigger).toHaveFocus());
     trigger.remove();
@@ -152,8 +149,11 @@ describe("NewCompositionDialog", () => {
     expect((await within(dialog).findByRole("button", { name: /Blank/ })).getAttribute("aria-pressed")).toBe("true");
     expect(props.onSubmit).not.toHaveBeenCalled();
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "  Consumer  " } });
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: /Site shell/ }));
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
+    await settle();
 
     await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith({
       providerId: "files",
@@ -168,7 +168,9 @@ describe("NewCompositionDialog", () => {
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     const name = within(dialog).getByRole("textbox", { name: "Name" }) as HTMLInputElement;
     fireEvent.input(name, { target: { value: "   " } });
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
+    await settle();
 
     expect(props.onSubmit).not.toHaveBeenCalled();
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("Give the composition a name");
@@ -184,6 +186,7 @@ describe("NewCompositionDialog", () => {
 
     expect(await within(dialog).findByText("Storage is offline.")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Retry templates" }));
+    await settle();
     expect(await within(dialog).findByText(/No eligible Global templates/)).toBeInTheDocument();
   });
 
@@ -195,11 +198,14 @@ describe("NewCompositionDialog", () => {
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     const name = within(dialog).getByRole("textbox", { name: "Name" });
     fireEvent.input(name, { target: { value: "Keep me" } });
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
+    await settle();
 
     expect(await within(dialog).findByText("Write failed.")).toBeInTheDocument();
     expect(name).toHaveValue("Keep me");
     fireEvent.click(within(dialog).getByRole("button", { name: "Retry" }));
+    await settle();
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
   });
 
@@ -211,7 +217,10 @@ describe("NewCompositionDialog", () => {
     const create = within(dialog).getByRole("button", { name: "Create composition" });
 
     fireEvent.click(create);
+
+    await settle();
     fireEvent.click(create);
+    await settle();
     expect(onSubmit).toHaveBeenCalledOnce();
     resolve({ status: "created" });
     await waitFor(() => expect(create).toBeDisabled());
@@ -225,10 +234,13 @@ describe("NewCompositionDialog", () => {
     fireEvent.input(within(dialog).getByRole("searchbox", { name: "Search Global templates" }), {
       target: { value: "nothing matches this" },
     });
+    await settle();
     expect(within(dialog).queryByRole("button", { name: /Site shell/ })).not.toBeInTheDocument();
     expect(within(dialog).getByText("No Global templates match this search.")).toBeInTheDocument();
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Clear search" }));
+
+    await settle();
     expect(within(dialog).getByRole("button", { name: /Site shell/ })).toBeInTheDocument();
   });
 
@@ -253,6 +265,8 @@ describe("NewCompositionDialog", () => {
     );
 
     fireEvent.click(within(dialog).getByRole("button", { name: /Site shell/ }));
+
+    await settle();
     expect(summary).toHaveTextContent("Main content = Page › Main");
     expect(summary).toHaveTextContent("Accepts 2 kinds, at least 1, any order:");
     const heroRow = within(summary).getByText("Hero").closest("li")!;
@@ -272,6 +286,8 @@ describe("NewCompositionDialog", () => {
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
 
     fireEvent.click(within(dialog).getByRole("button", { name: /Landing shell/ }));
+
+    await settle();
     const summary = within(dialog).getByLabelText("What you can place");
     expect(summary).toHaveTextContent("Body = Shell › Content");
     expect(summary).toHaveTextContent("No rule: accepts every component in the pack.");

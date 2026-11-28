@@ -1,7 +1,7 @@
 import { Container, Footer, Header, NavLink } from "demo-blog/components";
 
 export type CompositionOutlets = {
-  "site-frame-outlet"?: import("preact").ComponentChildren;
+  "site-frame-outlet"?: import("@takazudo/zfb/zudo-react").Child;
 };
 
 export default function Composition({ outlets = {} }: { outlets?: CompositionOutlets }) {

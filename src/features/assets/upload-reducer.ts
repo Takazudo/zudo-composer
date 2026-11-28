@@ -32,7 +32,7 @@ export const initialAssetUploadState: AssetUploadState = { busy: false, items: [
  *
  * `batch` is a monotonic counter owned by the uploader, not the position of the
  * drop: a failed row outlives its batch, so `drop-0` reused by the next drop
- * would key two different files to the same list row and hand Preact the wrong
+ * would key two different files to the same list row and hand the keyed list the wrong
  * DOM node to reuse.
  */
 export function assetUploadItemId(source: AssetUploadSource, batch: number, index: number): string {

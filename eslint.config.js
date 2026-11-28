@@ -54,7 +54,7 @@ export default tseslint.config(
     files: ['src/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': ['error', {
-        paths: [{ name: 'preact/hooks', importNames: ['useId'], message: 'Use useDomId from src/components/use-dom-id; Preact useId ids collide across this app.' }],
+        patterns: [{ group: ['preact', 'preact/*', 'preact-*', '@preact/*', '@testing-library/preact'], message: 'The tool runs on zudo-react (@takazudo/zfb/zudo-react); there is no Preact runtime.' }],
       }],
     },
   },

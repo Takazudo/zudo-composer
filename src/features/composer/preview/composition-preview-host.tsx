@@ -1,26 +1,30 @@
-import type { JSX } from "preact";
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { computed, getScope, signal, Show, type Child, type Ref } from "@takazudo/zfb/zudo-react";
 import type { CompositionDocument } from "../../../composer/model/types";
+import type { VersionedAssetStore } from "../../../assets/library";
 import { ExpandIcon, XMarkIcon } from "../../../components/icons";
+import { read, toSignal, type MaybeSignal } from "../../../components/reactive";
 import type { ComposerComponentProvider } from "../component-provider";
-import { useResolvedTheme } from "../../../theme/use-resolved-theme";
+import { resolvedThemeSignal } from "../../../theme/use-resolved-theme";
 import { buildComposerPreviewUrl, composerPreviewFrameProps, createComposerPreviewBridge, type ComposerPreviewBridge, type ComposerPreviewLocation } from "./bridge";
 import { localPreviewSnapshot, type ComposerPreviewSnapshot, type MessageTarget } from "./protocol";
 import "./composition-preview-host.css";
-import { useAssetResolvedPreviewSnapshot } from "./assets-snapshot";
+import { assetResolvedPreviewSnapshot } from "./assets-snapshot";
 
 export interface CompositionPreviewHostProps {
   componentProvider: ComposerComponentProvider;
-  document: CompositionDocument | null;
+  document: MaybeSignal<CompositionDocument | null>;
   /** Resolved provider-owned snapshot. When present it is sent verbatim instead of a local-only projection. */
-  snapshot?: ComposerPreviewSnapshot | null;
+  snapshot?: MaybeSignal<ComposerPreviewSnapshot | null | undefined>;
   title?: string;
-  emptyTitle?: string;
-  emptyMessage?: string;
-  loading?: boolean;
+  emptyTitle?: MaybeSignal<string>;
+  emptyMessage?: MaybeSignal<string>;
+  loading?: MaybeSignal<boolean>;
   enlargeable?: boolean;
-  onCurrent?: () => void;
-  onError?: (message: string) => void;
+  /** Read at call time, so a signal may swap the callback without a remount. */
+  onCurrent?: MaybeSignal<(() => void) | undefined>;
+  onError?: MaybeSignal<((message: string) => void) | undefined>;
+  /** The workspace's versioned Asset store, for resolving managed Asset references. */
+  assetStore?: VersionedAssetStore;
   createBridge?: typeof createComposerPreviewBridge;
   location?: ComposerPreviewLocation;
   hostWindow?: MessageTarget;
@@ -38,87 +42,103 @@ export function CompositionPreviewHost({
   enlargeable = true,
   onCurrent,
   onError,
+  assetStore,
   createBridge = createComposerPreviewBridge,
   location: suppliedLocation,
   hostWindow,
-}: CompositionPreviewHostProps): JSX.Element {
-  const frameRef = useRef<HTMLIFrameElement | null>(null);
-  const bridgeRef = useRef<ComposerPreviewBridge | null>(null);
-  const renderedSnapshotRef = useRef<ComposerPreviewSnapshot | null>(null);
-  const renderedThemeRef = useRef<"light" | "dark" | null>(null);
-  const localSnapshot = useMemo(
-    () => (document ? localPreviewSnapshot(document, document.id) : null),
-    [document],
-  );
-  const asset = useAssetResolvedPreviewSnapshot(snapshot ?? localSnapshot, componentProvider.catalog);
-  const effectiveSnapshot = asset.snapshot;
-  const latestSnapshotRef = useRef(effectiveSnapshot);
-  latestSnapshotRef.current = effectiveSnapshot;
-  const activeTheme = useResolvedTheme();
-  const latestThemeRef = useRef(activeTheme);
-  latestThemeRef.current = activeTheme;
-  const onCurrentRef = useRef(onCurrent);
-  onCurrentRef.current = onCurrent;
-  const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
-  useEffect(() => { if (asset.error) onErrorRef.current?.(asset.error); }, [asset.error]);
-  const [enlarged, setEnlarged] = useState(false);
-  const enlargeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const wasEnlargedRef = useRef(false);
-  const location = useMemo(() => suppliedLocation ?? buildComposerPreviewUrl(), [suppliedLocation]);
-  const frameProps = useMemo(() => composerPreviewFrameProps(location, title), [location, title]);
+}: CompositionPreviewHostProps): Child {
+  const scope = getScope();
+  const frameRef: Ref<HTMLIFrameElement> = { current: null };
+  let bridge: ComposerPreviewBridge | null = null;
+  let renderedSnapshot: ComposerPreviewSnapshot | null = null;
+  let renderedTheme: "light" | "dark" | null = null;
+  const documentSignal = toSignal(document);
+  const suppliedSnapshot = toSignal(snapshot ?? null);
+  let lastDocument: CompositionDocument | null = null;
+  let localSnapshot: ComposerPreviewSnapshot | null = null;
+  const authored = computed(() => {
+    const supplied = suppliedSnapshot.value;
+    if (supplied) return supplied;
+    const current = documentSignal.value;
+    if (current !== lastDocument) {
+      lastDocument = current;
+      localSnapshot = current ? localPreviewSnapshot(current, current.id) : null;
+    }
+    return localSnapshot;
+  });
+  const asset = assetResolvedPreviewSnapshot(scope, authored, componentProvider.catalog, { store: assetStore });
+  const effectiveSnapshot = computed(() => asset.value.snapshot);
+  const assetError = computed(() => asset.value.error);
+  const activeTheme = resolvedThemeSignal(scope);
+  const current = (): void => read(onCurrent)?.();
+  const fail = (message: string): void => read(onError)?.(message);
 
-  useEffect(() => {
+  let reportedError: string | undefined;
+  scope.effect(() => {
+    const message = assetError.value;
+    if (message === reportedError) return;
+    reportedError = message;
+    if (message) fail(message);
+  });
+  const enlarged = signal(false);
+  const enlargeButtonRef: Ref<HTMLButtonElement> = { current: null };
+  const closeButtonRef: Ref<HTMLButtonElement> = { current: null };
+  let wasEnlarged = false;
+  const location = suppliedLocation ?? buildComposerPreviewUrl();
+  const frameProps = composerPreviewFrameProps(location, title);
+
+  const send = (next: ComposerPreviewSnapshot, theme: "light" | "dark"): void => {
+    if (!bridge) return;
+    bridge.render(next, { mode: "preview", theme, selectedId: null });
+    renderedSnapshot = next;
+    renderedTheme = theme;
+    if (bridge.ready) current();
+  };
+
+  scope.onActivate(() => {
     const frame = frameRef.current;
-    if (!frame) return;
-    const bridge = createBridge({
+    if (!frame) return undefined;
+    const created = createBridge({
       frame,
       location,
       hostWindow: hostWindow ?? window,
       pack: { packId: componentProvider.manifest.packId, packVersion: componentProvider.manifest.packVersion },
-      onReady: () => onCurrentRef.current?.(),
-      onError: (message) => onErrorRef.current?.(message),
+      onReady: () => current(),
+      onError: (message) => fail(message),
       onRejected: (reason, detail) => {
-        if (reason === "pack-mismatch") onErrorRef.current?.(`Preview pack mismatch${detail ? `: ${detail}` : "."}`);
+        if (reason === "pack-mismatch") fail(`Preview pack mismatch${detail ? `: ${detail}` : "."}`);
       },
     });
-    bridgeRef.current = bridge;
-    renderedSnapshotRef.current = null;
-    const initialSnapshot = latestSnapshotRef.current;
-    if (initialSnapshot) {
-      bridge.render(initialSnapshot, { mode: "preview", theme: latestThemeRef.current, selectedId: null });
-      renderedSnapshotRef.current = initialSnapshot;
-      renderedThemeRef.current = latestThemeRef.current;
-      if (bridge.ready) onCurrentRef.current?.();
-    }
+    bridge = created;
+    renderedSnapshot = null;
+    const initialSnapshot = effectiveSnapshot.value;
+    if (initialSnapshot) send(initialSnapshot, activeTheme.value);
     return () => {
-      bridge.dispose();
-      bridgeRef.current = null;
-      renderedSnapshotRef.current = null;
-      renderedThemeRef.current = null;
+      created.dispose();
+      bridge = null;
+      renderedSnapshot = null;
+      renderedTheme = null;
     };
-  }, [componentProvider.manifest.packId, componentProvider.manifest.packVersion, createBridge, hostWindow, location]);
+  });
 
-  useEffect(() => {
-    const bridge = bridgeRef.current;
-    if (!bridge || !effectiveSnapshot || (renderedSnapshotRef.current === effectiveSnapshot && renderedThemeRef.current === activeTheme)) return;
-    bridge.render(effectiveSnapshot, { mode: "preview", theme: activeTheme, selectedId: null });
-    renderedSnapshotRef.current = effectiveSnapshot;
-    renderedThemeRef.current = activeTheme;
-    if (bridge.ready) onCurrentRef.current?.();
-  }, [activeTheme, effectiveSnapshot]);
+  scope.effect(() => {
+    const next = effectiveSnapshot.value;
+    const theme = activeTheme.value;
+    if (!bridge || !next || (renderedSnapshot === next && renderedTheme === theme)) return;
+    send(next, theme);
+  });
 
-  useEffect(() => {
-    if (enlarged) {
-      wasEnlargedRef.current = true;
+  scope.effect(() => {
+    if (enlarged.value) {
+      wasEnlarged = true;
       closeButtonRef.current?.focus();
-      const previousOverflow = globalThis.document.body.style.overflow;
-      globalThis.document.body.style.overflow = "hidden";
+      const body = globalThis.document.body;
+      const previousOverflow = body.style.overflow;
+      body.style.overflow = "hidden";
       const onKeyDown = (event: KeyboardEvent) => {
         if (event.key === "Escape") {
           event.preventDefault();
-          setEnlarged(false);
+          enlarged.value = false;
         } else if (event.key === "Tab") {
           event.preventDefault();
           closeButtonRef.current?.focus();
@@ -127,24 +147,31 @@ export function CompositionPreviewHost({
       window.addEventListener("keydown", onKeyDown);
       return () => {
         window.removeEventListener("keydown", onKeyDown);
-        globalThis.document.body.style.overflow = previousOverflow;
+        body.style.overflow = previousOverflow;
       };
     }
-    if (wasEnlargedRef.current) {
-      wasEnlargedRef.current = false;
+    if (wasEnlarged) {
+      wasEnlarged = false;
       enlargeButtonRef.current?.focus();
     }
-  }, [enlarged]);
+    return undefined;
+  });
+
+  const empty = computed(() => !effectiveSnapshot.value);
+  const busy = computed(() => read(loading) || asset.value.loading);
+  const emptyText = computed(() => asset.value.error ?? (asset.value.loading ? "Resolving current Assets versions…" : read(emptyMessage)));
 
   return <div
-    class={`sg-composition-preview${enlarged ? " sg-composition-preview--enlarged" : ""}`}
-    {...(enlarged ? { role: "dialog", "aria-modal": "true", "aria-label": `${title}, full screen` } : {})}
+    class={computed(() => `sg-composition-preview${enlarged.value ? " sg-composition-preview--enlarged" : ""}`)}
+    role={computed(() => (enlarged.value ? "dialog" : null))}
+    aria-modal={computed(() => (enlarged.value ? "true" : null))}
+    aria-label={computed(() => (enlarged.value ? `${title}, full screen` : null))}
   >
-    {enlargeable && <button ref={enlargeButtonRef} hidden={enlarged} type="button" class="sg-composition-preview__enlarge" aria-label={`Enlarge ${title}`} onClick={() => setEnlarged(true)}><ExpandIcon size="sm" /><span>Full screen</span></button>}
-    {enlarged && <button ref={closeButtonRef} type="button" class="sg-composition-preview__close" aria-label={`Close full-screen ${title}`} onClick={() => setEnlarged(false)}><XMarkIcon size="sm" /><span>Close</span></button>}
-    <div class="sg-composition-preview__stage" aria-busy={loading || asset.loading}>
-      {!effectiveSnapshot && <div class="sg-composition-preview__empty"><h3>{emptyTitle}</h3><p>{asset.error ?? (asset.loading ? "Resolving current Assets versions…" : emptyMessage)}</p></div>}
-      <iframe ref={frameRef} hidden={!effectiveSnapshot} style={{ display: effectiveSnapshot ? undefined : "none" }} onError={() => onErrorRef.current?.("Preview frame failed to load.")} class="sg-composition-preview__frame" tabIndex={-1} aria-hidden={!effectiveSnapshot} {...frameProps} />
+    {enlargeable ? <button ref={enlargeButtonRef} hidden={enlarged} type="button" class="sg-composition-preview__enlarge" aria-label={`Enlarge ${title}`} on:click={() => { enlarged.value = true; }}><ExpandIcon size="sm" /><span>Full screen</span></button> : null}
+    <Show when={enlarged}>{() => <button ref={closeButtonRef} type="button" class="sg-composition-preview__close" aria-label={`Close full-screen ${title}`} on:click={() => { enlarged.value = false; }}><XMarkIcon size="sm" /><span>Close</span></button>}</Show>
+    <div class="sg-composition-preview__stage" aria-busy={busy}>
+      <Show when={empty}>{() => <div class="sg-composition-preview__empty"><h3>{toSignal(emptyTitle)}</h3><p>{emptyText}</p></div>}</Show>
+      <iframe ref={frameRef} hidden={empty} style={computed(() => (empty.value ? "display: none;" : null))} on:error={() => fail("Preview frame failed to load.")} class="sg-composition-preview__frame" tabindex={-1} aria-hidden={computed(() => (empty.value ? "true" : "false"))} {...frameProps} />
     </div>
   </div>;
 }

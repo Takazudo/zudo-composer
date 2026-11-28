@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
-import { Fragment, h } from "preact";
-import type { ComponentChildren, ComponentType } from "preact";
-import render from "preact-render-to-string";
+import { Fragment, h } from "@takazudo/zfb/zudo-react";
+import type { Child, Component } from "@takazudo/zfb/zudo-react";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import {
   createComponentCatalog,
   createSequentialIdFactory,
@@ -113,7 +113,7 @@ function plan(sourceRecord: CompositionRecord, consumerRecord: CompositionRecord
 function typecheckLinkedModules(sourceCode: string, consumerCode: string): string[] {
   const options: ts.CompilerOptions = {
     jsx: ts.JsxEmit.ReactJSX,
-    jsxImportSource: "preact",
+    jsxImportSource: "@takazudo/zfb/zudo-react",
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     target: ts.ScriptTarget.ESNext,
@@ -129,7 +129,7 @@ function typecheckLinkedModules(sourceCode: string, consumerCode: string): strin
   const virtual = new Map<string, string>([
     [sourcePath, sourceCode],
     [consumerPath, consumerCode],
-    [shellPath, 'import type { ComponentChildren } from "preact"; export function Composition(props: { body?: ComponentChildren; secondary?: ComponentChildren; children?: ComponentChildren }): any { return props.body ?? props.secondary ?? props.children ?? null; }'],
+    [shellPath, 'import type { Child } from "@takazudo/zfb/zudo-react"; export function Composition(props: { body?: Child; secondary?: Child; children?: Child }): any { return props.body ?? props.secondary ?? props.children ?? null; }'],
     [leafPath, 'export function LinkedTemplate(props: { label?: string }): any { return props.label ?? null; }'],
   ]);
   const modules = new Map([
@@ -179,7 +179,7 @@ function renderLinkedModules(sourceCode: string, consumerCode: string): string {
   const compile = (code: string) => ts.transpileModule(code, { compilerOptions }).outputText;
   const modules = new Map<string, Record<string, unknown>>();
   modules.set("@linked-test/shell", {
-    Composition: (props: { body?: ComponentChildren; secondary?: ComponentChildren; children?: ComponentChildren }) => h("section", { "data-linked-source": "shell" }, props.body ?? props.secondary ?? props.children),
+    Composition: (props: { body?: Child; secondary?: Child; children?: Child }) => h("section", { "data-linked-source": "shell" }, props.body ?? props.secondary ?? props.children),
   });
   modules.set("@linked-test/leaf", {
     LinkedTemplate: (props: { label?: string }) => h("span", { "data-linked-local": "leaf" }, props.label),
@@ -196,7 +196,7 @@ function renderLinkedModules(sourceCode: string, consumerCode: string): string {
   };
   modules.set("@compositions/source", execute(compile(sourceCode)));
   const consumer = execute(compile(consumerCode));
-  return render(h(consumer.default as ComponentType<Record<string, never>>, {}));
+  return renderToString(h(consumer.default as Component<Record<string, never>>, {}));
 }
 
 describe("planLinkedJsxModules", () => {
@@ -222,7 +222,7 @@ describe("planLinkedJsxModules", () => {
     expect(consumerPlan).toMatchObject({ status: "generated", kind: "linked-consumer" });
     if (sourcePlan?.status !== "generated" || consumerPlan?.status !== "generated") throw new Error("expected generated plans");
 
-    expect(sourcePlan.code).toContain('"stable-outlet"?: import("preact").ComponentChildren;');
+    expect(sourcePlan.code).toContain('"stable-outlet"?: import("@takazudo/zfb/zudo-react").Child;');
     expect(sourcePlan.code).toContain('body={outlets["stable-outlet"]}');
     expect(sourcePlan.code).toContain("export default function Composition");
     expect(consumerPlan.code).toContain('import LinkedTemplate from "@compositions/source";');

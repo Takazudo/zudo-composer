@@ -7,6 +7,8 @@ import { build } from "vite";
 import { rollup } from "rollup";
 import { dts } from "rollup-plugin-dts";
 import ts from "typescript";
+import { ZUDO_REACT_JSX_IMPORT_SOURCE, zudoReactOxc } from "../plugins/module-resolution.mjs";
+import { ZUDO_REACT_EXTERNAL_ENTRIES, assertNoInlinedRuntime } from "./zudo-react-boundary.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const check = process.argv.includes("--check");
@@ -16,7 +18,7 @@ const declarations = join(temporary, "types");
 const entries = { index: "src/hosted-content/index.ts", editor: "src/hosted-content/browser.ts", preview: "src/hosted-content/preview-browser.ts", testing: "src/hosted-content/testing.ts", node: "server/content-ai/hosted-node.ts" };
 // Only the Node entry may reach Node built-ins; check-hosted-boundary.mjs proves the other graphs never do.
 const nodeEntries = new Set(["node"]);
-const allowed = new Set(["zod", "@lezer/markdown", "preact", "preact/hooks", "preact/jsx-runtime", "@zudo-composer/component-contract"]);
+const allowed = new Set(["zod", "@lezer/markdown", ...ZUDO_REACT_EXTERNAL_ENTRIES, "@zudo-composer/component-contract"]);
 const packageData = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 for (const name of Object.keys(packageData.dependencies)) if (name.startsWith("@codemirror/") || name === "@lezer/highlight") allowed.add(name);
 
@@ -32,7 +34,7 @@ async function files(directory) {
 
 try {
   await build({
-    configFile: false, root, logLevel: "error", oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
+    configFile: false, root, logLevel: "error", oxc: zudoReactOxc(),
     build: { target: "es2022", minify: false, outDir: output, emptyOutDir: true, copyPublicDir: false,
       lib: { entry: Object.fromEntries(Object.entries(entries).map(([name, path]) => [name, resolve(root, path)])), formats: ["es"], fileName: (_format, name) => `${name}.mjs` },
       rolldownOptions: {
@@ -46,7 +48,7 @@ try {
     },
   });
   const options = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler,
-    jsx: ts.JsxEmit.ReactJSX, jsxImportSource: "preact", strict: true, skipLibCheck: true,
+    jsx: ts.JsxEmit.ReactJSX, jsxImportSource: ZUDO_REACT_JSX_IMPORT_SOURCE, strict: true, skipLibCheck: true,
     declaration: true, emitDeclarationOnly: true, rootDir: root, outDir: declarations,
     lib: ["lib.es2023.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"], types: [], newLine: ts.NewLineKind.LineFeed };
   // Portable and browser declarations compile without Node types; the Node entry alone gets them.
@@ -70,6 +72,7 @@ try {
   }
   await writeFile(join(output, "editor.css"), await readFile(join(root, "src/hosted-content/editor.css")));
   const outputs = await files(output);
+  for (const path of outputs) if (path.endsWith(".mjs")) assertNoInlinedRuntime(relative(output, path), await readFile(path, "utf8"));
   const destination = join(root, "server/hosted-content");
   if (check) {
     assert.deepEqual((await files(destination)).map((path) => relative(destination, path)), outputs.map((path) => relative(output, path)), "Hosted output inventory drift");

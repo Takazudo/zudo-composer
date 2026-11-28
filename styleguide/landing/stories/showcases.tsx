@@ -1,4 +1,4 @@
-import { createElement, type ComponentChildren, type ComponentType } from "preact";
+import { h, type Child, type Component } from "@takazudo/zfb/zudo-react";
 import type { StoryMeta } from "@takazudo/zudo-sg/stories";
 import {
   Button, ComparisonNote, ContactForm, Container, CtaBand, DemoNote, FaqAccordion, FaqItem,
@@ -23,7 +23,7 @@ const priya = photo("avatar-priya.webp");
 type Definition = {
   id: string; title: string; category: string; description: string;
   defaults: Record<string, unknown>; source: { exportName: string };
-  component: ComponentType<Record<string, unknown>>;
+  component: Component<Record<string, unknown>>;
 };
 const definitions = componentPack.manifest.components.map((entry) => ({
   ...entry,
@@ -43,9 +43,9 @@ export function storyMeta(id: string): StoryMeta {
     usage: `import { ${entry.source.exportName} } from "demo-landing/components";\n\nconst props = ${JSON.stringify(entry.defaults, null, 2)};\n<${entry.source.exportName} {...props} />`,
   };
 }
-export function packDefaults(id: string): ComponentChildren {
+export function packDefaults(id: string): Child {
   const entry = definition(id);
-  return createElement(entry.component, { ...entry.defaults });
+  return h(entry.component, { ...entry.defaults });
 }
 const feature = (emphasis = false) => <FeatureItem icon="calendar" title="One calendar for the team" body="Keep deadlines, meetings and focused work together." emphasis={emphasis} />;
 const features = () => <><FeatureItem icon="calendar" title="See the week" body="Everything in one clear view." emphasis /><FeatureItem icon="clock" title="Protect focus" body="Make room for work that matters." emphasis={false} /><FeatureItem icon="people" title="Plan together" body="Find time that works for everyone." emphasis={false} /></>;
@@ -57,9 +57,9 @@ const testimonial = (name: string, src: string, order: number) => <Testimonial q
 const testimonials = () => <>{testimonial("Mara Lind", mara, 1)}{testimonial("Jonah Lee", jonah, 2)}{testimonial("Priya Shah", priya, 3)}</>;
 const heading = () => <SectionHeading eyebrow="How it works" heading="Make space for your best work" intro="A calmer way to plan the week." as="h2" align="start" />;
 
-export function showcase(id: string, example: boolean): ComponentChildren {
+export function showcase(id: string, example: boolean): Child {
   const entry = definition(id);
-  const render = (props: Record<string, unknown> = {}) => createElement(entry.component, { ...entry.defaults, ...props });
+  const render = (props: Record<string, unknown> = {}) => h(entry.component, { ...entry.defaults, ...props });
   switch (id) {
     case "land.header": return <Header brand="Orrery" brandHref="#home" nav={<><NavLink label="Features" href="#features" /><NavLink label="Pricing" href="#pricing" /></>} action={<Button label={example ? "Try Orrery" : "Start free"} href="#signup" variant="secondary" size="md" />} />;
     case "land.nav-link": return <NavLink label={example ? "View pricing" : "Explore features"} href={example ? "#pricing" : "#features"} />;

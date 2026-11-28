@@ -1,5 +1,3 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../../test-support/cleanup";
 // Inspector wiring for the debounced commit channel (issue #291).
 //
@@ -13,7 +11,7 @@ import "../../../test-support/cleanup";
 // and inspector-panel.test.tsx rely on that presentational default.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/preact";
+import { fireEvent, render, screen, settle } from "../../../../../test/render";
 import type { CompositionDocument } from "../../../../../composer/browser";
 import { TEST_COMPONENT_IDS, makeDocument, makeNode, resetTestIds, testManifest } from "../../test-support/composer-fixtures";
 import { InspectorPanel } from "../inspector-panel";
@@ -53,87 +51,103 @@ beforeEach(() => {
 });
 
 describe("InspectorPanel — keystream vs discrete commit routing (#291)", () => {
-  it("text keystrokes go through the debounced channel, never the immediate one", () => {
+  it("text keystrokes go through the debounced channel, never the immediate one", async () => {
     const { onUpdateProps, onUpdatePropsDebounced } = renderPanel();
     fireEvent.input(screen.getByLabelText("Title"), { target: { value: "New title" } });
+    await settle();
     expect(onUpdatePropsDebounced).toHaveBeenCalledWith("w", { title: "New title" });
     expect(onUpdateProps).not.toHaveBeenCalled();
   });
 
-  it("color keystrokes go through the debounced channel", () => {
+  it("color keystrokes go through the debounced channel", async () => {
     const { onUpdateProps, onUpdatePropsDebounced } = renderPanel();
     fireEvent.input(screen.getByLabelText("Tint"), { target: { value: "#ff0000" } });
+    await settle();
     expect(onUpdatePropsDebounced).toHaveBeenCalledWith("w", { tint: "#ff0000" });
     expect(onUpdateProps).not.toHaveBeenCalled();
   });
 
-  it("valid numeric keystrokes go through the debounced channel", () => {
+  it("valid numeric keystrokes go through the debounced channel", async () => {
     const { onUpdateProps, onUpdatePropsDebounced } = renderPanel();
     fireEvent.input(screen.getByLabelText("Count"), { target: { value: "7" } });
+    await settle();
     expect(onUpdatePropsDebounced).toHaveBeenCalledWith("w", { count: 7 });
     expect(onUpdateProps).not.toHaveBeenCalled();
   });
 
-  it("a checkbox toggle is a discrete commit point — immediate channel, no debounce", () => {
+  it("a checkbox toggle is a discrete commit point — immediate channel, no debounce", async () => {
     const { onUpdateProps, onUpdatePropsDebounced } = renderPanel();
     fireEvent.click(screen.getByLabelText("Enabled"));
+    await settle();
     expect(onUpdateProps).toHaveBeenCalledWith("w", { enabled: false });
     expect(onUpdatePropsDebounced).not.toHaveBeenCalled();
   });
 
-  it("a select change is a discrete commit point — immediate channel, no debounce", () => {
+  it("a select change is a discrete commit point — immediate channel, no debounce", async () => {
     const { onUpdateProps, onUpdatePropsDebounced } = renderPanel();
     fireEvent.change(screen.getByLabelText("Variant"), { target: { value: "ghost" } });
+    await settle();
     expect(onUpdateProps).toHaveBeenCalledWith("w", { variant: "ghost" });
     expect(onUpdatePropsDebounced).not.toHaveBeenCalled();
   });
 
-  it("blurring a text field lands the pending commit via onFlushPendingProps", () => {
+  it("blurring a text field lands the pending commit via onFlushPendingProps", async () => {
     const { onFlushPendingProps } = renderPanel();
     const title = screen.getByLabelText("Title");
     fireEvent.input(title, { target: { value: "Half typed" } });
+    await settle();
     expect(onFlushPendingProps).not.toHaveBeenCalled();
     fireEvent.blur(title);
+    await settle();
     expect(onFlushPendingProps).toHaveBeenCalledTimes(1);
   });
 
-  it("blurring a numeric field lands the pending commit via onFlushPendingProps", () => {
+  it("blurring a numeric field lands the pending commit via onFlushPendingProps", async () => {
     const { onFlushPendingProps } = renderPanel();
     const count = screen.getByLabelText("Count");
     fireEvent.input(count, { target: { value: "7" } });
+    await settle();
     fireEvent.blur(count);
+    await settle();
     expect(onFlushPendingProps).toHaveBeenCalledTimes(1);
   });
 
-  it("without the #291 props, keystream fields fall back to the immediate onUpdateProps", () => {
+  it("without the #291 props, keystream fields fall back to the immediate onUpdateProps", async () => {
     const { onUpdateProps, onUpdatePropsDebounced } = renderPanel({ withDebouncedChannel: false });
     fireEvent.input(screen.getByLabelText("Title"), { target: { value: "Fallback" } });
+    await settle();
     expect(onUpdateProps).toHaveBeenCalledWith("w", { title: "Fallback" });
     expect(onUpdatePropsDebounced).not.toHaveBeenCalled();
   });
 });
 
 describe("Numeric field dedupe inside the debounce window (#291)", () => {
-  it("re-commits a correction that equals the STALE prop value (dedupes against the in-flight value instead)", () => {
+  it("re-commits a correction that equals the STALE prop value (dedupes against the in-flight value instead)", async () => {
     // The debounced channel means the `value` prop lags the keystream: the
     // harness never applies commits, exactly like mid-debounce-window state.
     const { onUpdatePropsDebounced } = renderPanel();
     const count = screen.getByLabelText("Count");
 
     fireEvent.input(count, { target: { value: "1" } });
+
+    await settle();
     expect(onUpdatePropsDebounced).toHaveBeenNthCalledWith(1, "w", { count: 1 });
 
     fireEvent.input(count, { target: { value: "" } }); // invalid — held, not committed
+
+    await settle();
     // Correcting back to "3" equals the stale prop value (3) but NOT the
     // in-flight 1 — swallowing it would flush 1 while the field shows 3.
     fireEvent.input(count, { target: { value: "3" } });
+    await settle();
     expect(onUpdatePropsDebounced).toHaveBeenNthCalledWith(2, "w", { count: 3 });
   });
 
-  it("still dedupes a keystroke that changes nothing (same parsed value as the document)", () => {
+  it("still dedupes a keystroke that changes nothing (same parsed value as the document)", async () => {
     const { onUpdatePropsDebounced } = renderPanel();
     const count = screen.getByLabelText("Count");
     fireEvent.input(count, { target: { value: "3" } }); // equals the committed value
+    await settle();
     expect(onUpdatePropsDebounced).not.toHaveBeenCalled();
   });
 });

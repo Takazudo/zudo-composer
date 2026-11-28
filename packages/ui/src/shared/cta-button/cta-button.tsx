@@ -1,4 +1,4 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import { cx } from "../../lib/cx";
 
 export type CtaButtonVariant = "primary" | "secondary";
@@ -24,7 +24,7 @@ export type CtaButtonProps = {
   /** Show the trailing arrow glyph. Defaults to true. */
   arrow?: boolean;
   class?: string;
-  children?: ComponentChildren;
+  children?: Child;
 };
 
 /** Accent-filled or outlined call-to-action link. */
@@ -44,7 +44,7 @@ export function CtaButton({
         VARIANT_CLASS[variant],
         cls,
       )}
-      style={{ textDecoration: "none", color: TEXT_COLOR[variant] }}
+      style={{ "text-decoration": "none", color: TEXT_COLOR[variant] }}
     >
       {/* Label wrapped so the Composer inline-editor can target a
           decoration-free region: editing the bare <a> would trap the

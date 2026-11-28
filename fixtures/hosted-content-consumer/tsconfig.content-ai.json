@@ -3,7 +3,7 @@
     "target": "ES2023", "lib": ["ES2023", "DOM", "DOM.Iterable"], "types": [],
     "module": "NodeNext", "moduleResolution": "NodeNext",
     "strict": true, "skipLibCheck": false, "noEmit": true,
-    "jsx": "react-jsx", "jsxImportSource": "preact"
+    "jsx": "react-jsx", "jsxImportSource": "@takazudo/zfb/zudo-react"
   },
   "files": ["content-ai-entries.ts", "browser-css.d.ts"]
 }

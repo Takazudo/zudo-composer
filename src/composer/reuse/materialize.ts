@@ -25,14 +25,14 @@ export type MaterializedRuntimeOwner =
       kind: "local";
       /** The consumer record whose controller may mutate this branch. */
       recordId: string;
-      /** Stable, collision-safe namespace for Preact keys and DOM identity. */
+      /** Stable, collision-safe namespace for render keys and DOM identity. */
       namespace: string;
     }
   | {
       kind: "global-template";
       /** The resolved source record; this branch is read-only in the consumer. */
       sourceRecordId: string;
-      /** Stable, collision-safe namespace for Preact keys and DOM identity. */
+      /** Stable, collision-safe namespace for render keys and DOM identity. */
       namespace: string;
     };
 

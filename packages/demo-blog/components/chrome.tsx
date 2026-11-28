@@ -1,11 +1,11 @@
-import { createContext, type ComponentChildren } from "preact";
-import { useContext } from "preact/hooks";
+import { computed, getScope, signal, type Child, type Ref } from "@takazudo/zfb/zudo-react";
 import { renderInline } from "./prose";
 import { currentPathname, isCurrentHref } from "./runtime";
+import { answerLink, requestLink, slotLink } from "./slot-link";
 
 // Only the header marks the current item: the footer repeats nav links and a
 // second accent underline would break the one-accent-per-viewport budget.
-const NavCurrentContext = createContext(false);
+const NAV_CURRENT_LINK = slotLink<boolean>("blog-nav-current");
 
 const CAPTION = "font-blog-sans text-blog-caption font-blog-medium";
 const CAPS = `${CAPTION} uppercase tracking-blog-caps`;
@@ -13,7 +13,7 @@ const CAPS = `${CAPTION} uppercase tracking-blog-caps`;
 export interface HeaderProps {
   brand?: string;
   brandHref?: string;
-  nav?: ComponentChildren[];
+  nav?: Child | object;
 }
 
 export function Header({ brand = "Margin Notes", brandHref = "/", nav }: HeaderProps) {
@@ -22,8 +22,8 @@ export function Header({ brand = "Margin Notes", brandHref = "/", nav }: HeaderP
       <div class="mx-auto flex min-h-blog-nav-h max-w-blog-page flex-wrap items-center justify-between gap-x-blog-hsp-md px-blog-hsp-sm blog-md:px-blog-hsp-lg">
         <a class="font-blog-serif text-blog-h3 font-blog-semibold text-blog-fg-strong hover:underline" href={brandHref}>{brand}</a>
         <nav aria-label="Primary">
-          <ul class="flex flex-wrap gap-x-blog-hsp-md">
-            <NavCurrentContext.Provider value={true}>{nav}</NavCurrentContext.Provider>
+          <ul class="flex flex-wrap gap-x-blog-hsp-md" on:blog-nav-current={answerLink(NAV_CURRENT_LINK, true)}>
+            {nav as Child}
           </ul>
         </nav>
       </div>
@@ -37,14 +37,17 @@ export interface NavLinkProps {
 }
 
 export function NavLink({ label = "Link", href = "/" }: NavLinkProps) {
-  const markCurrent = useContext(NavCurrentContext);
-  const current = markCurrent && isCurrentHref(href, currentPathname());
+  const element: Ref<HTMLLIElement> = { current: null };
+  const current = signal(false);
+  getScope().onActivate(() => {
+    if (requestLink(NAV_CURRENT_LINK, element.current) === true) current.value = isCurrentHref(href, currentPathname());
+  });
   return (
-    <li>
+    <li ref={element}>
       <a
-        class={`inline-flex min-h-blog-control-h items-center ${CAPTION} text-blog-fg-strong ${current ? "underline decoration-blog-accent decoration-2 underline-offset-3" : "hover:underline"}`}
+        class={computed(() => `inline-flex min-h-blog-control-h items-center ${CAPTION} text-blog-fg-strong ${current.value ? "underline decoration-blog-accent decoration-2 underline-offset-3" : "hover:underline"}`)}
         href={href}
-        aria-current={current ? "page" : undefined}
+        aria-current={computed(() => (current.value ? "page" : null))}
       >
         {label}
       </a>
@@ -56,7 +59,7 @@ export interface FooterProps {
   smallPrint?: string;
   creditLabel?: string;
   creditHref?: string;
-  nav?: ComponentChildren[];
+  nav?: Child | object;
 }
 
 export function Footer({ smallPrint = "", creditLabel = "Built with zudo-composer", creditHref = "https://zudo-composer.zudolab.dev", nav }: FooterProps) {
@@ -64,7 +67,7 @@ export function Footer({ smallPrint = "", creditLabel = "Built with zudo-compose
     <footer class="mt-blog-vsp-2xl border-t border-blog-border bg-blog-bg">
       <div class="mx-auto flex max-w-blog-page flex-col gap-blog-vsp-sm px-blog-hsp-sm py-blog-vsp-lg blog-md:px-blog-hsp-lg">
         <nav aria-label="Footer">
-          <ul class="flex flex-wrap gap-x-blog-hsp-md">{nav}</ul>
+          <ul class="flex flex-wrap gap-x-blog-hsp-md">{nav as Child}</ul>
         </nav>
         {smallPrint ? <p class={`${CAPTION} text-blog-muted`}>{smallPrint}</p> : null}
         <p class={`${CAPTION} text-blog-muted`}>
@@ -77,31 +80,31 @@ export function Footer({ smallPrint = "", creditLabel = "Built with zudo-compose
 
 export interface ContainerProps {
   width?: "page" | "measure";
-  content?: ComponentChildren[];
+  content?: Child | object;
 }
 
 export function Container({ width = "page", content }: ContainerProps) {
-  return <div class={`mx-auto w-full px-blog-hsp-sm blog-md:px-blog-hsp-lg ${width === "measure" ? "max-w-blog-measure" : "max-w-blog-page"}`}>{content}</div>;
+  return <div class={`mx-auto w-full px-blog-hsp-sm blog-md:px-blog-hsp-lg ${width === "measure" ? "max-w-blog-measure" : "max-w-blog-page"}`}>{content as Child}</div>;
 }
 
 const STACK_GAP = { xs: "gap-blog-vsp-xs", sm: "gap-blog-vsp-sm", md: "gap-blog-vsp-md", lg: "gap-blog-vsp-lg" } as const;
 
 export interface StackProps {
   gap?: keyof typeof STACK_GAP;
-  content?: ComponentChildren[];
+  content?: Child | object;
 }
 
 export function Stack({ gap = "md", content }: StackProps) {
-  return <div class={`flex flex-col ${STACK_GAP[gap]}`}>{content}</div>;
+  return <div class={`flex flex-col ${STACK_GAP[gap]}`}>{content as Child}</div>;
 }
 
 export interface SectionProps {
   rule?: boolean;
-  content?: ComponentChildren[];
+  content?: Child | object;
 }
 
 export function Section({ rule = false, content }: SectionProps) {
-  return <section class={`py-blog-vsp-xl${rule ? " border-t border-blog-border" : ""}`}>{content}</section>;
+  return <section class={`py-blog-vsp-xl${rule ? " border-t border-blog-border" : ""}`}>{content as Child}</section>;
 }
 
 export interface SectionHeadingProps {

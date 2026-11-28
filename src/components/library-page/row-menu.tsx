@@ -1,7 +1,7 @@
-import { Fragment } from "preact";
-import { useRef } from "preact/hooks";
+import type { Child, Ref } from "@takazudo/zfb/zudo-react";
 import { EllipsisIcon, type IconComponent } from "../icons";
-import { Menu, MenuItem, MenuSeparator, useMenu } from "../overlay";
+import { createMenu, Menu, MenuItem, MenuSeparator } from "../overlay";
+import type { MaybeSignal } from "../reactive";
 
 // The row `⋯` menu (issue #164).
 //
@@ -17,7 +17,7 @@ export interface RowMenuAction {
   readonly icon?: IconComponent;
   /** Shortcut hint; decorative, and kept out of the item's accessible name. */
   readonly kbd?: string;
-  readonly disabled?: boolean;
+  readonly disabled?: MaybeSignal<boolean>;
   /** Renders the item as a link — a deep link into the record. */
   readonly href?: string;
   readonly onSelect?: () => void;
@@ -36,18 +36,13 @@ export interface RowMenuProps {
   class?: string;
 }
 
-export function RowMenu({ label, open, actions = [], destructive = [], triggerLabel, class: className }: RowMenuProps) {
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menu = useMenu(triggerRef, { align: "end" });
+export function RowMenu({ label, open, actions = [], destructive = [], triggerLabel, class: className }: RowMenuProps): Child {
+  const triggerRef: Ref<HTMLButtonElement> = { current: null };
+  const menu = createMenu(triggerRef, { align: "end" });
   const items = open ? [open, ...actions] : [...actions];
 
   return (
-    <Fragment>
-      {/*
-       * A raw button rather than `Button`: the trigger needs a ref for the
-       * menu's placement measurement, and Preact strips `ref` from a function
-       * component's props.
-       */}
+    <>
       <button
         type="button"
         ref={triggerRef}
@@ -85,6 +80,6 @@ export function RowMenu({ label, open, actions = [], destructive = [], triggerLa
           </MenuItem>
         ))}
       </Menu>
-    </Fragment>
+    </>
   );
 }

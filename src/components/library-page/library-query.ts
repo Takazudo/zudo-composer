@@ -1,11 +1,12 @@
-import { useState } from "preact/hooks";
+import { computed, signal, type ReadonlySignal, type Signal } from "@takazudo/zfb/zudo-react";
 import type { IconComponent } from "../icons";
+import { read, type MaybeSignal } from "../reactive";
 
 // Filter and sort for a library route (issue #164).
 //
 // The matching and ordering live in pure functions so a route can reuse them
-// outside a component (a keyboard command, a dashboard panel), and the hook is
-// only the state around them. Facets are single-select by design: the
+// outside a component (a keyboard command, a dashboard panel), and the
+// controller is only the signals around them. Facets are single-select by design: the
 // prototype's toolbar reads `Kind: All`, one answer per facet.
 
 export interface LibraryFacetOption<Row> {
@@ -98,57 +99,64 @@ export function applyLibraryQuery<Row>(
 
 export interface LibraryQueryController<Row> {
   /** The rows to render, after filtering and sorting. */
-  readonly rows: readonly Row[];
-  readonly search: string;
+  readonly rows: ReadonlySignal<readonly Row[]>;
+  /** Writable so the filter input can bind it as its `modelValue`. */
+  readonly search: Signal<string>;
   setSearch: (value: string) => void;
   readonly facets: readonly LibraryFacet<Row>[];
-  /** The chosen option id, falling back to the facet's default. */
+  /** The chosen option id, falling back to the facet's default. Tracked when read in a computed. */
   facetValue: (facetId: string) => string;
   setFacetValue: (facetId: string, optionId: string) => void;
   readonly sorts: readonly LibrarySort<Row>[];
-  readonly sortId: string | null;
+  readonly sortId: ReadonlySignal<string | null>;
   setSortId: (sortId: string) => void;
   /** True while a filter is narrowing the list; sort order does not count. */
-  readonly filtered: boolean;
+  readonly filtered: ReadonlySignal<boolean>;
   clearFilters: () => void;
 }
 
-export interface UseLibraryQueryOptions<Row> extends LibraryQueryDefinition<Row> {
-  readonly rows: readonly Row[];
+export interface LibraryQueryOptions<Row> extends LibraryQueryDefinition<Row> {
+  /** Every record; a signal keeps the filtered rows following the library. */
+  readonly rows: MaybeSignal<readonly Row[]>;
   /** Defaults to the first sort. */
   readonly defaultSortId?: string;
 }
 
-export function useLibraryQuery<Row>({
+export function createLibraryQuery<Row>({
   rows,
   searchText,
   facets = [],
   sorts = [],
   defaultSortId,
-}: UseLibraryQueryOptions<Row>): LibraryQueryController<Row> {
-  const [search, setSearch] = useState("");
-  const [facetValues, setFacetValues] = useState<Readonly<Record<string, string>>>(() => defaultFacetValues(facets));
-  const [sortId, setSortId] = useState<string | null>(() => defaultSortId ?? sorts[0]?.id ?? null);
-
-  const state: LibraryQueryState = { search, facetValues, sortId };
+}: LibraryQueryOptions<Row>): LibraryQueryController<Row> {
+  const search = signal("");
+  const facetValues = signal<Readonly<Record<string, string>>>(defaultFacetValues(facets));
+  const sortId = signal<string | null>(defaultSortId ?? sorts[0]?.id ?? null);
+  const state = computed<LibraryQueryState>(() => ({ search: search.value, facetValues: facetValues.value, sortId: sortId.value }));
 
   return {
-    rows: applyLibraryQuery(rows, { searchText, facets, sorts }, state),
+    rows: computed(() => applyLibraryQuery(read(rows), { searchText, facets, sorts }, state.value)),
     search,
-    setSearch,
+    setSearch: (value) => {
+      search.value = value;
+    },
     facets,
     facetValue: (facetId) => {
       const facet = facets.find((candidate) => candidate.id === facetId);
-      return facetValues[facetId] ?? facet?.options[0]?.id ?? "";
+      return facetValues.value[facetId] ?? facet?.options[0]?.id ?? "";
     },
-    setFacetValue: (facetId, optionId) => setFacetValues((current) => ({ ...current, [facetId]: optionId })),
+    setFacetValue: (facetId, optionId) => {
+      facetValues.value = { ...facetValues.value, [facetId]: optionId };
+    },
     sorts,
     sortId,
-    setSortId,
-    filtered: isLibraryQueryFiltered(facets, state),
+    setSortId: (value) => {
+      sortId.value = value;
+    },
+    filtered: computed(() => isLibraryQueryFiltered(facets, state.value)),
     clearFilters: () => {
-      setSearch("");
-      setFacetValues(defaultFacetValues(facets));
+      search.value = "";
+      facetValues.value = defaultFacetValues(facets);
     },
   };
 }

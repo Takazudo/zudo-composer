@@ -1,7 +1,8 @@
+import { computed, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import { HOVER_INVERT } from "./tone";
 
 interface StepperProps {
-  value: number;
+  value: ReadonlySignal<number>;
   min: number;
   max: number;
   label: string;
@@ -15,11 +16,11 @@ export function Stepper({ value, min, max, label, onChange }: StepperProps) {
   const subject = label.charAt(0).toLowerCase() + label.slice(1);
   return (
     <div role="group" aria-label={label} class="inline-flex items-center border border-shop-border bg-shop-bg">
-      <button type="button" aria-label={`Decrease ${subject}`} disabled={value <= min} onClick={() => onChange(value - 1)} class={STEP}>−</button>
+      <button type="button" aria-label={`Decrease ${subject}`} disabled={computed(() => value.value <= min)} on:click={() => onChange(value.value - 1)} class={STEP}>−</button>
       <span aria-live="polite" class="inline-flex h-shop-control-h min-w-[2.5rem] items-center justify-center border-x border-shop-border font-shop-mono tabular-nums text-shop-body text-shop-fg-strong">
-        {value}
+        {computed(() => String(value.value))}
       </span>
-      <button type="button" aria-label={`Increase ${subject}`} disabled={value >= max} onClick={() => onChange(value + 1)} class={STEP}>+</button>
+      <button type="button" aria-label={`Increase ${subject}`} disabled={computed(() => value.value >= max)} on:click={() => onChange(value.value + 1)} class={STEP}>+</button>
     </div>
   );
 }

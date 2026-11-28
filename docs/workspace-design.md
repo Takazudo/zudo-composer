@@ -5,7 +5,7 @@ sources, worker evidence limits and manager-owned integrated completion gates.
 
 The production workspace extends `src/components/ui`, `overlay` and
 `outline-tree`. Feature UIs consume these components; do not copy prototype
-renderers, add a parallel tree, or import `preact/compat`. The installed component
+renderers, add a parallel tree, or add a second UI runtime. The installed component
 provider and its preview runtime remain a separate rendering boundary.
 
 ## Existing controls and tokens

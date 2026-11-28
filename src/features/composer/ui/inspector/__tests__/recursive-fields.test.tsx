@@ -1,11 +1,8 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../../test-support/cleanup";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/preact";
-import type { ComponentChildren } from "preact";
-import { useState } from "preact/hooks";
+import { signal, type Child } from "@takazudo/zfb/zudo-react";
+import { fireEvent, render, screen, settle, within } from "../../../../../test/render";
 import type { ComponentManifest, FieldDefinition } from "@zudo-composer/component-contract";
 import type { CompositionDocument, JsonObject } from "../../../../../composer/browser";
 import { createComponentCatalog } from "../../../../../composer/browser";
@@ -118,10 +115,12 @@ function renderInspector(props: JsonObject = { actions: [{ label: "Get started",
 beforeEach(() => resetTestIds());
 
 describe("recursive contract-v2 inspector fields", () => {
-  it("edits a Hero action at its exact nested path and keeps records as raw JSON", () => {
+  it("edits a Hero action at its exact nested path and keeps records as raw JSON", async () => {
     const { onUpdatePropsDebounced } = renderInspector();
     fireEvent.click(screen.getByRole("button", { name: "Get started" }));
+    await settle();
     fireEvent.input(screen.getByLabelText("Label"), { target: { value: "Launch" } });
+    await settle();
 
     expect(onUpdatePropsDebounced).toHaveBeenCalledWith(
       "hero",
@@ -130,9 +129,10 @@ describe("recursive contract-v2 inspector fields", () => {
     );
   });
 
-  it("uses structural null checkpoints for add/remove/reorder and optional object keys", () => {
+  it("uses structural null checkpoints for add/remove/reorder and optional object keys", async () => {
     const { onUpdateProps } = renderInspector();
     fireEvent.click(screen.getByRole("button", { name: "Add item" }));
+    await settle();
     expect(onUpdateProps).toHaveBeenNthCalledWith(
       1,
       "hero",
@@ -144,16 +144,21 @@ describe("recursive contract-v2 inspector fields", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Add Note" }));
+
+    await settle();
     expect(onUpdateProps).toHaveBeenNthCalledWith(2, "hero", {
       settings: { enabled: true, note: "" },
     }, null);
 
     fireEvent.click(screen.getByRole("button", { name: "Remove Note" }));
+
+    await settle();
     expect(onUpdateProps).toHaveBeenNthCalledWith(3, "hero", { settings: { enabled: true } }, null);
 
     const actionsList = document.querySelector('[data-sg-inspector-list="actions"]');
     expect(actionsList).not.toBeNull();
     fireEvent.click(within(actionsList as HTMLElement).getAllByRole("button", { name: "Move down" })[0]!);
+    await settle();
     expect(onUpdateProps).toHaveBeenNthCalledWith(4, "hero", {
       actions: [
         { label: "", href: "" },
@@ -162,14 +167,16 @@ describe("recursive contract-v2 inspector fields", () => {
     }, null);
   });
 
-  it("keeps invalid values blocked but exposes declared fields as an accessible recovery path", () => {
+  it("keeps invalid values blocked but exposes declared fields as an accessible recovery path", async () => {
     const { onUpdateProps } = renderInspector({ actions: [{ label: "A", href: "#", variant: "tertiary" }], settings: { enabled: true }, layout: ["row", 2] });
     expect(screen.getByText("This component has invalid properties.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "A" }));
+    await settle();
     const variant = screen.getByLabelText("Variant");
     expect(variant).toHaveAttribute("aria-invalid", "true");
     expect(screen.getAllByRole("alert").some((alert) => /allowed options/i.test(alert.textContent ?? ""))).toBe(true);
     fireEvent.change(variant, { target: { value: "secondary" } });
+    await settle();
     expect(onUpdateProps).toHaveBeenCalledWith("hero", {
       actions: [{ label: "A", href: "#", variant: "secondary" }],
     }, [["actions", 0, "variant"]]);
@@ -177,13 +184,14 @@ describe("recursive contract-v2 inspector fields", () => {
     expect(screen.getByLabelText("Columns")).toHaveAttribute("type", "number");
   });
 
-  it("removes an optional top-level prop through the explicit omission channel", () => {
+  it("removes an optional top-level prop through the explicit omission channel", async () => {
     const { onUpdateProps } = renderInspector();
     fireEvent.click(screen.getByRole("button", { name: "Remove Settings" }));
+    await settle();
     expect(onUpdateProps).toHaveBeenCalledWith("hero", {}, null, ["settings"]);
   });
 
-  it("keeps primitive list items directly editable while object items remain collapsible", () => {
+  it("keeps primitive list items directly editable while object items remain collapsible", async () => {
     const { onUpdatePropsDebounced } = renderInspector({
       actions: [{ label: "A", href: "#", variant: "primary" }],
       settings: { enabled: true },
@@ -193,16 +201,19 @@ describe("recursive contract-v2 inspector fields", () => {
     const tag = screen.getByLabelText("Item 1") as HTMLInputElement;
     expect(tag).toHaveValue("one");
     fireEvent.input(tag, { target: { value: "two" } });
+    await settle();
     expect(onUpdatePropsDebounced).toHaveBeenCalledWith("hero", { tags: ["two"] }, [["tags", 0]]);
   });
 
-  it("keeps control ids unique after an ancestor re-renders around pass-through children", () => {
+  it("keeps control ids unique after an ancestor re-renders around pass-through children", async () => {
     // The app Shell re-renders itself (rail counts) around the route's host
     // element; controls mounted afterwards must not reuse an existing id.
     let rerenderShell = (): void => undefined;
-    function Shell({ children }: { children: ComponentChildren }) {
-      const [generation, setGeneration] = useState(0);
-      rerenderShell = () => setGeneration((value) => value + 1);
+    function Shell({ children }: { children: Child }) {
+      const generation = signal(0);
+      rerenderShell = () => {
+        generation.value += 1;
+      };
       return <main data-generation={generation}>{children}</main>;
     }
     render(
@@ -219,11 +230,15 @@ describe("recursive contract-v2 inspector fields", () => {
         </div>
       </Shell>,
     );
-    act(() => rerenderShell());
+    rerenderShell();
+    await settle();
     fireEvent.click(screen.getByRole("button", { name: "Get started" }));
+    await settle();
     fireEvent.click(screen.getByRole("button", { name: "Add item" }));
+    await settle();
     const second = document.querySelector('[data-sg-inspector-list="actions"] [data-sg-inspector-list-item="1"]') as HTMLElement;
     fireEvent.click(within(second).getByRole("button", { name: "Add Variant" }));
+    await settle();
 
     const ids = [...document.querySelectorAll("[id]")].map((element) => element.id);
     expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);

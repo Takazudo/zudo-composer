@@ -176,7 +176,7 @@ try {
     )
     .toBe("rgb(12, 34, 56)");
   console.log(
-    "populated token panel edits reached Preact iframe; Apply disabled",
+    "populated token panel edits reached zudo-react preview iframe; Apply disabled",
   );
   await page.screenshot({ path: join(evidence, "sample-spike-panel.png") });
   await page.getByRole("button", { name: "Close panel", exact: true }).click();

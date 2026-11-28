@@ -1,4 +1,4 @@
-import { useCallback, useState } from "preact/hooks";
+import { signal } from "@takazudo/zfb/zudo-react";
 import type { AssetPixelSize } from "./assets-format";
 
 /**
@@ -16,22 +16,22 @@ export interface AssetDimensionStore {
   record: (id: string, image: HTMLImageElement | null | undefined) => void;
 }
 
-export function useAssetDimensions(): AssetDimensionStore {
-  const [sizes, setSizes] = useState<ReadonlyMap<string, AssetPixelSize>>(() => new Map());
+/** Call once in a component's setup; `get` is tracked when read in a computed. */
+export function createAssetDimensions(): AssetDimensionStore {
+  const sizes = signal<ReadonlyMap<string, AssetPixelSize>>(new Map());
 
-  const record = useCallback((id: string, image: HTMLImageElement | null | undefined) => {
+  const record = (id: string, image: HTMLImageElement | null | undefined) => {
     // A broken or still-loading image reports 0×0; that is absence, not a size.
     if (!image || !image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) return;
     const width = image.naturalWidth;
     const height = image.naturalHeight;
-    setSizes((current) => {
-      const known = current.get(id);
-      if (known && known.width === width && known.height === height) return current;
-      const next = new Map(current);
-      next.set(id, { width, height });
-      return next;
-    });
-  }, []);
+    const current = sizes.value;
+    const known = current.get(id);
+    if (known && known.width === width && known.height === height) return;
+    const next = new Map(current);
+    next.set(id, { width, height });
+    sizes.value = next;
+  };
 
-  return { get: (id) => sizes.get(id), record };
+  return { get: (id) => sizes.value.get(id), record };
 }

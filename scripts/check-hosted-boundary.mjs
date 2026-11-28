@@ -1,7 +1,9 @@
 // @ts-check
 import assert from "node:assert/strict";
 import { dirname, isAbsolute, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
 import ts from "typescript";
+import { assertNoInlinedRuntime, isZudoReactExternal } from "./zudo-react-boundary.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const allowed = new Set(["zod", "@lezer/markdown", "@zudo-composer/component-contract"]);
@@ -12,6 +14,7 @@ async function visit(path, browser, seen, editor = browser, node = false) {
   const program = ts.createProgram([path], { allowJs: true, noLib: true, noResolve: true, types: [] });
   const tree = program.getSourceFile(path);
   assert.ok(tree, `Missing emitted source ${path}`);
+  assertNoInlinedRuntime(path, await readFile(path, "utf8"));
   const checker = program.getTypeChecker();
   const nodeGraph = node;
   /** @type {string[]} */
@@ -44,7 +47,7 @@ async function visit(path, browser, seen, editor = browser, node = false) {
     else if (node && id.startsWith("node:")) continue;
     else {
       assert.ok(!isAbsolute(id) && !id.startsWith("node:") && !id.startsWith("virtual:"), `${path}: forbidden import ${id}`);
-      assert.ok(allowed.has(id) || editor && (id === "preact" || id.startsWith("preact/") || id.startsWith("@codemirror/") || id === "@lezer/highlight"), `${path}: unexpected dependency ${id}`);
+      assert.ok(allowed.has(id) || editor && (isZudoReactExternal(id) || id.startsWith("@codemirror/") || id === "@lezer/highlight"), `${path}: unexpected dependency ${id}`);
     }
   }
 }

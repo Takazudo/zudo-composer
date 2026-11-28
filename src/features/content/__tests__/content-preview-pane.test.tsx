@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { fireEvent, render, screen, settle, settleTasks, waitFor } from "../../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createContentEntryRecord, createContentModelRecord } from "../../../content";
 import type { ContentPreviewSource, ContentPreviewState } from "../preview-source";
@@ -8,14 +8,14 @@ vi.mock("../../delivery/host-preview-policy", () => ({ get hostDocumentPreviewCo
 vi.mock("../../native-editing/session", () => ({ nativeContentRead: vi.fn(), nativeEditingAvailable: false }));
 const previewHost = vi.hoisted(() => vi.fn());
 vi.mock("../../composer/preview/composition-preview-host", async () => {
-  const { h } = await import("preact");
-  return { CompositionPreviewHost: (props: { enlargeable?: boolean; document: unknown }) => { previewHost(props); return h("div", { "data-enlargeable": String(props.enlargeable) }, props.document ? "Rendered draft" : "Empty preview"); } };
+  const { computed, h } = await import("@takazudo/zfb/zudo-react");
+  const { read } = await import("../../../components/reactive");
+  return { CompositionPreviewHost: (props: { enlargeable?: boolean; document: unknown }) => { previewHost(props); return h("div", { "data-enlargeable": String(props.enlargeable) }, computed(() => (read(props.document as never) ? "Rendered draft" : "Empty preview"))); } };
 });
 
 import { ContentPreviewPane } from "../content-preview-pane";
 
-// Vitest runs without `globals`, so Testing Library installs no auto-cleanup.
-afterEach(() => { cleanup(); hostMode.enabled = false; previewHost.mockClear(); });
+afterEach(() => { hostMode.enabled = false; previewHost.mockClear(); });
 
 const stamp = "2026-08-30T00:00:00.000Z";
 const model = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "body", key: "body", label: "Body", required: true, kind: "markdown" }] }, { id: "articles", timestamp: stamp });
@@ -47,6 +47,7 @@ describe("ContentPreviewPane", () => {
   it("chooses a Mapping to render through, disabling the blocked ones, and enlarges the draft", async () => {
     const source = sourceFixture();
     render(<ContentPreviewPane providerId="content-filesystem" model={model} entry={entry} entryName="Unsaved draft" componentProvider={{} as never} createPreviewSource={() => source} />);
+    await settleTasks();
 
     const render_through = await screen.findByRole("combobox", { name: "Render through" });
     expect(render_through).toHaveAccessibleDescription(/content-filesystem \/ draft/);
@@ -61,6 +62,7 @@ describe("ContentPreviewPane", () => {
     render(<ContentPreviewPane providerId="content-filesystem" model={model} entry={entry} entryName="Unsaved draft" componentProvider={{} as never} createPreviewSource={() => source} />);
 
     fireEvent.click(await screen.findByRole("tab", { name: /^Mapping/ }));
+    await settle();
     const link = screen.getByRole("link", { name: "Open Mapping" });
     expect(link).toHaveAttribute("href", "/mapping?provider=mapping-filesystem&mapping=map%20one");
     expect(screen.getByText(/Composition: composer-files \/ Article page/)).toBeInTheDocument();
@@ -73,16 +75,17 @@ describe("ContentPreviewPane", () => {
     render(<ContentPreviewPane providerId="content-filesystem" model={model} entry={entry} entryName="Unsaved draft" componentProvider={{} as never} createPreviewSource={() => source} />);
 
     fireEvent.click(await screen.findByRole("tab", { name: /^Usage/ }));
+    await settle();
     expect(screen.getByRole("link", { name: "Article page" })).toHaveAttribute("href", "/mapping?provider=mapping-filesystem&mapping=map%20one");
     expect(screen.getByRole("link", { name: "Broken page" })).toBeInTheDocument();
     expect(screen.getByText("blocked")).toBeInTheDocument();
   });
 });
 
-it("keeps Mapping metadata but never mounts Preact fragment renderer for a host document pack", async () => {
+it("keeps Mapping metadata but never mounts the zudo-react fragment renderer for a host document pack", async () => {
  hostMode.enabled = true; const source = sourceFixture();
  render(<ContentPreviewPane providerId="content-filesystem" model={model} entry={entry} entryName="Draft" saveStatus="dirty" componentProvider={{} as never} createPreviewSource={() => source}/>);
  await screen.findByRole("combobox", {name: "Mapping definition"});
  expect(previewHost).not.toHaveBeenCalled();expect(screen.getByText("Saved page preview")).toBeInTheDocument();expect(screen.getByText(/standalone Mapping fragments are unsupported/)).toBeInTheDocument();
- fireEvent.click(screen.getByRole("tab",{name:/^Mapping/}));expect(screen.getByRole("link",{name:"Open Mapping"})).toHaveAttribute("href","/mapping?provider=mapping-filesystem&mapping=map%20one");
+ fireEvent.click(screen.getByRole("tab",{name:/^Mapping/}));await settle();expect(screen.getByRole("link",{name:"Open Mapping"})).toHaveAttribute("href","/mapping?provider=mapping-filesystem&mapping=map%20one");
 });

@@ -38,7 +38,7 @@ inside the ready producer's disposable storage. Creation retains no
 `.zudo-site-project` activation. Later, `pnpm seed` explicitly activates the
 committed aggregate; it is separate from opening the populated editor.
 
-The starter contains three Preact components, a global frame and home page,
+The starter contains three zudo-react components, a global frame and home page,
 a content model and entry, a mapping, a sitemap, and one imported PNG. The base
 files are copied verbatim, including the host's own test source. The pack reads
 the host package name for its `./components` self-reference. No provider
@@ -53,14 +53,14 @@ to the starter's records:
 | --- | --- |
 | Ready runtime | Owned pack/styles/config; canonical Compositions, Content, Mapping and Sitemapper records; current pointers and completed workspace registry; Assets catalog/version and public image bytes |
 | Authoring, regeneration and build | `site-project.ts`, canonical `site-project.json`, image manifest and source PNG |
-| Tests, types, docs and hygiene | Own Preact/Vitest tests, TypeScript and Vitest configs, README, scratch-only `.gitignore` and `pnpm-workspace.yaml` |
+| Tests, types, docs and hygiene | Own zudo-react/Vitest tests, TypeScript and Vitest configs, README, scratch-only `.gitignore` and `pnpm-workspace.yaml` |
 
 A normal published creation also retains the registry lockfile. Installs, build
 artifacts, release activation state and test output are on-demand scratch state.
 After a clone-equivalent copy and install, `pnpm dev` opens the populated studio
 without modifying or rebuilding the committed initial CMS.
 
-Preact is a direct peer-satisfying dependency, and the tool deduplicates it.
+`@takazudo/zfb` (zudo-react) is a direct peer-satisfying dependency, and the tool deduplicates it.
 Tailwind remains tool-supplied: the host owns only its CSS entry and `@source`.
 The starter uses its own pack; adding `@zudo-composer/ui` requires the exact
 `ui-handoff.json` Git spec documented in `CLAUDE.md`. Adopting it does not
@@ -130,7 +130,7 @@ node scripts/check-creator.mjs --host /absolute/path/my-site
 ```
 
 That checks parity, the strict consumer boundary, and every required retained
-file. Negative tests mutate tool, contract, Preact and development dependency
+file. Negative tests mutate tool, contract, zudo-react runtime and development dependency
 versions, introduce a source reach-back, and exercise archive mismatch and
 install escape/failure. A bounded source test drives the canonical writers and
 reopens the resulting registry, then compares the exact retained inventory.

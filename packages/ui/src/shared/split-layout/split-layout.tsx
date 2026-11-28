@@ -1,5 +1,6 @@
-import type { ComponentChildren, JSX } from "preact";
+import { h } from "@takazudo/zfb/zudo-react";
 import { cx } from "../../lib/cx";
+import { slotChild, type SlotChildren } from "../../lib/slot";
 
 export type SplitLayoutRatio = "50/50" | "40/60" | "60/40" | "33/67" | "67/33";
 export type SplitLayoutGap = "sm" | "md" | "lg";
@@ -35,15 +36,15 @@ const GAP_Y_CLASS: Record<SplitLayoutGap, string> = {
 
 export type SplitLayoutProps = {
   /** Content for the left pane. */
-  left?: ComponentChildren;
+  left?: SlotChildren;
   /** Content for the right pane — pass multiple children for an ordered list. */
-  right?: ComponentChildren;
+  right?: SlotChildren;
   /** Left:right width ratio once panes sit side by side (at the `md` breakpoint). Defaults to 50/50. */
   ratio?: SplitLayoutRatio;
   /** Gap between panes. Defaults to md. */
   gap?: SplitLayoutGap;
   /** Wrapping element tag. Defaults to div. */
-  as?: keyof JSX.IntrinsicElements;
+  as?: keyof HTMLElementTagNameMap;
   class?: string;
 };
 
@@ -58,14 +59,14 @@ export function SplitLayout({
   right,
   ratio = "50/50",
   gap = "md",
-  as: Tag = "div",
+  as = "div",
   class: cls,
 }: SplitLayoutProps) {
   const ratioClass = RATIO_CLASS[ratio];
-  return (
-    <Tag class={cx("flex flex-col items-stretch md:flex-row", GAP_X_CLASS[gap], GAP_Y_CLASS[gap], cls)}>
-      <div class={cx("min-w-0", ratioClass.left)}>{left}</div>
-      <div class={cx("min-w-0", ratioClass.right)}>{right}</div>
-    </Tag>
+  return h(
+    as,
+    { class: cx("flex flex-col items-stretch md:flex-row", GAP_X_CLASS[gap], GAP_Y_CLASS[gap], cls) },
+    <div class={cx("min-w-0", ratioClass.left)}>{slotChild(left)}</div>,
+    <div class={cx("min-w-0", ratioClass.right)}>{slotChild(right)}</div>,
   );
 }

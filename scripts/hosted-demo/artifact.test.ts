@@ -1,8 +1,10 @@
 // @vitest-environment node
 import { readFile, rm, symlink } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { hostedAssetHeaders } from "../../src/assets/model/asset-kinds.mjs";
+import { DEV_JSX_SITE_MARKER } from "../../server/site-build/artifact.mjs";
 import { assertDemoEditorText, DEMO_EDITOR_SEED, HOSTED_DEMO_HEADERS, sha256, verifyDemoEditorArtifact } from "./artifact.mjs";
 import { writeEditorArtifact } from "./__fixtures__/editor-artifact";
 
@@ -144,6 +146,23 @@ describe("forbidden-marker regressions", () => {
     // triple above) must not false-positive.
     const clean = await readFile(join(directory, "clean-filename-identifier.js.txt"), "utf8");
     expect(() => assertDemoEditorText(clean, "assets/demo-pack.js")).not.toThrow();
+  });
+
+  it("allows the zudo-react runtime's own `source.columnNumber` read but not the emitted jsxDEV literal", async () => {
+    const directory = join(import.meta.dirname, "__fixtures__/markers");
+    const runtimeRead = await readFile(join(directory, "runtime-column-read.js.txt"), "utf8");
+    expect(runtimeRead).toContain("columnNumber");
+    expect(() => assertDemoEditorText(runtimeRead, "assets/zudo-react.js")).not.toThrow();
+    const installedRuntime = await readFile(join(createRequire(import.meta.url).resolve("@takazudo/zfb/zudo-react"), "../description.js"), "utf8");
+    expect(installedRuntime).toContain("source.columnNumber");
+    // A production bundle drops the package's source-map comment; the runtime code itself stays.
+    expect(() => assertDemoEditorText(installedRuntime.replace(/^\/\/# sourceMappingURL=.*$/m, ""), "assets/zudo-react.js")).not.toThrow();
+    const devMetadata = await readFile(join(directory, "dev-jsx-metadata.js.txt"), "utf8");
+    expect(DEV_JSX_SITE_MARKER.test(devMetadata)).toBe(true);
+    expect(DEV_JSX_SITE_MARKER.test(runtimeRead)).toBe(false);
+    for (const literal of ["{columnNumber:5}", "{ columnNumber: 12 }", "columnNumber :0", '{"columnNumber":12}', "{ 'columnNumber': 3 }"]) {
+      expect(() => assertDemoEditorText(literal, "assets/demo-pack.js")).toThrow("forbidden marker");
+    }
   });
 
   it.each([

@@ -1,5 +1,3 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../test-support/cleanup";
 // Tests the clipboard/duplicate seam `useComposerIntegration` exposes for
 // wave 7 (#256) menus (issue #255): `handleCopy` / `handleCut` / `handlePaste`
@@ -10,10 +8,9 @@ import "../../test-support/cleanup";
 // only proves the integration hook wires straight through to it.
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { act, renderHook } from "@testing-library/preact";
+import { act, renderIntegration } from "../test-support/integration-harness";
 import { VIRTUAL_ROOT_SLOT_ID } from "../../../../composer/browser";
 import { fixtureComponentProvider, FIXTURE_IDS, makeAbcDocument, resetFixtureIds } from "../../ui/tree/__tests__/fixtures";
-import { useComposerIntegration } from "../use-composer-integration";
 import { controllerOptions } from "../test-support/controller-fixtures";
 
 function setup(document = makeAbcDocument()) {
@@ -22,17 +19,15 @@ function setup(document = makeAbcDocument()) {
   // files for why an idFactory literal created inline in the render callback
   // would reset its counter on every re-render.
   const options = controllerOptions(document);
-  return renderHook(() =>
-    useComposerIntegration({
+  return renderIntegration({
       componentProvider: fixtureComponentProvider,
       controllerOptions: options,
-    }),
-  );
+    });
 }
 
 beforeEach(() => localStorage.clear());
 
-describe("useComposerIntegration — clipboard/duplicate seam (#255)", () => {
+describe("createComposerIntegration — clipboard/duplicate seam (#255)", () => {
   it("handleCopy fills the controller's clipboard without touching the document", () => {
     const { result } = setup();
     act(() => result.current.handleCopy("B"));

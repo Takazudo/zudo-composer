@@ -1,8 +1,8 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, settle, waitFor, within } from "../../../../../test/render";
+import { batch, signal } from "@takazudo/zfb/zudo-react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { MappingAssignmentCatalog } from "../../../../../sitemapper/routes";
+import type { SitemapPageSource } from "../../../../../sitemapper/model";
+import type { MappingAssignmentCatalog, SitemapNodeRouteInfo } from "../../../../../sitemapper/routes";
 import { MappingField } from "../mapping-field";
 
 beforeAll(() => {
@@ -35,8 +35,10 @@ describe("MappingField", () => {
     const value = { kind: "mapping" as const, ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field" as const, fieldId: "slug", titleFieldId: "title" } };
     render(<MappingField value={value} routeInfo={{ status: "ready", derivedRouteCount: 2, diagnostics: [], mapping: mappingMetadata }} catalog={catalog()} onChange={onChange} />);
     fireEvent.change(screen.getByRole("combobox", { name: "Slug field" }), { target: { value: "alternate-slug" } });
+    await settle();
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ route: { kind: "entry-field", fieldId: "alternate-slug", titleFieldId: "title" } }));
     fireEvent.change(screen.getByRole("combobox", { name: "Entry title field" }), { target: { value: "" } });
+    await settle();
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ route: { kind: "entry-field", fieldId: "slug" } }));
   });
 
@@ -58,6 +60,7 @@ describe("MappingField", () => {
     render(<MappingField value={{ kind: "mapping", ref: { providerId: "mapping", recordId: "gone" }, route: { kind: "single" } }} routeInfo={{ status: "blocked", derivedRouteCount: 0, diagnostics: [diagnostic] }} catalog={sourceCatalog} onChange={() => {}} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("assigned Mapping was not found");
     fireEvent.click(screen.getByRole("button", { name: "Change…" }));
+    await settle();
     expect(await screen.findByRole("dialog", { name: "Choose a Mapping" })).toBeInTheDocument();
     expect(sourceCatalog.routes.resolveMapping).not.toHaveBeenCalled();
   });
@@ -76,8 +79,10 @@ describe("MappingField", () => {
     render(<MappingField catalog={sourceCatalog} onChange={() => {}} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose mapping…" }));
+    await settle();
     const dialog = await screen.findByRole("dialog", { name: "Choose a Mapping" });
     fireEvent.click(await within(dialog).findByRole("button", { name: /Assign Article Mapping/ }));
+    await settle();
 
     expect(await screen.findByText("That Mapping no longer exists, so nothing was assigned."))
       .toBeInTheDocument();
@@ -100,8 +105,10 @@ describe("MappingField", () => {
     render(<MappingField catalog={sourceCatalog} onChange={onChange} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose mapping…" }));
+    await settle();
     const dialog = await screen.findByRole("dialog", { name: "Choose a Mapping" });
     fireEvent.click(await within(dialog).findByRole("button", { name: /Assign Article Mapping/ }));
+    await settle();
 
     expect(await screen.findByText("“Articles” has no slug field, so it derives no routes.")).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
@@ -111,7 +118,72 @@ describe("MappingField", () => {
     const sourceCatalog = catalog();
     render(<MappingField catalog={sourceCatalog} onChange={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "Choose mapping…" }));
+    await settle();
     expect(await screen.findByRole("dialog", { name: "Choose a Mapping" })).toBeInTheDocument();
     await waitFor(() => expect(sourceCatalog.list).toHaveBeenCalledTimes(1));
+  });
+
+  it("survives a reassignment from a collection to a single Mapping and to a broken reference", async () => {
+    type MappingSource = Extract<SitemapPageSource, { kind: "mapping" }>;
+    const ref = { providerId: "mapping", recordId: "articles" };
+    const value = signal<MappingSource | undefined>({ kind: "mapping", ref, route: { kind: "entry-field", fieldId: "alternate-slug", titleFieldId: "title" } });
+    const routeInfo = signal<SitemapNodeRouteInfo | undefined>({ status: "ready", derivedRouteCount: 2, diagnostics: [], mapping: mappingMetadata });
+    const view = render(<MappingField value={value} routeInfo={routeInfo} catalog={catalog()} onChange={() => {}} />);
+    expect(screen.getByRole("combobox", { name: "Slug field" })).toHaveValue("alternate-slug");
+
+    // The route info resolves after the page source: the collection's options
+    // and the single Mapping's route meet for one update.
+    value.value = { kind: "mapping", ref: { providerId: "mapping", recordId: "single" }, route: { kind: "single" } };
+    await settle();
+    batch(() => { routeInfo.value = undefined; });
+    await settle();
+    expect(screen.getByRole("status")).toHaveTextContent("Resolving mapping…");
+    routeInfo.value = { status: "ready", derivedRouteCount: 1, diagnostics: [], mapping: { name: "Single Mapping", model: "About", kind: "single", entryCount: 1, slugFields: [], titleFields: [] } };
+    await settle();
+    expect(screen.getByText("Single Mapping")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Slug field" })).not.toBeInTheDocument();
+
+    // Back to the collection, then the route info loses its Mapping in the same update.
+    batch(() => {
+      value.value = { kind: "mapping", ref, route: { kind: "entry-field", fieldId: "alternate-slug", titleFieldId: "title" } };
+      routeInfo.value = { status: "ready", derivedRouteCount: 2, diagnostics: [], mapping: mappingMetadata };
+    });
+    await settle();
+    routeInfo.value = { status: "blocked", derivedRouteCount: 0, diagnostics: [{ code: "mapping-not-found", nodeId: "articles", message: "The assigned Mapping was not found." }] };
+    await settle();
+    expect(screen.getByRole("alert")).toHaveTextContent("assigned Mapping was not found");
+    expect(view.diagnostics).toEqual([]);
+  });
+
+  it("keeps a stored slug or title field that the Content model no longer offers", async () => {
+    const value = { kind: "mapping" as const, ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field" as const, fieldId: "retired-slug", titleFieldId: "retired-title" } };
+    const view = render(<MappingField value={value} routeInfo={{ status: "ready", derivedRouteCount: 2, diagnostics: [], mapping: mappingMetadata }} catalog={catalog()} onChange={() => {}} />);
+    expect(screen.getByRole("combobox", { name: "Slug field" })).toHaveValue("retired-slug");
+    expect(screen.getByRole("option", { name: "Missing field (retired-slug) · stale" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Entry title field" })).toHaveValue("retired-title");
+    expect(view.diagnostics).toEqual([]);
+  });
+
+  it.each([
+    { name: "Slug field", stored: "retired-slug", next: "alternate-slug" },
+    { name: "Entry title field", stored: "retired-title", next: "title" },
+  ])("keeps focus on the $name select when picking a listed field drops the stale option", async ({ name, stored, next }) => {
+    type MappingSource = Extract<SitemapPageSource, { kind: "mapping" }>;
+    const value = signal<MappingSource | undefined>({ kind: "mapping", ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field", fieldId: "retired-slug", titleFieldId: "retired-title" } });
+    const onChange = (source: SitemapPageSource) => { if (source.kind === "mapping") value.value = source; };
+    const view = render(<MappingField value={value} routeInfo={{ status: "ready", derivedRouteCount: 2, diagnostics: [], mapping: mappingMetadata }} catalog={catalog()} onChange={onChange} />);
+    const before = screen.getByRole("combobox", { name });
+    expect(before).toHaveValue(stored);
+    before.focus();
+    expect(document.activeElement).toBe(before);
+
+    fireEvent.change(before, { target: { value: next } });
+    await settle();
+
+    const after = screen.getByRole("combobox", { name });
+    expect(after).toHaveValue(next);
+    expect(within(after).queryByRole("option", { name: `Missing field (${stored}) · stale` })).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(after);
+    expect(view.diagnostics).toEqual([]);
   });
 });

@@ -9,7 +9,7 @@
     "skipLibCheck": false,
     "noEmit": true,
     "jsx": "react-jsx",
-    "jsxImportSource": "preact"
+    "jsxImportSource": "@takazudo/zfb/zudo-react"
   },
   "files": ["browser-checkpoint.ts", "browser-css.d.ts"]
 }

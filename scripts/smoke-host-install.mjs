@@ -48,7 +48,7 @@ import { checkNoDeploy } from "./check-no-deploy.mjs";
 /** @typedef {import("@playwright/test").Page} Page */
 /** @typedef {import("./packed-host-helpers.mjs").HostManifest} HostManifest */
 /** @typedef {import("./packed-host-helpers.mjs").Tarballs} Tarballs */
-/** @typedef {{packageManager: string, peerDependencies: {preact: string}, devDependencies: Record<string, string>}} ToolPackage */
+/** @typedef {{packageManager: string, peerDependencies: {"@takazudo/zfb": string}, devDependencies: Record<string, string>}} ToolPackage */
 
 const root = resolve(import.meta.dirname, "..");
 const roots = await repositoryRoots(root);
@@ -179,7 +179,7 @@ async function proveSynthesizedHost(workspace, tarballs, toolPackage) {
       devDependencies: {
         "zudo-composer": "workspace:*",
         "@zudo-composer/component-contract": "workspace:*",
-        preact: toolPackage.peerDependencies.preact,
+        "@takazudo/zfb": toolPackage.peerDependencies["@takazudo/zfb"],
       },
     }, null, 2)}\n`);
     await configurePackedHost(hostRoot, tarballs, toolPackage.packageManager);

@@ -5,9 +5,8 @@
 // Two sets of dependencies are invisible to it and are instead discovered
 // while the app actually runs — and each runtime discovery triggers Vite's
 // "new dependencies found" re-optimization, which forces a full page reload:
-//   - `@preact/preset-vite` injects `preact/debug` and `preact/devtools` into
-//     the dev bundle, and compiled JSX imports `preact/jsx-runtime`; none of
-//     these is a static import the scanner can follow.
+//   - Compiled JSX imports `@takazudo/zfb/zudo-react/jsx-dev-runtime` (dev) or
+//     `/jsx-runtime` (build), which is not a static import the scanner can follow.
 //   - The configured component pack is excluded from the scanner (it is
 //     linked workspace source rather than an installed `node_modules`
 //     package, for this repo's own owned pack), so a bare-package dependency
@@ -21,13 +20,22 @@ import { resolve } from "node:path";
 import { resolveComponentPack } from "./component-pack.mjs";
 import { APP_ROOT } from "./roots.mjs";
 
-/** Dev-only entries `@preact/preset-vite` and compiled JSX pull in without a static import the scanner can see. */
-export const PREACT_DEV_ENTRIES = Object.freeze(["preact/debug", "preact/devtools", "preact/jsx-runtime"]);
+/**
+ * Every zudo-react entry the tool and a pack reach. Always all of them: an
+ * optimized subset inlines a private scheduler/scope copy, and a signal from
+ * that copy binds without a diagnostic and never updates (R0 #1003).
+ */
+export const ZUDO_REACT_DEV_ENTRIES = Object.freeze([
+  "@takazudo/zfb/zudo-react",
+  "@takazudo/zfb/zudo-react/jsx-runtime",
+  "@takazudo/zfb/zudo-react/jsx-dev-runtime",
+  "@takazudo/zfb/zudo-react/client",
+]);
 
 /**
  * The tool's own package and everything it declares as a dependency or peer.
  * A pack that is the host itself (a generated host's `<name>/components`)
- * lists the tool, the contract and preact as runtime dependencies; nesting
+ * lists the tool, the contract and @takazudo/zfb as runtime dependencies; nesting
  * those would pre-bundle the whole tool, server code included, for the
  * browser, and they already reach the dev graph through the tool's own entry.
  * @returns {Set<string>}
@@ -70,10 +78,10 @@ export function componentPackNestedIncludes({ workspaceRoot, pack, exclude = [] 
 
 /**
  * The full `optimizeDeps.include` list for one of the tool's own Vite
- * configs: the preact dev-only entries plus the pack's nested runtime
+ * configs: every zudo-react entry plus the pack's nested runtime
  * dependencies.
  * @param {{workspaceRoot: string, pack: string, exclude?: readonly string[]}} options
  */
 export function devPrebundleIncludes(options) {
-  return [...PREACT_DEV_ENTRIES, ...componentPackNestedIncludes(options)];
+  return [...ZUDO_REACT_DEV_ENTRIES, ...componentPackNestedIncludes(options)];
 }

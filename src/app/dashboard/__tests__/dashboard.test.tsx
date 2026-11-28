@@ -1,9 +1,8 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, settle, settleTasks, waitFor, within } from "../../../test/render";
 import type { WorkspaceAttention, WorkspaceCounts, WorkspaceRecent, WorkspaceSummary } from "../../workspace-summary";
 import { Dashboard } from "../dashboard";
 
-afterEach(cleanup);
 
 const MINUTE_MS = 60_000;
 const twelveMinutesAgo = (): string => new Date(Date.now() - 12 * MINUTE_MS).toISOString();
@@ -165,12 +164,12 @@ describe("Dashboard", () => {
       refresh,
     };
     render(<Dashboard summary={summary} />);
+    await settleTasks();
     await waitFor(() => expect(counts).toHaveBeenCalledTimes(1));
     async function fail() {
-      await act(async () => {
-        if (failure === "summary rejection") pending.reject(new Error("Read failed."));
-        else pending.resolve(degraded);
-      });
+      if (failure === "summary rejection") pending.reject(new Error("Read failed."));
+      else pending.resolve(degraded);
+      await settleTasks();
     }
     await fail();
     const expectedButtons = failure === "summary rejection" ? 1 : 3;
@@ -182,7 +181,8 @@ describe("Dashboard", () => {
         expect(button).not.toHaveAttribute("aria-busy", "true");
       });
       // Exercise each render site as the initiating control, then retry a failed retry.
-      act(() => { (buttons[(attempt - 1) % expectedButtons] as HTMLButtonElement).click(); });
+      (buttons[(attempt - 1) % expectedButtons] as HTMLButtonElement).click();
+      await settle();
       await waitFor(() => expect(counts).toHaveBeenCalledTimes(attempt + 1));
       expect(refresh).toHaveBeenCalledTimes(attempt);
       for (const button of screen.getAllByRole("button", { name: "Retry" })) {
@@ -190,12 +190,16 @@ describe("Dashboard", () => {
         expect(button).toHaveAttribute("aria-busy", "true");
         expect(button.querySelector(".cms-btn__spinner svg")).toHaveAttribute("aria-hidden", "true");
         // Native click models disabled activation; fireEvent bypasses that browser guard.
-        act(() => { (button as HTMLButtonElement).click(); });
+        (button as HTMLButtonElement).click();
+        await settle();
       }
       expect(refresh).toHaveBeenCalledTimes(attempt);
       expect(counts).toHaveBeenCalledTimes(attempt + 1);
       if (attempt <= expectedButtons) await fail();
-      else await act(async () => { pending.resolve(ready()); });
+      else {
+        pending.resolve(ready());
+        await settleTasks();
+      }
     }
     await waitFor(() => expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument());
     expect(within(statsRegion()).getAllByRole("link")).toHaveLength(5);
@@ -203,6 +207,7 @@ describe("Dashboard", () => {
 
   it("renders every count the read model reported and links each card to its route", async () => {
     render(<Dashboard summary={fakeSummary(ready()).summary} />);
+    await settleTasks();
 
     const cards = within(await screen.findByRole("region", { name: "Workspace status" })).getAllByRole("link");
     expect(cards.map((card) => card.getAttribute("href"))).toEqual(["/content", "/assets", "/composer", "/mapping", "/sitemapper"]);
@@ -219,6 +224,7 @@ describe("Dashboard", () => {
 
   it("offers the quick actions the workspace can actually serve", async () => {
     render(<Dashboard summary={fakeSummary(ready()).summary} />);
+    await settleTasks();
 
     expect(await screen.findByRole("link", { name: "Upload assets" })).toHaveAttribute("href", "/assets");
     expect(screen.getByRole("link", { name: "New entry" })).toHaveAttribute("href", "/content");
@@ -229,6 +235,7 @@ describe("Dashboard", () => {
   it("hides the upload action while no Asset provider is configured", async () => {
     const payload = ready({ counts: readyCounts({ assets: { status: "absent" } }) });
     render(<Dashboard summary={fakeSummary(payload).summary} />);
+    await settleTasks();
 
     await screen.findByRole("region", { name: "Workspace status" });
     expect(screen.queryByRole("link", { name: "Upload assets" })).not.toBeInTheDocument();
@@ -237,6 +244,7 @@ describe("Dashboard", () => {
   it("hides the upload action while the Asset provider has failed", async () => {
     const payload = ready({ counts: readyCounts({ assets: { status: "unavailable", error: "The Asset database is blocked." } }) });
     render(<Dashboard summary={fakeSummary(payload).summary} />);
+    await settleTasks();
 
     await screen.findByRole("region", { name: "Workspace status" });
     expect(screen.queryByRole("link", { name: "Upload assets" })).not.toBeInTheDocument();
@@ -244,6 +252,7 @@ describe("Dashboard", () => {
 
   it("follows each recent record to the deep link the read model built", async () => {
     render(<Dashboard summary={fakeSummary(ready()).summary} />);
+    await settleTasks();
 
     const recent = await screen.findByRole("region", { name: "Recent activity" });
     expect(within(recent).getAllByRole("link").map((row) => row.getAttribute("href"))).toEqual([
@@ -259,6 +268,7 @@ describe("Dashboard", () => {
 
   it("routes each attention item to the workspace that can resolve it", async () => {
     render(<Dashboard summary={fakeSummary(ready()).summary} />);
+    await settleTasks();
 
     const attention = await screen.findByRole("region", { name: "Needs attention" });
     expect(within(attention).getByRole("link", { name: "Fix Articles → Blog post" })).toHaveAttribute(
@@ -274,6 +284,7 @@ describe("Dashboard", () => {
     const failed = ready({ counts: readyCounts({ sitemaps: { status: "unavailable", error: "Sitemaps could not be read." } }) });
     const { summary, refresh } = fakeSummary(failed, ready());
     render(<Dashboard summary={summary} />);
+    await settleTasks();
 
     const chip = await screen.findByText("Unavailable · Sitemaps could not be read.");
     const card = chip.closest(".cms-dash-stat");
@@ -303,6 +314,7 @@ describe("Dashboard", () => {
     });
     const { summary, refresh } = fakeSummary(degraded, ready());
     render(<Dashboard summary={summary} />);
+    await settleTasks();
 
     const recent = await screen.findByRole("region", { name: "Recent activity" });
     expect(within(recent).getByText("Records from Assets are not in this list.")).toBeInTheDocument();
@@ -317,6 +329,7 @@ describe("Dashboard", () => {
 
   it("counts the attention backlog in the card header", async () => {
     render(<Dashboard summary={fakeSummary(ready()).summary} />);
+    await settleTasks();
 
     const attention = await screen.findByRole("region", { name: "Needs attention" });
     expect(within(attention).getByText("3")).toBeInTheDocument();
@@ -324,6 +337,7 @@ describe("Dashboard", () => {
 
   it("shows a start-here state instead of five zeroes for an untouched workspace", async () => {
     render(<Dashboard summary={fakeSummary(emptyWorkspace()).summary} />);
+    await settleTasks();
 
     expect(await screen.findByText("Start here")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Workspace status" })).not.toBeInTheDocument();
@@ -336,6 +350,7 @@ describe("Dashboard", () => {
 
   it("reports the newest write and the Asset provider state on the storage card", async () => {
     render(<Dashboard summary={fakeSummary(ready()).summary} />);
+    await settleTasks();
 
     const storage = await screen.findByRole("region", { name: "Storage" });
     expect(within(storage).getByText("Local filesystem · zudo-composer")).toBeInTheDocument();
@@ -346,6 +361,7 @@ describe("Dashboard", () => {
   it("shows an informational chip with no Retry action for an absent Asset provider", async () => {
     const payload = ready({ counts: readyCounts({ assets: { status: "absent" } }) });
     render(<Dashboard summary={fakeSummary(payload).summary} />);
+    await settleTasks();
 
     const stats = await screen.findByRole("region", { name: "Workspace status" });
     expect(within(stats).getByText("Not connected")).toBeInTheDocument();
@@ -358,6 +374,7 @@ describe("Dashboard", () => {
   it("never calls a failed Asset store 'not connected', and offers Retry from the stat card only", async () => {
     const payload = ready({ counts: readyCounts({ assets: { status: "unavailable", error: "The Asset database is blocked." } }) });
     render(<Dashboard summary={fakeSummary(payload).summary} />);
+    await settleTasks();
 
     const stats = await screen.findByRole("region", { name: "Workspace status" });
     expect(within(stats).getByText("Unavailable · The Asset database is blocked.")).toBeInTheDocument();
@@ -372,6 +389,7 @@ describe("Dashboard", () => {
   it("separates an empty workspace from one whose newest write is unknown", async () => {
     const partial = ready({ recent: { records: [], unavailable: [{ source: "content", error: "Content could not be read." }] } });
     render(<Dashboard summary={fakeSummary(partial).summary} />);
+    await settleTasks();
 
     const storage = await screen.findByRole("region", { name: "Storage" });
     expect(within(storage).getByText("Not known")).toBeInTheDocument();
@@ -379,6 +397,7 @@ describe("Dashboard", () => {
 
   it("counts each pipeline stage from its own source and links it to that workspace", async () => {
     render(<Dashboard summary={fakeSummary(ready()).summary} />);
+    await settleTasks();
 
     const pipeline = await screen.findByRole("region", { name: "How the pieces connect" });
     expect(within(pipeline).getAllByRole("link").map((stage) => stage.getAttribute("href"))).toEqual([
@@ -391,8 +410,9 @@ describe("Dashboard", () => {
     expect(within(pipeline).getByText("6 compositions")).toBeInTheDocument();
   });
 
-  it("stands on its own hero where no provider graph is mounted", () => {
+  it("stands on its own hero where no provider graph is mounted", async () => {
     render(<Dashboard summary={undefined} now={new Date(2026, 8, 4, 9)} />);
+    await settleTasks();
 
     expect(screen.getByRole("heading", { name: "Good morning." })).toBeInTheDocument();
     expect(screen.getByText("Everything in this workspace lives in this browser.")).toBeInTheDocument();
@@ -412,6 +432,7 @@ describe("Dashboard", () => {
       refresh: vi.fn(),
     };
     render(<Dashboard summary={failing} />);
+    await settleTasks();
 
     expect(await screen.findByText("Provider initialization failed.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Good (morning|afternoon|evening)\./ })).toBeInTheDocument();

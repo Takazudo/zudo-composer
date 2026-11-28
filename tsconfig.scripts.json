@@ -25,6 +25,7 @@
     "scripts/check-dist-artifact.mjs",
     "scripts/check-preview-isolation.mjs",
     "scripts/check-headless-boundary.mjs",
+    "scripts/zudo-react-specifiers.mjs",
     "scripts/check-package-conformance.mjs",
     "scripts/check-provider-boundary.mjs",
     "scripts/check-public-types.mjs",

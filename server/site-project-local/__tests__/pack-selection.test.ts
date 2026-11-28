@@ -104,7 +104,7 @@ describe("host-self pack graph identity (root-entry fixture)", () => {
     return componentPack as TrustedComponentPack;
   }
 
-  /** A disposable copy with its own `node_modules/preact`, so a test can bump
+  /** A disposable copy with its own `node_modules/@takazudo/zfb`, so a test can bump
    * that dependency's version without touching the repository's shared
    * install. Cleaned up by `release-fixture.ts`'s shared `afterEach`. */
   async function copySelfHostRoot(): Promise<string> {
@@ -113,7 +113,7 @@ describe("host-self pack graph identity (root-entry fixture)", () => {
     const root = join(parent, "self-host-root");
     await cp(selfHostRootFixture, root, { recursive: true });
     const require = createRequire(join(selfHostRootFixture, "package.json"));
-    for (const [name, subpath] of [["preact", "preact"], ["tailwindcss", "tailwindcss/preflight"]] as const) {
+    for (const [name, subpath] of [["@takazudo/zfb", "@takazudo/zfb/package.json"], ["tailwindcss", "tailwindcss/preflight"]] as const) {
       const packageRoot = packageRootAbove(require.resolve(subpath));
       await cp(packageRoot, join(root, "node_modules", name), { recursive: true });
     }
@@ -206,9 +206,9 @@ describe("host-self pack graph identity (root-entry fixture)", () => {
     const identity = resolveComponentPack(root, "self-host-root/pack");
     const digestOf = async () => (await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: root, stylesPath: join(root, "styles", "base.css") })).installedPackDigest;
     const initial = await digestOf();
-    const preactManifest = join(root, "node_modules", "preact", "package.json");
-    const manifest = JSON.parse(await readFile(preactManifest, "utf8")) as Record<string, unknown>;
-    await writeFile(preactManifest, JSON.stringify({ ...manifest, version: "10.99.99" }));
+    const runtimeManifest = join(root, "node_modules", "@takazudo", "zfb", "package.json");
+    const manifest = JSON.parse(await readFile(runtimeManifest, "utf8")) as Record<string, unknown>;
+    await writeFile(runtimeManifest, JSON.stringify({ ...manifest, version: "7.99.99" }));
     expect(await digestOf()).not.toBe(initial);
   });
 

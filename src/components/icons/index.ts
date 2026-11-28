@@ -1,5 +1,5 @@
 /**
- * Composer/Sitemapper app-chrome icon set — renderer-safe: plain `.ts` + Preact `h()`,
+ * Composer/Sitemapper app-chrome icon set — renderer-safe: plain `.ts` + zudo-react `h()`,
  * NO JSX. The composer preview iframe bundle is deliberately JSX-free (see the
  * header of `src/features/composer/preview/preview-app.ts`: root-`src` `.tsx`
  * modules cannot be imported under the shared vitest config), and this module
@@ -57,8 +57,8 @@
  * | PageIcon, SlotIcon, ContainerIcon, LeafIcon  | Composer tree node-type glyphs                        |
  */
 
-import { h } from "preact";
-import type { ComponentChildren, FunctionComponent, JSX } from "preact";
+import { h } from "@takazudo/zfb/zudo-react";
+import type { Child, CSSProperties, Component } from "@takazudo/zfb/zudo-react";
 
 export type IconSize = "xs" | "sm" | "md" | "lg";
 
@@ -70,16 +70,12 @@ export interface IconProps {
   /** Token-driven size (default `"md"`), via `w-icon-*` / `h-icon-*`. */
   size?: IconSize;
   class?: string;
-  style?: string | JSX.CSSProperties;
+  style?: string | CSSProperties;
 }
 
-export type IconComponent = FunctionComponent<IconProps>;
+export type IconComponent = Component<IconProps>;
 
-// Preact's `VNode<P>` is invariant in `P` (its `type` field is a
-// contravariant `ComponentType<P>`), so a `VNode<{ d: string }>` from
-// `h("path", …)` is NOT assignable to the default `VNode<{}>` — the internal
-// signatures use this erased alias instead.
-type AnyVNode = ComponentChildren;
+type AnyVNode = Child;
 
 const sizeClasses: Record<IconSize, string> = {
   xs: "w-icon-xs h-icon-xs",
@@ -92,7 +88,7 @@ type IconRenderFn = (
   width: number | string,
   height: number | string,
   cls: string | undefined,
-  style: string | JSX.CSSProperties | undefined,
+  style: string | CSSProperties | undefined,
 ) => AnyVNode;
 
 /**
@@ -130,7 +126,7 @@ function svgRoot(
   width: number | string,
   height: number | string,
   cls: string | undefined,
-  style: string | JSX.CSSProperties | undefined,
+  style: string | CSSProperties | undefined,
   paint: SvgChildProps,
   children: AnyVNode[],
 ): AnyVNode {

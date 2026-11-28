@@ -1,10 +1,11 @@
 import "./cleanup";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/preact";
-import type { ComponentChildren } from "preact";
+import { signal, type Child } from "@takazudo/zfb/zudo-react";
+import { fireEvent, render, screen, settle } from "../../../test/render";
 import { EditorBody, RailCollapseButton } from "../editor-body";
-import { EditorChromeContext } from "../editor-chrome-context";
-import type { EditorPane } from "../editor-chrome-context";
+import { createEditorChrome, createEditorRails } from "../editor-chrome-controller";
+import type { EditorPane, EditorRailsController } from "../editor-chrome-controller";
+import type { MaybeSignal } from "../../reactive";
 import {
   CSS_VAR_INSP_W,
   CSS_VAR_NAV_W,
@@ -21,11 +22,11 @@ import {
 const EDITOR_KEY = "composer";
 
 interface HarnessProps {
-  editorKey?: string;
-  activePane?: EditorPane;
-  nav?: ComponentChildren;
-  inspector?: ComponentChildren;
-  navCollapsed?: boolean;
+  editorKey?: MaybeSignal<string>;
+  activePane?: MaybeSignal<EditorPane>;
+  nav?: (rails: EditorRailsController) => Child;
+  inspector?: (rails: EditorRailsController) => Child;
+  navCollapsed?: MaybeSignal<boolean>;
   onNavCollapsedChange?: (collapsed: boolean) => void;
   defaultNavWidth?: number;
 }
@@ -33,21 +34,29 @@ interface HarnessProps {
 function Harness({
   editorKey = EDITOR_KEY,
   activePane = "main",
-  nav = <RailCollapseButton rail="nav" />,
-  inspector = <RailCollapseButton rail="insp" />,
-  ...rest
+  nav = (rails) => <RailCollapseButton rail="nav" rails={rails} />,
+  inspector = (rails) => <RailCollapseButton rail="insp" rails={rails} />,
+  navCollapsed,
+  onNavCollapsedChange,
+  defaultNavWidth,
 }: HarnessProps) {
+  const chrome = createEditorChrome({ editorKey, activePane });
+  const rails = createEditorRails({
+    chrome,
+    navLabel: "Structure",
+    inspectorLabel: "Inspector",
+    ...(navCollapsed === undefined ? {} : { navCollapsed }),
+    ...(onNavCollapsedChange ? { onNavCollapsedChange } : {}),
+  });
   return (
-    <EditorChromeContext.Provider value={{ editorKey, activePane, setActivePane: () => {} }}>
-      <EditorBody
-        navLabel="Structure"
-        inspectorLabel="Inspector"
-        nav={nav}
-        main={<p>Canvas</p>}
-        inspector={inspector}
-        {...rest}
-      />
-    </EditorChromeContext.Provider>
+    <EditorBody
+      chrome={chrome}
+      rails={rails}
+      nav={nav(rails)}
+      main={<p>Canvas</p>}
+      inspector={inspector(rails)}
+      {...(defaultNavWidth === undefined ? {} : { defaultNavWidth })}
+    />
   );
 }
 
@@ -69,7 +78,7 @@ beforeEach(() => {
 });
 
 describe("EditorBody layout", () => {
-  it("lays out nav, main and inspector as one grid with a separator between each", () => {
+  it("lays out nav, main and inspector as one grid with a separator between each", async () => {
     render(<Harness />);
 
     expect(region("nav")).toBeInTheDocument();
@@ -78,11 +87,9 @@ describe("EditorBody layout", () => {
     expect(screen.getAllByRole("separator")).toHaveLength(2);
   });
 
-  it("drops a rail's column and separator when the editor has no such rail", () => {
+  it("drops a rail's column and separator when the editor has no such rail", async () => {
     render(
-      <EditorChromeContext.Provider value={{ editorKey: EDITOR_KEY, activePane: "main", setActivePane: () => {} }}>
-        <EditorBody nav={<p>Pages</p>} main={<p>Canvas</p>} />
-      </EditorChromeContext.Provider>,
+      <EditorBody chrome={createEditorChrome({ editorKey: EDITOR_KEY })} nav={<p>Pages</p>} main={<p>Canvas</p>} />,
     );
 
     expect(document.querySelector('[data-pane="insp"]')).toBeNull();
@@ -90,11 +97,9 @@ describe("EditorBody layout", () => {
     expect(body()).toHaveClass("cms-editor__body--no-insp");
   });
 
-  it("treats a dropped rail branch as no rail at all", () => {
+  it("treats a dropped rail branch as no rail at all", async () => {
     render(
-      <EditorChromeContext.Provider value={{ editorKey: EDITOR_KEY, activePane: "main", setActivePane: () => {} }}>
-        <EditorBody nav={null} main={<p>Canvas</p>} inspector={false} />
-      </EditorChromeContext.Provider>,
+      <EditorBody chrome={createEditorChrome({ editorKey: EDITOR_KEY })} nav={null} main={<p>Canvas</p>} inspector={false} />,
     );
 
     expect(document.querySelector('[data-pane="nav"]')).toBeNull();
@@ -103,7 +108,7 @@ describe("EditorBody layout", () => {
     expect(body()).toHaveClass("cms-editor__body--no-nav", "cms-editor__body--no-insp");
   });
 
-  it("marks exactly the active pane, so the narrow single-column layout can pick one", () => {
+  it("marks exactly the active pane, so the narrow single-column layout can pick one", async () => {
     render(<Harness activePane="insp" />);
 
     expect(region("nav")).toHaveAttribute("data-pane-active", "false");
@@ -115,7 +120,7 @@ describe("EditorBody layout", () => {
 describe("EditorBody geometry", () => {
   // Ported from the Composer `restoreComposerWidths` case: the persisted widths
   // now land on the editor body rather than on `document.documentElement`.
-  it("restores both persisted widths into the body's custom properties", () => {
+  it("restores both persisted widths into the body's custom properties", async () => {
     localStorage.setItem(railStorageKey(EDITOR_KEY, "nav"), "312");
     localStorage.setItem(railStorageKey(EDITOR_KEY, "insp"), "344");
 
@@ -125,7 +130,7 @@ describe("EditorBody geometry", () => {
     expect(body().style.getPropertyValue(CSS_VAR_INSP_W)).toBe("344px");
   });
 
-  it("starts from the shared defaults, or the fresh-session width the editor asks for", () => {
+  it("starts from the shared defaults, or the fresh-session width the editor asks for", async () => {
     const { unmount } = render(<Harness />);
     expect(body().style.getPropertyValue(CSS_VAR_NAV_W)).toBe(`${DEFAULT_NAV_W}px`);
     expect(body().style.getPropertyValue(CSS_VAR_INSP_W)).toBe(`${DEFAULT_INSP_W}px`);
@@ -135,7 +140,7 @@ describe("EditorBody geometry", () => {
     expect(body().style.getPropertyValue(CSS_VAR_NAV_W)).toBe("320px");
   });
 
-  it("declares the resizers as keyboard-operable window splitters", () => {
+  it("declares the resizers as keyboard-operable window splitters", async () => {
     render(<Harness />);
     const [nav, insp] = screen.getAllByRole("separator");
 
@@ -149,11 +154,12 @@ describe("EditorBody geometry", () => {
     expect(insp).toHaveAttribute("aria-valuenow", String(DEFAULT_INSP_W));
   });
 
-  it("resizes from the keyboard and persists the result under the editor's key", () => {
+  it("resizes from the keyboard and persists the result under the editor's key", async () => {
     render(<Harness />);
     const [nav] = screen.getAllByRole("separator");
 
     fireEvent.keyDown(nav, { key: "ArrowRight" });
+    await settle();
 
     const expected = DEFAULT_NAV_W + RAIL_STEP_W;
     expect(body().style.getPropertyValue(CSS_VAR_NAV_W)).toBe(`${expected}px`);
@@ -162,22 +168,26 @@ describe("EditorBody geometry", () => {
     expect(localStorage.getItem(railStorageKey("sitemapper", "nav"))).toBeNull();
   });
 
-  it("keeps a dragged width across an unrelated re-render", () => {
-    const { rerender } = render(<Harness />);
+  it("keeps a dragged width across an unrelated re-render", async () => {
+    const activePane = signal<EditorPane>("main");
+    render(<Harness activePane={activePane} />);
     const [nav] = screen.getAllByRole("separator");
 
     fireEvent.keyDown(nav, { key: "ArrowRight" });
-    rerender(<Harness activePane="nav" />);
+    await settle();
+    activePane.value = "nav";
+    await settle();
 
     expect(body().style.getPropertyValue(CSS_VAR_NAV_W)).toBe(`${DEFAULT_NAV_W + RAIL_STEP_W}px`);
   });
 });
 
 describe("EditorBody collapse", () => {
-  it("collapses a rail to a stub carrying the control that restores it", () => {
+  it("collapses a rail to a stub carrying the control that restores it", async () => {
     render(<Harness />);
 
     fireEvent.click(screen.getByRole("button", { name: "Hide Structure" }));
+    await settle();
 
     expect(body()).toHaveClass("nav-collapsed");
     expect(screen.getAllByRole("separator")).toHaveLength(1);
@@ -187,11 +197,12 @@ describe("EditorBody collapse", () => {
     expect(restore).toHaveAttribute("aria-expanded", "false");
 
     fireEvent.click(restore);
+    await settle();
     expect(body()).not.toHaveClass("nav-collapsed");
     expect(screen.getAllByRole("separator")).toHaveLength(2);
   });
 
-  it("marks the in-pane control so the one-column layout can withdraw it", () => {
+  it("marks the in-pane control so the one-column layout can withdraw it", async () => {
     render(<Harness />);
 
     // At one column there is nothing to collapse and the stub that restores a
@@ -200,41 +211,47 @@ describe("EditorBody collapse", () => {
     expect(screen.getByRole("button", { name: "Hide Inspector" })).toHaveClass("cms-editor__rail-toggle");
   });
 
-  it("collapses the two rails independently", () => {
+  it("collapses the two rails independently", async () => {
     render(<Harness />);
 
     fireEvent.click(screen.getByRole("button", { name: "Hide Inspector" }));
+    await settle();
 
     expect(body()).toHaveClass("insp-collapsed");
     expect(body()).not.toHaveClass("nav-collapsed");
     expect(screen.getByRole("button", { name: "Hide Structure" })).toBeInTheDocument();
   });
 
-  it("collapses from the separator itself, per the ARIA splitter pattern", () => {
+  it("collapses from the separator itself, per the ARIA splitter pattern", async () => {
     render(<Harness />);
     const [nav] = screen.getAllByRole("separator");
 
     fireEvent.keyDown(nav, { key: "Enter" });
+    await settle();
 
     expect(body()).toHaveClass("nav-collapsed");
   });
 
-  it("lets the owning route drive the collapse state instead", () => {
+  it("lets the owning route drive the collapse state instead", async () => {
     const onNavCollapsedChange = vi.fn();
-    const { rerender } = render(<Harness navCollapsed={false} onNavCollapsedChange={onNavCollapsedChange} />);
+    const navCollapsed = signal(false);
+    render(<Harness navCollapsed={navCollapsed} onNavCollapsedChange={onNavCollapsedChange} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Hide Structure" }));
+    await settle();
 
     expect(onNavCollapsedChange).toHaveBeenCalledExactlyOnceWith(true);
     expect(body()).not.toHaveClass("nav-collapsed");
 
-    rerender(<Harness navCollapsed onNavCollapsedChange={onNavCollapsedChange} />);
+    navCollapsed.value = true;
+    await settle();
     expect(body()).toHaveClass("nav-collapsed");
   });
 
-  it("remembers a self-owned collapse, so a rail put away stays away across a reload", () => {
+  it("remembers a self-owned collapse, so a rail put away stays away across a reload", async () => {
     const first = render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "Hide Structure" }));
+    await settle();
     expect(readEditorCollapsed(EDITOR_KEY)).toEqual({ nav: true, insp: false });
     first.unmount();
 
@@ -244,10 +261,11 @@ describe("EditorBody collapse", () => {
     expect(screen.getByRole("button", { name: "Show Structure" })).toBeInTheDocument();
   });
 
-  it("restores a rail again, so the collapse is remembered in both directions", () => {
+  it("restores a rail again, so the collapse is remembered in both directions", async () => {
     writeEditorCollapsed(EDITOR_KEY, "nav", true);
     const first = render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "Show Structure" }));
+    await settle();
     expect(readEditorCollapsed(EDITOR_KEY).nav).toBe(false);
     first.unmount();
 
@@ -256,20 +274,23 @@ describe("EditorBody collapse", () => {
     expect(body()).not.toHaveClass("nav-collapsed");
   });
 
-  it("leaves persistence to a route that drives the collapse itself", () => {
+  it("leaves persistence to a route that drives the collapse itself", async () => {
     render(<Harness navCollapsed={false} onNavCollapsedChange={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Hide Structure" }));
+    await settle();
 
     expect(readEditorCollapsed(EDITOR_KEY).nav).toBe(false);
   });
 
-  it("re-reads the collapse state when the editor identity changes", () => {
+  it("re-reads the collapse state when the editor identity changes", async () => {
     writeEditorCollapsed("mapping", "insp", true);
-    const { rerender } = render(<Harness />);
+    const editorKey = signal(EDITOR_KEY);
+    render(<Harness editorKey={editorKey} />);
     expect(body()).not.toHaveClass("insp-collapsed");
 
-    rerender(<Harness editorKey="mapping" />);
+    editorKey.value = "mapping";
+    await settle();
 
     expect(body()).toHaveClass("insp-collapsed");
   });

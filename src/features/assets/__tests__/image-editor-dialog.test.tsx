@@ -1,4 +1,6 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { fireEvent, render, screen, settle, waitFor, within } from "../../../test/render";
+import { Keyed } from "../../../runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_DECODED_PIXELS, MAX_ENCODED_BYTES } from "@zudo-composer/image-editor";
 import { ImageEditorDialog } from "../image-editor-dialog";
@@ -13,7 +15,7 @@ type MockEditorProps = {
 
 vi.mock("@zudo-composer/image-editor/ui", () => ({
   ImageEditor: (props: MockEditorProps) => {
-    return <div data-testid="editor"><button type="button" onClick={() => void props.onSave(new Blob(["full export"], { type: props.mimeType }), "replace")}>Save</button><button type="button" onClick={() => props.onSavingChange?.(true)}>Begin saving</button><button type="button" onClick={() => props.onSavingChange?.(false)}>Finish saving</button><button type="button" onClick={props.onCancel}>Cancel</button></div>;
+    return <div data-testid="editor"><button type="button" on:click={() => void props.onSave(new Blob(["full export"], { type: props.mimeType }), "replace")}>Save</button><button type="button" on:click={() => props.onSavingChange?.(true)}>Begin saving</button><button type="button" on:click={() => props.onSavingChange?.(false)}>Finish saving</button><button type="button" on:click={() => props.onCancel()}>Cancel</button></div>;
   },
 }));
 
@@ -33,7 +35,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async () => response()));
   vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ width: 800, height: 600, close: vi.fn() })));
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("Assets image editor dialog", () => {
   it("fetches the provider display URL, preserves source MIME, and passes the full export to save", async () => {
@@ -47,7 +49,7 @@ describe("Assets image editor dialog", () => {
     expect(bitmapBlob).toBeInstanceOf(Blob);
     expect((bitmapBlob as Blob).type).toBe("image/png");
     expect(vi.mocked(createImageBitmap).mock.calls[0]![1]).toEqual({ imageOrientation: "from-image" });
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save", exact: true })); });
+    fireEvent.click(screen.getByRole("button", { name: "Save" })); await settle();
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ type: "image/png" }), "replace"));
   });
 
@@ -93,27 +95,31 @@ describe("Assets image editor dialog", () => {
     vi.mocked(createImageBitmap).mockResolvedValueOnce({ width: 800, height: 600, close: bitmapClose } as unknown as ImageBitmap);
     render(<ImageEditorDialog record={record()} dimensions={dimensions()} onSave={vi.fn()} onClose={onClose} />);
     await screen.findByTestId("editor");
-    fireEvent.click(screen.getByRole("button", { name: "Begin saving", exact: true }));
-    fireEvent.click(screen.getByRole("button", { name: "Close image editor", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Begin saving" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close image editor" }));
+    await settle();
     expect(onClose).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Finish saving", exact: true }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Finish saving" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-    await act(async () => { await Promise.resolve(); });
+    await settle();
     expect(bitmapClose).toHaveBeenCalledTimes(1);
   });
 
   it("closes a stale decoded bitmap after source replacement without closing it twice", async () => {
     let finishFirst!: (value: ImageBitmap) => void; let finishSecond!: (value: ImageBitmap) => void;
     vi.mocked(createImageBitmap).mockReset().mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve; })).mockImplementationOnce(() => new Promise((resolve) => { finishSecond = resolve; }));
-    const firstClose = vi.fn(); const secondClose = vi.fn(); const view = render(<ImageEditorDialog record={record()} dimensions={dimensions()} onSave={vi.fn()} onClose={vi.fn()} />);
+    const firstClose = vi.fn(); const secondClose = vi.fn();
+    // The owner keys the dialog per captured record, as the Assets route does.
+    const current = signal(record());
+    render(<Keyed value={current} by={(value) => `${value.id}:${value.revision}:${value.versionId}`}>{(value) => <ImageEditorDialog record={value.value} dimensions={dimensions()} onSave={vi.fn()} onClose={vi.fn()} />}</Keyed>);
     await waitFor(() => expect(finishFirst).toBeTypeOf("function"));
-    view.rerender(<ImageEditorDialog record={record({ id: "asset-2", versionId: "v2", url: "/uploaded-assets/sha256-b.png" })} dimensions={dimensions()} onSave={vi.fn()} onClose={vi.fn()} />);
-    await act(async () => { finishFirst({ width: 10, height: 10, close: firstClose } as unknown as ImageBitmap); });
-    await act(async () => { await Promise.resolve(); });
+    current.value = record({ id: "asset-2", versionId: "v2", url: "/uploaded-assets/sha256-b.png" }); await settle();
+    finishFirst({ width: 10, height: 10, close: firstClose } as unknown as ImageBitmap); await settle();
+    await settle();
     expect(firstClose).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(finishSecond).toBeTypeOf("function"));
-    await act(async () => { finishSecond({ width: 10, height: 10, close: secondClose } as unknown as ImageBitmap); });
+    finishSecond({ width: 10, height: 10, close: secondClose } as unknown as ImageBitmap); await settle();
     await screen.findByTestId("editor");
     expect(secondClose).not.toHaveBeenCalled();
   });
@@ -127,7 +133,7 @@ describe("Assets image editor dialog", () => {
     expect(screen.queryByTestId("editor")).toBeNull();
     finish({ width: 800, height: 600, close } as unknown as ImageBitmap);
     view.unmount();
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await Promise.resolve(); await Promise.resolve(); await settle();
     expect(close).toHaveBeenCalledTimes(1);
   });
 });

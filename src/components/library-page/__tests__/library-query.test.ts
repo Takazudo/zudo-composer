@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { act, renderHook } from "@testing-library/preact";
 import "./library-test-environment";
 import {
   applyLibraryQuery,
   defaultFacetValues,
   isLibraryQueryFiltered,
   matchesLibrarySearch,
-  useLibraryQuery,
+  createLibraryQuery,
   type LibraryQueryState,
 } from "../library-query";
 import { KIND_FACET, RECORDS, SORTS, searchText, type Record_ } from "./library-fixtures";
@@ -85,51 +84,47 @@ describe("defaultFacetValues", () => {
   });
 });
 
-describe("useLibraryQuery", () => {
+describe("createLibraryQuery", () => {
   function setup() {
-    return renderHook(() =>
-      useLibraryQuery({ rows: RECORDS, searchText, facets: [KIND_FACET], sorts: SORTS }),
-    );
+    return createLibraryQuery({ rows: RECORDS, searchText, facets: [KIND_FACET], sorts: SORTS });
   }
 
   it("starts unfiltered on the first sort", () => {
-    const { result } = setup();
-    expect(result.current.sortId).toBe("updated");
-    expect(result.current.facetValue("kind")).toBe("all");
-    expect(result.current.filtered).toBe(false);
-    expect(names(result.current.rows)).toEqual(["Product overview", "Blog post", "Site frame", "Landing hero"]);
+    const query = setup();
+    expect(query.sortId.value).toBe("updated");
+    expect(query.facetValue("kind")).toBe("all");
+    expect(query.filtered.value).toBe(false);
+    expect(names(query.rows.value)).toEqual(["Product overview", "Blog post", "Site frame", "Landing hero"]);
   });
 
   it("honours an explicit default sort", () => {
-    const { result } = renderHook(() =>
-      useLibraryQuery({ rows: RECORDS, searchText, sorts: SORTS, defaultSortId: "name" }),
-    );
-    expect(names(result.current.rows)[0]).toBe("Blog post");
+    const query = createLibraryQuery({ rows: RECORDS, searchText, sorts: SORTS, defaultSortId: "name" });
+    expect(names(query.rows.value)[0]).toBe("Blog post");
   });
 
   it("narrows on search and on a facet, and reports that it is filtered", () => {
-    const { result } = setup();
-    act(() => result.current.setSearch("hero"));
-    expect(names(result.current.rows)).toEqual(["Landing hero"]);
-    expect(result.current.filtered).toBe(true);
+    const query = setup();
+    query.setSearch("hero");
+    expect(names(query.rows.value)).toEqual(["Landing hero"]);
+    expect(query.filtered.value).toBe(true);
 
-    act(() => result.current.setSearch(""));
-    act(() => result.current.setFacetValue("kind", "template"));
-    expect(names(result.current.rows)).toEqual(["Site frame"]);
-    expect(result.current.facetValue("kind")).toBe("template");
+    query.setSearch("");
+    query.setFacetValue("kind", "template");
+    expect(names(query.rows.value)).toEqual(["Site frame"]);
+    expect(query.facetValue("kind")).toBe("template");
   });
 
   it("clears the filters but keeps the chosen order", () => {
-    const { result } = setup();
-    act(() => result.current.setSortId("name"));
-    act(() => result.current.setSearch("hero"));
-    act(() => result.current.setFacetValue("kind", "pattern"));
+    const query = setup();
+    query.setSortId("name");
+    query.setSearch("hero");
+    query.setFacetValue("kind", "pattern");
 
-    act(() => result.current.clearFilters());
-    expect(result.current.search).toBe("");
-    expect(result.current.facetValue("kind")).toBe("all");
-    expect(result.current.filtered).toBe(false);
-    expect(result.current.sortId).toBe("name");
-    expect(names(result.current.rows)[0]).toBe("Blog post");
+    query.clearFilters();
+    expect(query.search.value).toBe("");
+    expect(query.facetValue("kind")).toBe("all");
+    expect(query.filtered.value).toBe(false);
+    expect(query.sortId.value).toBe("name");
+    expect(names(query.rows.value)[0]).toBe("Blog post");
   });
 });

@@ -1,5 +1,5 @@
 /// <reference path="./features/composer/pack-config.d.ts" />
-import { h, render } from "preact";
+import { mountOwned } from "./runtime";
 import { hostDocumentPreviewConfigured, hostPreviewBoundary } from "./features/delivery/host-preview-policy";
 import { isSitePath, isWorkingPreviewPath } from "./features/delivery/routing";
 import { bootstrapTheme, createThemeController } from "./theme/theme";
@@ -12,7 +12,7 @@ const pathname = window.location.pathname;
 const hostBoundary = hostPreviewBoundary(pathname, hostDocumentPreviewConfigured);
 if (hostBoundary) {
   const { HostPreviewBoundary } = await import("./features/delivery/host-preview-unavailable");
-  render(h(HostPreviewBoundary, { kind: hostBoundary }), root);
+  mountOwned(HostPreviewBoundary, { kind: hostBoundary }, { parent: root, name: "HostPreviewBoundary" });
 } else if (isSitePath(pathname) || isWorkingPreviewPath(pathname)) {
   // A visitor document: the host's stylesheet and the visitor sheet only, and
   // no theme bootstrap, so the preview matches what a visitor is served.
@@ -40,6 +40,6 @@ if (hostBoundary) {
     await import("virtual:zudo-composer-host-styles");
     await import("./style.css");
     const { App } = await import("./App");
-    render(<App themeController={themeController} />, root);
+    mountOwned(App, { themeController }, { parent: root, name: "App" });
   }
 }

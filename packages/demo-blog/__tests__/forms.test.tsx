@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Comment, CommentForm, CommentList, Newsletter } from "../components/pack";
+import { fireEvent, render, settle } from "./render";
 import { resetLocalComments } from "../components/runtime";
 import { validateComment } from "../components/comments";
 
@@ -12,7 +12,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  cleanup();
   resetLocalComments();
   vi.useRealTimers();
   history.replaceState(null, "", "/");
@@ -30,7 +29,7 @@ function page() {
 const type = (element: HTMLElement, value: string) => fireEvent.input(element, { target: { value } });
 
 describe("blog.comment-form mock", () => {
-  it("validates name, email format and a 10-character comment", () => {
+  it("validates name, email format and a 10-character comment", async () => {
     expect(validateComment({ name: "", email: "nope", comment: "short" })).toEqual({
       name: "Please add your name.",
       email: "Please enter a valid email address.",
@@ -39,27 +38,37 @@ describe("blog.comment-form mock", () => {
     expect(validateComment({ name: "Ana", email: "ana@example.com", comment: "Long enough text." })).toEqual({});
   });
 
-  it("shows errors and posts nothing when invalid", () => {
+  it("shows errors and posts nothing when invalid", async () => {
     const { getByRole, getByText, container } = page();
+    await settle();
     fireEvent.click(getByRole("button", { name: "Post comment" }));
+    await settle();
     expect(getByText("Please add your name.")).toBeTruthy();
-    act(() => { vi.advanceTimersByTime(1000); });
+    vi.advanceTimersByTime(1000);
+    await settle();
     expect(container.querySelectorAll("li")).toHaveLength(1);
   });
 
-  it("disables for 600 ms, then appends the comment locally with the success text", () => {
+  it("disables for 600 ms, then appends the comment locally with the success text", async () => {
     const { getByRole, getByLabelText, container, queryByText, getByText } = page();
+    await settle();
     type(getByLabelText("Name"), "Rui");
+    await settle();
     type(getByLabelText("Email"), "rui@example.com");
+    await settle();
     type(getByLabelText("Comment"), "The hour before email is the one I keep.");
+    await settle();
     fireEvent.click(getByRole("button", { name: "Post comment" }));
+    await settle();
 
     expect((getByRole("button", { name: "Posting…" }) as HTMLButtonElement).disabled).toBe(true);
-    act(() => { vi.advanceTimersByTime(599); });
+    vi.advanceTimersByTime(599);
+    await settle();
     expect(container.querySelectorAll("li")).toHaveLength(1);
     expect(queryByText("Posted locally — this demo keeps nothing.")).toBeNull();
 
-    act(() => { vi.advanceTimersByTime(1); });
+    vi.advanceTimersByTime(1);
+    await settle();
     const items = [...container.querySelectorAll("li")];
     expect(items).toHaveLength(2);
     expect(items[1]!.hidden).toBe(false);
@@ -73,16 +82,22 @@ describe("blog.comment-form mock", () => {
 });
 
 describe("blog.newsletter mock", () => {
-  it("rejects a bad email, then succeeds after the delay", () => {
+  it("rejects a bad email, then succeeds after the delay", async () => {
     const { getByRole, getByLabelText, getByText, queryByText } = render(<Newsletter />);
+    await settle();
     type(getByLabelText("Email"), "bad");
+    await settle();
     fireEvent.click(getByRole("button", { name: "Subscribe" }));
+    await settle();
     expect(getByText("Please enter a valid email address.")).toBeTruthy();
 
     type(getByLabelText("Email"), "me@example.com");
+    await settle();
     fireEvent.click(getByRole("button", { name: "Subscribe" }));
+    await settle();
     expect(queryByText("Subscribed locally — this demo keeps nothing.")).toBeNull();
-    act(() => { vi.advanceTimersByTime(600); });
+    vi.advanceTimersByTime(600);
+    await settle();
     expect(getByText("Subscribed locally — this demo keeps nothing.")).toBeTruthy();
   });
 });

@@ -1,4 +1,4 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import { cx } from "../../lib/cx";
 
 export type SectionHeadingProps = {
@@ -6,7 +6,7 @@ export type SectionHeadingProps = {
   eyebrow?: string;
   heading: string;
   /** Supporting copy below the heading. */
-  intro?: ComponentChildren;
+  intro?: Child;
   /** Heading element. Defaults to h2; use h1 only for a page's main heading. */
   as?: "h1" | "h2";
   class?: string;
@@ -31,14 +31,14 @@ export function SectionHeading({
       )}
       <Heading
         class={cx(eyebrow && "mt-vsp-xs", "text-heading font-bold leading-tight text-fg")}
-        style={{ textWrap: "balance" }}
+        style={{ "text-wrap": "balance" }}
       >
         {heading}
       </Heading>
       {intro && (
         <p
           class="mt-vsp-sm max-w-[44rem] text-small leading-relaxed text-fg"
-          style={{ textWrap: "pretty" }}
+          style={{ "text-wrap": "pretty" }}
         >
           {intro}
         </p>

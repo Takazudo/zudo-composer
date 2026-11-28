@@ -1,7 +1,7 @@
-import type { ComponentChildren, JSX } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 
 // A deliberately tiny markdown subset (h2/h3, paragraphs, lists, links,
-// emphasis, rules) rendered straight to Preact nodes: no HTML strings, no WASM.
+// emphasis, rules) rendered straight to zudo-react descriptions: no HTML strings, no WASM.
 
 const LINK_CLASS = "text-shop-link underline decoration-shop-border underline-offset-4 hover:bg-shop-inverse-bg hover:text-shop-inverse-fg";
 const INLINE = /\[([^\]]+)\]\(([^)\s]+)\)|\*\*(.+?)\*\*|\*(.+?)\*|_(.+?)_/;
@@ -10,8 +10,8 @@ function safeHref(href: string): string | undefined {
   return /^(https?:\/\/|mailto:|\/|#)/.test(href) ? href : undefined;
 }
 
-export function renderInline(text: string): ComponentChildren[] {
-  const out: ComponentChildren[] = [];
+export function renderInline(text: string): Child[] {
+  const out: Child[] = [];
   let rest = text;
   while (rest !== "") {
     const match = INLINE.exec(rest);
@@ -71,7 +71,7 @@ export function parseBlocks(markdown: string): Block[] {
   return blocks;
 }
 
-function renderBlock(block: Block, key: number): JSX.Element {
+function renderBlock(block: Block, key: number): Child {
   switch (block.kind) {
     case "h2":
       return <h2 key={key} class="text-shop-h2 font-shop-semibold text-shop-fg-strong">{renderInline(block.text)}</h2>;

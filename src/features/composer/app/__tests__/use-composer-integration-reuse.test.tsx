@@ -1,14 +1,13 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../test-support/cleanup";
 import { describe, expect, it, vi } from "vitest";
-import { act, renderHook } from "@testing-library/preact";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { settle } from "../../../../test/render";
+import { act, renderIntegration } from "../test-support/integration-harness";
 import {
   type ComposerReuseResolutionOptions,
   type GlobalTemplateResolutionOutcome,
 } from "../../../../composer/browser";
 import { fixtureComponentProvider, makeAbcDocument, resetFixtureIds } from "../../ui/tree/__tests__/fixtures";
-import { useComposerIntegration } from "../use-composer-integration";
 import { controllerOptions } from "../test-support/controller-fixtures";
 
 function deferred<T>() {
@@ -52,7 +51,7 @@ function resolved(cardinality: "single" | "many"): GlobalTemplateResolutionOutco
   };
 }
 
-describe("useComposerIntegration — provider-scoped reuse resolution", () => {
+describe("createComposerIntegration — provider-scoped reuse resolution", () => {
   it("ignores a late source result after active record navigation", async () => {
     resetFixtureIds();
     const first = deferred<GlobalTemplateResolutionOutcome>();
@@ -66,16 +65,15 @@ describe("useComposerIntegration — provider-scoped reuse resolution", () => {
       ref: { providerId: "files", recordId },
       resolver,
     });
-    const { result, rerender } = renderHook(
-      ({ reuseResolution }) => useComposerIntegration({
-        componentProvider: fixtureComponentProvider,
-        controllerOptions: controllerOptions(document),
-        reuseResolution,
-      }),
-      { initialProps: { reuseResolution: config("consumer-a") } },
-    );
+    const reuseResolution = signal<ComposerReuseResolutionOptions | undefined>(config("consumer-a"));
+    const { result } = renderIntegration({
+      componentProvider: fixtureComponentProvider,
+      controllerOptions: controllerOptions(document),
+      reuseResolution,
+    });
 
-    rerender({ reuseResolution: config("consumer-b") });
+    reuseResolution.value = config("consumer-b");
+    await settle();
     await act(async () => {
       second.resolve(resolved("many"));
       await second.promise;

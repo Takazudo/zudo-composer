@@ -1,5 +1,6 @@
-import type { ComponentChildren, JSX } from "preact";
+import { h } from "@takazudo/zfb/zudo-react";
 import { cx } from "../../lib/cx";
+import { slotChild, type SlotChildren } from "../../lib/slot";
 
 export type AutoGridMin = "11rem" | "13rem" | "14rem" | "15rem" | "16rem" | "18rem";
 export type AutoGridGap = "sm" | "md" | "split";
@@ -47,7 +48,7 @@ export type AutoGridProps = {
   as?: AutoGridAs;
   "aria-label"?: string;
   class?: string;
-  children?: ComponentChildren;
+  children?: SlotChildren;
 };
 
 /**
@@ -66,10 +67,5 @@ export function AutoGrid({
 }: AutoGridProps) {
   const cols = (fill ? FILL_COLS : FIT_COLS)[min];
   const list = as === "ul" || as === "ol" ? "list-none p-0" : "";
-  const Tag = as as keyof JSX.IntrinsicElements;
-  return (
-    <Tag class={cx("grid", cols, GAP_CLASS[gap], list, className)} {...rest}>
-      {children}
-    </Tag>
-  );
+  return h(as, { class: cx("grid", cols, GAP_CLASS[gap], list, className), ...rest }, slotChild(children));
 }

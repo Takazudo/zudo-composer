@@ -145,7 +145,7 @@ async function assertPackageTree() {
 /** @returns {Promise<Record<string, string>>} */
 async function peerVersions() {
   const manifest = JSON.parse(await readFile(path.join(packageRoot, 'package.json'), 'utf8'));
-  return { preact: manifest.peerDependencies.preact, tailwindcss: manifest.peerDependencies.tailwindcss };
+  return { '@takazudo/zfb': manifest.peerDependencies['@takazudo/zfb'], tailwindcss: manifest.peerDependencies.tailwindcss };
 }
 
 /**

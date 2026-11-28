@@ -4,7 +4,7 @@
 // The host's source and component pack are TypeScript/TSX modules. Resolve the
 // host context first, then evaluate the generator through the tool-rooted
 // module runner and the authored source through the host-rooted runner. Both
-// runners use the canonical Preact JSX policy from module-evaluator.mjs.
+// runners use the canonical zudo-react JSX policy from module-evaluator.mjs.
 
 import { resolve } from "node:path";
 import { APP_ROOT } from "../../plugins/roots.mjs";

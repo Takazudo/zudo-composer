@@ -21,42 +21,14 @@ async function mountFocusProbe(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Open workspace" })).toBeVisible();
   await page.evaluate(async () => {
-    const loadedModule = (filename: string) => {
-      const url = performance.getEntriesByType("resource").map((entry) => entry.name)
-        .find((resource) => new URL(resource).pathname.endsWith(`/node_modules/.vite/deps/${filename}`));
-      if (!url) throw new Error(`App has not loaded ${filename}`);
-      return url;
-    };
-    // Reuse the exact versioned URLs Vite loaded for the app. Bare browser
-    // specifiers are unresolved here, and unversioned optimized-module URLs
-    // can load a second Preact instance in the probe.
-    const preactPath = loadedModule("preact.js");
-    const hooksPath = loadedModule("preact_hooks.js");
-    const dialogPath = "/src/components/overlay/dialog.tsx";
-    const { h, render } = await import(preactPath);
-    const { useState } = await import(hooksPath);
-    const { Dialog } = await import(dialogPath);
+    // A variable specifier: the Vite dev server resolves it through the app's
+    // own graph (one zudo-react runtime), and tsc must not.
+    const mountPath = "/tests/browser-dev/dialog-focus-mount.ts";
+    const { mountDialogFocusProbe } = await import(mountPath);
     const root = document.createElement("div");
     root.id = "focus-probe";
     document.body.append(root);
-
-    function Harness() {
-      const [state, setState] = useState("closed");
-      (window as FocusProbeWindow).focusProbeSet = (next) => setState(next);
-      if (state === "route") return h("main", { id: "new-route" }, "New route");
-      return h(
-        "section",
-        {},
-        h("button", { id: "probe-opener", onClick: () => setState("A") }, "Probe open"),
-        state !== "closed" && h(
-          Dialog,
-          { key: state, open: true, label: state, onClose: () => setState("closed") },
-          h("button", { id: `inside-${state}`, onClick: () => setState(state === "A" ? "B" : "closed") }, state === "A" ? "Replace" : "Finish"),
-        ),
-      );
-    }
-
-    render(h(Harness, {}), root);
+    (window as FocusProbeWindow).focusProbeSet = mountDialogFocusProbe(root);
   });
   await page.getByRole("button", { name: "Probe open", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "A", exact: true })).toBeVisible();

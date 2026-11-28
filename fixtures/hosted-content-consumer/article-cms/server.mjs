@@ -21,7 +21,7 @@ const here = fileURLToPath(new URL(".", import.meta.url));
 /** Bundles the host admin from its public imports only; the bytes are what the browser receives. */
 export async function buildArticleUi() {
   const result = await build({ entryPoints: { app: join(here, "ui/app.mjs") }, bundle: true, format: "esm", platform: "browser", write: false,
-    outdir: "/out", jsx: "automatic", jsxImportSource: "preact", logLevel: "silent", metafile: true });
+    outdir: "/out", jsx: "automatic", jsxImportSource: "@takazudo/zfb/zudo-react", logLevel: "silent", metafile: true });
   const files = new Map(result.outputFiles.map(file => [file.path.replace(/^\/out/, ""), file.text]));
   if (!files.has("/app.js") || !files.has("/app.css")) throw new Error("Article admin bundle is incomplete");
   return { files, metafile: result.metafile };

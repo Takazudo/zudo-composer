@@ -14,11 +14,11 @@
 
 import { pathToFileURL } from "node:url";
 import { runnerImport } from "vite";
-import { resolveComposerModules } from "../plugins/module-resolution.mjs";
+import { resolveComposerModules, zudoReactOxc, zudoReactSsr } from "../plugins/module-resolution.mjs";
 
 /**
  * @param {string} root Host root for config/pack modules; APP_ROOT for tool modules.
- * @param {{jsxImportSource?: string}} [options] Trusted isolated host renderer runtime; default remains Preact.
+ * @param {{jsxImportSource?: string}} [options] Trusted isolated host renderer runtime; default is zudo-react.
  * @returns {(modulePath: string) => Promise<Record<string, unknown>>}
  */
 export function createModuleEvaluator(root, options = {}) {
@@ -38,11 +38,11 @@ export function createModuleEvaluator(root, options = {}) {
         configFile: false,
         root,
         resolve: resolveComposerModules(),
-        // The Preact preset does not run here, so state the JSX runtime for
-        // tool/pack `.tsx` modules. A document host may select its own runtime.
-        // Each runnerImport owns a new graph: never reuse the dev server's
-        // Preact-transformed pack/component cache for the document renderer.
-        oxc: { jsx: { runtime: "automatic", importSource: options.jsxImportSource ?? "preact" } },
+        // State the JSX runtime for tool/pack `.tsx` modules. A document host
+        // may select its own runtime. Each runnerImport owns a new graph: never
+        // reuse the dev server's pack/component cache for the document renderer.
+        oxc: zudoReactOxc(options.jsxImportSource),
+        ssr: zudoReactSsr(),
       });
       return /** @type {Record<string, unknown>} */ (module);
     } finally {

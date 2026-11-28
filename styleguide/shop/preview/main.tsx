@@ -1,4 +1,5 @@
-import { render } from "preact";
+import { For, computed, h, signal } from "@takazudo/zfb/zudo-react";
+import { mount, type RootHandle } from "@takazudo/zfb/zudo-react/client";
 import { loaders } from "./loaders";
 import type { Story, StoryMeta } from "./story-types";
 import {
@@ -30,6 +31,9 @@ let pendingTheme: "light" | "dark" = matchMedia("(prefers-color-scheme: dark)")
   ? "dark"
   : "light";
 let frame = 0;
+let handle: RootHandle | null = null;
+const revision = signal(0);
+const identityRoot = { component: "ShopPreview", build: "zc-sg-shop-preview" } as const;
 
 function post(type: typeof MSG_READY | typeof MSG_HEIGHT, extra = {}) {
   parent.postMessage(
@@ -47,20 +51,54 @@ function reportHeight() {
   });
 }
 
-function paint() {
+function applyTheme() {
   document.documentElement.dataset.theme = pendingTheme;
   document.documentElement.classList.toggle("dark", pendingTheme === "dark");
   document.documentElement.style.colorScheme = pendingTheme;
+}
+
+// Stories render plain props once, so each props update remounts the variant.
+function ShopPreview() {
+  return (
+    <For each={computed(() => [revision.value])} by={(key) => key}>
+      {() => {
+        const defaults = Object.fromEntries(
+          (story?.controls ?? []).map((c) => [c.prop, c.defaultValue]),
+        );
+        return (
+          <div class="sg-preview-root" data-sg-variant-root>
+            {story?.render({ ...defaults, ...overrides })}
+          </div>
+        );
+      }}
+    </For>
+  );
+}
+// The minified function name cannot carry the root identity.
+ShopPreview.displayName = identityRoot.component;
+
+// zudo-react mounts only into a host carrying its caller-owned root contract.
+function mountRoot() {
+  root.setAttribute("data-zfb-island-skip-ssr", identityRoot.component);
+  root.setAttribute("data-zfb-transport", "json/1");
+  root.setAttribute("data-zfb-protocol", "zudo-react/1");
+  root.setAttribute("data-zfb-build", identityRoot.build);
+  const codes: string[] = [];
+  handle = mount(h(ShopPreview, null), root, {
+    identity: identityRoot,
+    report: (diagnostic) => {
+      codes.push(diagnostic.code);
+      console.error(diagnostic.code, diagnostic);
+    },
+  });
+  if (!handle) throw Error(`Preview mount refused: ${codes.join(", ")}`);
+}
+
+function paint() {
+  applyTheme();
   if (!story || disposed) return;
-  const defaults = Object.fromEntries(
-    (story.controls ?? []).map((c) => [c.prop, c.defaultValue]),
-  );
-  render(
-    <div class="sg-preview-root" data-sg-variant-root>
-      {story.render({ ...defaults, ...overrides })}
-    </div>,
-    root,
-  );
+  if (handle) revision.value += 1;
+  else mountRoot();
   reportHeight();
 }
 
@@ -78,7 +116,8 @@ function receive(event: MessageEvent) {
     paint();
   } else if (isSetThemeMessage(event.data)) {
     pendingTheme = event.data.theme;
-    paint();
+    applyTheme();
+    if (story && !disposed) reportHeight();
   }
 }
 
@@ -111,7 +150,8 @@ function dispose(event: PageTransitionEvent) {
   resize.disconnect();
   disposeTokens();
   cancelAnimationFrame(frame);
-  render(null, root);
+  handle?.unmount();
+  handle = null;
 }
 window.addEventListener("pagehide", dispose);
 

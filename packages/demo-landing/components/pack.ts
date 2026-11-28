@@ -11,7 +11,7 @@ import {
   Container, Grid, Image, Section, SectionHeading, Split, Stack,
   type ContainerProps, type GridProps, type ImageProps, type SectionHeadingProps, type SectionProps, type SplitProps, type StackProps,
 } from "./layout";
-import { BillingContext, PricingTable, PricingTier, type PricingTableProps, type PricingTierProps } from "./pricing";
+import { BILLING_LINK, PricingTable, PricingTier, type PricingTableProps, type PricingTierProps } from "./pricing";
 import { ComparisonNote, Prose, type ComparisonNoteProps, type ProseProps } from "./prose";
 import {
   CtaBand, FeatureGrid, FeatureItem, Stats, Step, StepsRow, Testimonial, Testimonials,
@@ -434,6 +434,7 @@ const faqItem = defineComponent<FaqItemProps>()(FaqItem, {
     order: 1,
   },
   fields: [text("question", "Question"), markdown("answer", "Answer"), select("topic", "Topic", ["general", "billing", "security"]), number("order", "Order", 0)],
+  staticProps: [{ prop: "group", reason: "Group name supplied by land.faq-accordion." }],
 });
 
 const ctaBand = defineComponent<CtaBandProps>()(CtaBand, {
@@ -504,7 +505,7 @@ export const componentPack = defineComponentPack({
 });
 
 export {
-  BillingContext, Button, ComparisonNote, ContactForm, Container, CtaBand, DemoNote, FaqAccordion, FaqItem, FeatureGrid, FeatureItem,
+  BILLING_LINK, Button, ComparisonNote, ContactForm, Container, CtaBand, DemoNote, FaqAccordion, FaqItem, FeatureGrid, FeatureItem,
   Footer, Grid, Header, Hero, Image, LogoStrip, NavLink, PricingTable, PricingTier, Prose, Section, SectionHeading, SignupForm, Split,
   Stack, Stats, Step, StepsRow, Testimonial, Testimonials,
 };

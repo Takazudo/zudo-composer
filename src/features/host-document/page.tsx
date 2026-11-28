@@ -1,7 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
-import { useWorkspace } from "../../app/workspace-context";
+import { batch, computed, For, getScope, Show, signal, type Ref } from "@takazudo/zfb/zudo-react";
+import type { RouteServicesProps } from "../../app/services";
 import { formatIntent } from "../../app/route-intents";
+import { holdPageLoadingWhile } from "../../app/page-loading/page-loading";
+import { Keyed } from "../../runtime";
+import { Rebuild } from "../../components/rebuild";
 import { holdNativeAuthoringReload, nativeEditRequest } from "../native-editing/session";
+import { LiveSelect, watch, when } from "../native-editing/live";
 import type { HostDocumentPreview, HostDocumentTarget } from "../../../server/host-document/types";
 import { acceptHostDocumentMessage, confirmedFirstAttemptRefusal, matchesHostDocumentFrame } from "./protocol";
 import { assertHostEditReceipt } from "./receipt";
@@ -11,118 +15,117 @@ import { HostInspector } from "./inspector";
 import type { WorkspaceSaveRegistry } from "../../app/workspace-sessions";
 import { writeHostSelection } from "../assistant/host-selection";
 import "./page.css";
-import { usePageLoadingWhile } from "../../app/page-loading/page-loading";
 
 const refusalNotice = "The saved workspace changed before this page edit was accepted. Review the saved page before making a new edit.";
 const setRefusalNotice = (workspaceId: string | null) => window.history.replaceState({ ...window.history.state, hostDocumentRefusal: workspaceId }, "");
+const targetKey = (target: HostDocumentTarget) => `${target.providerId}/${target.recordId}/${target.nodeId}/${target.renderedNodeId}`;
 
 type Preview = HostDocumentPreview & { editAuthority?: string; documentUrl: string; routes: { pathname: string; title: string; pageId: string }[] };
-export function HostDocumentPage() {
-  const integration = useWorkspace()!.integration;
-  const titles = useMemo(() => new Map((integration.componentProvider?.manifest.components ?? []).map(component => [component.id, component.title])), [integration]);
-  const [preview, setPreview] = useState<Preview | null>(null);
-  const [selected, setSelected] = useState<HostDocumentTarget | null>(null);
-  const [assistantProp, setAssistantProp] = useState("");
-  const dirty = useRef(false);
-  const explicitSave = useRef(false);
-  const submittedOperation = useRef<string | null>(null);
-  const registration = useRef<ReturnType<WorkspaceSaveRegistry["register"]> | null>(null);
-  useLayoutEffect(() => {
+export function HostDocumentPage({ services }: RouteServicesProps) {
+  const scope = getScope();
+  const alive = () => !scope.abortSignal.aborted;
+  const integration = services.workspace.integration;
+  const titles = new Map((integration.componentProvider?.manifest.components ?? []).map(component => [component.id, component.title]));
+  const preview = signal<Preview | null>(null);
+  const selected = signal<HostDocumentTarget | null>(null);
+  let dirty = false;
+  let explicitSave = false;
+  let submittedOperation: string | null = null;
+  let registration: ReturnType<WorkspaceSaveRegistry["register"]> | null = null;
+  scope.onActivate(() => {
     const handle = integration.sessions.register({ feature: "Host component draft", providerId: "files", workspaceId: integration.workspace.id }, { flush: async () => {
-      if (dirty.current && !explicitSave.current) throw new Error("Save or discard the local component draft before continuing.");
+      if (dirty && !explicitSave) throw new Error("Save or discard the local component draft before continuing.");
     } });
-    registration.current = handle;
-    const beforeUnload = (event: BeforeUnloadEvent) => { if (dirty.current && !explicitSave.current) { event.preventDefault(); event.returnValue = ""; } };
+    registration = handle;
+    const beforeUnload = (event: BeforeUnloadEvent) => { if (dirty && !explicitSave) { event.preventDefault(); event.returnValue = ""; } };
     window.addEventListener("beforeunload", beforeUnload);
-    return () => { window.removeEventListener("beforeunload", beforeUnload); handle.detach(); registration.current = null; };
-  }, [integration]);
+    return () => { window.removeEventListener("beforeunload", beforeUnload); handle.detach(); registration = null; };
+  });
   const markDirty = (value: boolean) => {
-    const wasDirty = dirty.current;
-    dirty.current = value;
-    if (value) registration.current?.changed();
-    else if (wasDirty) return registration.current?.retry();
+    const wasDirty = dirty;
+    dirty = value;
+    if (value) registration?.changed();
+    else if (wasDirty) return registration?.retry();
   };
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const recovery = useMemo(() => { try { return { store: createHostEditRecovery(localStorage, sessionStorage, window.location.origin), error: null }; } catch (cause) { return { store: null, error: cause instanceof Error ? cause.message : "Durable recovery storage is unavailable." }; } }, [integration]);
-  const [recoveryBlocked, setRecoveryBlocked] = useState(false);
-  const [pending, setPending] = useState<PendingHostEdit | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [refusal, setRefusal] = useState(() => window.history.state?.hostDocumentRefusal === integration.workspace.id);
-  const [current, setCurrent] = useState(false);
-  const [selecting, setSelecting] = useState(true);
-  const frame = useRef<HTMLIFrameElement>(null);
-  const sequence = useRef(0);
-  const readyDocument = useRef<Document | null>(null);
-  const invalidated = useRef(false);
+  const loading = signal(true);
+  const busy = signal(false);
+  const recovery = (() => { try { return { store: createHostEditRecovery(localStorage, sessionStorage, window.location.origin), error: null }; } catch (cause) { return { store: null, error: cause instanceof Error ? cause.message : "Durable recovery storage is unavailable." }; } })();
+  const recoveryBlocked = signal(false);
+  const pending = signal<PendingHostEdit | null>(null);
+  const error = signal<string | null>(null);
+  const refusal = signal(window.history.state?.hostDocumentRefusal === integration.workspace.id);
+  const current = signal(false);
+  const selecting = signal(true);
+  const frame: Ref<HTMLIFrameElement> = { current: null };
+  let sequence = 0;
+  let readyDocument: Document | null = null;
+  let invalidated = false;
   const readPending = (identity: HostDocumentPreview["identity"]) => {
-    try { setPending(recovery.store?.list(identity)[0] ?? null); setRecoveryBlocked(false); }
-    catch (cause) { setRecoveryBlocked(true); setError(cause instanceof Error ? cause.message : "Recovery storage cannot be read. Saving is disabled."); }
+    try { batch(() => { pending.value = recovery.store?.list(identity)[0] ?? null; recoveryBlocked.value = false; }); }
+    catch (cause) { batch(() => { recoveryBlocked.value = true; error.value = cause instanceof Error ? cause.message : "Recovery storage cannot be read. Saving is disabled."; }); }
   };
   const rememberVisitorUrl = (value: string) => { const editorUrl = new URL(window.location.href); editorUrl.searchParams.set("visitor", value); window.history.replaceState(window.history.state, "", editorUrl); };
   const chooseTarget = (target: HostDocumentTarget) => {
-    if (dirty.current && selected?.renderedNodeId !== target.renderedNodeId) { setError("Save or discard the local field draft before changing selection."); return; }
-    setAssistantProp(""); setSelected(target);
+    if (dirty && selected.value?.renderedNodeId !== target.renderedNodeId) { error.value = "Save or discard the local field draft before changing selection."; return; }
+    selected.value = target;
   };
   const refresh = async (visitorUrl?: string) => {
-    if (dirty.current) { setError("Save or discard the local field draft before changing or refreshing the page."); return; }
+    if (dirty) { error.value = "Save or discard the local field draft before changing or refreshing the page."; return; }
     const initialHandoff = visitorUrl === undefined;
     if (!initialHandoff) { const url = new URL(window.location.href); for (const key of ["sitemapProvider", "sitemap", "page"]) url.searchParams.delete(key); window.history.replaceState(window.history.state, "", url); }
     const params = new URLSearchParams(window.location.search);
     const handoff = initialHandoff ? { ...(params.get("sitemapProvider") ? { sitemapProviderId: params.get("sitemapProvider") } : {}), ...(params.get("sitemap") ? { sitemapId: params.get("sitemap") } : {}), ...(params.get("page") ? { pageId: params.get("page") } : {}) } : {};
     visitorUrl ??= new URLSearchParams(window.location.search).get("visitor") ?? undefined;
     const pathname = visitorUrl ? new URL(visitorUrl, window.location.origin).pathname : undefined;
-    const request = ++sequence.current;
-    invalidated.current = false; readyDocument.current = null;
-    setLoading(true); setCurrent(false); setError(null); setPreview(null); setSelected(null);
+    const request = ++sequence;
+    invalidated = false; readyDocument = null;
+    batch(() => { loading.value = true; current.value = false; error.value = null; preview.value = null; selected.value = null; });
     try {
       const value = await nativeEditRequest<Preview>("document-preview", { workspaceId: integration.workspace.id, ...handoff, ...(pathname ? { pathname, visitorUrl } : {}) });
-      if (request === sequence.current) { setPreview(value); readPending(value.identity); if (value.navigation) rememberVisitorUrl(value.navigation.url); }
-    } catch (cause) { if (request === sequence.current) setError(cause instanceof Error ? cause.message : "Page preview unavailable."); }
-    finally { if (request === sequence.current) setLoading(false); }
+      if (request === sequence && alive()) { preview.value = value; readPending(value.identity); if (value.navigation) rememberVisitorUrl(value.navigation.url); }
+    } catch (cause) { if (request === sequence && alive()) error.value = cause instanceof Error ? cause.message : "Page preview unavailable."; }
+    finally { if (request === sequence && alive()) loading.value = false; }
   };
-  useEffect(() => { void refresh(); return () => { sequence.current++; }; }, [integration]);
-  usePageLoadingWhile(loading);
-  useEffect(() => {
-    if (!preview) return;
+  scope.onActivate(() => { void refresh(); return () => { sequence++; }; });
+  holdPageLoadingWhile(scope, services.pageLoading, loading);
+  scope.onActivate(() => {
     const onMessage = (event: MessageEvent) => {
-      const message = acceptHostDocumentMessage(event, frame.current?.contentWindow ?? null, window.location.origin, preview);
-      if (message?.type === "ready" && !invalidated.current && matchesHostDocumentFrame(frame.current, preview, window.location.origin)) { readyDocument.current = frame.current?.contentDocument ?? null; setCurrent(true); }
-      if (message?.type === "select" && !invalidated.current && matchesHostDocumentFrame(frame.current, preview, window.location.origin)) chooseTarget(message.target);
-      if (message?.type === "leaving") { invalidated.current = true; setCurrent(false); if (!dirty.current) setSelected(null); setError("Preview left the captured page. Refresh the saved page before editing."); }
+      const shown = preview.value;
+      if (!shown) return;
+      const message = acceptHostDocumentMessage(event, frame.current?.contentWindow ?? null, window.location.origin, shown);
+      if (message?.type === "ready" && !invalidated && matchesHostDocumentFrame(frame.current, shown, window.location.origin)) { readyDocument = frame.current?.contentDocument ?? null; current.value = true; }
+      if (message?.type === "select" && !invalidated && matchesHostDocumentFrame(frame.current, shown, window.location.origin)) chooseTarget(message.target);
+      if (message?.type === "leaving") { invalidated = true; batch(() => { current.value = false; if (!dirty) selected.value = null; error.value = "Preview left the captured page. Refresh the saved page before editing."; }); }
       if (message?.type === "navigate") {
-        if (message.url.split("#")[0] === preview.navigation?.url.split("#")[0]) { rememberVisitorUrl(message.url); setPreview(previous => previous && previous.navigation ? { ...previous, navigation: { ...previous.navigation, url: message.url } } : previous); }
+        if (message.url.split("#")[0] === shown.navigation?.url.split("#")[0]) { rememberVisitorUrl(message.url); if (shown.navigation) preview.value = { ...shown, navigation: { ...shown.navigation, url: message.url } }; }
         else { void refresh(message.url); }
       }
     };
-    const invalidate = () => { invalidated.current = true; setCurrent(false); setError("Workspace changed. Refresh the saved page before editing its selected owner."); };
+    const invalidate = () => { if (!preview.value) return; invalidated = true; batch(() => { current.value = false; error.value = "Workspace changed. Refresh the saved page before editing its selected owner."; }); };
     window.addEventListener("message", onMessage);
     window.addEventListener("native-authoring-invalidated", invalidate);
     // Session generation tracks unsaved input, not a change to the captured
     // canonical snapshot. Its flush guard still blocks unrelated operations;
     // invalidating here would disable the draft's own explicit Save action.
     const stop = integration.subscribeChanges(channel => { if (channel !== "sessions") invalidate(); });
-    return () => { window.removeEventListener("message", onMessage); window.removeEventListener("native-authoring-invalidated", invalidate); stop(); };
-  }, [preview, integration, selected]);
-  useEffect(() => {
-    if (!preview || !current) return;
-    const send = (value: Record<string, unknown>) => frame.current?.contentWindow?.postMessage({ protocol: "zudo-host-document-v1", frameId: preview.frameId, ...value }, window.location.origin);
-    send({ type: "mode", selecting });
-    send({ type: "highlight", renderedNodeId: selected?.renderedNodeId ?? null });
-  }, [preview, selected, selecting, current]);
-  useEffect(() => {
-    if (!preview || !recovery.store) return;
-    const changed = () => readPending(preview.identity);
+    const changed = () => { const shown = preview.value; if (shown && recovery.store) readPending(shown.identity); };
     window.addEventListener("storage", changed);
-    return () => window.removeEventListener("storage", changed);
-  }, [preview, recovery.store]);
+    return () => { window.removeEventListener("message", onMessage); window.removeEventListener("native-authoring-invalidated", invalidate); window.removeEventListener("storage", changed); stop(); };
+  });
+  watch(scope, () => [preview.value, selected.value, selecting.value, current.value] as const, ([shown, target, mode, rendered]) => {
+    if (!shown || !rendered) return;
+    const send = (value: Record<string, unknown>) => frame.current?.contentWindow?.postMessage({ protocol: "zudo-host-document-v1", frameId: shown.frameId, ...value }, window.location.origin);
+    send({ type: "mode", selecting: mode });
+    send({ type: "highlight", renderedNodeId: target?.renderedNodeId ?? null });
+  });
   const submit = async (retained: PendingHostEdit, recovering = true) => {
-    if (busy || !recovery.store) return;
+    const shown = preview.value;
+    if (busy.value || !recovery.store) return;
     const request = retained.request;
-    if (dirty.current && recovering && submittedOperation.current !== request.operationId) { setError("Save or discard this local draft before recovering a different retained operation."); return; }
-    if (retained.identity.workspaceId !== integration.workspace.id || !preview || retained.identity.packId !== preview.identity.packId || retained.identity.rendererId !== preview.identity.rendererId) { setError("This retained operation belongs to a different authoring workspace or renderer. Open its original workspace to recover it."); return; }
-    explicitSave.current = true;
-    setBusy(true); setError(null);
+    if (dirty && recovering && submittedOperation !== request.operationId) { error.value = "Save or discard this local draft before recovering a different retained operation."; return; }
+    if (retained.identity.workspaceId !== integration.workspace.id || !shown || retained.identity.packId !== shown.identity.packId || retained.identity.rendererId !== shown.identity.rendererId) { error.value = "This retained operation belongs to a different authoring workspace or renderer. Open its original workspace to recover it."; return; }
+    explicitSave = true;
+    batch(() => { busy.value = true; error.value = null; });
     const releaseReload = holdNativeAuthoringReload();
     let refreshAfterSave = false;
     try {
@@ -138,46 +141,75 @@ export function HostDocumentPage() {
         if (definitiveStale) receipt = cause && typeof cause === "object" && "receipt" in cause ? cause.receipt : undefined;
         else {
           const refused = confirmedFirstAttemptRefusal(recovering, code);
-          setError(`${cause instanceof Error ? cause.message : "Response unavailable."}${refused ? " No change was accepted." : " The original outcome remains uncertain. The exact operation is retained; finish saving in other tabs, then recover it before another edit."}`);
+          error.value = `${cause instanceof Error ? cause.message : "Response unavailable."}${refused ? " No change was accepted." : " The original outcome remains uncertain. The exact operation is retained; finish saving in other tabs, then recover it before another edit."}`;
           if (!refused) return;
         }
       }
       if (accepted || definitiveStale) await assertHostEditReceipt(request, receipt, definitiveStale);
       recovery.store.complete(retained, receipt);
-      readPending(preview.identity);
+      readPending(shown.identity);
       if (accepted) {
         await markDirty(false);
         refreshAfterSave = true;
       } else if (definitiveStale) {
-        invalidated.current = true; setCurrent(false);
-        setRefusal(true); setRefusalNotice(integration.workspace.id);
+        invalidated = true;
+        batch(() => { current.value = false; refusal.value = true; });
+        setRefusalNotice(integration.workspace.id);
       }
     } catch {
-      readPending(preview.identity);
-      setError("The browser could not record the page edit result. Preserve its recovery data and reopen the saved page to check its status.");
+      readPending(shown.identity);
+      error.value = "The browser could not record the page edit result. Preserve its recovery data and reopen the saved page to check its status.";
     } finally {
-      explicitSave.current = false;
-      if (dirty.current) registration.current?.changed();
-      setBusy(false);
-      if (!releaseReload() && refreshAfterSave) await refresh(preview.navigation?.url ?? String(request.pathname));
+      explicitSave = false;
+      if (dirty) registration?.changed();
+      busy.value = false;
+      if (!releaseReload() && refreshAfterSave && alive()) await refresh(shown.navigation?.url ?? String(request.pathname));
     }
   };
   const apply = async (change: unknown) => {
-    if (!preview?.editAuthority || !selected || !current || busy || pending || recoveryBlocked || !recovery.store) return;
-    if (!matchesHostDocumentFrame(frame.current, preview, window.location.origin, true)) { invalidated.current = true; setCurrent(false); if (!dirty.current) setSelected(null); setError("Preview URL changed. Refresh the saved page before editing."); return; }
-    if (refusal) { setRefusal(false); setRefusalNotice(null); }
-    const { renderedNodeId, providerId, recordId, nodeId } = selected;
-    const request = { workspaceId: preview.identity.workspaceId, authority: preview.editAuthority, revision: preview.identity.revision, pathname: preview.identity.pathname, operationId: crypto.randomUUID(), target: { renderedNodeId, providerId, recordId, nodeId }, change };
+    const shown = preview.value, target = selected.value;
+    if (!shown?.editAuthority || !target || !current.value || busy.value || pending.value || recoveryBlocked.value || !recovery.store) return;
+    if (!matchesHostDocumentFrame(frame.current, shown, window.location.origin, true)) { invalidated = true; batch(() => { current.value = false; if (!dirty) selected.value = null; error.value = "Preview URL changed. Refresh the saved page before editing."; }); return; }
+    if (refusal.value) { refusal.value = false; setRefusalNotice(null); }
+    const { renderedNodeId, providerId, recordId, nodeId } = target;
+    const request = { workspaceId: shown.identity.workspaceId, authority: shown.editAuthority, revision: shown.identity.revision, pathname: shown.identity.pathname, operationId: crypto.randomUUID(), target: { renderedNodeId, providerId, recordId, nodeId }, change };
     let retained: PendingHostEdit;
-    try { retained = recovery.store.save(preview.identity, request); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Durable recovery storage failed. Nothing was sent."); return; }
-    setPending(retained); submittedOperation.current = request.operationId;
+    try { retained = recovery.store.save(shown.identity, request); }
+    catch (cause) { error.value = cause instanceof Error ? cause.message : "Durable recovery storage failed. Nothing was sent."; return; }
+    pending.value = retained; submittedOperation = request.operationId;
     await submit(retained, false);
   };
+  const hasPreview = when(() => preview.value);
+  const routeOptions = computed(() => preview.value?.routes.map(route => ({ value: route.pathname, label: `${route.title} · ${route.pathname}` })) ?? []);
+  const statusText = computed(() => loading.value ? "Opening saved page…" : current.value ? "Saved snapshot rendered" : "Preview not current");
+  const editLocked = computed(() => !current.value || busy.value || !!pending.value || recoveryBlocked.value || !recovery.store || !preview.value?.editAuthority);
+  const selection = computed(() => selected.value ? [selected.value] : []);
   return <main class="cms-host-document">
-    <header><h1>Page authoring</h1><label>Page <select class="cms-select" disabled={!preview} value={preview?.identity.pathname ?? ""} onChange={event => void refresh(event.currentTarget.value)}>{preview?.routes.map(route => <option key={route.pathname} value={route.pathname}>{route.title} · {route.pathname}</option>)}</select></label><button class="cms-btn" type="button" onClick={() => void refresh(preview?.navigation?.url ?? preview?.identity.pathname)}>Refresh saved page</button><button class="cms-btn" type="button" aria-pressed={selecting} onClick={() => setSelecting(!selecting)}>{selecting ? "Select components" : "Browse page"}</button><p role="status">{loading ? "Opening saved page…" : current ? "Saved snapshot rendered" : "Preview not current"}</p>{refusal && <p aria-live="polite">{refusalNotice}</p>}{error && <p role="alert">{error}</p>}{recovery.error && <p role="alert">{recovery.error} Saving is disabled.</p>}{preview && !preview.editAuthority && <p>Saved store identity is unavailable. New page edits are disabled.</p>}{pending && <button class="cms-btn" type="button" disabled={busy} onClick={() => void submit(pending)}>Recover pending save ({pending.request.pathname}{pending.sessionId !== recovery.store?.sessionId ? ", previous session" : ""})</button>}</header>
-    <nav aria-label="Page component tree"><h2>Components</h2>{preview && <HostComponentTree targets={preview.targets} titles={titles} selectedId={selected?.renderedNodeId} disabled={!current} onSelect={chooseTarget} />}</nav>
-    <section aria-label="Rendered page">{preview && <iframe ref={frame} title="Host rendered page" sandbox="allow-scripts allow-same-origin" src={preview.documentUrl} onLoad={() => { setCurrent(!invalidated.current && readyDocument.current !== null && readyDocument.current === frame.current?.contentDocument && matchesHostDocumentFrame(frame.current, preview, window.location.origin)); if (!matchesHostDocumentFrame(frame.current, preview, window.location.origin)) { invalidated.current = true; if (!dirty.current) setSelected(null); setError("Preview navigation was not captured. Refresh the saved page before editing."); } }} />}</section>
-    <aside aria-label="Selected component inspector"><h2>Inspector</h2>{selected ? <><h3>{componentTitle(selected, titles)}</h3><section aria-label="Assistant selection"><label>Selected property <select value={assistantProp} onChange={event => setAssistantProp(event.currentTarget.value)}><option value="">Component arrangement</option>{integration.componentProvider?.manifest.components.find(component => component.id === selected.componentId)?.fields.map(field => <option key={field.prop} value={field.prop}>{field.label}</option>)}</select></label><a class="cms-btn" href={formatIntent({ route: "composer", mode: "assistant" })} onClick={event => { if (!integration.workspace.id || !current || dirty.current || busy || pending || !preview || !matchesHostDocumentFrame(frame.current, preview, window.location.origin, true)) { event.preventDefault(); setError("Save or discard local edits and refresh the selected page before asking the Assistant."); return; } try { writeHostSelection(sessionStorage, integration.workspace.id, { revision: preview.identity.revision, pathname: preview.identity.pathname, target: { renderedNodeId: selected.renderedNodeId, providerId: selected.providerId, recordId: selected.recordId, nodeId: selected.nodeId }, ...(assistantProp ? { prop: assistantProp } : {}) }); } catch (cause) { event.preventDefault(); setError(cause instanceof Error ? cause.message : "Selection handoff unavailable."); } }}>Ask Assistant</a></section><details><summary>Component and owner</summary><p>Component: <code>{selected.componentId}</code></p><p>Owner: <code>{selected.providerId}/{selected.recordId}/{selected.nodeId}</code></p></details><HostInspector key={`${selected.providerId}/${selected.recordId}/${selected.nodeId}/${selected.renderedNodeId}`} target={selected} component={integration.componentProvider?.manifest.components.find(component => component.id === selected.componentId)} disabled={!current || busy || !!pending || recoveryBlocked || !recovery.store || !preview?.editAuthority} saving={busy} onDirty={markDirty} onSave={apply} />{selected.capabilities && <section aria-label="Arrangement owner uses"><h3>Arrangement owner uses</h3>{selected.capabilities.uses.length ? <ul>{selected.capabilities.uses.map(path => <li key={path}>{path}</li>)}</ul> : <p>No route uses were resolved in this capture.</p>}</section>}{current && <a href={formatIntent({ route: "composer", providerId: selected.providerId, compositionId: selected.recordId })}>Edit owning composition</a>}{selected.entries.length > 0 && <><h3>Shared Content sources</h3>{selected.entries.map(entry => <p key={`${entry.providerId}/${entry.recordId}`}><a href={formatIntent({ route: "content", providerId: entry.providerId, modelId: entry.modelId, entryId: entry.recordId })}>{entry.modelId}/{entry.recordId}</a></p>)}<p>Bound values belong to these shared records. Editing them affects every live use.</p></>}</> : <p>Select a component in the page or tree.</p>}</aside>
+    <header><h1>Page authoring</h1><label>Page <LiveSelect class="cms-select" disabled={computed(() => !preview.value)} options={routeOptions} value={computed(() => preview.value?.identity.pathname ?? "")} onChange={value => void refresh(value)} /></label><button class="cms-btn" type="button" on:click={() => void refresh(preview.value?.navigation?.url ?? preview.value?.identity.pathname)}>Refresh saved page</button><button class="cms-btn" type="button" aria-pressed={selecting} on:click={() => { selecting.value = !selecting.value; }}>{computed(() => selecting.value ? "Select components" : "Browse page")}</button><p role="status">{statusText}</p><Show when={refusal}>{() => <p aria-live="polite">{refusalNotice}</p>}</Show><Show when={when(() => error.value)}>{() => <p role="alert">{computed(() => error.value ?? "")}</p>}</Show>{recovery.error && <p role="alert">{recovery.error} Saving is disabled.</p>}<Show when={when(() => preview.value && !preview.value.editAuthority)}>{() => <p>Saved store identity is unavailable. New page edits are disabled.</p>}</Show><Rebuild value={pending}>{retained => retained && <button class="cms-btn" type="button" disabled={busy} on:click={() => void submit(retained)}>Recover pending save ({retained.request.pathname}{retained.sessionId !== recovery.store?.sessionId ? ", previous session" : ""})</button>}</Rebuild></header>
+    <nav aria-label="Page component tree"><h2>Components</h2><Rebuild value={computed(() => preview.value?.targets ?? null)}>{targets => targets && <HostComponentTree targets={targets} titles={titles} selectedId={computed(() => selected.value?.renderedNodeId)} disabled={computed(() => !current.value)} onSelect={chooseTarget} />}</Rebuild></nav>
+    <section aria-label="Rendered page"><Show when={hasPreview}>{() => <iframe ref={frame} title="Host rendered page" sandbox="allow-scripts allow-same-origin" src={computed(() => preview.value?.documentUrl ?? null)} on:load={() => {
+      const shown = preview.value;
+      if (!shown) return;
+      current.value = !invalidated && readyDocument !== null && readyDocument === frame.current?.contentDocument && matchesHostDocumentFrame(frame.current, shown, window.location.origin);
+      if (!matchesHostDocumentFrame(frame.current, shown, window.location.origin)) { invalidated = true; batch(() => { if (!dirty) selected.value = null; error.value = "Preview navigation was not captured. Refresh the saved page before editing."; }); }
+    }} />}</Show></section>
+    <aside aria-label="Selected component inspector"><h2>Inspector</h2><Show when={when(() => selected.value)} fallback={() => <p>Select a component in the page or tree.</p>}>{() => <For each={selection} by={targetKey}>{item => {
+      const target = item.value;
+      const component = integration.componentProvider?.manifest.components.find(entry => entry.id === target.componentId);
+      const assistantProp = signal("");
+      return <>
+        <h3>{componentTitle(target, titles)}</h3>
+        <section aria-label="Assistant selection"><label>Selected property <select modelValue={assistantProp}><option value="">Component arrangement</option>{component?.fields.map(field => <option value={field.prop}>{field.label}</option>)}</select></label><a class="cms-btn" href={formatIntent({ route: "composer", mode: "assistant" })} on:click={event => {
+          const shown = preview.value;
+          if (!integration.workspace.id || !current.value || dirty || busy.value || pending.value || !shown || !matchesHostDocumentFrame(frame.current, shown, window.location.origin, true)) { event.preventDefault(); error.value = "Save or discard local edits and refresh the selected page before asking the Assistant."; return; }
+          try { writeHostSelection(sessionStorage, integration.workspace.id, { revision: shown.identity.revision, pathname: shown.identity.pathname, target: { renderedNodeId: target.renderedNodeId, providerId: target.providerId, recordId: target.recordId, nodeId: target.nodeId }, ...(assistantProp.value ? { prop: assistantProp.value } : {}) }); } catch (cause) { event.preventDefault(); error.value = cause instanceof Error ? cause.message : "Selection handoff unavailable."; }
+        }}>Ask Assistant</a></section>
+        <details><summary>Component and owner</summary><p>Component: <code>{target.componentId}</code></p><p>Owner: <code>{target.providerId}/{target.recordId}/{target.nodeId}</code></p></details>
+        <Keyed value={computed(() => targetKey(target))} by={key => key}>{() => <HostInspector target={target} component={component} disabled={editLocked} saving={busy} onDirty={markDirty} onSave={apply} />}</Keyed>
+        {target.capabilities && <section aria-label="Arrangement owner uses"><h3>Arrangement owner uses</h3>{target.capabilities.uses.length ? <ul>{target.capabilities.uses.map(path => <li>{path}</li>)}</ul> : <p>No route uses were resolved in this capture.</p>}</section>}
+        <Show when={current}>{() => <a href={formatIntent({ route: "composer", providerId: target.providerId, compositionId: target.recordId })}>Edit owning composition</a>}</Show>
+        {target.entries.length > 0 && <><h3>Shared Content sources</h3>{target.entries.map(entry => <p><a href={formatIntent({ route: "content", providerId: entry.providerId, modelId: entry.modelId, entryId: entry.recordId })}>{entry.modelId}/{entry.recordId}</a></p>)}<p>Bound values belong to these shared records. Editing them affects every live use.</p></>}
+      </>;
+    }}</For>}</Show></aside>
   </main>;
 }

@@ -1,15 +1,15 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 
 export interface ContainerProps {
   width: "page" | "prose";
-  children?: ComponentChildren;
+  children?: Child | object;
 }
 
 const WIDTH = { page: "max-w-shop-page", prose: "max-w-shop-prose" } as const;
 
 export function Container({ width = "page", children }: ContainerProps) {
-  return <div class={`mx-auto w-full ${WIDTH[width] ?? WIDTH.page} px-shop-hsp-md shop-md:px-shop-hsp-lg shop-xl:px-shop-hsp-2xl`}>{children}</div>;
+  return <div class={`mx-auto w-full ${WIDTH[width] ?? WIDTH.page} px-shop-hsp-md shop-md:px-shop-hsp-lg shop-xl:px-shop-hsp-2xl`}>{children as Child}</div>;
 }
 
 export const containerComponent = defineComponent<ContainerProps>()(Container, {

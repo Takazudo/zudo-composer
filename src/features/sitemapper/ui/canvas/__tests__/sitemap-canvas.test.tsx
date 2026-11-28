@@ -1,7 +1,5 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { cleanup, fireEvent, render, screen, settle, waitFor } from "../../../../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SitemapDocument, SitemapNode } from "../../../../../sitemapper/model";
 import { SITEMAP_SCHEMA_VERSION } from "../../../../../sitemapper/model";
@@ -72,12 +70,11 @@ describe("SitemapCanvas", () => {
     });
     const sample = () => ({ height: viewport.style.height, top: stage.style.top, width: stage.style.width });
     const resize = async () => {
-      await act(() => {
-        notify();
-        notify(); // Coalesce a burst of node/scroller notifications.
-        expect(frames).toHaveLength(1);
-        frames.shift()!(0);
-      });
+      notify();
+      notify(); // Coalesce a burst of node/scroller notifications.
+      expect(frames).toHaveLength(1);
+      frames.shift()!(0);
+      await settle();
     };
     await resize();
     await resize();
@@ -104,11 +101,10 @@ describe("SitemapCanvas", () => {
     const scroller = container.querySelector<HTMLElement>(".sg-sitemapper-canvas__scroll")!;
     scroller.style.padding = "16px";
     Object.defineProperties(scroller, { clientWidth: { value: 832 }, clientHeight: { value: 132 } });
-    await act(() => {
-      notify();
-      frames.shift()!(0);
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Fit", exact: true }));
+    notify();
+    frames.shift()!(0);
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Fit" }));
     // The two-row stage is 224px tall: 100 available pixels fit at 45%,
     // whereas the 132px padding box would incorrectly choose 59%.
     expect(callbacks.onZoomChange).toHaveBeenCalledWith(0.45);
@@ -137,18 +133,23 @@ describe("SitemapCanvas", () => {
     // in it and moves every other row on the route while it happens.
     const reveal = vi.mocked(Element.prototype.scrollIntoView);
     reveal.mockClear();
-    const callbacks = { ...props(), selectedId: "Home" };
-    const { rerender } = render(<SitemapCanvas {...callbacks} />);
+    const zoom = signal(1), selectedId = signal<string | null>("Home");
+    const callbacks = { ...props(), selectedId, zoom };
+    render(<SitemapCanvas {...callbacks} />);
     await waitFor(() => expect(reveal).toHaveBeenCalledTimes(1));
 
     // A re-render that changes the measured geometry, and so the layout, but
     // not the selection.
-    rerender(<SitemapCanvas {...callbacks} zoom={1.5} />);
-    rerender(<SitemapCanvas {...callbacks} zoom={2} />);
+    zoom.value = 1.5;
+    await settle();
+    zoom.value = 2;
+    await settle();
     await waitFor(() => expect(reveal).toHaveBeenCalledTimes(1));
 
     // Choosing a different node is a request, and is honoured.
-    rerender(<SitemapCanvas {...callbacks} selectedId="Child" />);
+    zoom.value = 1;
+    selectedId.value = "Child";
+    await settle();
     await waitFor(() => expect(reveal).toHaveBeenCalledTimes(2));
   });
 
@@ -192,30 +193,34 @@ describe("SitemapCanvas", () => {
     expect(container.querySelector(".sg-sitemapper-connectors")).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("dispatches controlled selection and node actions through the shared menu", () => {
+  it("dispatches controlled selection and node actions through the shared menu", async () => {
     const callbacks = props();
     render(<SitemapCanvas {...callbacks} />);
     fireEvent.click(screen.getByRole("button", { name: /^Child/ }));
     fireEvent.click(screen.getByRole("button", { name: "Actions for Child" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Add child page" }));
     expect(callbacks.onSelect).toHaveBeenCalledWith("Child");
     expect(callbacks.onAddChild).toHaveBeenCalledWith("Child");
   });
 
-  it("keeps the root page out of the destructive menu items", () => {
+  it("keeps the root page out of the destructive menu items", async () => {
     render(<SitemapCanvas {...props()} />);
     fireEvent.click(screen.getByRole("button", { name: "Actions for Home" }));
+    await settle();
     const menu = screen.getByRole("menu", { name: "Home actions" });
     expect(menu.querySelector('[role="menuitem"][disabled]')).not.toBeNull();
     expect(screen.getByRole("menuitem", { name: "Delete…" })).toBeDisabled();
     expect(screen.getByRole("menuitem", { name: "Duplicate" })).toBeDisabled();
   });
 
-  it("dismisses a node menu on Escape", () => {
+  it("dismisses a node menu on Escape", async () => {
     render(<SitemapCanvas {...props()} />);
     fireEvent.click(screen.getByRole("button", { name: "Actions for Child" }));
+    await settle();
     const menu = screen.getByRole("menu", { name: "Child actions" });
     fireEvent.keyDown(menu, { key: "Escape" });
+    await settle();
     expect(screen.queryByRole("menu", { name: "Child actions" })).toBeNull();
   });
 

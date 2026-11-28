@@ -43,7 +43,7 @@ export function creatorPackageManager(tool) {
 /** @param {string} name */
 export function validateHostName(name) {
   if (name.length > 214 || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(name)
-    || ["node_modules", "favicon.ico", "zudo-composer", contractName, "@zudo-composer/ui", "preact", "preact-render-to-string", "@types/node", "vitest", "typescript"].includes(name)
+    || ["node_modules", "favicon.ico", "zudo-composer", contractName, "@zudo-composer/ui", "@takazudo/zfb", "@types/node", "vitest", "typescript"].includes(name)
     || name.split("/").some((part) => part === "src")) {
     throw new Error(`Invalid host package name "${name}". Use a lowercase npm name, distinct from its dependencies.`);
   }
@@ -53,11 +53,11 @@ export function validateHostName(name) {
 export function creatorDependencyVersions({ tool, contractVersion }) {
   return {
     dependencies: {
+      "@takazudo/zfb": tool.peerDependencies["@takazudo/zfb"],
       "@zudo-composer/component-contract": contractVersion,
-      preact: tool.peerDependencies.preact,
       "zudo-composer": tool.version,
     },
-    devDependencies: Object.fromEntries(["@types/node", "preact-render-to-string", "typescript", "vitest"]
+    devDependencies: Object.fromEntries(["@types/node", "typescript", "vitest"]
       .map((name) => [name, tool.devDependencies[name]])),
   };
 }
@@ -91,8 +91,8 @@ export function assertCreatorVersionParity(manifest, metadata) {
   // Read the tool metadata independently of the manifest-writing helper. A
   // wrong literal introduced into that helper must not become its own oracle.
   const expectedVersions = {
-    dependencies: { "zudo-composer": metadata.tool.version, "@zudo-composer/component-contract": metadata.contractVersion, preact: metadata.tool.peerDependencies.preact },
-    devDependencies: Object.fromEntries(["@types/node", "preact-render-to-string", "typescript", "vitest"].map((name) => [name, metadata.tool.devDependencies[name]])),
+    dependencies: { "zudo-composer": metadata.tool.version, "@zudo-composer/component-contract": metadata.contractVersion, "@takazudo/zfb": metadata.tool.peerDependencies["@takazudo/zfb"] },
+    devDependencies: Object.fromEntries(["@types/node", "typescript", "vitest"].map((name) => [name, metadata.tool.devDependencies[name]])),
   };
   for (const [section, versions] of Object.entries(expectedVersions)) {
     for (const [name, expected] of Object.entries(versions)) {
@@ -103,6 +103,11 @@ export function assertCreatorVersionParity(manifest, metadata) {
   }
   if (manifest.packageManager !== creatorPackageManager(metadata.tool)) throw new Error("Creator package-manager version differs from the tool.");
 }
+
+// A host never runs the zfb CLI, so its ~123 MB native binary is not installed;
+// the zudo-react runtime is plain JavaScript and imports without it.
+export const ZFB_PLATFORM_PACKAGES = Object.freeze(["@takazudo/zfb-darwin-arm64", "@takazudo/zfb-darwin-x64", "@takazudo/zfb-linux-arm64-gnu", "@takazudo/zfb-linux-x64-gnu", "@takazudo/zfb-win32-x64-msvc"]);
+const ZFB_IGNORED_OPTIONAL = `ignoredOptionalDependencies:\n${ZFB_PLATFORM_PACKAGES.map((name) => `  - "${name}"\n`).join("")}`;
 
 export const HOST_GITIGNORE = `node_modules/
 .zudo-site-project/
@@ -129,13 +134,13 @@ export function createHostConfigFiles(name, metadata) {
       compilerOptions: {
         target: "ES2023", lib: ["ES2023", "DOM", "DOM.Iterable"], module: "ESNext", moduleResolution: "Bundler",
         resolveJsonModule: true, verbatimModuleSyntax: true, moduleDetection: "force", noEmit: true,
-        strict: true, skipLibCheck: true, jsx: "react-jsx", jsxImportSource: "preact", types: ["node"],
+        strict: true, skipLibCheck: true, jsx: "react-jsx", jsxImportSource: "@takazudo/zfb/zudo-react", types: ["node"],
       },
       include: ["components", "site-project.ts", "zudo-composer.config.ts", "vitest.config.ts", "tests"],
     }),
-    "vitest.config.ts": `import { defineConfig } from "vitest/config";\n\nexport default defineConfig({\n  oxc: { jsx: { runtime: "automatic", importSource: "preact" } },\n  resolve: { dedupe: ["preact"] },\n  test: {\n    include: ["tests/**/*.spec.tsx"],\n    environment: "node",\n    testTimeout: 60_000,\n  },\n});\n`,
+    "vitest.config.ts": `import { defineConfig } from "vitest/config";\n\nexport default defineConfig({\n  oxc: { jsx: { runtime: "automatic", importSource: "@takazudo/zfb/zudo-react" } },\n  resolve: { dedupe: ["@takazudo/zfb"] },\n  test: {\n    include: ["tests/**/*.spec.tsx"],\n    environment: "node",\n    testTimeout: 60_000,\n  },\n});\n`,
     ".gitignore": HOST_GITIGNORE,
-    "pnpm-workspace.yaml": "packages:\n  - .\n\nallowBuilds:\n  esbuild: true\n",
+    "pnpm-workspace.yaml": `packages:\n  - .\n\nallowBuilds:\n  esbuild: true\n\n${ZFB_IGNORED_OPTIONAL}`,
   };
 }
 

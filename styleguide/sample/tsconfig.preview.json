@@ -9,7 +9,7 @@
     "noEmit": true,
     "strict": true,
     "jsx": "react-jsx",
-    "jsxImportSource": "preact",
+    "jsxImportSource": "@takazudo/zfb/zudo-react",
     "skipLibCheck": false,
     "types": [
       "vite/client",

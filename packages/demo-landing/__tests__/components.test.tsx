@@ -1,4 +1,4 @@
-import { render } from "preact-render-to-string";
+import { renderToString as render } from "@takazudo/zfb/zudo-react/server";
 import { describe, expect, it } from "vitest";
 import * as packModule from "../components/pack";
 import { isCurrentPath } from "../components/chrome";
@@ -214,7 +214,7 @@ describe("prose", () => {
     expect(output).toContain("<em>soft</em>");
     expect(output).toContain('<a href="/docs" class="text-land-link underline decoration-land-border');
     expect(output).not.toContain("javascript:");
-    expect(output).toContain("&lt;script>");
+    expect(output).toContain("&lt;script&gt;x&lt;/script&gt;");
   });
 
   it("keeps text links off the accent", () => {

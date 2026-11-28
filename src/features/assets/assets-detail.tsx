@@ -1,4 +1,4 @@
-import type { JSX } from "preact";
+import { computed, Show, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import type { AssetSummary } from "../../assets";
 import { FolderIcon, TrashIcon } from "../../components/icons";
 import { formatLibraryTimestamp, formatLibraryTimestampFull, toLibraryDate } from "../../components/library-page";
@@ -7,9 +7,10 @@ import { assetMarkdown, assetUrl } from "./controller";
 import type { AssetDimensionStore } from "./assets-dimensions";
 import { formatBytes, formatPixelSize, isAssetImage, assetTypeLabel } from "./assets-format";
 import { AssetThumb } from "./assets-thumb";
+import { AssetView } from "./live";
 
 export interface AssetDetailPanelProps {
-  record: AssetSummary | null;
+  record: ReadonlySignal<AssetSummary | null>;
   dimensions: AssetDimensionStore;
   onCopyUrl(record: AssetSummary): void;
   onCopyMarkdown(record: AssetSummary): void;
@@ -24,27 +25,36 @@ export interface AssetDetailPanelProps {
  * either — alt belongs to the reference, not to the asset, and the Asset model
  * stores none.
  */
-export function AssetDetailPanel({ record, dimensions, onCopyUrl, onCopyMarkdown, onDelete }: AssetDetailPanelProps): JSX.Element {
+export function AssetDetailPanel({ record, dimensions, onCopyUrl, onCopyMarkdown, onDelete }: AssetDetailPanelProps): Child {
+  const present = computed(() => record.value !== null);
+  const shown = computed(() => record.value!);
   return (
     <Pane class="sg-assets-detail" label="Asset details">
       <PaneHeader title="Details" />
       <PaneBody padded>
-        {record ? (
-          <AssetDetail
-            record={record}
-            dimensions={dimensions}
-            onCopyUrl={onCopyUrl}
-            onCopyMarkdown={onCopyMarkdown}
-            onDelete={onDelete}
-          />
-        ) : (
-          <EmptyState
-            inline
-            icon={FolderIcon}
-            title="No asset selected"
-            description="Choose an asset to read its public URL, copy a Markdown reference, or delete it."
-          />
-        )}
+        <Show
+          when={present}
+          fallback={() => (
+            <EmptyState
+              inline
+              icon={FolderIcon}
+              title="No asset selected"
+              description="Choose an asset to read its public URL, copy a Markdown reference, or delete it."
+            />
+          )}
+        >
+          {() => (
+            <AssetView record={shown}>{(current) => (
+              <AssetDetail
+                record={current}
+                dimensions={dimensions}
+                onCopyUrl={onCopyUrl}
+                onCopyMarkdown={onCopyMarkdown}
+                onDelete={onDelete}
+              />
+            )}</AssetView>
+          )}
+        </Show>
       </PaneBody>
     </Pane>
   );
@@ -56,8 +66,8 @@ function AssetDetail({
   onCopyUrl,
   onCopyMarkdown,
   onDelete,
-}: AssetDetailPanelProps & { record: AssetSummary }): JSX.Element {
-  const size = isAssetImage(record) ? dimensions.get(record.id) : undefined;
+}: Omit<AssetDetailPanelProps, "record"> & { record: AssetSummary }): Child {
+  const size = computed(() => (isAssetImage(record) ? dimensions.get(record.id) : undefined));
   const added = toLibraryDate(record.createdAt);
   const url = assetUrl(record);
 
@@ -73,12 +83,12 @@ function AssetDetail({
           <dt>Type</dt>
           <dd>{assetTypeLabel(record.mimeType)}</dd>
         </div>
-        {size ? (
+        <Show when={computed(() => Boolean(size.value))}>{() => (
           <div>
             <dt>Dimensions</dt>
-            <dd>{formatPixelSize(size)}</dd>
+            <dd>{computed(() => (size.value ? formatPixelSize(size.value) : ""))}</dd>
           </div>
-        ) : null}
+        )}</Show>
         <div>
           <dt>Size</dt>
           <dd>{formatBytes(record.byteLength)}</dd>
@@ -87,7 +97,7 @@ function AssetDetail({
           <dt>Added</dt>
           <dd>
             {added ? (
-              <time dateTime={added.toISOString()} title={formatLibraryTimestampFull(added)}>
+              <time datetime={added.toISOString()} title={formatLibraryTimestampFull(added)}>
                 {formatLibraryTimestamp(added)}
               </time>
             ) : "—"}
@@ -100,19 +110,23 @@ function AssetDetail({
       </dl>
 
       <Field label="Public URL">
-        <div class="sg-assets-detail__copy">
-          <Input size="sm" class="sg-assets-detail__value" value={url} readOnly onFocus={(event) => event.currentTarget.select()} />
-          <Button size="sm" onClick={() => onCopyUrl(record)}>Copy</Button>
-        </div>
+        {(field) => (
+          <div class="sg-assets-detail__copy">
+            <Input field={field} size="sm" class="sg-assets-detail__value" value={url} readonly on:focus={(event) => event.currentTarget.select()} />
+            <Button size="sm" on:click={() => onCopyUrl(record)}>Copy</Button>
+          </div>
+        )}
       </Field>
       <Field label="Markdown">
-        <div class="sg-assets-detail__copy">
-          <Input size="sm" class="sg-assets-detail__value" value={assetMarkdown(record)} readOnly onFocus={(event) => event.currentTarget.select()} />
-          <Button size="sm" onClick={() => onCopyMarkdown(record)}>Copy Markdown</Button>
-        </div>
+        {(field) => (
+          <div class="sg-assets-detail__copy">
+            <Input field={field} size="sm" class="sg-assets-detail__value" value={assetMarkdown(record)} readonly on:focus={(event) => event.currentTarget.select()} />
+            <Button size="sm" on:click={() => onCopyMarkdown(record)}>Copy Markdown</Button>
+          </div>
+        )}
       </Field>
 
-      <Button variant="danger" size="sm" class="sg-assets-detail__delete" onClick={() => onDelete(record)}>
+      <Button variant="danger" size="sm" class="sg-assets-detail__delete" on:click={() => onDelete(record)}>
         <TrashIcon size="sm" />
         Delete…
       </Button>

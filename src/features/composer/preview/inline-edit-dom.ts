@@ -14,7 +14,7 @@
 // ground-check invariant (which is only sound because entry and the
 // ground-check derive the value IDENTICALLY), so they live here, once.
 //
-// Everything in this module is pure or DOM-only: no Preact, no bridge, no
+// Everything in this module is pure or DOM-only: no zudo-react, no bridge, no
 // session state.
 
 import type { CompositionNode } from "../headless-api";

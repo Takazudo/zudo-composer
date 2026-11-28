@@ -1,12 +1,12 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 
 export interface CategoryBodyProps {
-  children?: ComponentChildren;
+  children?: Child | object;
 }
 
 export function CategoryBody({ children }: CategoryBodyProps) {
-  return <div class="flex flex-col gap-shop-vsp-lg py-shop-vsp-lg">{children}</div>;
+  return <div class="flex flex-col gap-shop-vsp-lg py-shop-vsp-lg">{children as Child}</div>;
 }
 
 export const categoryBodyComponent = defineComponent<CategoryBodyProps>()(CategoryBody, {

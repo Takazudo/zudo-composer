@@ -6,7 +6,7 @@
 //     selection, expansion, edit/preview mode, canvas viewport choice, and an
 //     honest save/load status.
 //
-// This module is 100% pure — no DOM, no localStorage, no Preact. It only
+// This module is 100% pure — no DOM, no localStorage, no zudo-react. It only
 // applies Takazudo/zudo-sg#245's commands (addNode/updateProps/reorderNode/removeNode) and
 // folds their `CommandResult` into a new `ComposerControllerState`. Side
 // effects (queue persistence and the native navigation guard) live in sibling

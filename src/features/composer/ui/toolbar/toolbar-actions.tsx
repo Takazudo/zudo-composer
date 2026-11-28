@@ -1,16 +1,13 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 // The Composer toolbar's inline-end group: the two status chips the save state
 // does not cover, history, Export, and the overflow menu.
 //
 // The save state itself is NOT here — `EditorChrome` publishes it through
-// `useEditorStatus` and the app shell draws it, so every editor reports saving
+// `bindEditorStatus` and the app shell draws it, so every editor reports saving
 // in one place. What remains is Composer-specific and belongs beside the
 // commands: the session clipboard, and a generated-output block, which is a
 // separate fact from "the record is saved" and must not soften it.
 
-import type { JSX } from "preact";
-import { useRef } from "preact/hooks";
+import { computed, Show, type Child, type Ref } from "@takazudo/zfb/zudo-react";
 import type { CompositionDerivedOutputOutcome, CompositionNode } from "../../../../composer/browser";
 import { ComposerClipboardChip } from "../../app/composer-clipboard-chip";
 import {
@@ -23,26 +20,27 @@ import {
   UndoIcon,
   WarningIcon,
 } from "../../../../components/icons";
-import { Menu, MenuItem, MenuSeparator, useMenu } from "../../../../components/overlay";
+import { createMenu, Menu, MenuItem, MenuSeparator } from "../../../../components/overlay";
+import { read, type MaybeSignal } from "../../../../components/reactive";
 import { Button, StatusChip } from "../../../../components/ui";
 
 export interface ComposerToolbarActionsProps {
   onUndo?: () => void;
   onRedo?: () => void;
-  canUndo?: boolean;
-  canRedo?: boolean;
+  canUndo?: MaybeSignal<boolean>;
+  canRedo?: MaybeSignal<boolean>;
   onExport: () => void;
   exportLabel?: string;
-  exportDisabled?: boolean;
+  exportDisabled?: MaybeSignal<boolean>;
   /** Kept separate from the save status so "Saved" stays truthful. */
-  derivedOutput?: CompositionDerivedOutputOutcome | null;
+  derivedOutput?: MaybeSignal<CompositionDerivedOutputOutcome | null>;
   /** The session clipboard — a chip while it holds something. */
-  clipboard?: CompositionNode | null;
+  clipboard?: MaybeSignal<CompositionNode | null>;
   /** Friendly display name for a component id; required only alongside `clipboard`. */
   titleFor?: (componentId: string) => string | undefined;
   /** Record-level duplicate, distinct from duplicating a selected node. */
   onDuplicateComposition?: () => void;
-  duplicatingComposition?: boolean;
+  duplicatingComposition?: MaybeSignal<boolean>;
   onRenameComposition?: () => void;
   onDeleteComposition?: () => void;
   /** Toggles for the two rails, mirroring the overflow menu's entries. */
@@ -67,82 +65,83 @@ export function ComposerToolbarActions({
   onDeleteComposition,
   onToggleStructure,
   onToggleInspector,
-}: ComposerToolbarActionsProps): JSX.Element {
-  const overflowRef = useRef<HTMLButtonElement | null>(null);
-  const overflow = useMenu(overflowRef, { align: "end" });
-  const blocked = derivedOutput?.records.find((record) => record.status === "blocked");
+}: ComposerToolbarActionsProps): Child {
+  const overflowRef: Ref<HTMLButtonElement> = { current: null };
+  const overflow = createMenu(overflowRef, { align: "end" });
+  const blocked = computed(() => read(derivedOutput)?.records.some((record) => record.status === "blocked") ?? false);
+  const duplicating = computed(() => read(duplicatingComposition));
 
   return (
     <>
       <ComposerClipboardChip clipboard={clipboard} titleFor={titleFor} />
-      {blocked && (
-        <StatusChip
-          state="custom"
-          label="Generated output blocked"
-          tone="warn"
-          icon={WarningIcon}
-        />
-      )}
-      {onUndo && (
+      <Show when={blocked}>
+        {() => (
+          <StatusChip
+            state="custom"
+            label="Generated output blocked"
+            tone="warn"
+            icon={WarningIcon}
+          />
+        )}
+      </Show>
+      {onUndo ? (
         <Button
           variant="ghost"
           iconOnly
           aria-label="Undo"
           title="Undo (Cmd+Z / Ctrl+Z)"
-          disabled={!canUndo}
-          onClick={onUndo}
+          disabled={computed(() => !read(canUndo))}
+          on:click={() => onUndo()}
         >
           <UndoIcon size="sm" />
         </Button>
-      )}
-      {onRedo && (
+      ) : null}
+      {onRedo ? (
         <Button
           variant="ghost"
           iconOnly
           aria-label="Redo"
           title="Redo (Cmd+Shift+Z / Ctrl+Shift+Z or Ctrl+Y)"
-          disabled={!canRedo}
-          onClick={onRedo}
+          disabled={computed(() => !read(canRedo))}
+          on:click={() => onRedo()}
         >
           <RedoIcon size="sm" />
         </Button>
-      )}
-      <Button disabled={exportDisabled} aria-disabled={exportDisabled} onClick={onExport}>
+      ) : null}
+      <Button disabled={exportDisabled} aria-disabled={computed(() => read(exportDisabled))} on:click={() => onExport()}>
         <DownloadIcon size="sm" />
         {exportLabel}
       </Button>
-      {/* A raw button rather than `Button`: the menu measures its trigger
-       * through a ref, and Preact strips `ref` from a function component. */}
-      <button
-        type="button"
-        ref={overflowRef}
-        class="cms-btn cms-btn--ghost cms-btn--icon"
+      <Button
+        variant="ghost"
+        iconOnly
+        elementRef={overflowRef}
         aria-label="More composition actions"
         {...overflow.triggerProps}
       >
         <EllipsisIcon size="sm" />
-      </button>
+      </Button>
       <Menu controller={overflow} label="Composition actions">
-        {onDuplicateComposition && (
-          <MenuItem icon={DuplicateIcon} disabled={duplicatingComposition} onSelect={onDuplicateComposition}>
-            {duplicatingComposition ? "Duplicating composition…" : "Duplicate composition"}
+        {onDuplicateComposition ? (
+          <MenuItem icon={DuplicateIcon} disabled={duplicating} onSelect={onDuplicateComposition}>
+            {computed(() => (duplicating.value ? "Duplicating composition…" : "Duplicate composition"))}
           </MenuItem>
-        )}
-        {onRenameComposition && (
+        ) : null}
+        {onRenameComposition ? (
           <MenuItem icon={EditIcon} onSelect={onRenameComposition}>
             Rename…
           </MenuItem>
-        )}
-        {onToggleStructure && <MenuItem onSelect={onToggleStructure}>Toggle structure</MenuItem>}
-        {onToggleInspector && <MenuItem onSelect={onToggleInspector}>Toggle inspector</MenuItem>}
-        {onDeleteComposition && (
+        ) : null}
+        {onToggleStructure ? <MenuItem onSelect={onToggleStructure}>Toggle structure</MenuItem> : null}
+        {onToggleInspector ? <MenuItem onSelect={onToggleInspector}>Toggle inspector</MenuItem> : null}
+        {onDeleteComposition ? (
           <>
             <MenuSeparator />
             <MenuItem icon={TrashIcon} tone="danger" onSelect={onDeleteComposition}>
               Delete…
             </MenuItem>
           </>
-        )}
+        ) : null}
       </Menu>
     </>
   );

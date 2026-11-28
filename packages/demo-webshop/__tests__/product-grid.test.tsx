@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
-import { render } from "preact";
-import { act } from "preact/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProductCard, ProductGrid } from "../components/pack";
+import { render, settle } from "./render";
 
 const PRODUCTS = [
   { slug: "ledger-notebook", name: "Ledger Notebook A5", price: 24, category: "desk", featured: true, tag1: "paper" },
@@ -14,18 +13,16 @@ const PRODUCTS = [
 
 let host: HTMLElement;
 
-function mount(props: Partial<Parameters<typeof ProductGrid>[0]> = {}) {
-  act(() => {
-    render(
+async function mount(props: Partial<Parameters<typeof ProductGrid>[0]> = {}) {
+  host = render(
       <ProductGrid toolbar chips pageSize={8} defaultSort="name" emptyText="Nothing here" {...props}
         items={PRODUCTS.map((product) => (
           <ProductCard key={product.slug} name={product.name} href={`/products/${product.slug}`} src="" alt="" price={product.price} currency="USD"
             category={product.category} availability="in-stock" stockLabel="In stock" slug={product.slug} featured={product.featured} tag1={product.tag1} tag2="" tag3="" />
         ))}
       />,
-      host,
-    );
-  });
+  ).container;
+  await settle();
 }
 
 const cards = () => [...host.querySelectorAll<HTMLAnchorElement>("a[data-slug]")];
@@ -34,87 +31,81 @@ const visible = () => cards().filter((card) => !card.hidden).sort((a, b) => Numb
 beforeEach(() => {
   vi.useFakeTimers();
   history.replaceState(null, "", "/products");
-  host = document.createElement("div");
-  document.body.append(host);
 });
 
 afterEach(() => {
-  act(() => render(null, host));
-  host.remove();
   vi.useRealTimers();
 });
 
 describe("shop.product-grid over materialised card children", () => {
-  it("keeps DOM order and expresses the sort with CSS order", () => {
-    mount();
+  it("keeps DOM order and expresses the sort with CSS order", async () => {
+    await mount();
     expect(cards().map((card) => card.dataset.slug)).toEqual(PRODUCTS.map((product) => product.slug));
     expect(visible()).toEqual(["brass-rule", "candle-set", "ledger-notebook", "sling-pouch", "wick-lamp"]);
     expect(host.textContent).toContain("5 products");
   });
 
-  it("re-sorts by price when the sort select changes", () => {
-    mount();
+  it("re-sorts by price when the sort select changes", async () => {
+    await mount();
     const select = host.querySelector("select")!;
-    act(() => {
-      select.value = "price-desc";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    select.value = "price-desc";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle();
     expect(visible()).toEqual(["wick-lamp", "sling-pouch", "brass-rule", "candle-set", "ledger-notebook"]);
     expect(location.search).toBe("?sort=price-desc");
   });
 
-  it("filters with multi-select category chips", () => {
-    mount();
+  it("filters with multi-select category chips", async () => {
+    await mount();
     const chip = (label: string) => [...host.querySelectorAll("button")].find((button) => button.textContent === label)!;
     expect([...host.querySelectorAll("button[aria-pressed]")].map((button) => button.textContent)).toEqual(["Desk", "Carry", "Light"]);
-    act(() => chip("Light").click());
+    chip("Light").click();
+    await settle();
     expect(visible()).toEqual(["candle-set", "wick-lamp"]);
-    act(() => chip("Carry").click());
+    chip("Carry").click();
+    await settle();
     expect(visible()).toEqual(["candle-set", "sling-pouch", "wick-lamp"]);
     expect(host.textContent).toContain("3 products");
     expect(new URLSearchParams(location.search).get("cat")).toBe("light,carry");
   });
 
-  it("searches name and tags after the debounce", () => {
-    mount();
+  it("searches name and tags after the debounce", async () => {
+    await mount();
     const input = host.querySelector<HTMLInputElement>('input[type="search"]')!;
-    act(() => {
-      input.value = "brass";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    input.value = "brass";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await settle();
     expect(visible()).toHaveLength(5);
-    act(() => {
-      vi.advanceTimersByTime(150);
-    });
+    vi.advanceTimersByTime(150);
+    await settle();
     expect(visible()).toEqual(["brass-rule", "wick-lamp"]);
-    act(() => {
-      input.value = "zzz";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    act(() => {
-      vi.advanceTimersByTime(150);
-    });
+    input.value = "zzz";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await settle();
+    vi.advanceTimersByTime(150);
+    await settle();
     expect(visible()).toEqual([]);
     expect(host.textContent).toContain("Nothing here");
   });
 
-  it("paginates and hides cards on other pages", () => {
-    mount({ pageSize: 4 });
+  it("paginates and hides cards on other pages", async () => {
+    await mount({ pageSize: 4 });
     expect(visible()).toEqual(["brass-rule", "candle-set", "ledger-notebook", "sling-pouch"]);
     const next = host.querySelector<HTMLButtonElement>('button[aria-label="Next page"]')!;
-    act(() => next.click());
+    next.click();
+    await settle();
     expect(visible()).toEqual(["wick-lamp"]);
     expect(new URLSearchParams(location.search).get("page")).toBe("2");
   });
 
-  it("restores shareable state from the URL", () => {
+  it("restores shareable state from the URL", async () => {
     history.replaceState(null, "", "/products?cat=desk&sort=price-desc");
-    mount();
+    await mount();
     expect(visible()).toEqual(["brass-rule", "ledger-notebook"]);
   });
 
-  it("applies no filtering or pagination with the toolbar off", () => {
-    mount({ toolbar: false, pageSize: 4, defaultSort: "featured" });
+  it("applies no filtering or pagination with the toolbar off", async () => {
+    await mount({ toolbar: false, pageSize: 4, defaultSort: "featured" });
     expect(host.querySelector("select")).toBeNull();
     expect(visible()).toEqual(["ledger-notebook", "sling-pouch", "wick-lamp", "brass-rule", "candle-set"]);
   });

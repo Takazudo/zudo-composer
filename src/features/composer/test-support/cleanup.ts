@@ -1,7 +1,5 @@
-import { cleanup } from "@testing-library/preact";
-import { afterEach } from "vitest";
-
-afterEach(cleanup);
+// The shared render helper registers its own cleanup, so importing it is enough.
+import "../../../test/render";
 
 if (typeof HTMLDialogElement !== "undefined") {
   if (!HTMLDialogElement.prototype.showModal) {

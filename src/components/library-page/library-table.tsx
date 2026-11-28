@@ -1,4 +1,6 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
+import type { MaybeSignal } from "../reactive";
+import type { LiveChild } from "../rebuild";
 import { Chip, DataTable, type DataTableColumn } from "../ui";
 import { formatLibraryTimestamp, formatLibraryTimestampFull, toLibraryDate } from "./library-format";
 import type { LibrarySelectionController } from "./library-selection";
@@ -12,7 +14,7 @@ import { RowMenu, type RowMenuProps } from "./row-menu";
 // one table without the component naming any of them.
 
 /** An absent value reads as an em dash, and stays out of the accessible name. */
-function BlankCell() {
+function BlankCell(): Child {
   return (
     <span class="cms-library-blank" aria-hidden="true">
       —
@@ -23,21 +25,22 @@ function BlankCell() {
 export interface LibraryTableProps<Row> {
   /** Accessible name of the table. */
   caption: string;
-  rows: readonly Row[];
+  /** A signal rebuilds the body as the list changes. */
+  rows: MaybeSignal<readonly Row[]>;
   contract: LibraryRowContract<Row>;
   /** Route columns, rendered between the kind chip and the updated column. */
   columns?: readonly DataTableColumn<Row>[];
   selection?: LibrarySelectionController<Row>;
   /** The trailing `⋯` menu. Return null for a row that has no actions. */
   rowMenu?: (row: Row) => RowMenuProps | null;
-  /** Rendered above the table while rows are selected — a `BulkBar`, typically. */
-  bulkBar?: ComponentChildren;
+  /** Rendered above the table while it has content — a `BulkBar`, typically; a signal follows the selection. */
+  bulkBar?: LiveChild;
   /** Replaces the rows when there are none: the empty or no-match state. */
-  empty?: ComponentChildren;
+  empty?: Child;
   density?: "default" | "compact";
-  nameHeader?: ComponentChildren;
-  kindHeader?: ComponentChildren;
-  updatedHeader?: ComponentChildren;
+  nameHeader?: Child;
+  kindHeader?: Child;
+  updatedHeader?: Child;
   class?: string;
 }
 
@@ -55,7 +58,7 @@ export function LibraryTable<Row>({
   kindHeader = "Kind",
   updatedHeader = "Updated",
   class: className,
-}: LibraryTableProps<Row>) {
+}: LibraryTableProps<Row>): Child {
   const nameColumn: DataTableColumn<Row> = {
     key: "name",
     header: nameHeader,
@@ -103,7 +106,7 @@ export function LibraryTable<Row>({
           const date = toLibraryDate(contract.updatedAt?.(row));
           if (!date) return <BlankCell />;
           return (
-            <time dateTime={date.toISOString()} title={formatLibraryTimestampFull(date)}>
+            <time datetime={date.toISOString()} title={formatLibraryTimestampFull(date)}>
               {formatLibraryTimestamp(date)}
             </time>
           );

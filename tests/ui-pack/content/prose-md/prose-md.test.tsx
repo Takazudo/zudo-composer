@@ -6,7 +6,9 @@
  * `prose-md-sanitize.test.tsx` (which needs `@vitest-environment jsdom`; see
  * that file's header).
  */
-import { render, screen, waitFor } from "@testing-library/preact";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { Keyed } from "../../../../src/runtime";
+import { render, screen, settleTasks, waitFor } from "../../../../src/test/render";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProseMd } from "../../../../packages/ui/src/content/prose-md/prose-md";
 import { renderMarkdown } from "../../../../packages/ui/src/content/prose-md/markdown-runtime";
@@ -66,8 +68,16 @@ describe("ProseMd", () => {
     const second = deferred<MarkdownRenderResult>();
     mockedRenderMarkdown.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
 
-    const { rerender } = render(<ProseMd markdown="first" />);
-    rerender(<ProseMd markdown="second" />);
+    // A prop change remounts the node, as the Composer preview renderer does.
+    const markdown = signal("first");
+    render(
+      <Keyed value={markdown} by={(value) => value}>
+        {(value) => <ProseMd markdown={value.value} />}
+      </Keyed>,
+    );
+    await settleTasks();
+    markdown.value = "second";
+    await settleTasks();
 
     // The SECOND (current) request settles first…
     second.resolve({ html: "<p>second</p>", diagnostics: [] });

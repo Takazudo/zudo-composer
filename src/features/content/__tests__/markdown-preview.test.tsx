@@ -1,6 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/preact";
+import { signal, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProseMd } from "@zudo-composer/ui";
+import { Keyed } from "../../../runtime";
+import { render, screen, settle, waitFor } from "../../../test/render";
 
 type MarkdownRenderResult = {
   html: string | null;
@@ -23,8 +25,11 @@ describe("the existing sanitized Markdown preview contract", () => {
     const oldResult = deferred<MarkdownRenderResult>();
     const currentResult = deferred<MarkdownRenderResult>();
     renderMarkdownMock.mockReturnValueOnce(oldResult.promise).mockReturnValueOnce(currentResult.promise);
-    const rendered = render(<ProseMd markdown="old" />);
-    rendered.rerender(<ProseMd markdown="current" />);
+    // Pack components take plain props; a new value remounts, as the renderer's keyed nodes do.
+    const markdown = signal("old");
+    render(<Keyed value={markdown} by={(value: string) => value}>{(value: ReadonlySignal<string>) => <ProseMd markdown={value.value} />}</Keyed>);
+    markdown.value = "current";
+    await settle();
 
     currentResult.resolve({ html: "<p>current result</p>", diagnostics: [] });
     await screen.findByText("current result");

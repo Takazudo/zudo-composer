@@ -32,7 +32,7 @@ export default defineConfig(
         ...wind,
         sources: {
           ...wind.sources,
-          // Product stories and CSS are compiled only by the Preact pipeline.
+          // Product stories and CSS are compiled only by the preview pipeline.
           exclude: [...(wind.sources?.exclude ?? []), "preview/**", "stories/**", "src/generated/**", "src/styles/preview-entry.css"],
         },
       } } : {}),

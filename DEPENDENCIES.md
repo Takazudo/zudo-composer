@@ -320,3 +320,27 @@ The UI package handoff advanced to `5af34a703ea840db22261a0acf8ee09f69c0ae8e`
 on `package/ui-v1`, a fast-forward from `776fb59a` whose root tree equals
 `packages/ui` with md-wasm 4.3.3. Sample's exact Git pin and lock follow it, so
 its release-age exclusion now lists only md-wasm 4.3.3.
+
+## zudo-react migration: Preact removed
+
+The tool, its owned packs, the demo hosts and the four standalone styleguide
+preview graphs now run on zudo-react from `@takazudo/zfb` 7.2.0. This section
+supersedes the Preact KEEP rows above.
+
+- **REMOVE** `preact`, `preact-render-to-string`, `@preact/preset-vite` and
+  `@testing-library/preact` from the root, `packages/*`, `fixtures/host`,
+  `fixtures/themeset-host` and the four styleguide hosts (Blog's route fixture
+  check no longer imports the renderer). The root lockfile and the four host
+  lockfiles resolve none of them. `pnpm runtime:negative-scan` keeps it so.
+- **ADD** `@testing-library/dom` to the Webshop, Landing and Blog demo hosts,
+  whose tests import it, and `jsdom` to Blog's styleguide devDependencies.
+- **ADD** a `@takazudo/zfb` 7.2.0 peer (with a matching devDependency) to
+  `packages/image-editor`, which imports the zudo-react runtime.
+- **UPDATE** the four styleguide hosts' `@takazudo/zfb` and
+  `@takazudo/zfb-runtime` from 6.0.1 to 7.2.0, so each preview graph carries
+  one runtime equal to the pack peer. `@takazudo/zfb-md-wasm` stays 6.0.1 (the
+  pack's exact dependency). zudo-sg 0.9.3, zudo-doc 10.0.3 and zdtp 0.9.5 still
+  declare a ZFB ^6 peer; the hosts install non-strictly, so this is an unmet-peer
+  warning, and each host's own check and build pass on 7.2.0 (Sample waits for
+  the UI-pack handoff). The `doc` member stays on ZFB 6.0.1: it is a separate
+  graph that does not consume a pack.

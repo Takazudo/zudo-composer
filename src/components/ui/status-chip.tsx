@@ -1,5 +1,6 @@
 import { CheckCircleIcon, ErrorIcon, LoadingIcon, WarningIcon } from "../icons";
 import type { IconComponent } from "../icons";
+import type { MaybeSignal } from "../reactive";
 import { Button } from "./button";
 import { cx } from "./class-names";
 
@@ -29,7 +30,7 @@ interface StatusChipBaseProps {
   /** Renders the Retry action; only the `failed` state shows one. */
   onRetry?: () => void;
   retryLabel?: string;
-  retrying?: boolean;
+  retrying?: MaybeSignal<boolean>;
   class?: string;
 }
 
@@ -52,7 +53,7 @@ export function StatusChip(props: StatusChipProps) {
       {Icon ? <Icon size="sm" class={cx("cms-status__icon", preset?.spin && "cms-status__spinner")} /> : null}
       <span class="cms-status__label">{detail ? `${text} · ${detail}` : text}</span>
       {state === "failed" && onRetry ? (
-        <Button size="xs" onClick={onRetry} busy={retrying}>
+        <Button size="xs" on:click={() => onRetry()} busy={retrying}>
           {retryLabel}
         </Button>
       ) : null}

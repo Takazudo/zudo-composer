@@ -12,7 +12,7 @@
     "skipLibCheck": true,
     "types": ["node"],
     "jsx": "react-jsx",
-    "jsxImportSource": "preact"
+    "jsxImportSource": "@takazudo/zfb/zudo-react"
   },
   "include": [
     "server/site-project-local/**/*.ts",

@@ -1,7 +1,7 @@
 // IFRAME-SIDE half of the Composer preview bridge.
 //
 // Mirrors `bridge.ts`: same guard, same exact-origin posting, same revision
-// rule — but from inside the preview document. Kept out of the Preact island so
+// rule — but from inside the preview document. Kept out of the zudo-react root so
 // the listener, the revision guard, and the emitters can be tested against
 // plain fake windows with no DOM and no component tree.
 //

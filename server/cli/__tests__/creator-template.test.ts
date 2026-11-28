@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { runnerImport } from "vite";
@@ -42,11 +42,11 @@ it("produces a complete portable starter through canonical writers and reopens i
       paths: Object.fromEntries(["authoring", "site-build", "site-project"].map((name) => [`zudo-composer/${name}`, [join(APP_ROOT, `server/${name}.d.mts`)]]).concat([["zudo-composer/config", [join(APP_ROOT, "server/config/define.d.mts")]]])),
     });
     const diagnostics = [...parsed.errors, ...ts.getPreEmitDiagnostics(ts.createProgram(parsed.fileNames, parsed.options))];
-    expect(diagnostics.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"))).toEqual([]);
+    expect(diagnostics.map((diagnostic) => `${diagnostic.file ? relative(host, diagnostic.file.fileName) : ""}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`)).toEqual([]);
     const evaluate = async (path: string) => (await runnerImport(pathToFileURL(path).href, {
       configFile: false, root: host,
-      resolve: { alias: { "zudo-composer/authoring": join(APP_ROOT, "server/authoring.mjs") }, dedupe: ["preact"] },
-      oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
+      resolve: { alias: { "zudo-composer/authoring": join(APP_ROOT, "server/authoring.mjs") }, dedupe: ["@takazudo/zfb"] },
+      oxc: { jsx: { runtime: "automatic", importSource: "@takazudo/zfb/zudo-react" } },
     })).module as Record<string, unknown>;
     const pack = (await evaluate(join(host, "components/pack.ts"))).componentPack as TrustedComponentPack;
     const config = composer({ workspaceRoot: host, pack: "creator-contract/components" }, { env: {} });

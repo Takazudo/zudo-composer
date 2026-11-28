@@ -1,5 +1,3 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../test-support/cleanup";
 // Central integration tests (issue #251): every surface driven by ONE
 // controller, one document snapshot. The canvas iframe is stood in for by the
@@ -8,8 +6,7 @@ import "../../test-support/cleanup";
 // The tree/chooser/inspector/toolbar are the genuine components.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act } from "preact/test-utils";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { fireEvent, render, screen, settle, waitFor, within } from "../../../../test/render";
 import type {
   CompositionDocument,
   CompositionRecord,
@@ -31,7 +28,7 @@ import {
   selectMessage as protocolSelectMessage,
 } from "../../preview/protocol";
 import { INSPECTOR_COMMIT_DEBOUNCE_MS } from "../../chrome/use-composer-controller";
-import { ChromeContext, createChromeStore } from "../../../../app/chrome-context";
+import { createChromeStore } from "../../../../app/chrome-context";
 import { ComposerIntegration } from "../composer-integration";
 import { makeTestBridge } from "../test-support/preview-harness";
 import { LS_COMPOSER_VIEWPORT } from "../viewport";
@@ -81,7 +78,7 @@ const asAny = (v: unknown) => v as any;
 
 let rev = 1000;
 
-function setup(
+async function setup(
   seedViewport?: string,
   sample: CompositionDocument = emptyDoc(),
   getPublicationDependencies?: () => Promise<{ status: "ready"; dependentCount: number }>,
@@ -96,18 +93,18 @@ function setup(
   // drawing it, so the spec supplies the chrome store the app shell would.
   const chrome = createChromeStore();
   const utils = render(
-    <ChromeContext.Provider value={chrome}>
-      <ComposerIntegration
+    <ComposerIntegration
+        appChrome={chrome}
         componentProvider={fixtureComponentProvider}
         controllerOptions={controllerOptions(sample)}
         createBridge={bridge.createBridge}
         previewLocation={bridge.location}
         getPublicationDependencies={getPublicationDependencies}
         {...patternCallbacks}
-      />
-    </ChromeContext.Provider>,
+      />,
   );
-  act(() => bridge.deliver(readyMessage()));
+  bridge.deliver(readyMessage());
+  await settle();
 
   const region = (selector: string) => utils.container.querySelector(selector) as HTMLElement;
   const tree = () => region(".cms-editor__region--nav");
@@ -130,8 +127,9 @@ function setup(
     within(tree()).queryByRole("treeitem", { name: new RegExp(`^${name}`) }) !== null;
 
   /** Open the inspector tab named `name`; Properties is what the panel opens on. */
-  function inspectorTab(name: "Properties" | "Slots" | "Reuse") {
+  async function inspectorTab(name: "Properties" | "Slots" | "Reuse") {
     fireEvent.click(within(inspector()).getByRole("tab", { name: new RegExp(`^${name}`) }));
+    await settle();
   }
 
   const renders = () => bridge.posts.filter((p) => asAny(p.message).type === "render");
@@ -139,9 +137,11 @@ function setup(
   const lastSentSession = () => asAny(bridge.posts.at(-1)!.message).session;
 
   /** Add via the shared chooser, opened for `target` from the canvas request-add path. */
-  function addAt(target: InsertionTarget, cardName: string) {
-    act(() => bridge.deliver(requestAddMessage(rev++, target)));
+  async function addAt(target: InsertionTarget, cardName: string) {
+    bridge.deliver(requestAddMessage(rev++, target));
+    await settle();
     fireEvent.click(within(chooser()).getByRole("button", { name: cardName }));
+    await settle();
   }
 
   return {
@@ -174,15 +174,19 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     const source = fixtureDocument([
       fixtureNode(FIXTURE_IDS.split, {}, { left: [], right: [] }, "split"),
     ]);
-    const s = setup(undefined, source, dependencies);
+    const s = await setup(undefined, source, dependencies);
 
     // The outlet is published from the Reuse tab, for the slot selected in
     // Structure — one selection, read by both panes.
     fireEvent.click(s.treeRow("Left"));
-    s.inspectorTab("Reuse");
+    await settle();
+    await s.inspectorTab("Reuse");
     fireEvent.click(within(s.inspector()).getByRole("button", { name: "Use Left as outlet" }));
+    await settle();
     fireEvent.input(within(s.inspector()).getByLabelText("Outlet label"), { target: { value: "Main content" } });
+    await settle();
     fireEvent.click(within(s.inspector()).getByRole("button", { name: "Publish template" }));
+    await settle();
 
     await waitFor(() => {
       expect(s.canvasDoc().publication).toMatchObject({
@@ -200,9 +204,13 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     expect(within(s.tree()).queryByRole("button", { name: "Add component to Left" })).not.toBeInTheDocument();
 
     fireEvent.click(s.treeRow("Right"));
-    s.inspectorTab("Reuse");
+
+    await settle();
+    await s.inspectorTab("Reuse");
     fireEvent.click(within(s.inspector()).getByRole("button", { name: "Reassign outlet to Right" }));
+    await settle();
     fireEvent.click(within(s.inspector()).getByRole("button", { name: "Save reassignment" }));
+    await settle();
     await waitFor(() => {
       const publication = s.canvasDoc().publication;
       expect(publication).toMatchObject({
@@ -223,13 +231,15 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
       kind: "global-template",
       outlet: { id: "outlet-main", label: "Main", target: { parentId: "split", slotId: "left" } },
     };
-    const s = setup(undefined, source, dependencies);
+    const s = await setup(undefined, source, dependencies);
 
-    s.inspectorTab("Reuse");
+    await s.inspectorTab("Reuse");
     fireEvent.click(within(s.inspector()).getByRole("button", { name: "Unpublish Global template" }));
+    await settle();
     fireEvent.click(
       within(screen.getByRole("alertdialog")).getByRole("button", { name: "Unpublish Global template" }),
     );
+    await settle();
 
     await waitFor(() => expect(dependencies).toHaveBeenCalledOnce());
     expect(s.canvasDoc().publication).toMatchObject({ kind: "global-template", outlet: { id: "outlet-main" } });
@@ -238,9 +248,9 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     );
   });
 
-  it("chooser add drives tree, canvas snapshot, inspector, and selection together", () => {
-    const s = setup();
-    s.addAt(ROOT, "Box");
+  it("chooser add drives tree, canvas snapshot, inspector, and selection together", async () => {
+    const s = await setup();
+    await s.addAt(ROOT, "Box");
 
     const doc = s.canvasDoc();
     expect(doc.root).toHaveLength(1);
@@ -290,19 +300,24 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
       kind: "pattern",
       record: patternRecord,
     }));
-    const s = setup(undefined, emptyDoc(), undefined, { listPatternCatalog, loadPattern });
+    const s = await setup(undefined, emptyDoc(), undefined, { listPatternCatalog, loadPattern });
 
-    act(() => s.bridge.deliver(requestAddMessage(rev++, ROOT)));
+    s.bridge.deliver(requestAddMessage(rev++, ROOT));
+
+    await settle();
     fireEvent.click(within(s.chooser()).getByRole("button", { name: "Patterns" }));
+    await settle();
 
     const patternRow = await within(s.chooser()).findByRole("button", { name: /Feature Pattern/i });
     expect(listPatternCatalog).toHaveBeenCalledOnce();
     fireEvent.click(patternRow);
+    await settle();
 
     await waitFor(() => expect(loadPattern).toHaveBeenCalledWith({ providerId: "files", recordId: "feature-pattern" }));
     const insert = await within(s.chooser()).findByRole("button", { name: "Insert Pattern" });
     expect((insert as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(insert);
+    await settle();
 
     await waitFor(() => expect(s.canvasDoc().root.map((node) => node.componentId)).toEqual([FIXTURE_IDS.stack, FIXTURE_IDS.box]));
     expect(s.canvasDoc().root.map((node) => node.id)).not.toEqual(["pattern-stack", "pattern-box"]);
@@ -356,7 +371,8 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
         previewLocation={bridge.location}
       />,
     );
-    act(() => bridge.deliver(readyMessage()));
+    bridge.deliver(readyMessage());
+    await settle();
 
     await waitFor(() => {
       const renderMessage = bridge.posts
@@ -375,40 +391,46 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     expect(within(tree).getAllByRole("treeitem", { name: /^Box/ })).toHaveLength(1);
     expect(within(tree).getByText(/Site shell/)).toBeInTheDocument();
     fireEvent.click(within(tree).getByRole("button", { name: "Open source" }));
+    await settle();
     expect(onOpenSource).toHaveBeenCalledWith("site-shell");
 
     const inspector = view.container.querySelector(".cms-editor__region--insp") as HTMLElement;
     fireEvent.click(within(inspector).getByRole("tab", { name: /^Reuse/ }));
+    await settle();
     expect(within(inspector).getByRole("button", { name: "Detach" })).toBeInTheDocument();
   });
 
-  it("a canvas selection reveals + expands the node's ancestors in the tree", () => {
-    const s = setup();
-    s.addAt(ROOT, "Split Layout");
+  it("a canvas selection reveals + expands the node's ancestors in the tree", async () => {
+    const s = await setup();
+    await s.addAt(ROOT, "Split Layout");
     const splitId = s.canvasDoc().root[0]!.id;
-    s.addAt({ parentId: splitId, slotId: "left", index: 0 }, "Box");
+    await s.addAt({ parentId: splitId, slotId: "left", index: 0 }, "Box");
     const boxId = s.canvasDoc().root[0]!.slots.left![0]!.id;
 
     // Collapse the split so the box row is not rendered.
     fireEvent.click(within(s.tree()).getByRole("button", { name: "Collapse Split Layout" }));
+    await settle();
     expect(s.hasTreeRow("Box")).toBe(false);
 
     // A canvas click on the (hidden) box reveals it: selects + re-expands split.
-    act(() => s.bridge.deliver(selectMessage(rev++, boxId)));
+    s.bridge.deliver(selectMessage(rev++, boxId));
+    await settle();
     expect(s.hasTreeRow("Box")).toBe(true);
     // And the selection is mirrored back to the canvas snapshot.
     expect(s.lastSentSession().selectedId).toBe(boxId);
   });
 
-  it("a cross-frame Add opens the shared chooser for the exact target and restores focus to the iframe", () => {
-    const s = setup();
+  it("a cross-frame Add opens the shared chooser for the exact target and restores focus to the iframe", async () => {
+    const s = await setup();
     // Seed one box so we can target an explicit index.
-    s.addAt(ROOT, "Box");
+    await s.addAt(ROOT, "Box");
     // The canvas requests an add BEFORE the first child (index 0). The host
     // focuses the iframe first, so the chooser captures it as the restore
     // target (the chooser then moves focus to its own search field).
-    act(() => s.bridge.deliver(requestAddMessage(rev++, { parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 0 })));
+    s.bridge.deliver(requestAddMessage(rev++, { parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 0 }));
+    await settle();
     fireEvent.click(within(s.chooser()).getByRole("button", { name: "Stack" }));
+    await settle();
 
     const doc = s.canvasDoc();
     expect(doc.root.map((n) => n.componentId)).toEqual([FIXTURE_IDS.stack, FIXTURE_IDS.box]);
@@ -416,11 +438,11 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     expect(document.activeElement).toBe(s.iframe());
   });
 
-  it("a before-first insertion lands at index 0 identically in tree, canvas, and export order", () => {
-    const s = setup();
-    s.addAt(ROOT, "Stack");
+  it("a before-first insertion lands at index 0 identically in tree, canvas, and export order", async () => {
+    const s = await setup();
+    await s.addAt(ROOT, "Stack");
     // Insert before the first child.
-    s.addAt({ parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 0 }, "Split Layout");
+    await s.addAt({ parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 0 }, "Split Layout");
 
     // Canvas snapshot order.
     expect(s.canvasDoc().root.map((n) => n.componentId)).toEqual([FIXTURE_IDS.split, FIXTURE_IDS.stack]);
@@ -434,6 +456,7 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
 
     // Export order (same document/manifest source).
     fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Export JSX" }));
+    await settle();
     const code = screen.getByRole("dialog", { name: /^Export —/ }).querySelector("pre")!.textContent ?? "";
     expect(code).toContain("SplitLayout");
     expect(code).toContain("Stack");
@@ -441,42 +464,58 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
   });
 
   it("keeps the shared tree pending-insert session through the chooser and focuses the inserted row", async () => {
-    const s = setup(undefined, makeAbcDocument());
+    const s = await setup(undefined, makeAbcDocument());
     fireEvent.click(within(s.tree()).getByRole("button", { name: "Insert before Split Layout" }));
+    await settle();
     fireEvent.click(within(s.chooser()).getByRole("button", { name: "Text" }));
+    await settle();
 
     expect(s.canvasDoc().root.map((node) => node.componentId)).toEqual([FIXTURE_IDS.text, FIXTURE_IDS.split]);
     await waitFor(() => expect(document.activeElement).toBe(s.treeRow("Text")));
   });
 
   it("uses the shared pending session for terminal Add and restores the terminal origin on cancel", async () => {
-    const s = setup();
+    const s = await setup();
     const terminal = within(s.tree()).getByRole("button", { name: "Add component" });
     fireEvent.click(terminal);
+    await settle();
     fireEvent.click(within(s.chooser()).getByRole("button", { name: "Cancel" }));
+    await settle();
     await waitFor(() => expect(document.activeElement).toBe(terminal));
 
     fireEvent.click(terminal);
+
+    await settle();
     fireEvent.click(within(s.chooser()).getByRole("button", { name: "Stack" }));
+    await settle();
     expect(s.canvasDoc().root.map((node) => node.componentId)).toEqual([FIXTURE_IDS.stack]);
     await waitFor(() => expect(document.activeElement).toBe(s.treeRow("Stack")));
   });
 
   it("routes document/slot row Add and adjacent insert-menu Add through live terminal sessions", async () => {
-    const s = setup(undefined, makeAbcDocument());
+    const s = await setup(undefined, makeAbcDocument());
     const documentAdd = within(s.tree()).getByRole("button", { name: "Add component to the document" });
     fireEvent.click(documentAdd);
+    await settle();
     fireEvent.click(within(s.chooser()).getByRole("button", { name: "Cancel" }));
+    await settle();
     await waitFor(() => expect(document.activeElement).toBe(documentAdd));
 
     fireEvent.click(documentAdd);
+
+    await settle();
     fireEvent.click(within(s.chooser()).getByRole("button", { name: "Text" }));
+    await settle();
     expect(s.canvasDoc().root.map((node) => node.componentId)).toEqual([FIXTURE_IDS.split, FIXTURE_IDS.text]);
     await waitFor(() => expect(document.activeElement).toBe(s.treeRow("Text")));
 
     fireEvent.click(within(s.tree()).getByRole("button", { name: "Insert options for Right" }));
+
+    await settle();
     fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Add component…" }));
+    await settle();
     fireEvent.click(within(s.chooser()).getByRole("button", { name: "Text" }));
+    await settle();
     expect(s.canvasDoc().root[0]!.slots.right!.map((node) => node.props.label ?? node.props.children)).toEqual(["B", "C", "Text"]);
     await waitFor(() => expect(document.activeElement).toBe(s.treeRowsNamed("Text").find((row) => row.getAttribute("aria-selected") === "true")));
   });
@@ -484,8 +523,8 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
 
 describe("ComposerIntegration — mutations reflect everywhere (#251)", () => {
   it("a prop edit updates the document, the canvas snapshot, and the save status", async () => {
-    const s = setup();
-    s.addAt(ROOT, "Box");
+    const s = await setup();
+    await s.addAt(ROOT, "Box");
     const boxId = s.canvasDoc().root[0]!.id;
 
     const label = within(s.inspector()).getByLabelText("Label") as HTMLInputElement;
@@ -494,7 +533,9 @@ describe("ComposerIntegration — mutations reflect everywhere (#251)", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       fireEvent.input(label, { target: { value: "Renamed" } });
-      act(() => { vi.advanceTimersByTime(INSPECTOR_COMMIT_DEBOUNCE_MS); });
+      await settle();
+      vi.advanceTimersByTime(INSPECTOR_COMMIT_DEBOUNCE_MS);
+      await settle();
     } finally {
       vi.useRealTimers();
     }
@@ -504,9 +545,9 @@ describe("ComposerIntegration — mutations reflect everywhere (#251)", () => {
     await waitFor(() => expect(s.chrome.getSnapshot().editorStatus).toEqual({ state: "saved" }));
   });
 
-  it("a canvas inline-edit commit routes through updateProps; the inspector reflects it live (#257)", () => {
-    const s = setup();
-    s.addAt(ROOT, "Box");
+  it("a canvas inline-edit commit routes through updateProps; the inspector reflects it live (#257)", async () => {
+    const s = await setup();
+    await s.addAt(ROOT, "Box");
     const boxId = s.canvasDoc().root[0]!.id;
 
     const label = () => within(s.inspector()).getByLabelText("Label") as HTMLInputElement;
@@ -517,7 +558,9 @@ describe("ComposerIntegration — mutations reflect everywhere (#251)", () => {
       s.bridge.posts.filter((p) => asAny(p.message).type === "render").at(-1)!.message,
     ).revision as number;
 
-    act(() => s.bridge.deliver(commitInlineEditMessage(boxId, "label", "Edited on canvas", currentRev)));
+    s.bridge.deliver(commitInlineEditMessage(boxId, "label", "Edited on canvas", currentRev));
+
+    await settle();
 
     // Routed through the ONE mutation path → document + canvas snapshot updated…
     expect(s.canvasDoc().root[0]!.props.label).toBe("Edited on canvas");
@@ -526,27 +569,31 @@ describe("ComposerIntegration — mutations reflect everywhere (#251)", () => {
     expect(label().value).toBe("Edited on canvas");
   });
 
-  it("a sibling move reorders the document across tree + canvas", () => {
-    const s = setup();
-    s.addAt({ parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 0 }, "Box");
-    s.addAt({ parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 1 }, "Stack");
+  it("a sibling move reorders the document across tree + canvas", async () => {
+    const s = await setup();
+    await s.addAt({ parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 0 }, "Box");
+    await s.addAt({ parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 1 }, "Stack");
     const [firstId, secondId] = s.canvasDoc().root.map((n) => n.id);
 
     // Stack is selected (just added); move it up from its own row menu.
     fireEvent.click(within(s.tree()).getByRole("button", { name: "Open menu for Stack" }));
+    await settle();
     fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Move up" }));
+    await settle();
     expect(s.canvasDoc().root.map((n) => n.id)).toEqual([secondId, firstId]);
   });
 
-  it("removing a subtree clears it from the tree and the canvas snapshot", () => {
-    const s = setup();
-    s.addAt(ROOT, "Split Layout");
+  it("removing a subtree clears it from the tree and the canvas snapshot", async () => {
+    const s = await setup();
+    await s.addAt(ROOT, "Split Layout");
     const splitId = s.canvasDoc().root[0]!.id;
-    s.addAt({ parentId: splitId, slotId: "left", index: 0 }, "Box");
+    await s.addAt({ parentId: splitId, slotId: "left", index: 0 }, "Box");
 
     // Select the split's row, then delete it from the inspector's Node section.
     fireEvent.click(s.treeRow("Split Layout"));
+    await settle();
     fireEvent.click(within(s.inspector()).getByRole("button", { name: "Delete" }));
+    await settle();
 
     expect(s.canvasDoc().root).toHaveLength(0);
     expect(s.hasTreeRow("Split Layout")).toBe(false);
@@ -554,13 +601,15 @@ describe("ComposerIntegration — mutations reflect everywhere (#251)", () => {
 });
 
 describe("ComposerIntegration — mode, viewport, persistence, export (#251)", () => {
-  it("Preview mode removes structural affordances and read-only-locks the inspector", () => {
-    const s = setup();
-    s.addAt(ROOT, "Box");
+  it("Preview mode removes structural affordances and read-only-locks the inspector", async () => {
+    const s = await setup();
+    await s.addAt(ROOT, "Box");
     // Edit mode: the tree offers an Add affordance.
     expect(within(s.tree()).getByRole("button", { name: "Add component to the document" })).toBeInTheDocument();
 
     fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Preview" }));
+
+    await settle();
 
     expect(s.lastSentSession().mode).toBe("preview");
     expect(within(s.tree()).queryByRole("button", { name: "Add component to the document" })).toBeNull();
@@ -569,131 +618,152 @@ describe("ComposerIntegration — mode, viewport, persistence, export (#251)", (
     expect(within(s.inspector()).getByText("Box")).toBeInTheDocument();
   });
 
-  it("switching Edit → Preview → Edit preserves the document and selection", () => {
-    const s = setup();
-    s.addAt(ROOT, "Box");
+  it("switching Edit → Preview → Edit preserves the document and selection", async () => {
+    const s = await setup();
+    await s.addAt(ROOT, "Box");
     const boxId = s.canvasDoc().root[0]!.id;
     fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Preview" }));
+    await settle();
     fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Edit" }));
+    await settle();
     expect(s.lastSentSession().mode).toBe("edit");
     expect(s.lastSentSession().selectedId).toBe(boxId);
     expect(s.canvasDoc().root).toHaveLength(1);
   });
 
-  it("the viewport control resizes only the preview frame and persists the choice", () => {
-    const s = setup();
+  it("the viewport control resizes only the preview frame and persists the choice", async () => {
+    const s = await setup();
     expect(s.frame().style.width).toBe(""); // fluid
     fireEvent.click(
       within(within(s.toolbar()).getByRole("radiogroup", { name: "Canvas viewport" })).getByRole("radio", { name: "768" }),
     );
+    await settle();
     expect(s.frame().style.width).toBe("768px");
     expect(localStorage.getItem(LS_COMPOSER_VIEWPORT)).toBe("tablet");
   });
 
-  it("restores a persisted viewport on load", () => {
-    const s = setup("mobile");
+  it("restores a persisted viewport on load", async () => {
+    const s = await setup("mobile");
     expect(s.frame().style.width).toBe("390px");
   });
 
-  it("export renders exactly the generator output for the current document/manifest", () => {
-    const s = setup();
-    s.addAt(ROOT, "Box");
+  it("export renders exactly the generator output for the current document/manifest", async () => {
+    const s = await setup();
+    await s.addAt(ROOT, "Box");
     fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Export JSX" }));
+    await settle();
     const dialog = screen.getByRole("dialog", { name: "Export — Integration Doc" });
     expect(dialog.querySelector("pre")!.textContent).toContain("Box");
   });
 });
 
 describe("ComposerIntegration — replay + guarded keyboard (#251)", () => {
-  it("replays the newest document to a reloaded iframe at a fresh revision", () => {
-    const s = setup();
-    s.addAt(ROOT, "Box");
+  it("replays the newest document to a reloaded iframe at a fresh revision", async () => {
+    const s = await setup();
+    await s.addAt(ROOT, "Box");
     const before = s.bridge.posts.length;
 
     // The iframe reloads and re-announces ready — the newest snapshot replays.
-    act(() => s.bridge.deliver(readyMessage()));
+    s.bridge.deliver(readyMessage());
+    await settle();
     const replay = s.bridge.posts[before]!;
     expect(asAny(replay.message).type).toBe("render");
     expect(asAny(replay.message).document.root).toHaveLength(1);
   });
 
-  it("Delete removes the selected node, but is guarded in inputs and in Preview", () => {
-    const s = setup();
-    s.addAt(ROOT, "Box");
+  it("Delete removes the selected node, but is guarded in inputs and in Preview", async () => {
+    const s = await setup();
+    await s.addAt(ROOT, "Box");
     expect(s.canvasDoc().root).toHaveLength(1);
 
     // Guard 1: a keystroke aimed at an editable control does NOT delete.
     const label = within(s.inspector()).getByLabelText("Label");
     fireEvent.keyDown(label, { key: "Delete" });
+    await settle();
     expect(s.canvasDoc().root).toHaveLength(1);
 
     // Guard 2: Preview mode never mutates.
     fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Preview" }));
+    await settle();
     fireEvent.keyDown(document.body, { key: "Delete" });
+    await settle();
     expect(s.canvasDoc().root).toHaveLength(1);
 
     // Edit mode, focus outside an input → the selected node is removed.
     fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Edit" }));
+    await settle();
     fireEvent.keyDown(document.body, { key: "Delete" });
+    await settle();
     expect(s.canvasDoc().root).toHaveLength(0);
   });
 });
 
 describe("ComposerIntegration — undo/redo app wiring (#74)", () => {
-  it("row-menu removal is one action and remains undoable by keyboard shortcut", () => {
-    const s = setup(undefined, makeAbcDocument());
+  it("row-menu removal is one action and remains undoable by keyboard shortcut", async () => {
+    const s = await setup(undefined, makeAbcDocument());
 
     fireEvent.click(within(s.tree()).getByRole("button", { name: "Open menu for Split Layout" }));
+
+    await settle();
     fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Delete" }));
+    await settle();
     expect(s.canvasDoc().root).toHaveLength(0);
 
     fireEvent.keyDown(document, { key: "z", ctrlKey: true });
+
+    await settle();
     expect(s.canvasDoc().root).toHaveLength(1);
   });
 
-  it("drives one controller from toolbar, parent shortcuts, and canvas relay", () => {
-    const s = setup();
+  it("drives one controller from toolbar, parent shortcuts, and canvas relay", async () => {
+    const s = await setup();
     const undo = () => within(s.toolbar()).getByRole("button", { name: "Undo" });
     const redo = () => within(s.toolbar()).getByRole("button", { name: "Redo" });
 
     expect(undo()).toBeDisabled();
     expect(redo()).toBeDisabled();
 
-    s.addAt(ROOT, "Box");
+    await s.addAt(ROOT, "Box");
     expect(s.canvasDoc().root).toHaveLength(1);
     expect(undo()).toBeEnabled();
     expect(redo()).toBeDisabled();
 
     // Toolbar actions are wired directly to the mounted controller.
     fireEvent.click(undo());
+    await settle();
     expect(s.canvasDoc().root).toHaveLength(0);
     expect(undo()).toBeDisabled();
     expect(redo()).toBeEnabled();
     fireEvent.click(redo());
+    await settle();
     expect(s.canvasDoc().root).toHaveLength(1);
 
     // Parent-document shortcuts use the same callbacks and capability flags.
     fireEvent.keyDown(document, { key: "z", ctrlKey: true });
+    await settle();
     expect(s.canvasDoc().root).toHaveLength(0);
     expect(undo()).toBeDisabled();
     expect(redo()).toBeEnabled();
 
     // Canvas-relayed shortcuts reach that same controller as well.
-    act(() => s.bridge.deliver(requestHistoryMessage("redo")));
+    s.bridge.deliver(requestHistoryMessage("redo"));
+    await settle();
     expect(s.canvasDoc().root).toHaveLength(1);
-    act(() => s.bridge.deliver(requestHistoryMessage("undo")));
+    s.bridge.deliver(requestHistoryMessage("undo"));
+    await settle();
     expect(s.canvasDoc().root).toHaveLength(0);
     expect(undo()).toBeDisabled();
     expect(redo()).toBeEnabled();
   });
 
-  it("tracks disabled history buttons through mutation, undo, and Preview mode", () => {
-    const s = setup();
+  it("tracks disabled history buttons through mutation, undo, and Preview mode", async () => {
+    const s = await setup();
     const undo = () => within(s.toolbar()).getByRole("button", { name: "Undo" });
     const redo = () => within(s.toolbar()).getByRole("button", { name: "Redo" });
 
-    s.addAt(ROOT, "Box");
+    await s.addAt(ROOT, "Box");
     fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Preview" }));
+    await settle();
 
     expect(undo()).toBeDisabled();
     expect(redo()).toBeDisabled();
@@ -702,35 +772,41 @@ describe("ComposerIntegration — undo/redo app wiring (#74)", () => {
     // Preview's controller capability flags disable both affordances and its
     // keyboard/canvas guards leave the document untouched.
     fireEvent.keyDown(document, { key: "z", ctrlKey: true });
-    act(() => s.bridge.deliver(requestHistoryMessage("undo")));
+    await settle();
+    s.bridge.deliver(requestHistoryMessage("undo"));
+    await settle();
     expect(s.canvasDoc().root).toHaveLength(1);
 
     fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Edit" }));
+
+    await settle();
     expect(undo()).toBeEnabled();
     expect(redo()).toBeDisabled();
     fireEvent.click(undo());
+    await settle();
     expect(undo()).toBeDisabled();
     expect(redo()).toBeEnabled();
   });
 
-  it("drops an inline commit stamped before undo and shows the existing stale notice", () => {
-    const s = setup();
-    s.addAt(ROOT, "Box");
+  it("drops an inline commit stamped before undo and shows the existing stale notice", async () => {
+    const s = await setup();
+    await s.addAt(ROOT, "Box");
     const boxId = s.canvasDoc().root[0]!.id;
     const beforeUndoRevision = asAny(
       s.bridge.posts.filter((p) => asAny(p.message).type === "render").at(-1)!.message,
     ).revision as number;
 
     fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Undo" }));
+
+    await settle();
     expect(s.canvasDoc().root).toHaveLength(0);
     const afterUndoRevision = asAny(
       s.bridge.posts.filter((p) => asAny(p.message).type === "render").at(-1)!.message,
     ).revision as number;
     expect(afterUndoRevision).toBeGreaterThan(beforeUndoRevision);
 
-    act(() =>
-      s.bridge.deliver(commitInlineEditMessage(boxId, "label", "Late canvas edit", beforeUndoRevision)),
-    );
+    s.bridge.deliver(commitInlineEditMessage(boxId, "label", "Late canvas edit", beforeUndoRevision));
+    await settle();
 
     expect(s.canvasDoc().root).toHaveLength(0);
     expect(screen.getByText(/Your inline edit was not applied/)).toBeInTheDocument();
@@ -740,11 +816,13 @@ describe("ComposerIntegration — undo/redo app wiring (#74)", () => {
 describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
   beforeEach(() => resetFixtureIds());
 
-  it("structure node menu: Copy/Cut/Duplicate/Move/Delete, Delete danger-styled, and closing restores focus to the trigger", () => {
-    const s = setup(undefined, makeAbcDocument());
+  it("structure node menu: Copy/Cut/Duplicate/Move/Delete, Delete danger-styled, and closing restores focus to the trigger", async () => {
+    const s = await setup(undefined, makeAbcDocument());
     const trigger = within(s.tree()).getByRole("button", { name: "Open menu for Box B" });
 
     fireEvent.click(trigger);
+
+    await settle();
     expect(within(s.menu()!).getAllByRole("menuitem").map((el) => el.textContent)).toEqual([
       "Copy",
       "Cut",
@@ -758,17 +836,20 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
     );
 
     fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Copy" }));
+
+    await settle();
     expect(within(s.toolbar()).getByText("Box", { exact: false })).toBeInTheDocument();
     expect(s.menu()).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("opaque nodes show NO Copy/Cut/Duplicate in the node menu — reorder and Delete remain", () => {
+  it("opaque nodes show NO Copy/Cut/Duplicate in the node menu — reorder and Delete remain", async () => {
     const doc = makeAbcDocument();
     doc.root.push({ id: "ghost", componentId: "ghost.unknown", componentVersion: 1, props: {}, slots: {} });
-    const s = setup(undefined, doc);
+    const s = await setup(undefined, doc);
     const trigger = within(s.tree()).getByRole("button", { name: /open menu for ghost.unknown/i });
     fireEvent.click(trigger);
+    await settle();
     expect(within(s.menu()!).getAllByRole("menuitem").map((el) => el.textContent)).toEqual([
       "Move up",
       "Move down",
@@ -776,21 +857,26 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
     ]);
   });
 
-  it("Delete on a populated subtree removes in one action and remains undoable from the toolbar", () => {
-    const s = setup(undefined, makeAbcDocument());
+  it("Delete on a populated subtree removes in one action and remains undoable from the toolbar", async () => {
+    const s = await setup(undefined, makeAbcDocument());
     fireEvent.click(within(s.tree()).getByRole("button", { name: "Open menu for Split Layout" }));
+    await settle();
     fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Delete" }));
+    await settle();
 
     expect(s.canvasDoc().root).toHaveLength(0);
     expect(s.menu()).toBeNull();
 
     fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Undo" }));
+
+    await settle();
     expect(s.canvasDoc().root).toHaveLength(1);
   });
 
-  it("insert menu always offers BOTH Add component… and Paste here; paste disabled while clipboard is empty", () => {
-    const s = setup(undefined, makeAbcDocument());
+  it("insert menu always offers BOTH Add component… and Paste here; paste disabled while clipboard is empty", async () => {
+    const s = await setup(undefined, makeAbcDocument());
     fireEvent.click(within(s.tree()).getByRole("button", { name: "Insert options for the document" }));
+    await settle();
     const items = within(s.menu()!).getAllByRole("menuitem");
     expect(items.map((el) => el.textContent)).toEqual(["Add component…", "Paste here"]);
     expect((within(s.menu()!).getByRole("menuitem", { name: "Paste here" }) as HTMLButtonElement).disabled).toBe(
@@ -798,19 +884,23 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
     );
   });
 
-  it("PASTE INTO A NAMED SLOT end-to-end through the insert menu — the B/C right-slot fixture", () => {
-    const s = setup(undefined, makeAbcDocument());
+  it("PASTE INTO A NAMED SLOT end-to-end through the insert menu — the B/C right-slot fixture", async () => {
+    const s = await setup(undefined, makeAbcDocument());
 
     // Copy B via its node menu.
     fireEvent.click(within(s.tree()).getByRole("button", { name: "Open menu for Box B" }));
+    await settle();
     fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Copy" }));
+    await settle();
     expect(s.menu()).toBeNull();
 
     // Open the RIGHT slot's insert menu (the companion "⋯" beside its own "+Add").
     fireEvent.click(within(s.tree()).getByRole("button", { name: "Insert options for Right" }));
+    await settle();
     const paste = within(s.menu()!).getByRole("menuitem", { name: 'Paste "Box" here' });
     expect((paste as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(paste);
+    await settle();
 
     const right = s.canvasDoc().root[0]!.slots.right as { id: string; componentId: string }[];
     expect(right.map((node) => node.id).slice(0, 2)).toEqual(["B", "C"]);
@@ -823,19 +913,22 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
     expect(s.menu()).toBeNull();
   });
 
-  it("Escape closes the tree-origin menu and returns focus to its trigger", () => {
-    const s = setup(undefined, makeAbcDocument());
+  it("Escape closes the tree-origin menu and returns focus to its trigger", async () => {
+    const s = await setup(undefined, makeAbcDocument());
     const trigger = within(s.tree()).getByRole("button", { name: "Insert options for the document" });
     fireEvent.click(trigger);
+    await settle();
     expect(s.menu()).not.toBeNull();
     fireEvent.keyDown(s.menu()!, { key: "Escape" });
+    await settle();
     expect(s.menu()).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("cross-frame: request-node-menu opens the SAME menu, and closing posts restore-focus with the exact focusToken", () => {
-    const s = setup(undefined, makeAbcDocument());
-    act(() => s.bridge.deliver(requestNodeMenuMessage(rev++, "B", RECT, "node-menu:B")));
+  it("cross-frame: request-node-menu opens the SAME menu, and closing posts restore-focus with the exact focusToken", async () => {
+    const s = await setup(undefined, makeAbcDocument());
+    s.bridge.deliver(requestNodeMenuMessage(rev++, "B", RECT, "node-menu:B"));
+    await settle();
 
     expect(s.menu()).not.toBeNull();
     expect(within(s.menu()!).getAllByRole("menuitem").map((el) => el.textContent)).toEqual([
@@ -849,6 +942,7 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
 
     s.bridge.posts.length = 0;
     fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Cut" }));
+    await settle();
 
     expect(s.menu()).toBeNull();
     // Cutting B also re-renders the canvas snapshot (a document mutation) —
@@ -858,13 +952,16 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
     expect(asAny(restoreFocusPosts[0]!.message)).toMatchObject({ type: "restore-focus", focusToken: "node-menu:B" });
   });
 
-  it("cross-frame insert menu: Add component… focuses the iframe and opens the shared chooser for the exact target (no restore-focus round trip)", () => {
-    const s = setup(undefined, makeAbcDocument());
+  it("cross-frame insert menu: Add component… focuses the iframe and opens the shared chooser for the exact target (no restore-focus round trip)", async () => {
+    const s = await setup(undefined, makeAbcDocument());
     const target = { parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 1 };
-    act(() => s.bridge.deliver(requestInsertMenuMessage(rev++, target, RECT, "insert-menu:root:1")));
+    s.bridge.deliver(requestInsertMenuMessage(rev++, target, RECT, "insert-menu:root:1"));
+    await settle();
     s.bridge.posts.length = 0;
 
     fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Add component…" }));
+
+    await settle();
 
     // No restore-focus round trip for the "Add" hand-off — the iframe was
     // focused directly (so the chooser captures IT as its own trigger), and
@@ -872,14 +969,15 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
     expect(s.bridge.posts.filter((p) => asAny(p.message).type === "restore-focus")).toHaveLength(0);
     expect(s.chooser()).not.toBeNull();
     fireEvent.click(within(s.chooser()).getByRole("button", { name: "Box" }));
+    await settle();
     expect(s.canvasDoc().root.map((n) => n.componentId)[1]).toBe(FIXTURE_IDS.box);
     // The chooser's OWN close-focus-restore returns focus to its captured
     // trigger — the iframe, matching the existing #251 request-add contract.
     expect(document.activeElement).toBe(s.iframe());
   });
 
-  it("cross-frame: request-insert-menu translates the rect by the iframe's own offset", () => {
-    const s = setup(undefined, makeAbcDocument());
+  it("cross-frame: request-insert-menu translates the rect by the iframe's own offset", async () => {
+    const s = await setup(undefined, makeAbcDocument());
     vi.spyOn(s.iframe(), "getBoundingClientRect").mockReturnValue({
       x: 100,
       y: 40,
@@ -891,11 +989,10 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
       bottom: 340,
       toJSON: () => ({}),
     });
-    act(() =>
-      s.bridge.deliver(
+    s.bridge.deliver(
         requestInsertMenuMessage(rev++, { parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 1 }, RECT, "t"),
-      ),
-    );
+      );
+    await settle();
     // The host translates the iframe-local rect and parks the menu's anchor
     // there; where the panel then lands is the shared menu's own contract.
     const anchor = s.container.querySelector(".sg-composer-menu-anchor") as HTMLElement;
@@ -907,14 +1004,13 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
 });
 
 describe("ComposerIntegration — canvas drag & drop end-to-end (#258)", () => {
-  it("a canvas MOVE mutates the document, mirrors selection, and reveals the node", () => {
-    const s = setup(undefined, makeAbcDocument());
+  it("a canvas MOVE mutates the document, mirrors selection, and reveals the node", async () => {
+    const s = await setup(undefined, makeAbcDocument());
     // Move B to the end of split.right → [C, B], with B selected.
-    act(() =>
-      s.bridge.deliver(
+    s.bridge.deliver(
         dropNodeMessage("B", { parentId: "split", slotId: "right", index: 2 }, false, rev++),
-      ),
-    );
+      );
+    await settle();
 
     const doc = s.canvasDoc();
     expect(doc.root[0]!.slots.right!.map((n) => n.id)).toEqual(["C", "B"]);
@@ -923,13 +1019,12 @@ describe("ComposerIntegration — canvas drag & drop end-to-end (#258)", () => {
     expect(s.hasTreeRow("BoxB")).toBe(true);
   });
 
-  it("an Alt-COPY keeps the source and selects the fully re-ID'd clone", () => {
-    const s = setup(undefined, makeAbcDocument());
-    act(() =>
-      s.bridge.deliver(
+  it("an Alt-COPY keeps the source and selects the fully re-ID'd clone", async () => {
+    const s = await setup(undefined, makeAbcDocument());
+    s.bridge.deliver(
         dropNodeMessage("B", { parentId: "split", slotId: "right", index: 0 }, true, rev++),
-      ),
-    );
+      );
+    await settle();
 
     const right = s.canvasDoc().root[0]!.slots.right!;
     // Source B kept; a distinct clone inserted at index 0.
@@ -941,14 +1036,13 @@ describe("ComposerIntegration — canvas drag & drop end-to-end (#258)", () => {
     expect(s.treeRowsNamed("BoxB")).toHaveLength(2);
   });
 
-  it("an invalid drop (cycle) is rejected: no document change and an error surfaces", () => {
-    const s = setup(undefined, makeAbcDocument());
+  it("an invalid drop (cycle) is rejected: no document change and an error surfaces", async () => {
+    const s = await setup(undefined, makeAbcDocument());
     const before = s.canvasDoc();
-    act(() =>
-      s.bridge.deliver(
+    s.bridge.deliver(
         dropNodeMessage("split", { parentId: "split", slotId: "right", index: 0 }, false, rev++),
-      ),
-    );
+      );
+    await settle();
     // The document is unchanged (the last render is still the pre-drop one).
     expect(s.canvasDoc()).toEqual(before);
   });

@@ -1,7 +1,8 @@
 import { EditorSelection } from "@codemirror/state";
 import { undo } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
-import { fireEvent, render, within } from "@testing-library/preact";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { fireEvent, render, settle, settleTasks, waitFor, within } from "../../../test/render";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { MarkdownEditor, createMarkdownEditor } from "../markdown-editor";
 
@@ -21,10 +22,17 @@ function editorFrom(container: Element): EditorView {
   return view;
 }
 
+/** CodeMirror arrives through a late import on activation. */
+async function mountedEditor(container: Element): Promise<EditorView> {
+  await waitFor(() => expect(container.querySelector(".cm-editor")).not.toBeNull());
+  return editorFrom(container);
+}
+
 describe("MarkdownEditor lifecycle", () => {
-  it("labels the multiline editor and does not echo the initial value", () => {
+  it("labels the multiline editor and does not echo the initial value", async () => {
     const onChange = vi.fn();
     const { container } = render(<MarkdownEditor identity="entry-1:body" label="Body" required value={"exact\n🙂"} onChange={onChange} />);
+    await mountedEditor(container);
     const content = container.querySelector(".cm-content");
     expect(content).toHaveAttribute("aria-multiline", "true");
     expect(content).toHaveAccessibleName("Body");
@@ -34,25 +42,43 @@ describe("MarkdownEditor lifecycle", () => {
     expect(editorFrom(container).state.doc.toString()).toBe("exact\n🙂");
   });
 
-  it("uses the freshest callback and replaces the EditorView only when identity changes", () => {
+  it("uses the freshest callback and replaces the EditorView only when identity changes", async () => {
     const first = vi.fn();
     const second = vi.fn();
     const destroy = vi.spyOn(EditorView.prototype, "destroy");
-    const rendered = render(<MarkdownEditor identity="entry-1:body" label="Body" value="a" onChange={first} />);
-    const initial = editorFrom(rendered.container);
+    const identity = signal("entry-1:body"), value = signal("a"), onChange = signal<(next: string) => void>(first);
+    const rendered = render(<MarkdownEditor identity={identity} label="Body" value={value} onChange={onChange} />);
+    const initial = await mountedEditor(rendered.container);
 
-    rendered.rerender(<MarkdownEditor identity="entry-1:body" label="Body" value="a" onChange={second} />);
+    onChange.value = second; await settle();
     expect(editorFrom(rendered.container)).toBe(initial);
     initial.dispatch({ changes: { from: 1, insert: "b" } });
     expect(second).toHaveBeenLastCalledWith("ab");
     expect(first).not.toHaveBeenCalled();
 
-    rendered.rerender(<MarkdownEditor identity="entry-2:body" label="Body" value={"次\n"} onChange={second} />);
-    expect(editorFrom(rendered.container)).not.toBe(initial);
+    identity.value = "entry-2:body"; value.value = "次\n"; await settle();
+    await waitFor(() => expect(editorFrom(rendered.container)).not.toBe(initial));
     expect(editorFrom(rendered.container).state.doc.toString()).toBe("次\n");
     expect(destroy).toHaveBeenCalledTimes(1);
     rendered.unmount();
     expect(destroy).toHaveBeenCalledTimes(2);
+    destroy.mockRestore();
+  });
+
+  it("creates nothing when it is unmounted before the editor module arrives", async () => {
+    const destroy = vi.spyOn(EditorView.prototype, "destroy");
+    const onChange = vi.fn();
+    const rendered = render(<MarkdownEditor identity="entry-1:body" label="Body" value="a" onChange={onChange} />);
+    const mount = rendered.container.querySelector(".sg-content-markdown-editor__mount");
+    expect(mount).not.toBeNull();
+    rendered.unmount();
+    await settleTasks();
+    await import("../markdown-source");
+    await settleTasks();
+    expect(document.querySelector(".cm-editor")).toBeNull();
+    expect(mount!.querySelector(".cm-editor")).toBeNull();
+    expect(destroy).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
     destroy.mockRestore();
   });
 
@@ -98,10 +124,10 @@ describe("MarkdownEditor lifecycle", () => {
 });
 
 describe("MarkdownEditor authoring surface", () => {
-  it("preserves the editor selection on toolbar pointer-down and formats on click", () => {
+  it("preserves the editor selection on toolbar pointer-down and formats on click", async () => {
     const onChange = vi.fn();
     const { container } = render(<MarkdownEditor identity="entry-1:body" label="Body" value="word" onChange={onChange} />);
-    const view = editorFrom(container);
+    const view = await mountedEditor(container);
     view.dispatch({ selection: EditorSelection.single(0, 4) });
     const bold = within(container as HTMLElement).getByRole("button", { name: "Bold" });
     expect(fireEvent.pointerDown(bold)).toBe(false);
@@ -113,22 +139,23 @@ describe("MarkdownEditor authoring surface", () => {
     expect(view.hasFocus).toBe(true);
   });
 
-  it("leaves Tab available for ordinary focus navigation", () => {
+  it("leaves Tab available for ordinary focus navigation", async () => {
     const { container } = render(<MarkdownEditor identity="entry-1:body" label="Body" value="" onChange={() => undefined} />);
+    await mountedEditor(container);
     const content = container.querySelector<HTMLElement>(".cm-content")!;
     expect(fireEvent.keyDown(content, { key: "Tab", code: "Tab" })).toBe(true);
   });
 
-  it("continues Markdown list markup on Enter", () => {
+  it("continues Markdown list markup on Enter", async () => {
     const { container } = render(<MarkdownEditor identity="entry-1:body" label="Body" value="- item" onChange={() => undefined} />);
-    const view = editorFrom(container);
+    const view = await mountedEditor(container);
     view.dispatch({ selection: EditorSelection.cursor(view.state.doc.length) });
     view.focus();
     fireEvent.keyDown(view.contentDOM, { key: "Enter", code: "Enter" });
     expect(view.state.doc.toString()).toBe("- item\n- ");
   });
 
-  it("offers Edit, Preview, and responsive Split views on the shared segmented control", () => {
+  it("offers Edit, Preview, and responsive Split views on the shared segmented control", async () => {
     const { container } = render(<MarkdownEditor identity="entry-1:body" label="Story" value="## Title" onChange={() => undefined} />);
     const surface = within(container as HTMLElement);
     expect(surface.getByText("Rich text (Markdown)")).toBeInTheDocument();
@@ -138,17 +165,20 @@ describe("MarkdownEditor authoring surface", () => {
     expect(within(view).getByRole("button", { name: "Split" })).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(within(view).getByRole("button", { name: "Preview" }));
+    await settle();
     expect(container.querySelector(".sg-content-markdown-editor")).toHaveAttribute("data-mode", "preview");
     expect(container.querySelector(".sg-content-markdown-editor__source")).toHaveAttribute("hidden");
     // Preview hides the source, so formatting it would land out of sight.
     expect(surface.getByRole("button", { name: "Bold" })).toBeDisabled();
 
     fireEvent.click(within(view).getByRole("button", { name: "Edit" }));
+    await settle();
     expect(container.querySelector(".sg-content-markdown-editor")).toHaveAttribute("data-mode", "edit");
     expect(container.querySelector(".sg-content-markdown-editor__preview")).toHaveAttribute("hidden");
     expect(surface.getByRole("button", { name: "Bold" })).not.toBeDisabled();
 
     fireEvent.click(within(view).getByRole("button", { name: "Split" }));
+    await settle();
     expect(container.querySelector(".sg-content-markdown-editor")).toHaveAttribute("data-mode", "split");
   });
 });

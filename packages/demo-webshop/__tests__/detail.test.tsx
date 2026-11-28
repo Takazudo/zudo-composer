@@ -1,4 +1,4 @@
-import { render } from "preact-render-to-string";
+import { renderToString as render } from "@takazudo/zfb/zudo-react/server";
 import { describe, expect, it } from "vitest";
 import {
   AddToCart,

@@ -1,10 +1,10 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../test-support/cleanup";
 import { describe, expect, it, vi } from "vitest";
-import { render, renderHook } from "@testing-library/preact";
+import { computed, getScope, signal } from "@takazudo/zfb/zudo-react";
+import { Keyed } from "../../../../runtime";
+import { render, settle } from "../../../../test/render";
 import {
-  useComposerKeyboard,
+  bindComposerKeyboard,
   type ComposerKeyboardOptions,
   type KeyboardHost,
 } from "../use-composer-keyboard";
@@ -38,7 +38,7 @@ function setup(opts: Omit<ComposerKeyboardOptions, "host">) {
     },
   };
   function Probe() {
-    useComposerKeyboard({ ...opts, host });
+    bindComposerKeyboard(getScope(), { ...opts, host });
     return null;
   }
   render(<Probe />);
@@ -62,7 +62,46 @@ function setup(opts: Omit<ComposerKeyboardOptions, "host">) {
   return { fire };
 }
 
-describe("useComposerKeyboard — the guard matrix (#251)", () => {
+/**
+ * Mounts the binding with `options` held in a signal. Values follow the signal
+ * in place; callbacks and the host are fixed per binding, so a new identity
+ * for any of them mounts a fresh binding.
+ */
+function renderBinding(initial: ComposerKeyboardOptions) {
+  const options = signal(initial);
+  let generation = 0;
+  let seen: unknown[] | null = null;
+  const binding = computed(() => {
+    const current = options.value;
+    const identity = [current.onRemoveSelected, current.onEscape, current.onUndo, current.onRedo, current.host];
+    if (seen === null || identity.some((value, index) => !Object.is(value, seen![index]))) {
+      seen = identity;
+      generation += 1;
+    }
+    return generation;
+  });
+  function Probe() {
+    const current = options.value;
+    bindComposerKeyboard(getScope(), {
+      ...current,
+      mode: computed(() => options.value.mode as "edit" | "preview"),
+      selectedId: computed(() => options.value.selectedId as string | null),
+      canUndo: computed(() => options.value.canUndo as boolean | undefined ?? true),
+      canRedo: computed(() => options.value.canRedo as boolean | undefined ?? true),
+      menuOpen: computed(() => (options.value.menuOpen as boolean | undefined) ?? false),
+    });
+    return null;
+  }
+  render(<Keyed value={binding} by={(key) => key}>{() => <Probe />}</Keyed>);
+  return {
+    async rerender(next: ComposerKeyboardOptions) {
+      options.value = next;
+      await settle();
+    },
+  };
+}
+
+describe("bindComposerKeyboard — the guard matrix (#251)", () => {
   it("Delete removes the current selection in Edit mode", () => {
     const onRemoveSelected = vi.fn();
     const { fire } = setup({ mode: "edit", selectedId: "n1", onRemoveSelected, onEscape: vi.fn() });
@@ -246,8 +285,8 @@ describe("useComposerKeyboard — the guard matrix (#251)", () => {
   });
 });
 
-describe("useComposerKeyboard — effect does not rebind on unrelated rerenders (#286)", () => {
-  it("does not remove/re-add the keydown listener when every option is referentially stable", () => {
+describe("bindComposerKeyboard — effect does not rebind on unrelated rerenders (#286)", () => {
+  it("does not remove/re-add the keydown listener when every option is referentially stable", async () => {
     const host: KeyboardHost = {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
@@ -262,9 +301,7 @@ describe("useComposerKeyboard — effect does not rebind on unrelated rerenders 
       host,
     };
 
-    const { rerender } = renderHook((opts: ComposerKeyboardOptions) => useComposerKeyboard(opts), {
-      initialProps: options,
-    });
+    const { rerender } = renderBinding(options);
     expect(host.addEventListener).toHaveBeenCalledTimes(1);
     expect(host.removeEventListener).not.toHaveBeenCalled();
 
@@ -272,13 +309,13 @@ describe("useComposerKeyboard — effect does not rebind on unrelated rerenders 
     // same reference/value as before (mirrors a parent rerender where
     // `onEscape`/`onRemoveSelected` are memoized) — the effect must not tear
     // down and re-add the listener.
-    rerender({ mode: "edit", selectedId: "n1", onRemoveSelected, onEscape, host });
+    await rerender({ mode: "edit", selectedId: "n1", onRemoveSelected, onEscape, host });
 
     expect(host.addEventListener).toHaveBeenCalledTimes(1);
     expect(host.removeEventListener).not.toHaveBeenCalled();
   });
 
-  it("DOES rebind when a dep like onEscape actually changes identity", () => {
+  it("DOES rebind when a dep like onEscape actually changes identity", async () => {
     const host: KeyboardHost = {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
@@ -292,12 +329,10 @@ describe("useComposerKeyboard — effect does not rebind on unrelated rerenders 
       host,
     };
 
-    const { rerender } = renderHook((opts: ComposerKeyboardOptions) => useComposerKeyboard(opts), {
-      initialProps: options,
-    });
+    const { rerender } = renderBinding(options);
     expect(host.addEventListener).toHaveBeenCalledTimes(1);
 
-    rerender({ mode: "edit", selectedId: "n1", onRemoveSelected, onEscape: vi.fn(), host });
+    await rerender({ mode: "edit", selectedId: "n1", onRemoveSelected, onEscape: vi.fn(), host });
 
     expect(host.removeEventListener).toHaveBeenCalledTimes(1);
     expect(host.addEventListener).toHaveBeenCalledTimes(2);

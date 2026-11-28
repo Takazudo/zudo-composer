@@ -1,13 +1,13 @@
 import "./cleanup";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/preact";
-import { useState } from "preact/hooks";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { fireEvent, render, screen, settle } from "../../../test/render";
 import { SearchIcon } from "../../icons";
 import { Checkbox, Input, Select, Switch, Textarea } from "../form-controls";
 
 describe("Input", () => {
   it("renders at the md control height and forwards native props", () => {
-    render(<Input aria-label="Name" placeholder="Untitled" value="Product overview" onInput={vi.fn()} />);
+    render(<Input aria-label="Name" placeholder="Untitled" value="Product overview" on:input={vi.fn()} />);
     const input = screen.getByRole("textbox", { name: "Name" });
     expect(input.className).toBe("cms-input");
     expect(input).toHaveAttribute("placeholder", "Untitled");
@@ -36,7 +36,7 @@ describe("Input", () => {
 describe("Select", () => {
   it("renders its options behind a caret and keeps the caller class on the wrapper", () => {
     const { container } = render(
-      <Select aria-label="Kind" value="pattern" onChange={vi.fn()} class="lib-filter">
+      <Select aria-label="Kind" modelValue={signal("pattern")} on:change={vi.fn()} class="lib-filter">
         <option value="pattern">Pattern</option>
         <option value="page">Page</option>
       </Select>,
@@ -74,19 +74,21 @@ describe("Textarea", () => {
 });
 
 function SwitchHarness({ disabled = false }) {
-  const [checked, setChecked] = useState(false);
-  return <Switch checked={checked} onCheckedChange={setChecked} disabled={disabled} label="Auto slug" />;
+  const checked = signal(false);
+  return <Switch checked={checked} onCheckedChange={(next) => { checked.value = next; }} disabled={disabled} label="Auto slug" />;
 }
 
 describe("Switch", () => {
-  it("is a switch that toggles by click and by keyboard", () => {
+  it("is a switch that toggles by click and by keyboard", async () => {
     render(<SwitchHarness />);
     const control = screen.getByRole("switch", { name: "Auto slug" });
     expect(control).not.toBeChecked();
     fireEvent.click(control);
+    await settle();
     expect(screen.getByRole("switch", { name: "Auto slug" })).toBeChecked();
     // Space activates a checkbox natively, which jsdom models as a click.
     fireEvent.click(screen.getByRole("switch", { name: "Auto slug" }));
+    await settle();
     expect(screen.getByRole("switch", { name: "Auto slug" })).not.toBeChecked();
   });
 
@@ -104,12 +106,12 @@ describe("Switch", () => {
 });
 
 function CheckboxHarness() {
-  const [checked, setChecked] = useState(false);
-  return <Checkbox checked={checked} onCheckedChange={setChecked} label="Include drafts" />;
+  const checked = signal(false);
+  return <Checkbox checked={checked} onCheckedChange={(next) => { checked.value = next; }} label="Include drafts" />;
 }
 
 describe("Checkbox", () => {
-  it("toggles and reports each change", () => {
+  it("toggles and reports each change", async () => {
     const { container } = render(<CheckboxHarness />);
     const control = screen.getByRole("checkbox", { name: "Include drafts" });
     expect(control).toHaveAttribute("type", "checkbox");
@@ -117,6 +119,7 @@ describe("Checkbox", () => {
     expect(box).toHaveAttribute("aria-hidden", "true");
     expect(control.nextElementSibling).toBe(box);
     fireEvent.click(control);
+    await settle();
     expect(screen.getByRole("checkbox", { name: "Include drafts" })).toBeChecked();
   });
 

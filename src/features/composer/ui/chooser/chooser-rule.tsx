@@ -1,11 +1,10 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 // Rule presentation for a chooser opened on a restricted insertion target:
 // the header naming what the region accepts, the hidden-by-rule disclosure,
 // and the note explaining why a hidden component is not offered. Every piece
 // renders from one `SlotRule` (`../slot-rules`), so an open target renders none.
 
-import type { JSX } from "preact";
+import { computed, type Child } from "@takazudo/zfb/zudo-react";
+import { read, type MaybeSignal } from "../../../../components/reactive";
 import type { RootPolicyOrigin } from "../../../../composer/browser";
 import type { SlotRule, SlotRuleComponent } from "../slot-rules";
 import { Chip } from "../../../../components/ui";
@@ -21,7 +20,7 @@ export function chooserBlockedMessage(rule: SlotRule): string | null {
   return `This slot is full (max ${rule.max}).`;
 }
 
-function LockGlyph(): JSX.Element {
+function LockGlyph(): Child {
   return (
     <svg class="sg-composer-chooser-rule-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
       <rect x="3.25" y="7" width="9.5" height="6.75" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.5" />
@@ -30,7 +29,7 @@ function LockGlyph(): JSX.Element {
   );
 }
 
-export function ChooserRuleHeader({ rule }: { rule: SlotRule }): JSX.Element {
+export function ChooserRuleHeader({ rule }: { rule: SlotRule }): Child {
   const count = rule.accepts.length;
   return (
     <div class="sg-composer-chooser-rule" data-chooser-rule>
@@ -45,12 +44,12 @@ export function ChooserRuleHeader({ rule }: { rule: SlotRule }): JSX.Element {
           </li>
         ))}
       </ul>
-      {rule.origin && (
+      {rule.origin ? (
         <span class="sg-composer-chooser-rule-source">
           rule from {ruleOriginPath(rule.origin)}
-          {rule.origin.viaTemplate && ` · template ${rule.origin.viaTemplate.sourceName}`}
+          {rule.origin.viaTemplate ? ` · template ${rule.origin.viaTemplate.sourceName}` : null}
         </span>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -58,19 +57,19 @@ export function ChooserRuleHeader({ rule }: { rule: SlotRule }): JSX.Element {
 export interface ChooserHiddenDisclosureProps {
   rule: SlotRule;
   components: readonly SlotRuleComponent[];
-  open: boolean;
+  open: MaybeSignal<boolean>;
   onToggle: (open: boolean) => void;
-  previewedId: string | null;
+  previewedId: MaybeSignal<string | null>;
   onPreview: (id: string) => void;
 }
 
-export function ChooserHiddenDisclosure({ rule, components, open, onToggle, previewedId, onPreview }: ChooserHiddenDisclosureProps): JSX.Element {
+export function ChooserHiddenDisclosure({ rule, components, open, onToggle, previewedId, onPreview }: ChooserHiddenDisclosureProps): Child {
   const where = rule.origin ? ruleOriginPath(rule.origin) : "this region";
   return (
     <details
       class="sg-composer-chooser-hidden"
-      open={open}
-      onToggle={(event) => onToggle((event.currentTarget as HTMLDetailsElement).open)}
+      open={computed(() => read(open))}
+      on:toggle={(event) => onToggle((event.currentTarget as HTMLDetailsElement).open)}
     >
       <summary class="sg-composer-chooser-hidden-summary">
         {components.length} hidden by this region's rule — shown so you know they exist, not offered
@@ -83,10 +82,10 @@ export function ChooserHiddenDisclosure({ rule, components, open, onToggle, prev
               class="sg-composer-chooser-hidden-row"
               aria-label={component.title}
               aria-describedby={`${component.id}-hidden-meta`}
-              aria-pressed={previewedId === component.id}
-              onClick={() => onPreview(component.id)}
-              onMouseEnter={() => onPreview(component.id)}
-              onFocus={() => onPreview(component.id)}
+              aria-pressed={computed(() => read(previewedId) === component.id)}
+              on:click={() => onPreview(component.id)}
+              on:mouseenter={() => onPreview(component.id)}
+              on:focus={() => onPreview(component.id)}
             >
               <span class="sg-composer-chooser-hidden-title" aria-hidden="true">{component.title}</span>
               <span id={`${component.id}-hidden-meta`} class="sg-composer-chooser-hidden-meta">

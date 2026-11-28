@@ -1,7 +1,7 @@
 import { Container, Stack } from "@zudo-composer/ui";
 
 export type CompositionOutlets = {
-  "main-content"?: import("preact").ComponentChildren;
+  "main-content"?: import("@takazudo/zfb/zudo-react").Child;
 };
 
 export default function Composition({ outlets = {} }: { outlets?: CompositionOutlets }) {

@@ -1,10 +1,10 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 // The Composer inspector: three tabs over one selection.
 //
 // Purely presentational over the shared document model and controller
-// contracts — it reads `document`/`manifest`/`selectedId`/`mode` and reports
-// every mutation through typed callbacks, never touching commands or storage.
+// contracts — it reads `document`/`manifest`/`selectedId`/`mode` (plain values
+// or signals) and reports every mutation through typed callbacks, never
+// touching commands or storage. The selected node's field editors stay mounted
+// while the document updates, so a focused field keeps its caret.
 //
 // The tabs exist because the three things this pane carries answer different
 // questions and used to be stacked: reuse guidance is document-scoped and was
@@ -24,11 +24,11 @@
 //    disabled, so switching back to Edit never loses what was selected.
 
 import { MAPPING_ENTRY_IDENTITY_CAPABILITY } from "../../../../mapping/model/types";
-import type { ComponentChildren, JSX } from "preact";
-import { useState } from "preact/hooks";
+import { computed, For, Show, signal, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import type {
   ComponentCatalog,
   CompositionDocument,
+  CompositionNode,
   Grammar,
   GrammarAcceptedKind,
   GrammarRegion,
@@ -50,8 +50,11 @@ import {
   orderedSlotIds,
   renderGrammarMarkdown,
 } from "../../../../composer/browser";
-import { RailCollapseButton } from "../../../../components/editor-chrome";
+import { RailCollapseButton, type EditorRailsController } from "../../../../components/editor-chrome";
 import { CopyIcon, DuplicateIcon, PlusIcon, SlotIcon, TrashIcon } from "../../../../components/icons";
+import { memo, read, toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { Rebuild } from "../../../../components/rebuild";
+import { Keyed } from "../../../../runtime";
 import {
   Banner,
   Button,
@@ -72,23 +75,25 @@ import { describeSlotRule, partitionCatalog, type SlotRule } from "../slot-rules
 import type { SelectedSlot } from "../tree/structure-pane";
 import { ComposerCopyButton } from "../export/copy-button";
 import { InspectorField, seedValue } from "./inspector-field";
-import { ReuseControls } from "./reuse-controls";
+import { ReuseControls, type ReuseSelectedSlot } from "./reuse-controls";
 import type { ReuseAuthoringActionResult } from "../shared/reuse-authoring-contract";
 
 type InspectorTab = "props" | "slots" | "reuse";
 type GrammarFormat = "markdown" | "json";
 
 export interface InspectorPanelProps {
-  document: CompositionDocument;
+  document: MaybeSignal<CompositionDocument>;
   manifest: ComponentCatalog;
   /** Catalog used by the Slots tab's rule display. A restricted slot's accepted-component rows are empty without it. */
   entries?: readonly ComponentDefinition[];
-  selectedId: string | null;
+  selectedId: MaybeSignal<string | null>;
   /** The slot chosen in Structure, when the selected row is a slot. */
-  selectedSlot?: SelectedSlot | null;
+  selectedSlot?: MaybeSignal<SelectedSlot | null>;
   /** The document's effective root policy — drives the document row's Grammar-for-agents block. */
-  rootPolicy?: RootPolicy;
-  mode: ComposerMode;
+  rootPolicy?: MaybeSignal<RootPolicy | undefined>;
+  mode: MaybeSignal<ComposerMode>;
+  /** The editor's rails; the header offers the inspector's collapse control when given. */
+  rails?: EditorRailsController;
   onUpdateProps: (
     nodeId: string,
     patch: JsonObject,
@@ -119,7 +124,7 @@ export interface InspectorPanelProps {
     label: string,
   ) => Promise<ReuseAuthoringActionResult>;
   /** Latest typed controller error (e.g. protected outlet-owner removal). */
-  lastError?: string | null;
+  lastError?: MaybeSignal<string | null>;
   /**
    * Optional friendlier display name for a component id — e.g. from the host's
    * richer catalog, which this component's `ComponentCatalog` does not carry.
@@ -127,8 +132,8 @@ export interface InspectorPanelProps {
    */
   titleFor?: (componentId: string) => string | undefined;
   /** Document-level link state; selection and fields remain local-only. */
-  linkedPresentation?: LinkedEditorPresentation;
-  linkedActions?: LinkedEditorLifecycleActions;
+  linkedPresentation?: MaybeSignal<LinkedEditorPresentation>;
+  linkedActions?: MaybeSignal<LinkedEditorLifecycleActions | undefined>;
 }
 
 /** The chain of `Component › slot` steps down to the selected node. */
@@ -296,9 +301,9 @@ function grammarForRestrictedRule(
 }
 
 /** The Slots tab's "Grammar for agents" block: a Markdown/JSON toggle over one region's grammar, with Copy. */
-function GrammarForAgentsSection({ grammar }: { grammar: Grammar }): JSX.Element {
-  const [format, setFormat] = useState<GrammarFormat>("markdown");
-  const text = format === "markdown" ? renderGrammarMarkdown(grammar) : JSON.stringify(grammar, null, 2);
+function GrammarForAgentsSection({ grammar }: { grammar: Grammar }): Child {
+  const format = signal<GrammarFormat>("markdown");
+  const text = computed(() => (format.value === "markdown" ? renderGrammarMarkdown(grammar) : JSON.stringify(grammar, null, 2)));
 
   return (
     <PaneSection
@@ -310,7 +315,7 @@ function GrammarForAgentsSection({ grammar }: { grammar: Grammar }): JSX.Element
           mode="pressed"
           size="sm"
           value={format}
-          onChange={setFormat}
+          onChange={(next) => { format.value = next; }}
           options={[
             { value: "markdown", label: "Markdown" },
             { value: "json", label: "JSON" },
@@ -319,7 +324,7 @@ function GrammarForAgentsSection({ grammar }: { grammar: Grammar }): JSX.Element
       }
     >
       <pre class="sg-composer-export__code">{text}</pre>
-      <ComposerCopyButton text={text} label="Copy" size="sm" />
+      <Rebuild value={text}>{(current) => <ComposerCopyButton text={current} label="Copy" size="sm" />}</Rebuild>
       <p class="sg-composer-inspector-note">
         Same output as <code>zudo-composer grammar</code>. Derived from the manifest and the template; nothing
         authored by hand.
@@ -328,42 +333,25 @@ function GrammarForAgentsSection({ grammar }: { grammar: Grammar }): JSX.Element
   );
 }
 
-function InspectorShell({
-  title,
-  version,
-  tabs,
-  activeTab,
-  onSelectTab,
-  children,
-}: {
-  title: ComponentChildren;
-  version?: string | number;
-  tabs: readonly PaneTab<InspectorTab>[];
-  activeTab: InspectorTab;
-  onSelectTab: (tab: InspectorTab) => void;
-  children: ComponentChildren;
-}): JSX.Element {
-  return (
-    <Pane label="Inspector">
-      <PaneHeader
-        title={title}
-        actions={<RailCollapseButton rail="insp" />}
-      >
-        {version ? <Chip tone="plain">v{version}</Chip> : null}
-      </PaneHeader>
-      <PaneTabs label="Inspector" tabs={tabs} activeId={activeTab} onSelect={onSelectTab} />
-      <PaneBody>{children}</PaneBody>
-    </Pane>
-  );
+/** A grammar derivation builds a fresh object every time; equal output must not rebuild its section. */
+function sameGrammar(left: Grammar | null, right: Grammar | null): boolean {
+  return left === right || (left !== null && right !== null && JSON.stringify(left) === JSON.stringify(right));
+}
+
+interface Selection {
+  /** `node:<id>` while the selected id resolves, `root` for the document row, `missing` otherwise. */
+  key: string;
+  nodeId: string | null;
 }
 
 export function InspectorPanel({
-  document,
+  document: documentProp,
   manifest,
   entries = [],
-  selectedId,
-  selectedSlot = null,
+  selectedId: selectedIdProp,
+  selectedSlot: selectedSlotProp = null,
   mode,
+  rails,
   onUpdateProps,
   onUpdatePropsDebounced,
   onFlushPendingProps,
@@ -382,334 +370,520 @@ export function InspectorPanel({
   linkedPresentation = { state: "local" },
   linkedActions,
   rootPolicy,
-}: InspectorPanelProps): JSX.Element {
-  const [requestedTab, setRequestedTab] = useState<InspectorTab>("props");
-  const readOnly = mode === "preview";
-  const location = selectedId !== null ? findLocation(document, manifest, selectedId) : undefined;
-  const node = location?.node;
-  const entry = node ? manifest.get(node.componentId) : undefined;
-  const slotIds = node ? orderedSlotIds(node, entry) : [];
+}: InspectorPanelProps): Child {
+  const document = toSignal(documentProp);
+  const selectedId = toSignal(selectedIdProp);
+  const selectedSlot = toSignal(selectedSlotProp);
+  const requestedTab = signal<InspectorTab>("props");
+  const readOnly = computed(() => read(mode) === "preview");
 
-  const reuse = (
-    <ReuseControls
-      document={document}
-      manifest={manifest}
-      mode={mode}
-      lastError={lastError}
-      onPublishPattern={onPublishPattern}
-      onClearPublication={onClearPublication}
-      onSetGlobalTemplateOutlet={onSetGlobalTemplateOutlet}
-      selectedSlot={
-        selectedSlot && node
-          ? {
-            ...selectedSlot,
-            label: entry?.slots.find((slot) => slot.id === selectedSlot.slotId)?.label ?? selectedSlot.slotId,
-            empty: (node.slots[selectedSlot.slotId] ?? []).length === 0,
-          }
-          : null
-      }
-      linkedPresentation={linkedPresentation}
-      linkedActions={linkedActions}
-    />
-  );
+  const location = computed(() => {
+    const id = selectedId.value;
+    return id !== null ? findLocation(document.value, manifest, id) : undefined;
+  });
+  const node = computed(() => location.value?.node);
+  const selection = memo((): Selection => {
+    const current = node.value;
+    if (current) return { key: `node:${current.id}`, nodeId: current.id };
+    return { key: selectedId.value === null ? "root" : "missing", nodeId: null };
+  });
+  const slotIds = memo(() => {
+    const current = node.value;
+    return current ? orderedSlotIds(current, manifest.get(current.componentId)) : [];
+  });
 
-  // Resolved during render, not repaired in an effect: an effect runs after
-  // paint, so a tab that no longer exists for the new selection would be shown
-  // for a frame before it moved.
-  const tabs: PaneTab<InspectorTab>[] = [
-    { id: "props", label: "Properties" },
-    { id: "slots", label: "Slots", count: slotIds.length, disabled: slotIds.length === 0 },
-    { id: "reuse", label: "Reuse" },
-  ];
-  const activeTab: InspectorTab = requestedTab === "slots" && slotIds.length === 0 ? "props" : requestedTab;
+  // Resolved as a derivation, not repaired afterwards: a tab that no longer
+  // exists for the new selection is never shown.
+  const activeTab = computed((): InspectorTab => (requestedTab.value === "slots" && slotIds.value.length === 0 ? "props" : requestedTab.value));
+  const title = computed(() => {
+    const current = node.value;
+    return current ? titleFor?.(current.componentId) ?? current.componentId : "Inspector";
+  });
+  const version = computed(() => node.value?.componentVersion);
+  const inspectorState = computed(() => {
+    const current = node.value;
+    if (!current) return "empty";
+    const diagnostic = classifyNode(current, manifest);
+    const entry = manifest.get(current.componentId);
+    return entry !== undefined && canRepairNodeProps(diagnostic) ? "recoverable" : diagnostic.opaque ? "opaque" : "editable";
+  });
 
-  if (!node || !location) {
-    // The document row shares this same "nothing selected" state, so its
-    // Grammar-for-agents block lives here rather than behind a selection.
-    const rootRule = selectedId === null
-      ? describeSlotRule({ catalog: entries, manifest, document, target: { parentId: null, slotId: "", index: 0 }, rootPolicy })
-      : null;
-    const rootGrammar = rootRule?.kind === "restricted"
-      ? grammarForRestrictedRule(rootRule, manifest, document, regionIdentity(rootRule.origin, DOCUMENT_ROOT_IDENTITY), false)
-      : null;
+  const reuseSlot = memo((): ReuseSelectedSlot | null => {
+    const slot = selectedSlot.value;
+    const current = node.value;
+    if (!slot || !current) return null;
+    const entry = manifest.get(current.componentId);
+    return {
+      ...slot,
+      label: entry?.slots.find((candidate) => candidate.id === slot.slotId)?.label ?? slot.slotId,
+      empty: (current.slots[slot.slotId] ?? []).length === 0,
+    };
+  });
 
-    return (
-      <InspectorShell title="Inspector" tabs={tabs} activeTab={activeTab} onSelectTab={setRequestedTab}>
-        <div data-sg-inspector-state="empty">
-          {activeTab === "reuse" ? (
-            reuse
-          ) : (
-            <>
-              <EmptyState
-                inline
-                title="Nothing selected"
-                description={
-                  document.root.length === 0
-                    ? "The composition is empty. Add a component from Structure to start editing."
-                    : "Select a component in the canvas or in Structure to edit its properties."
-                }
-              />
-              {rootGrammar && <GrammarForAgentsSection grammar={rootGrammar} />}
-            </>
-          )}
-        </div>
-      </InspectorShell>
-    );
-  }
-
-  const diagnostic = classifyNode(node, manifest);
-  const canRepairProps = entry !== undefined && canRepairNodeProps(diagnostic);
-  const fieldsEditable = !diagnostic.opaque || canRepairProps;
-  const fields = fieldsEditable && entry ? entry.fields : [];
-  const present = fields.filter((field) => Object.hasOwn(node.props, field.prop) || field.required === true);
-  const absentOptional = fields.filter((field) => !Object.hasOwn(node.props, field.prop) && field.required !== true);
-  const title = titleFor?.(node.componentId) ?? node.componentId;
-
-  const siblings =
-    location.parentId === null
-      ? document.root
-      : (findLocation(document, manifest, location.parentId)?.node.slots[location.slotId] ?? []);
+  const hasSlots = computed(() => slotIds.value.length > 0);
 
   return (
-    <InspectorShell
-      title={title}
-      version={node.componentVersion}
-      tabs={tabs}
-      activeTab={activeTab}
-      onSelectTab={setRequestedTab}
-    >
-      <div data-sg-inspector-state={canRepairProps ? "recoverable" : diagnostic.opaque ? "opaque" : "editable"}>
-        {activeTab === "props" && (
-          <>
-            {readOnly && (
-              <PaneSection title="Preview">
-                <p class="sg-composer-inspector-note" role="status">
-                  Preview mode — properties are read-only.
-                </p>
-              </PaneSection>
+    <Pane label="Inspector">
+      <PaneHeader
+        title={title}
+        actions={rails ? <RailCollapseButton rail="insp" rails={rails} /> : undefined}
+      >
+        <Show when={computed(() => Boolean(version.value))}>
+          {() => <Chip tone="plain">v{computed(() => version.value ?? "")}</Chip>}
+        </Show>
+      </PaneHeader>
+      <Keyed value={hasSlots} by={(value) => String(value)}>
+        {(withSlots) => {
+          const tabs: PaneTab<InspectorTab>[] = [
+            { id: "props", label: "Properties" },
+            { id: "slots", label: "Slots", count: computed(() => slotIds.value.length), disabled: !withSlots.value },
+            { id: "reuse", label: "Reuse" },
+          ];
+          return <PaneTabs label="Inspector" tabs={tabs} activeId={activeTab} onSelect={(tab) => { requestedTab.value = tab; }} />;
+        }}
+      </Keyed>
+      <PaneBody>
+        <div data-sg-inspector-state={inspectorState}>
+          <Show when={computed(() => activeTab.value === "reuse")}>
+            {() => (
+              <ReuseControls
+                document={document}
+                manifest={manifest}
+                mode={mode}
+                lastError={lastError}
+                onPublishPattern={onPublishPattern}
+                onClearPublication={onClearPublication}
+                onSetGlobalTemplateOutlet={onSetGlobalTemplateOutlet}
+                selectedSlot={reuseSlot}
+                linkedPresentation={linkedPresentation}
+                linkedActions={linkedActions}
+              />
             )}
+          </Show>
+          <Show when={computed(() => activeTab.value !== "reuse")}>
+            {() => (
+              <Keyed value={selection} by={(current) => current.key}>
+                {(current) => {
+                  const nodeId = current.value.nodeId;
+                  if (nodeId === null) {
+                    return (
+                      <EmptySelection
+                        document={document}
+                        manifest={manifest}
+                        entries={entries}
+                        isRoot={current.value.key === "root"}
+                        rootPolicy={rootPolicy}
+                      />
+                    );
+                  }
+                  const view: NodeViewProps = {
+                    nodeId,
+                    document,
+                    manifest,
+                    entries,
+                    readOnly,
+                    lastError,
+                    titleFor,
+                    onUpdateProps,
+                    onUpdatePropsDebounced,
+                    onFlushPendingProps,
+                    onRemove,
+                    onCopy,
+                    onDuplicate,
+                    onJumpToSlot,
+                  };
+                  return (
+                    <>
+                      <Show when={computed(() => activeTab.value === "props")}>{() => <NodeProperties {...view} />}</Show>
+                      <Show when={computed(() => activeTab.value === "slots")}>{() => <NodeSlots {...view} />}</Show>
+                    </>
+                  );
+                }}
+              </Keyed>
+            )}
+          </Show>
+        </div>
+      </PaneBody>
+    </Pane>
+  );
+}
 
-            {diagnostic.opaque && (
+function EmptySelection({
+  document,
+  manifest,
+  entries,
+  isRoot,
+  rootPolicy,
+}: {
+  document: ReadonlySignal<CompositionDocument>;
+  manifest: ComponentCatalog;
+  entries: readonly ComponentDefinition[];
+  isRoot: boolean;
+  rootPolicy: MaybeSignal<RootPolicy | undefined> | undefined;
+}): Child {
+  // The document row shares this same "nothing selected" state, so its
+  // Grammar-for-agents block lives here rather than behind a selection.
+  const rootGrammar = memo((): Grammar | null => {
+    if (!isRoot) return null;
+    const doc = document.value;
+    const rootRule = describeSlotRule({ catalog: entries, manifest, document: doc, target: { parentId: null, slotId: "", index: 0 }, rootPolicy: read(rootPolicy) });
+    return rootRule.kind === "restricted"
+      ? grammarForRestrictedRule(rootRule, manifest, doc, regionIdentity(rootRule.origin, DOCUMENT_ROOT_IDENTITY), false)
+      : null;
+  }, sameGrammar);
+  return (
+    <>
+      <EmptyState
+        inline
+        title="Nothing selected"
+        description={computed(() =>
+          document.value.root.length === 0
+            ? "The composition is empty. Add a component from Structure to start editing."
+            : "Select a component in the canvas or in Structure to edit its properties.")}
+      />
+      <Rebuild value={rootGrammar}>{(grammar) => (grammar ? <GrammarForAgentsSection grammar={grammar} /> : null)}</Rebuild>
+    </>
+  );
+}
+
+interface NodeViewProps {
+  nodeId: string;
+  document: ReadonlySignal<CompositionDocument>;
+  manifest: ComponentCatalog;
+  entries: readonly ComponentDefinition[];
+  readOnly: ReadonlySignal<boolean>;
+  lastError: MaybeSignal<string | null>;
+  titleFor: ((componentId: string) => string | undefined) | undefined;
+  onUpdateProps: InspectorPanelProps["onUpdateProps"];
+  onUpdatePropsDebounced: InspectorPanelProps["onUpdatePropsDebounced"];
+  onFlushPendingProps: InspectorPanelProps["onFlushPendingProps"];
+  onRemove: InspectorPanelProps["onRemove"];
+  onCopy: InspectorPanelProps["onCopy"];
+  onDuplicate: InspectorPanelProps["onDuplicate"];
+  onJumpToSlot: InspectorPanelProps["onJumpToSlot"];
+}
+
+interface DiagnosticView {
+  opaque: boolean;
+  canRepairProps: boolean;
+  reasons: string;
+}
+
+/** The selected node as of the latest document; the node id is fixed for this view's lifetime. */
+function nodeSignals(nodeId: string, document: ReadonlySignal<CompositionDocument>, manifest: ComponentCatalog) {
+  const location = computed(() => findLocation(document.value, manifest, nodeId));
+  const node = computed((): CompositionNode | undefined => location.value?.node);
+  return { location, node };
+}
+
+function NodeProperties({
+  nodeId,
+  document,
+  manifest,
+  readOnly,
+  lastError,
+  titleFor,
+  onUpdateProps,
+  onUpdatePropsDebounced,
+  onFlushPendingProps,
+  onRemove,
+  onCopy,
+  onDuplicate,
+}: NodeViewProps): Child {
+  const { location, node } = nodeSignals(nodeId, document, manifest);
+  const initial = node.value!;
+  const componentId = initial.componentId;
+  const entry = manifest.get(componentId);
+  const title = titleFor?.(componentId) ?? componentId;
+
+  const diagnostic = computed(() => {
+    const current = node.value;
+    return current ? classifyNode(current, manifest) : null;
+  });
+  const diagnosticView = memo((): DiagnosticView => {
+    const current = diagnostic.value;
+    return {
+      opaque: current?.opaque ?? false,
+      canRepairProps: current !== null && entry !== undefined && canRepairNodeProps(current),
+      reasons: JSON.stringify(current?.reasons ?? []),
+    };
+  });
+  const fields = memo(() => {
+    const view = diagnosticView.value;
+    const fieldsEditable = !view.opaque || view.canRepairProps;
+    return fieldsEditable && entry ? entry.fields : [];
+  });
+  const props = computed(() => node.value?.props ?? {});
+  const present = memo(() => fields.value.filter((field) => Object.hasOwn(props.value, field.prop) || field.required === true));
+  const absentOptional = memo(() => fields.value.filter((field) => !Object.hasOwn(props.value, field.prop) && field.required !== true));
+  const nodeFacts = memo(() => {
+    const current = location.value;
+    const doc = document.value;
+    if (!current) return { parent: "", position: "" };
+    const siblings =
+      current.parentId === null
+        ? doc.root
+        : (findLocation(doc, manifest, current.parentId)?.node.slots[current.slotId] ?? []);
+    return {
+      parent: parentPath(doc, manifest, nodeId, titleFor),
+      position: `${current.index + 1} of ${siblings.length}`,
+    };
+  });
+
+  const commitWith = (channel: (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing) => void, prop: string) =>
+    (value: Parameters<typeof channel>[1][string], path?: PropPath, structural?: boolean) => {
+      const coalescePaths = structural ? null : path && path.length > 0 ? [path as PropPath] : undefined;
+      if (coalescePaths === undefined) channel(nodeId, { [prop]: value });
+      else channel(nodeId, { [prop]: value }, coalescePaths);
+    };
+
+  return (
+    <>
+      <Show when={readOnly}>
+        {() => (
+          <PaneSection title="Preview">
+            <p class="sg-composer-inspector-note" role="status">
+              Preview mode — properties are read-only.
+            </p>
+          </PaneSection>
+        )}
+      </Show>
+
+      <Show when={computed(() => diagnosticView.value.opaque)}>
+        {() => (
+          <Rebuild value={diagnosticView}>
+            {(view) => (
               <PaneSection title="Diagnostics">
                 <Banner
                   tone="err"
                   title={
-                    canRepairProps
+                    view.canRepairProps
                       ? "This component has invalid properties."
                       : "This component can't be edited."
                   }
                 >
                   <ul class="sg-composer-inspector-diagnostics">
-                    {diagnostic.reasons.map((reason, index) => (
+                    {(diagnostic.value?.reasons ?? []).map((reason, index) => (
                       <li key={`${reason.code}-${index}`}>
                         {reason.message}
-                        {reason.code === "unaccepted-child" && (
+                        {reason.code === "unaccepted-child" ? (
                           <> — rule from {title} › {entry?.slots.find((slot) => slot.id === reason.slotId)?.label ?? reason.slotId}</>
-                        )}
+                        ) : null}
                       </li>
                     ))}
                   </ul>
                 </Banner>
               </PaneSection>
             )}
+          </Rebuild>
+        )}
+      </Show>
 
-            {present.length > 0 && (
-              <PaneSection title="Properties" class="sg-composer-inspector-props">
-                {present.map((field) => (
+      <Show when={computed(() => present.value.length > 0)}>
+        {() => (
+          <PaneSection title="Properties" class="sg-composer-inspector-props">
+            <For each={present} by={(field) => `${nodeId}:${field.prop}`}>
+              {(fieldSignal) => {
+                const field = fieldSignal.value;
+                return (
                   <InspectorField
-                    key={`${selectedId}:${field.prop}`}
                     field={field}
-                    value={Object.hasOwn(node.props, field.prop) ? node.props[field.prop] : undefined}
+                    value={computed(() => (Object.hasOwn(props.value, field.prop) ? props.value[field.prop] : undefined))}
                     disabled={readOnly}
-                    onRemove={() => onUpdateProps(node.id, {}, null, [field.prop])}
-                    onCommit={(value, path, structural) => {
-                      const coalescePaths = structural ? null : path && path.length > 0 ? [path as PropPath] : undefined;
-                      if (coalescePaths === undefined) onUpdateProps(node.id, { [field.prop]: value });
-                      else onUpdateProps(node.id, { [field.prop]: value }, coalescePaths);
-                    }}
-                    onCommitDebounced={
-                      onUpdatePropsDebounced &&
-                      ((value, path, structural) => {
-                        const coalescePaths = structural ? null : path && path.length > 0 ? [path as PropPath] : undefined;
-                        if (coalescePaths === undefined) onUpdatePropsDebounced(node.id, { [field.prop]: value });
-                        else onUpdatePropsDebounced(node.id, { [field.prop]: value }, coalescePaths);
-                      })
-                    }
+                    onRemove={() => onUpdateProps(nodeId, {}, null, [field.prop])}
+                    onCommit={commitWith(onUpdateProps, field.prop)}
+                    onCommitDebounced={onUpdatePropsDebounced ? commitWith(onUpdatePropsDebounced, field.prop) : undefined}
                     onFlushPending={onFlushPendingProps}
                   />
-                ))}
-              </PaneSection>
-            )}
-
-            {absentOptional.length > 0 && (
-              <PaneSection title="Optional props">
-                <div class="sg-composer-inspector-optional">
-                  {absentOptional.map((field) => {
-                    const seed = seedValue(field);
-                    return (
-                      <Button
-                        key={field.prop}
-                        size="xs"
-                        disabled={readOnly || seed === undefined}
-                        aria-label={`Add ${field.label}`}
-                        title={
-                          seed === undefined
-                            ? "This value has required fields with no deterministic seed."
-                            : undefined
-                        }
-                        data-sg-inspector-optional-field={field.prop}
-                        // `null` coalescing: adding a prop is a structural
-                        // change, and its own point in the history stack.
-                        onClick={() => {
-                          if (seed !== undefined) onUpdateProps(node.id, { [field.prop]: seed }, null);
-                        }}
-                      >
-                        <PlusIcon size="xs" />
-                        {field.label}
-                      </Button>
-                    );
-                  })}
-                </div>
-              </PaneSection>
-            )}
-
-            <PaneSection title="Node">
-              <dl class="sg-composer-inspector-node">
-                <dt>Component</dt>
-                <dd><code>{node.componentId}</code></dd>
-                <dt>ID</dt>
-                <dd><code>{node.id}</code></dd>
-                <dt>Parent</dt>
-                <dd>{parentPath(document, manifest, node.id, titleFor)}</dd>
-                <dt>Position</dt>
-                <dd>{location.index + 1} of {siblings.length}</dd>
-              </dl>
-              <div class="sg-composer-inspector-node-actions">
-                {onDuplicate && (
-                  <Button size="sm" disabled={readOnly} onClick={() => onDuplicate(node.id)}>
-                    <DuplicateIcon size="sm" />
-                    Duplicate
-                  </Button>
-                )}
-                {onCopy && (
-                  <Button size="sm" disabled={readOnly} onClick={() => onCopy(node.id)}>
-                    <CopyIcon size="sm" />
-                    Copy
-                  </Button>
-                )}
-                <Button
-                  variant="danger"
-                  size="sm"
-                  class="sg-composer-inspector-remove"
-                  disabled={readOnly}
-                  onClick={() => onRemove(node.id)}
-                >
-                  <TrashIcon size="sm" />
-                  Delete
-                </Button>
-              </div>
-              {lastError && (
-                <p class="sg-composer-inspector-note" role="alert">{lastError}</p>
-              )}
-            </PaneSection>
-          </>
-        )}
-
-        {activeTab === "slots" && (
-          <PaneSection title="Slots">
-            <ul class="sg-composer-inspector-slots" data-sg-inspector-slots>
-              {(() => {
-                // One document-wide walk, reused for every slot row below.
-                const completeness = describeSlotCompleteness(document, manifest);
-                return slotIds.map((slotId) => {
-                  const slot = entry?.slots.find((candidate) => candidate.id === slotId);
-                  const count = (node.slots[slotId] ?? []).length;
-                  const label = slot?.label ?? slotId;
-                  const rule = describeInspectorSlotRule(document, manifest, entries, node.id, slotId);
-                  const underMin = completeness.find(
-                    (candidate) => candidate.nodeId === node.id && candidate.slotId === slotId,
-                  );
-                  return (
-                    <li key={slotId} class="sg-composer-inspector-slot">
-                      <SlotIcon size="sm" />
-                      <span class="sg-composer-inspector-slot-name">{label}</span>
-                      <span class="sg-composer-inspector-slot-meta">
-                        {count} {count === 1 ? "child" : "children"}
-                        {slot?.cardinality === "single" ? " · single" : ""}
-                      </span>
-                      {onJumpToSlot && (
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          aria-label={`Jump to ${label}`}
-                          onClick={() => onJumpToSlot({ parentId: node.id, slotId })}
-                        >
-                          Jump
-                        </Button>
-                      )}
-                      <div class="sg-composer-inspector-slot-detail">
-                        {underMin && (
-                          <Banner tone="warn">
-                            This slot needs at least {underMin.min} {underMin.min === 1 ? "component" : "components"}
-                            {" "}(has {underMin.count}).
-                          </Banner>
-                        )}
-                        {rule.kind === "open" && (
-                          <p class="sg-composer-inspector-note">Accepts any component in the pack.</p>
-                        )}
-                        {rule.kind === "restricted" && (
-                          <PaneSection title="Rule" class="sg-composer-inspector-rule">
-                            {rule.origin && (
-                              <p class="sg-composer-inspector-rule-origin">
-                                Rule from {rule.origin.componentTitle} › {rule.origin.slotLabel}
-                                {rule.origin.viaTemplate ? ` · template ${rule.origin.viaTemplate.sourceName}` : ""}
-                              </p>
-                            )}
-                            <ul class="sg-composer-inspector-rule-list">
-                              {rule.accepts.map((component) => (
-                                <li key={component.id} class="sg-composer-inspector-rule-row">
-                                  <span>{component.title}</span>
-                                  {component.hasOwnRule && (
-                                    <span class="sg-composer-inspector-rule-badge">has rule</span>
-                                  )}
-                                  <code>{component.id}</code>
-                                </li>
-                              ))}
-                            </ul>
-                            <p class="sg-composer-inspector-rule-bounds">{describeCardinality(rule)}</p>
-                            {rule.isOutlet && (
-                              <p class="sg-composer-inspector-rule-applies">
-                                Applies to: every page bound to this template
-                              </p>
-                            )}
-                            <p class="sg-composer-inspector-note">
-                              Read-only here. The rule is part of the component&rsquo;s schema, not of this
-                              composition. Change it in the host&rsquo;s component source and republish the pack.
-                            </p>
-                          </PaneSection>
-                        )}
-                        {rule.kind === "restricted" && (
-                          <GrammarForAgentsSection
-                            grammar={grammarForRestrictedRule(
-                              rule,
-                              manifest,
-                              document,
-                              regionIdentity(rule.origin, { componentId: node.componentId, componentTitle: title, slotId, slotLabel: label, outletLabel: label }),
-                              rule.isOutlet,
-                            )}
-                          />
-                        )}
-                      </div>
-                    </li>
-                  );
-                });
-              })()}
-            </ul>
+                );
+              }}
+            </For>
           </PaneSection>
         )}
+      </Show>
 
-        {activeTab === "reuse" && reuse}
-      </div>
-    </InspectorShell>
+      <Show when={computed(() => absentOptional.value.length > 0)}>
+        {() => (
+          <PaneSection title="Optional props">
+            <div class="sg-composer-inspector-optional">
+              <For each={absentOptional} by={(field) => field.prop}>
+                {(fieldSignal) => {
+                  const field = fieldSignal.value;
+                  const seed = seedValue(field);
+                  return (
+                    <Button
+                      size="xs"
+                      disabled={computed(() => readOnly.value || seed === undefined)}
+                      aria-label={`Add ${field.label}`}
+                      title={
+                        seed === undefined
+                          ? "This value has required fields with no deterministic seed."
+                          : undefined
+                      }
+                      data-sg-inspector-optional-field={field.prop}
+                      // `null` coalescing: adding a prop is a structural
+                      // change, and its own point in the history stack.
+                      on:click={() => {
+                        if (seed !== undefined) onUpdateProps(nodeId, { [field.prop]: seed }, null);
+                      }}
+                    >
+                      <PlusIcon size="xs" />
+                      {field.label}
+                    </Button>
+                  );
+                }}
+              </For>
+            </div>
+          </PaneSection>
+        )}
+      </Show>
+
+      <PaneSection title="Node">
+        <dl class="sg-composer-inspector-node">
+          <dt>Component</dt>
+          <dd><code>{componentId}</code></dd>
+          <dt>ID</dt>
+          <dd><code>{nodeId}</code></dd>
+          <dt>Parent</dt>
+          <dd>{computed(() => nodeFacts.value.parent)}</dd>
+          <dt>Position</dt>
+          <dd>{computed(() => nodeFacts.value.position)}</dd>
+        </dl>
+        <div class="sg-composer-inspector-node-actions">
+          {onDuplicate ? (
+            <Button size="sm" disabled={readOnly} on:click={() => onDuplicate(nodeId)}>
+              <DuplicateIcon size="sm" />
+              Duplicate
+            </Button>
+          ) : null}
+          {onCopy ? (
+            <Button size="sm" disabled={readOnly} on:click={() => onCopy(nodeId)}>
+              <CopyIcon size="sm" />
+              Copy
+            </Button>
+          ) : null}
+          <Button
+            variant="danger"
+            size="sm"
+            class="sg-composer-inspector-remove"
+            disabled={readOnly}
+            on:click={() => onRemove(nodeId)}
+          >
+            <TrashIcon size="sm" />
+            Delete
+          </Button>
+        </div>
+        <Show when={computed(() => Boolean(read(lastError)))}>
+          {() => <p class="sg-composer-inspector-note" role="alert">{computed(() => read(lastError) ?? "")}</p>}
+        </Show>
+      </PaneSection>
+    </>
+  );
+}
+
+function NodeSlots({ nodeId, document, manifest, entries, titleFor, onJumpToSlot }: NodeViewProps): Child {
+  const { node } = nodeSignals(nodeId, document, manifest);
+  const componentId = node.value!.componentId;
+  const entry = manifest.get(componentId);
+  const title = titleFor?.(componentId) ?? componentId;
+  // The slot list is a read-only view of the whole document, rebuilt per document.
+  const view = memo(() => ({ document: document.value, node: node.value }));
+  return (
+    <PaneSection title="Slots">
+      <Rebuild value={view}>
+        {({ document: doc, node: current }) => {
+          if (!current) return <ul class="sg-composer-inspector-slots" data-sg-inspector-slots />;
+          const slotIds = orderedSlotIds(current, entry);
+          // One document-wide walk, reused for every slot row below.
+          const completeness = describeSlotCompleteness(doc, manifest);
+          return (
+            <ul class="sg-composer-inspector-slots" data-sg-inspector-slots>
+              {slotIds.map((slotId) => {
+                const slot = entry?.slots.find((candidate) => candidate.id === slotId);
+                const count = (current.slots[slotId] ?? []).length;
+                const label = slot?.label ?? slotId;
+                const rule = describeInspectorSlotRule(doc, manifest, entries, nodeId, slotId);
+                const underMin = completeness.find(
+                  (candidate) => candidate.nodeId === nodeId && candidate.slotId === slotId,
+                );
+                return (
+                  <li key={slotId} class="sg-composer-inspector-slot">
+                    <SlotIcon size="sm" />
+                    <span class="sg-composer-inspector-slot-name">{label}</span>
+                    <span class="sg-composer-inspector-slot-meta">
+                      {count} {count === 1 ? "child" : "children"}
+                      {slot?.cardinality === "single" ? " · single" : ""}
+                    </span>
+                    {onJumpToSlot ? (
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        aria-label={`Jump to ${label}`}
+                        on:click={() => onJumpToSlot({ parentId: nodeId, slotId })}
+                      >
+                        Jump
+                      </Button>
+                    ) : null}
+                    <div class="sg-composer-inspector-slot-detail">
+                      {underMin ? (
+                        <Banner tone="warn">
+                          This slot needs at least {underMin.min} {underMin.min === 1 ? "component" : "components"}
+                          {" "}(has {underMin.count}).
+                        </Banner>
+                      ) : null}
+                      {rule.kind === "open" ? (
+                        <p class="sg-composer-inspector-note">Accepts any component in the pack.</p>
+                      ) : null}
+                      {rule.kind === "restricted" ? (
+                        <PaneSection title="Rule" class="sg-composer-inspector-rule">
+                          {rule.origin ? (
+                            <p class="sg-composer-inspector-rule-origin">
+                              Rule from {rule.origin.componentTitle} › {rule.origin.slotLabel}
+                              {rule.origin.viaTemplate ? ` · template ${rule.origin.viaTemplate.sourceName}` : ""}
+                            </p>
+                          ) : null}
+                          <ul class="sg-composer-inspector-rule-list">
+                            {rule.accepts.map((component) => (
+                              <li key={component.id} class="sg-composer-inspector-rule-row">
+                                <span>{component.title}</span>
+                                {component.hasOwnRule ? (
+                                  <span class="sg-composer-inspector-rule-badge">has rule</span>
+                                ) : null}
+                                <code>{component.id}</code>
+                              </li>
+                            ))}
+                          </ul>
+                          <p class="sg-composer-inspector-rule-bounds">{describeCardinality(rule)}</p>
+                          {rule.isOutlet ? (
+                            <p class="sg-composer-inspector-rule-applies">
+                              Applies to: every page bound to this template
+                            </p>
+                          ) : null}
+                          <p class="sg-composer-inspector-note">
+                            Read-only here. The rule is part of the component’s schema, not of this
+                            composition. Change it in the host’s component source and republish the pack.
+                          </p>
+                        </PaneSection>
+                      ) : null}
+                      {rule.kind === "restricted" ? (
+                        <GrammarForAgentsSection
+                          grammar={grammarForRestrictedRule(
+                            rule,
+                            manifest,
+                            doc,
+                            regionIdentity(rule.origin, { componentId, componentTitle: title, slotId, slotLabel: label, outletLabel: label }),
+                            rule.isOutlet,
+                          )}
+                        />
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          );
+        }}
+      </Rebuild>
+    </PaneSection>
   );
 }

@@ -2,7 +2,7 @@
 // preview iframe app.
 //
 // This module is deliberately JSX-free and imports nothing: the preview bundle
-// reaches these detectors without pulling any host chrome — or Preact hooks —
+// reaches these detectors without pulling any host chrome — or the UI runtime —
 // into its graph through `app/use-composer-keyboard`.
 
 /** True when a keystroke is being typed into an editable control. */

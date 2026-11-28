@@ -1,9 +1,10 @@
 import { defineComponent } from "@zudo-composer/component-contract";
-import type { ComponentChildren } from "preact";
-import { useEffect, useState } from "preact/hooks";
-import { GridRegistryContext, GridViewContext, useGridRegistry } from "./grid-context";
-import { SHOP_SORTS, computeGridView, type ShopSort } from "./grid-view";
-import { Pagination } from "./pagination";
+import { For, Show, batch, computed, getScope, signal, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
+import { GRID_ITEM_LINK } from "./grid-link";
+import { SHOP_SORTS, computeGridView, type GridItemData, type GridItemView, type GridView, type ShopSort } from "./grid-view";
+import { createItemRegistry } from "./item-registry";
+import { PaginationControls } from "./pagination";
+import { answerLink } from "./slot-link";
 import { CAPS, CONTROL } from "./tone";
 
 export interface ProductGridProps {
@@ -12,7 +13,7 @@ export interface ProductGridProps {
   pageSize: number;
   defaultSort: ShopSort;
   emptyText: string;
-  items?: ComponentChildren;
+  items?: Child | object;
 }
 
 const SORT_LABEL: Record<ShopSort, string> = {
@@ -58,98 +59,122 @@ function label(category: string): string {
 }
 
 export function ProductGrid({ toolbar = true, chips = true, pageSize = 8, defaultSort = "featured", emptyText = "No products match.", items }: ProductGridProps) {
-  const { registry, ordered } = useGridRegistry();
-  const [state, setState] = useState<ToolbarState>({ categories: [], sort: defaultSort, search: "", page: 1 });
-  const [searchInput, setSearchInput] = useState("");
-  const [urlReady, setUrlReady] = useState(false);
+  const scope = getScope();
+  const categories = signal<readonly string[]>([]);
+  const sort = signal<string>(defaultSort);
+  const search = signal("");
+  const page = signal(1);
+  const searchInput = signal("");
+  const urlReady = signal(false);
+  const activeSort = computed(() => (SHOP_SORTS.includes(sort.value as ShopSort) ? (sort.value as ShopSort) : defaultSort));
 
-  useEffect(() => {
+  const { ordered, host } = createItemRegistry<GridItemData, GridItemView>(() => view.value.items);
+  const view: ReadonlySignal<GridView> = computed(() =>
+    computeGridView(ordered.value, {
+      categories: toolbar && chips ? categories.value : [],
+      sort: toolbar ? activeSort.value : defaultSort,
+      search: toolbar ? search.value : "",
+      page: page.value,
+      pageSize: toolbar ? pageSize : 0,
+    }),
+  );
+
+  scope.onActivate(() => {
     if (!toolbar) return;
     const initial = readQuery(defaultSort);
-    setState(initial);
-    setSearchInput(initial.search);
-    setUrlReady(true);
-  }, [toolbar, defaultSort]);
+    batch(() => {
+      categories.value = initial.categories;
+      sort.value = initial.sort;
+      search.value = initial.search;
+      page.value = initial.page;
+      searchInput.value = initial.search;
+      urlReady.value = true;
+    });
+  });
 
-  useEffect(() => {
-    if (urlReady) writeQuery(state, defaultSort);
-  }, [urlReady, state, defaultSort]);
+  scope.effect(() => {
+    if (urlReady.value) writeQuery({ categories: [...categories.value], sort: activeSort.value, search: search.value, page: page.value }, defaultSort);
+  });
 
-  useEffect(() => {
-    if (searchInput === state.search) return;
-    const timer = setTimeout(() => setState((previous) => ({ ...previous, search: searchInput, page: 1 })), SEARCH_DEBOUNCE_MS);
+  scope.effect(() => {
+    const next = searchInput.value;
+    if (next === search.value) return;
+    const timer = setTimeout(() => batch(() => {
+      search.value = next;
+      page.value = 1;
+    }), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [searchInput, state.search]);
-
-  const view = computeGridView(ordered, {
-    categories: toolbar && chips ? state.categories : [],
-    sort: toolbar ? state.sort : defaultSort,
-    search: toolbar ? state.search : "",
-    page: state.page,
-    pageSize: toolbar ? pageSize : 0,
   });
 
   const toggleCategory = (category: string) =>
-    setState((previous) => ({
-      ...previous,
-      page: 1,
-      categories: previous.categories.includes(category) ? previous.categories.filter((item) => item !== category) : [...previous.categories, category],
-    }));
+    batch(() => {
+      page.value = 1;
+      categories.value = categories.value.includes(category) ? categories.value.filter((item) => item !== category) : [...categories.value, category];
+    });
+
+  const countText = computed(() => `${view.value.matchCount} ${view.value.matchCount === 1 ? "product" : "products"}`);
+  const chipCategories = computed(() => view.value.categories);
 
   return (
-    <GridRegistryContext.Provider value={registry}>
-      <GridViewContext.Provider value={view.items}>
-        <div class="flex flex-col gap-shop-vsp-md">
-          {toolbar && (
-            <div class="flex flex-col gap-shop-vsp-sm border-b border-shop-border pb-shop-vsp-sm shop-md:flex-row shop-md:items-center shop-md:justify-between">
-              <p class={`${CAPS} text-shop-muted`} aria-live="polite">
-                {view.matchCount} {view.matchCount === 1 ? "product" : "products"}
-              </p>
-              <div class="flex flex-wrap items-center gap-shop-hsp-xs">
-                {chips && view.categories.map((category) => {
-                  const active = state.categories.includes(category);
+    <div class="flex flex-col gap-shop-vsp-md" on:shop-grid-item={answerLink(GRID_ITEM_LINK, host)}>
+      {toolbar && (
+        <div class="flex flex-col gap-shop-vsp-sm border-b border-shop-border pb-shop-vsp-sm shop-md:flex-row shop-md:items-center shop-md:justify-between">
+          <p class={`${CAPS} text-shop-muted`} aria-live="polite">
+            {countText}
+          </p>
+          <div class="flex flex-wrap items-center gap-shop-hsp-xs">
+            {chips && (
+              <For each={chipCategories} by={(category) => category}>
+                {(category) => {
+                  const active = computed(() => categories.value.includes(category.value));
                   return (
                     <button
-                      key={category}
                       type="button"
                       aria-pressed={active}
-                      onClick={() => toggleCategory(category)}
-                      class={`h-shop-control-h px-shop-hsp-sm border text-shop-body hover:bg-shop-inverse-bg hover:text-shop-inverse-fg ${active ? "border-shop-fg-strong bg-shop-surface-2 text-shop-fg-strong" : "border-shop-border text-shop-fg"}`}
+                      on:click={() => toggleCategory(category.value)}
+                      class={computed(() => `h-shop-control-h px-shop-hsp-sm border text-shop-body hover:bg-shop-inverse-bg hover:text-shop-inverse-fg ${active.value ? "border-shop-fg-strong bg-shop-surface-2 text-shop-fg-strong" : "border-shop-border text-shop-fg"}`)}
                     >
-                      {label(category)}
+                      {label(category.value)}
                     </button>
                   );
-                })}
-                <label class="flex items-center gap-shop-hsp-xs text-shop-caption text-shop-muted">
-                  <span class="uppercase tracking-shop-caps">Sort</span>
-                  <select
-                    value={state.sort}
-                    onChange={(event) => setState((previous) => ({ ...previous, page: 1, sort: event.currentTarget.value as ShopSort }))}
-                    // A non-default sort earns the accent underline (§ 3 accent uses).
-                    class={`${CONTROL} ${state.sort === defaultSort ? "" : "border-b-2 border-b-shop-accent"}`}
-                  >
-                    {SHOP_SORTS.map((sort) => <option key={sort} value={sort}>{SORT_LABEL[sort]}</option>)}
-                  </select>
-                </label>
-                <input
-                  type="search"
-                  aria-label="Search products"
-                  placeholder="Search"
-                  value={searchInput}
-                  onInput={(event) => setSearchInput(event.currentTarget.value)}
-                  class={CONTROL}
-                />
-              </div>
-            </div>
-          )}
-          <div class="grid grid-cols-1 gap-x-shop-hsp-md gap-y-shop-vsp-lg shop-sm:grid-cols-2 shop-lg:grid-cols-3 shop-lg:gap-x-shop-hsp-lg shop-xl:grid-cols-4">{items}</div>
-          {ordered.length > 0 && view.matchCount === 0 && <p class="text-shop-body text-shop-muted">{emptyText}</p>}
-          {toolbar && view.pageCount > 1 && (
-            <Pagination page={view.page} pageCount={view.pageCount} onPage={(page) => setState((previous) => ({ ...previous, page }))} />
-          )}
+                }}
+              </For>
+            )}
+            <label class="flex items-center gap-shop-hsp-xs text-shop-caption text-shop-muted">
+              <span class="uppercase tracking-shop-caps">Sort</span>
+              <select
+                modelValue={sort}
+                on:change={() => {
+                  page.value = 1;
+                }}
+                // A non-default sort earns the accent underline (§ 3 accent uses).
+                class={computed(() => `${CONTROL} ${activeSort.value === defaultSort ? "" : "border-b-2 border-b-shop-accent"}`)}
+              >
+                {SHOP_SORTS.map((option) => <option value={option}>{SORT_LABEL[option]}</option>)}
+              </select>
+            </label>
+            <input type="search" aria-label="Search products" placeholder="Search" modelValue={searchInput} class={CONTROL} />
+          </div>
         </div>
-      </GridViewContext.Provider>
-    </GridRegistryContext.Provider>
+      )}
+      <div class="grid grid-cols-1 gap-x-shop-hsp-md gap-y-shop-vsp-lg shop-sm:grid-cols-2 shop-lg:grid-cols-3 shop-lg:gap-x-shop-hsp-lg shop-xl:grid-cols-4">{items as Child}</div>
+      <Show when={computed(() => ordered.value.length > 0 && view.value.matchCount === 0)}>
+        {() => <p class="text-shop-body text-shop-muted">{emptyText}</p>}
+      </Show>
+      {toolbar && (
+        <Show when={computed(() => view.value.pageCount > 1)}>
+          {() => (
+            <PaginationControls
+              page={computed(() => view.value.page)}
+              pageCount={computed(() => view.value.pageCount)}
+              onPage={(next) => {
+                page.value = next;
+              }}
+            />
+          )}
+        </Show>
+      )}
+    </div>
   );
 }
 

@@ -11,7 +11,6 @@
 import { resolve } from "node:path";
 import { createServer } from "vite";
 import tailwindPlugin from "../plugins/tailwind-plugin.mjs";
-import preact from "@preact/preset-vite";
 import composerFileProviderPlugin from "../plugins/composer-file-provider-plugin.mjs";
 import domainFileProviderPlugin from "../plugins/domain-file-provider-plugin.mjs";
 import contentDomainProvider from "../plugins/content-domain-provider.mjs";
@@ -27,7 +26,8 @@ import { APP_ROOT, resolveAppWarmupFiles, resolveFsAllow, resolvePublicDir, reso
 import { createModuleEvaluator } from "./module-evaluator.mjs";
 import { loadHostConfig } from "./host-context.mjs";
 
-import { resolveComposerModules } from "../plugins/module-resolution.mjs";
+import { resolveComposerModules, zudoReactOxc } from "../plugins/module-resolution.mjs";
+import zudoReactIdentityPlugin from "../plugins/zudo-react-identity-plugin.mjs";
 
 export { loadHostConfig };
 
@@ -74,13 +74,18 @@ export async function resolveComposerDevConfig(options = {}) {
         // on a full-reload discovery round.
         entries: [resolve(APP_ROOT, APP_ENTRY_MODULE)],
         // Pre-bundles at startup what the scanner would otherwise only find at
-        // runtime and reload for: @preact/preset-vite's dev-only injections,
-        // compiled JSX's preact/jsx-runtime, and the excluded pack's own
+        // runtime and reload for: every zudo-react entry (all of them, never a
+        // subset — see dev-prebundle.mjs), and the excluded pack's own
         // runtime dependencies, since the pack is excluded from scanning above
         // (#703 — every real `zudo-composer dev` boots through this config).
         include: devPrebundleIncludes({ workspaceRoot, pack: settings.pack, exclude: OPTIMIZE_DEPS_EXCLUDE }),
+        // The scanner ignores `oxc` and finds no tsconfig for tool files outside
+        // the host root, so it would compile JSX against `react/jsx-dev-runtime`,
+        // fail, and skip pre-bundling everything it discovered.
+        rolldownOptions: { transform: zudoReactOxc() },
       },
       resolve: resolveComposerModules(),
+      oxc: zudoReactOxc(),
       server: {
         fs: { allow: [...resolveFsAllow(workspaceRoot), componentPack.identity.packageRoot] },
         watch: { ignored: resolveWatchIgnored([paths.data, paths.compositions, paths.content, paths.mappings, paths.sitemaps, paths.assets, paths.publicAssets, resolveSiteProjectLocalRoot(workspaceRoot)]) },
@@ -91,6 +96,7 @@ export async function resolveComposerDevConfig(options = {}) {
       // fallbacks do not apply in this lane. The SiteProject release root is
       // not a config setting and keeps its own `ZUDO_SITE_PROJECT_ROOT`.
       plugins: [
+        zudoReactIdentityPlugin(),
         componentPack,
         hostStylesPlugin({ stylesPath: paths.styles, styles: settings.styles, configPath: composerConfig.configPath }),
         releaseApiPlugin({ assetsStoreRoot: paths.assets, workspaceRoot, packIdentity: componentPack.identity, stylesPath: paths.styles }),
@@ -115,7 +121,6 @@ export async function resolveComposerDevConfig(options = {}) {
         }),
         composerAppHtmlPlugin(),
         tailwindPlugin(),
-        preact(),
       ],
     },
   };

@@ -1,11 +1,8 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, settle, waitFor, within } from "../../../../test/render";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { SITEMAP_PROVIDERS, type SitemapProvider, type SitemapRecord } from "../../../../sitemapper/library";
 import { SitemapLibrary } from "../sitemap-library";
-import { WorkspaceContext } from "../../../../app/workspace-context";
+import { testServices } from "../../test-support/services";
 import type { ProductionProviderIntegration } from "../../../../app/provider-integration";
 
 const originalShowModal = HTMLDialogElement.prototype.showModal;
@@ -78,17 +75,22 @@ describe("Sitemaps library", () => {
     render(<SitemapLibrary provider={setup.provider} navigate={navigate} idFactory={() => "new-map"} now={() => "2026-02-01T00:00:00.000Z"} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "New sitemap" }));
+    await settle();
     const dialog = screen.getByRole("dialog", { name: "Create sitemap" });
     const input = within(dialog).getByRole("textbox", { name: "Sitemap name" }) as HTMLInputElement;
     expect(input).toHaveFocus();
 
     fireEvent.input(input, { target: { value: "   " } });
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: "Create sitemap" }));
+    await settle();
     expect(navigate).not.toHaveBeenCalled();
     expect(within(dialog).getByText("Enter a sitemap name.")).toBeInTheDocument();
 
     fireEvent.input(input, { target: { value: "Launch map" } });
+    await settle();
     fireEvent.keyDown(input, { key: "Enter" });
+    await settle();
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper?provider=sitemap-filesystem&sitemap=new-map"));
     expect(setup.records.get("new-map")?.document.name).toBe("Launch map");
     expect(prompt).not.toHaveBeenCalled();
@@ -110,12 +112,15 @@ describe("Sitemaps library", () => {
     await screen.findByRole("link", { name: "Product map" });
 
     fireEvent.input(screen.getByRole("searchbox", { name: "Filter sitemaps" }), { target: { value: "brand" } });
+    await settle();
     expect(dataRows()).toHaveLength(1);
     expect(screen.getByText("1 of 2 sitemaps · Project files")).toBeInTheDocument();
 
     fireEvent.input(screen.getByRole("searchbox", { name: "Filter sitemaps" }), { target: { value: "nothing here" } });
+    await settle();
     expect(screen.getByText("No matches for “nothing here”")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    await settle();
     expect(dataRows()).toHaveLength(2);
   });
 
@@ -123,11 +128,15 @@ describe("Sitemaps library", () => {
     const setup = provider([record()]);
     render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} now={() => "2026-03-01T00:00:00.000Z"} />);
     fireEvent.click(await screen.findByRole("button", { name: "More actions for Product map" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("menu", { name: "Product map actions" })).getByRole("menuitem", { name: "Rename…" }));
+    await settle();
 
     const dialog = screen.getByRole("dialog", { name: "Rename sitemap" });
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Sitemap name" }), { target: { value: "Launch architecture" } });
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: "Save name" }));
+    await settle();
 
     await waitFor(() => expect(setup.records.get("product-map")?.document.name).toBe("Launch architecture"));
     expect(setup.records.get("product-map")).toMatchObject({ id: "product-map", updatedAt: "2026-03-01T00:00:00.000Z" });
@@ -138,11 +147,15 @@ describe("Sitemaps library", () => {
     vi.spyOn(setup.provider.store, "put").mockRejectedValue(new Error("Storage quota exceeded."));
     render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "More actions for Product map" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Rename…" }));
+    await settle();
 
     const dialog = screen.getByRole("dialog", { name: "Rename sitemap" });
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Sitemap name" }), { target: { value: "Launch architecture" } });
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: "Save name" }));
+    await settle();
 
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("Storage quota exceeded.");
     expect(within(dialog).getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Launch architecture");
@@ -154,10 +167,13 @@ describe("Sitemaps library", () => {
     vi.stubGlobal("confirm", confirm);
     render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "More actions for Product map" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    await settle();
 
     const dialog = screen.getByRole("alertdialog", { name: "Delete Product map?" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await settle();
 
     await screen.findByText("No sitemaps yet");
     expect(setup.records.has("product-map")).toBe(false);
@@ -168,10 +184,13 @@ describe("Sitemaps library", () => {
     const setup = provider([record()]);
     const metadata = { metadata: { activeSitemap: { providerId: "sitemap-filesystem", recordId: "product-map" } } };
     const integration = { workspace: { metadata: async () => metadata } } as unknown as ProductionProviderIntegration;
-    render(<WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}><SitemapLibrary provider={setup.provider} navigate={vi.fn()} /></WorkspaceContext.Provider>);
+    render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} services={testServices({ integration })} />);
     fireEvent.click(await screen.findByRole("button", { name: "More actions for Product map" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Delete Product map?" })).getByRole("button", { name: "Delete" }));
+    await settle();
     expect(await screen.findByText("The active Sitemap cannot be deleted. Select another Sitemap as active first.")).toBeInTheDocument();
     expect(setup.records.has("product-map")).toBe(true);
   });
@@ -182,11 +201,15 @@ describe("Sitemaps library", () => {
     await screen.findByRole("link", { name: "Product map" });
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Product map" }));
+    await settle();
     fireEvent.click(screen.getByRole("checkbox", { name: "Brand map" }));
+    await settle();
     expect(screen.getByText("2 sitemaps selected")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Delete 2 sitemaps?" })).getByRole("button", { name: "Delete" }));
+    await settle();
 
     await screen.findByText("No sitemaps yet");
     expect(screen.queryByText("2 sitemaps selected")).toBeNull();
@@ -198,8 +221,10 @@ describe("Sitemaps library", () => {
     render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Clear library" }));
+    await settle();
     const confirm = await screen.findByRole("alertdialog", { name: "Clear library?" });
     fireEvent.click(within(confirm).getByRole("button", { name: "Clear library" }));
+    await settle();
 
     await waitFor(() => expect(clear).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("No sitemaps yet")).toBeInTheDocument();
@@ -210,9 +235,11 @@ describe("Sitemaps library", () => {
     const clear = vi.spyOn(setup.provider.store, "clear");
     const metadata = { metadata: { activeSitemap: { providerId: "sitemap-filesystem", recordId: "product-map" } } };
     const integration = { workspace: { metadata: async () => metadata } } as unknown as ProductionProviderIntegration;
-    render(<WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}><SitemapLibrary provider={setup.provider} navigate={vi.fn()} /></WorkspaceContext.Provider>);
+    render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} services={testServices({ integration })} />);
     fireEvent.click(await screen.findByRole("button", { name: "Clear library" }));
+    await settle();
     fireEvent.click(within(await screen.findByRole("alertdialog", { name: "Clear library?" })).getByRole("button", { name: "Clear library" }));
+    await settle();
     expect(await screen.findByText("The active Sitemap cannot be deleted. Select another Sitemap as active first.")).toBeInTheDocument();
     expect(clear).not.toHaveBeenCalled();
   });
@@ -223,8 +250,10 @@ describe("Sitemaps library", () => {
     render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Clear library" }));
+    await settle();
     const confirm = await screen.findByRole("alertdialog", { name: "Clear library?" });
     fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    await settle();
 
     expect(clear).not.toHaveBeenCalled();
     expect(screen.getByRole("link", { name: "Product map" })).toBeInTheDocument();
@@ -250,7 +279,9 @@ describe("Sitemaps library", () => {
     expect(dataRows()).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Start fresh…" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Start fresh?" })).getByRole("button", { name: "Start fresh" }));
+    await settle();
     await screen.findByText("No sitemaps yet");
   });
 
@@ -263,6 +294,7 @@ describe("Sitemaps library", () => {
     expect(await screen.findByText("Sitemap library unavailable.")).toBeInTheDocument();
     expect(screen.queryByRole("table")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await settle();
     expect(await screen.findByRole("link", { name: "Product map" })).toBeInTheDocument();
   });
 

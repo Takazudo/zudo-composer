@@ -3,7 +3,7 @@
  *
  * Exercises the REAL markdown runtime end-to-end (unmocked): confirms that
  * the sanitized, fence-highlighted HTML `renderMarkdown()` produces is what
- * actually lands in the DOM through ProseMd's `dangerouslySetInnerHTML`
+ * actually lands in the DOM through ProseMd's `rawHtml`
  * mount, and that raw script/event-handler markup embedded in author
  * markdown never survives into the mounted document.
  *
@@ -12,7 +12,7 @@
  * would assert against a sanitizer that never ran (see
  * `markdown-runtime.test.ts`'s header for the same reasoning).
  */
-import { render, screen, waitFor } from "@testing-library/preact";
+import { render, screen, waitFor } from "../../../../src/test/render";
 import { beforeAll, describe, expect, it } from "vitest";
 import { ProseMd } from "../../../../packages/ui/src/content/prose-md/prose-md";
 import { renderMarkdown } from "../../../../packages/ui/src/content/prose-md/markdown-runtime";
@@ -38,7 +38,7 @@ describe("ProseMd — real markdown runtime", () => {
         // wrapper too, so asserting it alone stays green even if highlighting
         // fails completely. A `class`-bearing span is also the thing this test
         // uniquely justifies: it has to survive BOTH the DOMPurify allowlist and
-        // the dangerouslySetInnerHTML mount.
+        // the rawHtml mount.
         expect(document.querySelector("pre.hi-root .hi-kw")).toBeTruthy();
       });
     },

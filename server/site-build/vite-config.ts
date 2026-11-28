@@ -1,14 +1,14 @@
 import { normalizePath, type InlineConfig, type Plugin } from "vite";
 import { resolve } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import preact from "@preact/preset-vite";
 import tailwindPlugin from "../../plugins/tailwind-plugin.mjs";
 import componentPackPlugin from "../../plugins/component-pack-plugin.mjs";
 import hostStylesPlugin from "../../plugins/host-styles-plugin.mjs";
 import entryGraphPlugin, { STATIC_SITE_ENTRY_MODULE } from "../../plugins/entry-graph-plugin.mjs";
 import { APP_HTML_PATH, rewriteAppEntry } from "../../plugins/composer-app-html.mjs";
 import { SITE_BUILD_ENTRY, resolveWorkspaceRoot } from "../../plugins/roots.mjs";
-import { resolveComposerModules } from "../../plugins/module-resolution.mjs";
+import { resolveComposerModules, zudoReactOxc, zudoReactSsr } from "../../plugins/module-resolution.mjs";
+import zudoReactIdentityPlugin from "../../plugins/zudo-react-identity-plugin.mjs";
 import { loadHostContext } from "../host-context.mjs";
 import { compileStaticSite, SITE_MANIFEST, SITE_HEADERS, createSiteManifest } from "../site-build.mjs";
 import { collectStaticSiteAssets } from "./assets";
@@ -68,13 +68,16 @@ export async function resolveStaticSiteConfig(options: Pick<BuildSiteOptions, "w
     base: "/",
     publicDir: false,
     resolve: resolveComposerModules(),
-    build: { outDir, emptyOutDir: true, rollupOptions: { input: APP_HTML_PATH } },
+    oxc: zudoReactOxc(),
+    ssr: zudoReactSsr(),
+    // zudo-react derives a root's identity from the mounted component's function name.
+    build: { outDir, emptyOutDir: true, rollupOptions: { input: APP_HTML_PATH, output: { keepNames: true } } },
     plugins: [
       site,
+      zudoReactIdentityPlugin(),
       componentPackPlugin({ workspaceRoot: hostRoot, pack: settings.pack }),
       hostStylesPlugin({ stylesPath: paths.styles, styles: settings.styles, configPath }),
       tailwindPlugin(),
-      preact(),
       // See vite.config.ts: the same isolation-gate record, for the published
       // static visitor entry this host's build ships. Opt-in, because this
       // config is part of the packed tool and runs inside consuming hosts: the

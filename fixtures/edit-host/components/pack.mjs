@@ -1,15 +1,15 @@
-import { h } from "preact";
+import { h } from "@takazudo/zfb/zudo-react";
 import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
 
 export const Paragraph = ({ text }) => h("p", {}, text);
-export const List = ({ items }) => h("ul", {}, items.map((item, index) => h("li", { key: index }, item)));
+export const List = ({ items }) => h("ul", {}, items.map((item) => h("li", {}, item)));
 export const Image = ({ src, alt }) => h("img", { src, alt });
 export const Note = ({ text }) => h("aside", {}, text);
 export const NativeProse = ({ markdown }) => h("section", {}, markdown);
 export const Frame = ({ children }) => h("main", {}, [h("header", {}, "Installed template frame"), children]);
 export const Table = ({ columns, rows }) => h("table", {}, [
-  h("thead", {}, h("tr", {}, columns.map((column, index) => h("th", { key: index }, column)))),
-  h("tbody", {}, rows.map((row, index) => h("tr", { key: index }, row.map((cell, cellIndex) => h("td", { key: cellIndex }, cell))))),
+  h("thead", {}, h("tr", {}, columns.map((column) => h("th", {}, column)))),
+  h("tbody", {}, rows.map((row) => h("tr", {}, row.map((cell) => h("td", {}, cell))))),
 ]);
 const string = { schema: { type: "string" }, editor: { kind: "text" } };
 const strings = { schema: { type: "array", items: string }, editor: { kind: "list" } };

@@ -1,0 +1,1 @@
+function recordSite(e,t,n){if(t&&typeof t.fileName=="string"&&Number.isInteger(t.lineNumber)&&Number.isInteger(t.columnNumber))e.site={file:t.fileName,line:t.lineNumber,column:t.columnNumber}}export{recordSite};

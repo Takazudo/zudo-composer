@@ -1,6 +1,8 @@
 import "./cleanup";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/preact";
+import { signal } from "@takazudo/zfb/zudo-react";
+import { Rebuild } from "../../rebuild";
+import { fireEvent, render, screen, settle } from "../../../test/render";
 import { StatusChip } from "../status-chip";
 
 describe("StatusChip", () => {
@@ -27,30 +29,35 @@ describe("StatusChip", () => {
     expect(container.querySelector(".cms-status__spinner")).not.toBeNull();
   });
 
-  it("offers Retry only in the failed state", () => {
+  it("offers Retry only in the failed state", async () => {
     const onRetry = vi.fn();
-    const { rerender } = render(<StatusChip state="failed" onRetry={onRetry} />);
+    const state = signal<"failed" | "saved">("failed");
+    render(<Rebuild value={state}>{(current) => <StatusChip state={current} onRetry={onRetry} />}</Rebuild>);
     const status = screen.getByRole("status");
     expect(status.className).toBe("cms-status cms-status--err");
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
 
-    rerender(<StatusChip state="saved" onRetry={onRetry} />);
+    state.value = "saved";
+    await settle();
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   });
 
-  it("defaults retrying off and restores the same markup after retrying", () => {
+  it("defaults retrying off and restores the same markup after retrying", async () => {
     const onRetry = vi.fn();
-    const { container, rerender } = render(<StatusChip state="failed" onRetry={onRetry} />);
+    const retrying = signal(false);
+    const { container } = render(<StatusChip state="failed" onRetry={onRetry} retrying={retrying} />);
     const normal = container.innerHTML;
     const button = screen.getByRole("button", { name: "Retry" });
     expect(button).toBeEnabled();
     expect(button).not.toHaveAttribute("aria-busy");
     expect(button.querySelector(".cms-btn__spinner")).toBeNull();
-    rerender(<StatusChip state="failed" onRetry={onRetry} retrying />);
+    retrying.value = true;
+    await settle();
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("aria-busy", "true");
-    rerender(<StatusChip state="failed" onRetry={onRetry} retrying={false} />);
+    retrying.value = false;
+    await settle();
     expect(container.innerHTML).toBe(normal);
   });
 

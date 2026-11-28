@@ -14,7 +14,7 @@ corepack pnpm -C styleguide/shop dev
 The dev port is **4398**. The standalone host is excluded from the root pnpm
 workspace and has its own lockfile. `gen` bundles the real Shop component pack
 from TypeScript source into ignored `src/generated/`. The bundle leaves
-`preact`, `preact/*` and `@zudo-composer/component-contract` external so those
+`@takazudo/zfb/zudo-react`, its subpaths and `@zudo-composer/component-contract` external so those
 runtime imports resolve from this host's pinned dependencies. The host's real
 uploaded images are copied into ignored `public/uploaded-assets/` at the same
 URLs as the demo site. Neither `dist`, `node_modules`, nor a prebuilt pack is
@@ -43,7 +43,7 @@ not install Sample's `@zudo-composer/ui` package.
 
 The catalog uses published zudo-sg 0.9 / zudo-doc 10.0 (Classic theme pack) on zfb 6.0.1, with
 zudo-react and Wind for its shell. The actual product pack and story callbacks
-remain Preact. `src/config/preview.mjs` validates the retained same-origin
+run in a separate zudo-react preview graph. `src/config/preview.mjs` validates the retained same-origin
 `/components/preview` endpoint. The frame loads only its separately compiled
 Tailwind pack stylesheet and runtime, with no shell islands or CSS injection.
 
@@ -63,7 +63,7 @@ source/workbench, image, token and CSS boundaries. Browser generation makes
 `build` a serial heavy lane: install Playwright Chromium first, or explicitly
 set `PLAYWRIGHT_EXECUTABLE_PATH` for an approved local executable.
 
-`check` checks source inventory and both shell and Preact TypeScript graphs.
+`check` checks source inventory and both shell and preview TypeScript graphs.
 `verify:browser` consumes prepared `dist` and covers copy/live CSS/height,
 resizing, resolved theme, protocol validation/readiness, actual token CSS
 edits, repeated SPA navigation, all variants and cleanup. There are no authored

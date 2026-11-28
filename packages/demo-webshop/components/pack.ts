@@ -115,4 +115,4 @@ export { SpecTable } from "./spec-table";
 export { Split } from "./split";
 export { Stack } from "./stack";
 export { StatusBadge } from "./status-badge";
-export { cartStore, createCartStore, useCart, CART_STORAGE_KEY, type CartLine, type CartState } from "./cart-store";
+export { cartStore, createCartStore, cartSignal, CART_STORAGE_KEY, type CartLine, type CartState } from "./cart-store";

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
-import { useWorkspace } from "../../../app/workspace-context";
+import { computed, signal, type ReadonlySignal, type Scope } from "@takazudo/zfb/zudo-react";
+import { read, type MaybeSignal } from "../../../components/reactive";
 import type { ComponentCatalog } from "../../../composer/model/types";
 import type { VersionedAssetStore } from "../../../assets/library";
 import { LiveAssetReferenceResolver } from "../../../assets/references";
@@ -23,26 +23,74 @@ export async function resolvePreviewAssetSnapshot(snapshot: ComposerPreviewSnaps
   return { status: "ready" as const, snapshot: { ...snapshot, document: resolveCompositionAsset(snapshot.document, catalog, { lock: result.lock }).document,
     ...(snapshot.linked ? { linked: { ...snapshot.linked, sourceDocument: resolveCompositionAsset(snapshot.linked.sourceDocument, catalog, { lock: result.lock }).document } } : {}) } };
 }
-/** Resolution runs in the owning host. The iframe receives only detached JSON. */
-export function useAssetResolvedPreviewSnapshot(snapshot: ComposerPreviewSnapshot | null, catalog: ComponentCatalog, enabled = true) {
-  const store = useWorkspace()?.integration.assetProvider?.store;
-  const resolver = useMemo(() => resolverFor(store), [store]);
-  const [generation, setGeneration] = useState(0);
-  const hasManaged = useMemo(() => {
-    if (!enabled || !snapshot) return false;
+export interface AssetResolvedPreviewSnapshot {
+  snapshot: ComposerPreviewSnapshot | null;
+  loading: boolean;
+  error?: string;
+}
+
+export interface AssetResolvedPreviewOptions {
+  /** The workspace's versioned Asset store; without one only pinned URLs pass. */
+  store?: VersionedAssetStore;
+  enabled?: MaybeSignal<boolean>;
+}
+
+/**
+ * Resolution runs in the owning host. The iframe receives only detached JSON.
+ * The result follows `snapshot` and Asset replacements for `scope`'s lifetime.
+ */
+export function assetResolvedPreviewSnapshot(
+  scope: Scope,
+  snapshot: ReadonlySignal<ComposerPreviewSnapshot | null>,
+  catalog: ComponentCatalog,
+  options: AssetResolvedPreviewOptions = {},
+): ReadonlySignal<AssetResolvedPreviewSnapshot> {
+  const { store } = options;
+  const resolver = resolverFor(store);
+  const generation = signal(0);
+  const hasManaged = computed(() => {
+    const current = snapshot.value;
+    if (!read(options.enabled ?? true) || !current) return false;
     const identity = { providerId: store?.provider.id, preservePinnedUrls: true };
-    const indices = [resolveCompositionAsset(snapshot.document, catalog, identity).index, ...(snapshot.linked ? [resolveCompositionAsset(snapshot.linked.sourceDocument, catalog, identity).index] : [])];
+    const indices = [resolveCompositionAsset(current.document, catalog, identity).index, ...(current.linked ? [resolveCompositionAsset(current.linked.sourceDocument, catalog, identity).index] : [])];
     return indices.some((index) => !index.complete || index.references.length > 0);
-  }, [snapshot, catalog, enabled, store]);
-  const [resolved, setResolved] = useState<{ source: ComposerPreviewSnapshot; generation: number; value: ComposerPreviewSnapshot | null; error?: string } | null>(null);
-  useEffect(() => hasManaged ? resolver.subscribeChanges(() => { setGeneration((value) => value + 1); }) : undefined, [resolver, hasManaged]);
-  useEffect(() => {
-    if (!snapshot || !hasManaged) return;
-    let active = true;
-    void resolvePreviewAssetSnapshot(snapshot, catalog, resolver).then((result) => { if (active) setResolved({ source: snapshot, generation, value: result.status === "ready" ? result.snapshot : null, ...(result.status === "blocked" ? { error: result.message } : {}) }); }, (reason: unknown) => { if (active) setResolved({ source: snapshot, generation, value: null, error: reason instanceof Error ? reason.message : "Preview assets could not be resolved." }); });
-    return () => { active = false; };
-  }, [snapshot, catalog, resolver, generation, hasManaged]);
-  if (!hasManaged) return { snapshot, loading: false, error: undefined };
-  const current = resolved?.source === snapshot && resolved.generation === generation ? resolved : null;
-  return { snapshot: current?.value ?? null, loading: !current, error: current?.error };
+  });
+  const resolved = signal<{ source: ComposerPreviewSnapshot; generation: number; value: ComposerPreviewSnapshot | null; error?: string } | null>(null);
+
+  // One subscription per managed span: re-running on every snapshot write must
+  // not close the resolver's persistence channel or drop its pending cache.
+  let stopChanges: (() => void) | null = null;
+  const unsubscribe = () => { const stop = stopChanges; stopChanges = null; stop?.(); };
+  scope.effect(() => {
+    const managed = hasManaged.value;
+    if (managed && !stopChanges) stopChanges = resolver.subscribeChanges(() => { generation.value += 1; });
+    else if (!managed) unsubscribe();
+  });
+  scope.onCleanup(unsubscribe);
+
+  let requested: { source: ComposerPreviewSnapshot; generation: number } | null = null;
+  scope.effect(() => {
+    const current = snapshot.value;
+    const currentGeneration = generation.value;
+    if (!current || !hasManaged.value) { requested = null; return; }
+    if (requested?.source === current && requested.generation === currentGeneration) return;
+    const request = { source: current, generation: currentGeneration };
+    requested = request;
+    const settle = (value: ComposerPreviewSnapshot | null, error?: string): void => {
+      if (scope.abortSignal.aborted || requested !== request) return;
+      resolved.value = { source: current, generation: currentGeneration, value, ...(error === undefined ? {} : { error }) };
+    };
+    void resolvePreviewAssetSnapshot(current, catalog, resolver).then(
+      (result) => settle(result.status === "ready" ? result.snapshot : null, result.status === "blocked" ? result.message : undefined),
+      (reason: unknown) => settle(null, reason instanceof Error ? reason.message : "Preview assets could not be resolved."),
+    );
+  });
+
+  return computed(() => {
+    const current = snapshot.value;
+    if (!hasManaged.value) return { snapshot: current, loading: false, error: undefined };
+    const result = resolved.value;
+    const latest = result?.source === current && result.generation === generation.value ? result : null;
+    return { snapshot: latest?.value ?? null, loading: !latest, error: latest?.error };
+  });
 }

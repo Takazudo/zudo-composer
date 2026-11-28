@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, settle, settleTasks, waitFor, within } from "../../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ContentApp } from "../content-app";
 import { createContentAuthoringController } from "../controller";
@@ -9,7 +9,7 @@ import { createContentEntryRecord, createContentModelRecord } from "../../../con
 // auto-cleanup and a second render would query against both trees.
 afterEach(async () => {
   cleanup();
-  // Provider updates can schedule Preact's after-paint effects outside act().
+  // Provider updates can schedule after-paint work outside a flush.
   // Unmounting removes their components but does not cancel the queued RAF and
   // its timeout fallback. Let that frame and its posted effect task drain while
   // jsdom's cancelAnimationFrame still exists, before Vitest disposes the window.
@@ -67,6 +67,7 @@ describe("Content route intents", () => {
     expect(new URLSearchParams(window.location.search).get("view")).toBe("missing");
     const tree = screen.getByRole("tree", { name: "Content" });
     fireEvent.click(within(tree).getByRole("treeitem", { name: /^Hello/ }));
+    await settleTasks();
     expect(await screen.findByRole("textbox", { name: "Entry title" })).toHaveValue("Hello");
     await waitFor(() => expect(window.location.search).toBe("?provider=content-filesystem&model=articles&entry=entry-1"));
     expect(screen.queryByText('Content view "missing" is unavailable for this model.')).toBeNull();
@@ -93,6 +94,7 @@ describe("Content route intents", () => {
     expect(failure).toHaveTextContent('Content view "missing" is unavailable for this model.');
     expect(window.location.search).toBe("?provider=content-filesystem&model=articles&view=missing");
     fireEvent.click(entry);
+    await settleTasks();
     expect(await screen.findByRole("textbox", { name: "Entry title" })).toHaveValue("Hello");
     await waitFor(() => expect(window.location.search).toBe("?provider=content-filesystem&model=articles&entry=entry-1"));
     expect(screen.queryByText(/Entry provider temporarily unavailable\./)).toBeNull();
@@ -158,6 +160,7 @@ describe("Content navigator and toolbar", () => {
   it("offers the other authoring mode from the overflow menu", async () => {
     await openArticles();
     fireEvent.click(screen.getByRole("button", { name: "More Content actions" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("menu", { name: "Content actions" })).getByRole("menuitem", { name: "Edit schema" }));
 
     await waitFor(() => expect(within(screen.getByRole("region", { name: "Editor" })).getByText("Schema", { exact: true })).toBeVisible());
@@ -171,7 +174,7 @@ describe("Content navigator and toolbar", () => {
     fireEvent.click(within(tree).getByRole("treeitem", { name: /^Articles/ }));
     const entry = await within(tree).findByRole("treeitem", { name: /^Hello/ });
     fireEvent.click(entry);
-    const title = await screen.findByRole("textbox", { name: "Title", exact: true });
+    const title = await screen.findByRole("textbox", { name: "Title" });
     fireEvent.input(title, { target: { value: "Failed edit" } });
 
     await waitFor(() => expect(controller.state.saveStatus).toBe("error"));
