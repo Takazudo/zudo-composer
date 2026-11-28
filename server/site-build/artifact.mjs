@@ -15,6 +15,14 @@ export const SITE_MANIFEST = "site-manifest.json";
 // Cloudflare consumes this deployment configuration instead of serving it.
 export const SITE_HEADERS = "_headers";
 
+// Path-independent proof that a development JSX transform reached a published
+// artifact: `jsxDEV` emits a `{fileName, lineNumber, columnNumber: <n>}` literal,
+// which survives minification while build-machine path prefixes do not exist at
+// all on a container checkout such as `/__w` or `/app`. Only the emitted literal
+// counts: the zudo-react runtime itself reads `source.columnNumber` when a dev
+// site is present, and that property read is not dev metadata.
+export const DEV_JSX_SITE_MARKER = /\bcolumnNumber\s*:\s*\d/;
+
 // Markers that would mean the authoring tool's server, filesystem or release
 // plumbing leaked into a visitor bundle.
 const FORBIDDEN_ARTIFACT_MARKERS = [
@@ -22,11 +30,6 @@ const FORBIDDEN_ARTIFACT_MARKERS = [
   "/Users/",
   "/home/",
   "/root/",
-  // Path-independent proof that a development JSX transform reached a
-  // published artifact: `jsxDEV` emits a `{fileName, lineNumber, columnNumber}`
-  // triple, which survives minification while the build-machine path prefixes
-  // above do not exist at all on a container checkout such as `/__w` or `/app`.
-  "columnNumber",
   "node:fs",
   "node:path",
   "node:crypto",
@@ -165,6 +168,7 @@ export async function verifySiteStaticArtifact({ directory, expectedSourceRevisi
     if (/\.(?:js|mjs|html|css)$/.test(file.path)) {
       const text = bytes.toString("utf8");
       for (const forbidden of FORBIDDEN_ARTIFACT_MARKERS) assert.ok(!text.includes(forbidden), `Site artifact leaked forbidden marker ${forbidden}: ${file.path}`);
+      assert.doesNotMatch(text, DEV_JSX_SITE_MARKER, `Site artifact leaked forbidden marker ${DEV_JSX_SITE_MARKER}: ${file.path}`);
     }
   }
   assert.deepEqual([...found].sort(), Object.keys(manifest.files).sort(), "Site manifest must describe every file exactly once");

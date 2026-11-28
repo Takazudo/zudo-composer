@@ -6,7 +6,7 @@ import { lstat, readdir, readFile } from "node:fs/promises";
 import { basename, extname, join, normalize, resolve, sep } from "node:path";
 import ts from "typescript";
 import { ASSET_CHECKSUM_URL_PATTERN, assetMimeTypeForExtension, hostedAssetHeaders } from "../../src/assets/model/asset-kinds.mjs";
-import { assertToolIdentity, readToolIdentity } from "../../server/site-build/artifact.mjs";
+import { DEV_JSX_SITE_MARKER, assertToolIdentity, readToolIdentity } from "../../server/site-build/artifact.mjs";
 import { createModuleEvaluator } from "../../server/module-evaluator.mjs";
 import { APP_ROOT } from "../../plugins/roots.mjs";
 import { assertDemoEditorRoutes } from "../routes.mjs";
@@ -43,7 +43,6 @@ const FORBIDDEN_ARTIFACT_MARKERS = [
   "/Users/",
   "/home/",
   "/root/",
-  "columnNumber",
   "sourceMappingURL",
   "virtual:composer-file-provider",
   "createComposerFileProviderMiddleware",
@@ -127,6 +126,7 @@ export function assertDemoEditorText(source, fileName) {
       assert.ok(!code.includes(forbidden) && !dependencies.some((path) => path.includes(forbidden)), `Hosted artifact leaked forbidden marker ${forbidden}: ${fileName}`);
     } else assert.ok(false, `Hosted artifact leaked forbidden marker ${forbidden}: ${fileName}`);
   }
+  assert.doesNotMatch(source, DEV_JSX_SITE_MARKER, `Hosted artifact leaked forbidden marker ${DEV_JSX_SITE_MARKER}: ${fileName}`);
   assert.doesNotMatch(source, /["'`]@\/[A-Za-z0-9_.-]/, "Hosted artifact leaked forbidden module alias: @/");
 }
 

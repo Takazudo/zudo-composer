@@ -42,6 +42,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm headless:negative-scan
+      - run: pnpm runtime:negative-scan
       - run: pnpm site-project:boundary
       - run: pnpm contract:conformance
       - run: pnpm contract:negative-scan
@@ -431,7 +432,7 @@ jobs:
       # paths from its upstream Rust build and would always match.
       - name: Reject leaked filesystem paths or dev sourcemap markers
         run: |
-          grep -rlE --include='*.js' --include='*.mjs' --include='*.css' --include='*.html' '/home/|columnNumber' packages/demo-*/dist-editor/assets && false
+          grep -rlE --include='*.js' --include='*.mjs' --include='*.css' --include='*.html' '/home/|columnNumber[[:space:]]*:[[:space:]]*[0-9]' packages/demo-*/dist-editor/assets && false
           echo "No forbidden markers found in demo editor batch output"
 
   doc-site-build:
@@ -479,7 +480,7 @@ jobs:
             styleguide/sample/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: corepack pnpm sg:pins
-      # Thumbnail capture renders the real Preact preview during the build.
+      # Thumbnail capture renders the real zudo-react preview during the build.
       - run: pnpm exec playwright install --with-deps chromium
       - run: corepack pnpm sg:build-site
       - run: pnpm -C styleguide/sample exec zfb wind audit --plan build --fail-on error
@@ -516,7 +517,7 @@ jobs:
       - run: pnpm -C styleguide/shop install --frozen-lockfile
       - run: corepack pnpm sg:pins
       - run: pnpm -C styleguide/shop check
-      # Thumbnail capture renders the real Preact preview during the build.
+      # Thumbnail capture renders the real zudo-react preview during the build.
       - run: pnpm exec playwright install --with-deps chromium
       - run: corepack pnpm sg:build-styleguide shop-sg --skip-install
       - run: pnpm -C styleguide/shop exec zfb wind audit --plan build --fail-on error
@@ -559,7 +560,7 @@ jobs:
       - run: pnpm -C styleguide/landing install --frozen-lockfile
       - run: corepack pnpm sg:pins
       - run: pnpm -C styleguide/landing check
-      # Thumbnail capture renders the real Preact preview during the build.
+      # Thumbnail capture renders the real zudo-react preview during the build.
       - run: pnpm exec playwright install --with-deps chromium
       - run: corepack pnpm sg:build-styleguide landing-sg --skip-install
       - run: pnpm -C styleguide/landing exec zfb wind audit --plan build --fail-on error
@@ -602,7 +603,7 @@ jobs:
       - run: pnpm -C styleguide/blog install --frozen-lockfile
       - run: corepack pnpm sg:pins
       - run: pnpm -C styleguide/blog check
-      # Thumbnail capture renders the real Preact preview during the build.
+      # Thumbnail capture renders the real zudo-react preview during the build.
       - run: pnpm exec playwright install --with-deps chromium
       - run: corepack pnpm sg:build-styleguide blog-sg --skip-install
       - run: pnpm -C styleguide/blog exec zfb wind audit --plan build --fail-on error

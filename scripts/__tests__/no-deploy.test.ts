@@ -353,7 +353,8 @@ describe("CI and aggregate packed-host coverage", () => {
     const markerStep = job.steps.find((step: { run?: string }) => step.run?.includes("grep"));
     expect(markerStep).toBeDefined();
     expect(markerStep.run).toContain("/home/");
-    expect(markerStep.run).toContain("columnNumber");
+    // The emitted jsxDEV literal only; the runtime's own `source.columnNumber` read is allowed.
+    expect(markerStep.run).toContain("columnNumber[[:space:]]*:[[:space:]]*[0-9]");
     expect(markerStep.run).toContain("packages/demo-*/dist-editor/assets");
   });
 

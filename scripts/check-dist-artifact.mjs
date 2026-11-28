@@ -12,6 +12,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, extname, join, resolve } from "node:path";
 import { UI_PACK } from "./ui-pack-identity.mjs";
+import { DEV_JSX_SITE_MARKER } from "../server/site-build/artifact.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const dist = join(root, "dist");
@@ -49,11 +50,11 @@ for (const forbidden of [
   "/Users/",
   "/home/",
   "/root/",
-  "columnNumber",
   "sourceMappingURL",
 ]) {
   assert.ok(!assetText.includes(forbidden), `production artifact leaked forbidden marker: ${forbidden}`);
 }
+assert.doesNotMatch(assetText, DEV_JSX_SITE_MARKER, `production artifact leaked forbidden marker: ${DEV_JSX_SITE_MARKER}`);
 // Match the app's `@/…` module alias only when it is emitted as a string-like
 // specifier. CodeMirror's style runtime legitimately contains the regular
 // expression `/^@/`, whose closing slash creates the same two-byte sequence.
