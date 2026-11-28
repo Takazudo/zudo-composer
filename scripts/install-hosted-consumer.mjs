@@ -17,11 +17,11 @@ const manifest = {
   dependencies: {
     "zudo-composer": `git+https://github.com/Takazudo/zudo-composer.git#${sha}`,
     "@zudo-composer/component-contract": "git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0",
-    // The tool and its editor peer on exactly this zudo-react runtime. zudo-sg 0.9.3 still
-    // declares ZFB ^6.0.1, Doc ^10.0.3 and zdtp ^0.9.4, so strict peers below reject this
-    // set until the renderer's engine stack moves to a ZFB 7 release.
+    // The tool and its editor peer on exactly this zudo-react runtime. The renderer's engine
+    // stack is the ZFB 7.2.0 family: zudo-sg 0.12.0 peers ZFB ^7.2.0, zdtp ^0.9.10 and Doc
+    // ^14.0.0; Doc 14 also requires the ZFB runtime and zod, so strict peers pin each exactly.
     "@takazudo/zfb": "7.2.0", "@takazudo/zfb-runtime": "7.2.0",
-    "@takazudo/zudo-sg": "0.9.3", "@takazudo/zdtp": "0.9.5", "@takazudo/zudo-doc": "10.0.3",
+    "@takazudo/zudo-sg": "0.12.0", "@takazudo/zdtp": "0.9.10", "@takazudo/zudo-doc": "14.0.0", zod: "4.4.3",
     marked: "16.3.0", // host-only Markdown renderer; never a tool runtime dependency
   },
   devDependencies: { esbuild: "0.28.2", "@playwright/test": "1.62.1", "@cloudflare/workers-types": "5.20261012.1", tsx: "4.23.12", typescript: "6.0.3", miniflare: "5.20261006.1-alpha" },
@@ -29,10 +29,7 @@ const manifest = {
 await writeFile(join(destination, "package.json"), JSON.stringify(manifest, null, 2) + "\n");
 // Exact release-age exclusions this install needs; prune each once it is older than pnpm's default minimum release age.
 /** @type {string[]} */
-const releaseAgeExclude = [
-  "@takazudo/zdtp@0.9.5",
-  "@takazudo/zudo-sg@0.9.3",
-];
+const releaseAgeExclude = [];
 await writeFile(join(destination, "pnpm-workspace.yaml"), `packages: []\nautoInstallPeers: false\nstrictPeerDependencies: true\nallowBuilds:\n  '@zudo-composer/component-contract': true\n  esbuild: true\n  workerd: true\n${releaseAgeExclude.length ? `minimumReleaseAgeExclude:\n${releaseAgeExclude.map(item => `  - '${item}'\n`).join("")}` : ""}`);
 execFileSync("corepack", ["pnpm", "install"], { cwd: destination, stdio: "inherit" });
 await writeFile(join(destination, "renderer/package.json"), JSON.stringify({ ...manifest, name: "composer-hosted-renderer" }, null, 2) + "\n");
