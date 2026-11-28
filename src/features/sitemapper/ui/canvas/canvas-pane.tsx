@@ -1,8 +1,6 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
-import { useMemo } from "preact/hooks";
+import { computed, type Child } from "@takazudo/zfb/zudo-react";
+import { toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { Rebuild } from "../../../../components/rebuild";
 import { ComposerIcon, MappingIcon } from "../../../../components/icons";
 import { Chip, DataTable, Pane, PaneBody, PaneHeader, type DataTableColumn } from "../../../../components/ui";
 import type { SitemapDocument, SitemapNode } from "../../../../sitemapper/model";
@@ -13,17 +11,18 @@ import { describeRouteStatus, type PageSourceLabels } from "./page-source";
 export type SitemapView = "canvas" | "outline" | "routes" | "navigation";
 
 export interface CanvasPaneProps {
-  document: SitemapDocument;
-  routes: ReadonlyMap<string, string>;
-  sources: PageSourceLabels;
-  routeInfo: ReadonlyMap<string, SitemapNodeRouteInfo>;
+  document: MaybeSignal<SitemapDocument>;
+  routes: MaybeSignal<ReadonlyMap<string, string>>;
+  sources: MaybeSignal<PageSourceLabels>;
+  routeInfo: MaybeSignal<ReadonlyMap<string, SitemapNodeRouteInfo>>;
+  /** Static for the pane's lifetime. */
   view: SitemapView;
-  selectedId: string | null;
-  zoom: number;
-  layoutPreference?: CanvasLayoutPreference;
+  selectedId: MaybeSignal<string | null>;
+  zoom: MaybeSignal<number>;
+  layoutPreference?: MaybeSignal<CanvasLayoutPreference>;
   onLayoutPreferenceChange?: (preference: CanvasLayoutPreference) => void;
   /** The load/recovery notice, drawn above the surface it applies to. */
-  notice?: JSX.Element | null;
+  notice?: Child;
   onZoomChange: (zoom: number) => void;
   onSelect: (id: string) => void;
   onAddChild: (id: string) => void;
@@ -41,13 +40,13 @@ function flatten(nodes: readonly SitemapNode[], rows: SitemapNode[] = []): Sitem
 }
 
 export function CanvasPane({
-  document,
-  routes,
-  sources,
-  routeInfo,
+  document: documentInput,
+  routes: routesInput,
+  sources: sourcesInput,
+  routeInfo: routeInfoInput,
   view,
-  selectedId,
-  zoom,
+  selectedId: selectedInput,
+  zoom: zoomInput,
   layoutPreference,
   onLayoutPreferenceChange,
   notice,
@@ -57,22 +56,28 @@ export function CanvasPane({
   onDuplicate,
   onDelete,
   onCreateRoot,
-}: CanvasPaneProps): JSX.Element {
-  const rows = useMemo(() => flatten(document.root), [document]);
+}: CanvasPaneProps): Child {
+  const document = toSignal(documentInput);
+  const routes = toSignal(routesInput);
+  const sources = toSignal(sourcesInput);
+  const routeInfo = toSignal(routeInfoInput);
+  const selectedId = toSignal(selectedInput);
+  const zoom = toSignal(zoomInput);
+  const rows = computed(() => flatten(document.value.root));
 
+  // The table view is rebuilt with its rows; its cells read the current labels.
   const columns: readonly DataTableColumn<SitemapNode>[] = [
     { key: "title", header: "Title", variant: "name", cell: (row) => row.title },
     {
       key: "route",
       header: "Route",
       variant: "muted",
-      cell: (row) => <code class="sg-sitemapper-route">{routes.get(row.id) ?? "/"}</code>,
+      cell: (row) => <code class="sg-sitemapper-route">{computed(() => routes.value.get(row.id) ?? "/")}</code>,
     },
     {
       key: "source",
       header: "Source",
-      cell: (row) => {
-        const source = sources.get(row.id);
+      cell: (row) => <Rebuild value={computed(() => sources.value.get(row.id))}>{(source) => {
         if (!source) return <span class="sg-sitemapper-blank" aria-hidden="true">—</span>;
         const Icon = source.kind === "mapping" ? MappingIcon : ComposerIcon;
         return (
@@ -81,7 +86,7 @@ export function CanvasPane({
             {source.name}
           </span>
         );
-      },
+      }}</Rebuild>,
     },
     {
       key: "status",
@@ -89,10 +94,9 @@ export function CanvasPane({
       cell: (row) => {
         if (row.source.kind === "unassigned") return <Chip tone="warn" dot>Unassigned</Chip>;
         if (row.source.kind === "composition") return <Chip tone="ok" dot>Assigned</Chip>;
-        const status = routeInfo.get(row.id)?.status;
-        return status === undefined
+        return <Rebuild value={computed(() => routeInfo.value.get(row.id)?.status)}>{(status) => status === undefined
           ? <Chip dot>Resolving…</Chip>
-          : <Chip tone={status === "ready" ? "ok" : "warn"} dot>{describeRouteStatus(status)}</Chip>;
+          : <Chip tone={status === "ready" ? "ok" : "warn"} dot>{describeRouteStatus(status)}</Chip>}</Rebuild>;
       },
     },
   ];
@@ -101,7 +105,7 @@ export function CanvasPane({
     <Pane variant="canvas" label="Sitemap canvas" class="sg-sitemapper-main">
       <PaneHeader
         class="sg-sitemapper-main__header"
-        title={`Canvas · ${Math.round(zoom * 100)}%`}
+        title={computed(() => `Canvas · ${Math.round(zoom.value * 100)}%`)}
       />
       <PaneBody class="sg-sitemapper-main__body">
         {/* Always rendered: the body is a two-row grid, and a missing first row
@@ -135,8 +139,8 @@ export function CanvasPane({
                 <button
                   type="button"
                   class="cms-btn cms-btn--ghost cms-btn--xs"
-                  aria-pressed={selectedId === row.id}
-                  onClick={() => onSelect(row.id)}
+                  aria-pressed={computed(() => selectedId.value === row.id ? "true" : "false")}
+                  on:click={() => onSelect(row.id)}
                 >
                   Select
                 </button>

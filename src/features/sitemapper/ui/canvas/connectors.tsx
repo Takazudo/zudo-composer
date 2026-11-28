@@ -1,31 +1,27 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
+import { computed, For, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import type { CanvasLayout } from "./layout";
 
 export interface SitemapConnectorsProps {
-  layout: CanvasLayout;
+  layout: ReadonlySignal<CanvasLayout>;
 }
 
-export function SitemapConnectors({ layout }: SitemapConnectorsProps): JSX.Element {
+export function SitemapConnectors({ layout }: SitemapConnectorsProps): Child {
   return (
     <svg
       class="sg-sitemapper-connectors"
-      width={layout.width}
-      height={layout.height}
-      viewBox={`0 0 ${layout.width} ${layout.height}`}
+      width={computed(() => layout.value.width)}
+      height={computed(() => layout.value.height)}
+      viewBox={computed(() => `0 0 ${layout.value.width} ${layout.value.height}`)}
       aria-hidden="true"
       focusable="false"
     >
-      {layout.segments.map((segment) => (
+      <For each={computed(() => layout.value.segments)} by={(segment) => segment.id}>{(segment) => (
         <path
-          key={segment.id}
           class="sg-sitemapper-connector"
-          data-sg-external={segment.external ? "true" : undefined}
-          d={segment.path}
+          data-sg-external={computed(() => segment.value.external ? "true" : null)}
+          d={computed(() => segment.value.path)}
         />
-      ))}
+      )}</For>
     </svg>
   );
 }
