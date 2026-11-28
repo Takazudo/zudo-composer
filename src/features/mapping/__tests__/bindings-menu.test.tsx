@@ -28,4 +28,21 @@ describe("Mapping binding row menu", () => {
     expect(workspace.controller.state.definition?.contentModel?.document.fields).not.toBe(fields);
     expect(screen.getByRole("menuitem", { name: "Move up" })).toBeInTheDocument();
   });
+
+  it("keeps an unbound target's bind menu open across the same re-resolve", async () => {
+    const workspace = await openedHarness(mappingRecord([READY_BINDING, INCOMPATIBLE_BINDING]));
+    const resolveModel = workspace.content.resolveModel.bind(workspace.content);
+    vi.spyOn(workspace.content, "resolveModel").mockImplementation(async (ref) => structuredClone(await resolveModel(ref)));
+    render(<MappingApp provider={workspace.provider} contentCatalog={workspace.content} compositionCatalog={workspace.compositions} contentEntries={workspace.contentEntries} componentProvider={activeComponentProvider} controller={workspace.controller} location={{ pathname: "/mapping", search: "" }} navigate={vi.fn()} />);
+    await settle();
+    const moving = workspace.controller.moveBinding(READY_BINDING.id, 1);
+    const chip = screen.getAllByRole("button", { name: /^Bind .+ on / })[0]!;
+    fireEvent.click(chip);
+    await settle();
+    const menuName = screen.getByRole("menu").getAttribute("aria-label");
+    await moving;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await settleTasks();
+    expect(screen.getByRole("menu", { name: menuName! })).toBeInTheDocument();
+  });
 });

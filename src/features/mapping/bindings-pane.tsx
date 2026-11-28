@@ -34,7 +34,7 @@ import {
   type MappingBindingRow,
 } from "./presentation";
 import type { MappingEditorState } from "./controller";
-import { followModel, keyedBy, memo } from "../../components/reactive";
+import { followModel, keyedBy } from "../../components/reactive";
 
 // The binding board: ONE ROW PER BINDING. Source, transform and target used to
 // be three stacked card regions per binding, which put a three-binding Mapping
@@ -204,6 +204,11 @@ export function BindingsPane({
   // array; rebuilding the table for that would close an open row menu.
   const fields = keyedBy(() => state.value.definition?.contentModel?.document.fields ?? [], (current) => JSON.stringify(current));
   const tableRows = keyedBy(() => rows.value, structureKey);
+  // Keyed by content like `fields`: an equal re-resolve must not close an open chip menu.
+  const unboundView = keyedBy(() => {
+    const { mapping, definition } = state.value;
+    return { unbound: mapping ? unboundTargets(mapping, definition) : [], bindable: (definition?.targets.length ?? 0) > 0, fields: fields.value };
+  }, (view) => JSON.stringify(view));
   const liveRow = (row: MappingBindingRow) => computed(() => rows.value.find((candidate) => candidate.binding.id === row.binding.id) ?? row);
 
   /** The bind menu for one target, shared by an unbound chip and a Fix action. */
@@ -294,13 +299,12 @@ export function BindingsPane({
           )}</Rebuild>
         )}</Show>
         <PaneSection title="Unbound targets" class="cms-mapping-unbound">
-          <Rebuild value={memo(() => [state.value.mapping, state.value.definition, fields.value] as const)}>{([mapping, definition, currentFields]) => {
-            const unbound = mapping ? unboundTargets(mapping, definition) : [];
+          <Rebuild value={unboundView}>{({ unbound, bindable, fields: currentFields }) => {
             // Nothing left to bind and nothing bindable at all look the same
             // from the list alone, and they need opposite answers.
             if (unbound.length === 0) return (
               <p class="cms-mapping-unbound__empty">
-                {(definition?.targets.length ?? 0) > 0
+                {bindable
                   ? "Every bindable prop of this Composition has a binding."
                   : "This Composition offers no bindable props. Check the Diagnostics tab."}
               </p>
