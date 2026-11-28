@@ -1,12 +1,13 @@
-import type { JSX } from "preact";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
+import { fireEvent, render, screen, settle, waitFor, within } from "../../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { computed } from "@takazudo/zfb/zudo-react";
 import { createAssetRecord, type AssetRecord } from "../../../assets";
 import {
   ASSET_UPLOAD_ACCEPT,
   ASSET_UPLOAD_BUSY_REJECTION,
   AssetUploadPanel,
-  useAssetUpload,
+  createAssetUpload,
   type AssetUploadStore,
 } from "../assets-upload";
 
@@ -17,14 +18,14 @@ const record = (fileName: string, id = "uploaded-assets"): AssetRecord => create
 const transfer = (files: File[], items: Array<{ kind: string; getAsFile(): File | null }> = []) => ({ files, items, types: ["Files"], dropEffect: "none" });
 const deferred = <T,>() => { let resolve!: (value: T) => void; let reject!: (reason: unknown) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { vi.restoreAllMocks(); });
 
 /** The route's shape: one queue behind the header's button and the drop strip. */
-function Harness({ store, refresh }: { store: AssetUploadStore; refresh: () => Promise<void> }): JSX.Element {
-  const controller = useAssetUpload({ store, refresh, now: () => 777 });
+function Harness({ store, refresh }: { store: AssetUploadStore; refresh: () => Promise<void> }): Child {
+  const controller = createAssetUpload({ store, refresh, now: () => 777 });
   return (
     <>
-      <button type="button" disabled={controller.state.busy} onClick={controller.openPicker}>Upload</button>
+      <button type="button" disabled={computed(() => controller.state.value.busy)} on:click={controller.openPicker}>Upload</button>
       <AssetUploadPanel controller={controller} />
     </>
   );
@@ -62,6 +63,7 @@ describe("Asset upload", () => {
     Object.defineProperty(input, "value", { value: "C:\\fakepath\\same.png", writable: true, configurable: true });
     fireEvent.change(input, { target: { files: [file("same.png")] } });
     expect(input.value).toBe("");
+    await settle();
     first.resolve(record("same.png"));
     await waitFor(() => expect(screen.getByRole("button", { name: "Choose files" })).toBeEnabled());
     fireEvent.change(input, { target: { files: [file("same.png")] } });
@@ -80,15 +82,15 @@ describe("Asset upload", () => {
     const dataTransfer = transfer([file("drop.png")]);
     expect(fireEvent.dragOver(surface, { dataTransfer })).toBe(false);
     expect(dataTransfer.dropEffect).toBe("copy");
-    expect(surface).toHaveClass("sg-assets-upload--drag-active");
+    await settle(); expect(surface).toHaveClass("sg-assets-upload--drag-active");
     const childLeave = new Event("dragleave", { bubbles: true, cancelable: true });
     Object.defineProperty(childLeave, "relatedTarget", { value: screen.getByRole("button", { name: "Choose files" }) });
     fireEvent(surface, childLeave);
-    expect(surface).toHaveClass("sg-assets-upload--drag-active");
+    await settle(); expect(surface).toHaveClass("sg-assets-upload--drag-active");
     const outerLeave = new Event("dragleave", { bubbles: true, cancelable: true });
     Object.defineProperty(outerLeave, "relatedTarget", { value: document.body });
     fireEvent(surface, outerLeave);
-    expect(surface).not.toHaveClass("sg-assets-upload--drag-active");
+    await settle(); expect(surface).not.toHaveClass("sg-assets-upload--drag-active");
     expect(fireEvent.drop(surface, { dataTransfer })).toBe(false);
     await screen.findByText("Stored");
   });
@@ -117,7 +119,7 @@ describe("Asset upload", () => {
     expect(fireEvent.paste(surface, { clipboardData })).toBe(false);
     expect(fireEvent.paste(surface, { clipboardData: transfer([file("second.png")]) })).toBe(true);
     expect(upload).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(ASSET_UPLOAD_BUSY_REJECTION)).toBeInTheDocument();
+    await settle(); expect(screen.getByText(ASSET_UPLOAD_BUSY_REJECTION)).toBeInTheDocument();
     pending.resolve(record("first.png"));
     await screen.findByText("Stored");
   });
@@ -164,7 +166,7 @@ describe("Asset upload", () => {
     expect(within(status).getByText("broken.png")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss broken.png" }));
-    expect(within(status).queryByText("broken.png")).toBeNull();
+    await settle(); expect(within(status).queryByText("broken.png")).toBeNull();
     expect(within(status).getAllByRole("listitem")).toHaveLength(1);
   });
 });
