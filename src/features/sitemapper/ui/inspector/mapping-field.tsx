@@ -1,5 +1,5 @@
 import { computed, Show, signal, type Child } from "@takazudo/zfb/zudo-react";
-import { followModel, memo, toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { followModel, keyedBy, memo, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Rebuild } from "../../../../components/rebuild";
 import { Keyed } from "../../../../runtime";
 import { EditIcon, MappingIcon } from "../../../../components/icons";
@@ -26,6 +26,47 @@ function describeAssignFailure(subject: string, outcome: ResolveFailure): string
   return outcome.status === "not-found"
     ? `${subject} no longer exists, so nothing was assigned.`
     : `${subject} could not be read (${outcome.reason}), so nothing was assigned.`;
+}
+
+interface FieldChoice { id: string; label: string }
+
+/**
+ * The options a field select offers. A stored field the model no longer lists
+ * stays selectable as a stale option, so the select never holds a value it
+ * cannot show.
+ */
+function fieldChoices(fields: readonly FieldChoice[], stored: string, allowEmpty: boolean): FieldChoice[] {
+  const listed = fields.map(({ id, label }) => ({ id, label }));
+  const stale = stored !== "" && !listed.some((field) => field.id === stored) ? [{ id: stored, label: `Missing field (${stored}) · stale` }] : [];
+  const empty = allowEmpty ? [{ id: "", label: "Use page title" }] : listed.length === 0 && stale.length === 0 ? [{ id: "", label: "No slug fields" }] : [];
+  return [...empty, ...stale, ...listed];
+}
+
+function choicesKey(choices: readonly FieldChoice[]): string {
+  return JSON.stringify(choices);
+}
+
+/** A model for one mounted option set: a value it does not list waits for the rebuild that adds it. */
+function pickListed(choices: readonly FieldChoice[], stored: string): string {
+  return choices.some((choice) => choice.id === stored) ? stored : choices[0]?.id ?? "";
+}
+
+function MappingCard({ detail: currentDetail, info, slugLabel, onChange }: { detail: NonNullable<SitemapNodeRouteInfo["mapping"]>; info: SitemapNodeRouteInfo; slugLabel: string | null; onChange: () => void }): Child {
+  return (
+    <div class="sg-sitemapper-source__card">
+      <MappingIcon size="sm" class="sg-sitemapper-source__glyph" />
+      <span class="sg-sitemapper-source__text">
+        <strong>{currentDetail.name}</strong>
+        <span>
+          {`${slugLabel ? `slug field: ${slugLabel} · ` : ""}${info.derivedRouteCount} ${info.derivedRouteCount === 1 ? "route" : "routes"}`}
+        </span>
+      </span>
+      <Chip tone={info.status === "ready" ? "ok" : "warn"} dot>{describeRouteStatus(info.status)}</Chip>
+      <Button size="xs" variant="ghost" iconOnly aria-label="Change mapping" on:click={onChange}>
+        <EditIcon size="xs" />
+      </Button>
+    </div>
+  );
 }
 
 export interface MappingFieldProps {
@@ -81,9 +122,15 @@ export function MappingField({ value: valueInput, routeInfo: routeInfoInput, cat
   });
   const hasValue = computed(() => value.value !== undefined);
   const resolved = computed(() => routeInfo.value !== undefined && detail.value !== undefined);
-  // The selects are rebuilt when the fields they offer change; their models follow the stored route.
-  const slugOptions = computed(() => (detail.value?.slugFields ?? []).map((field) => `${field.id}\u0000${field.label}`).join("\u0001"));
-  const titleOptions = computed(() => (detail.value?.titleFields ?? []).map((field) => `${field.id}\u0000${field.label}`).join("\u0001"));
+  const card = memo(() => {
+    const currentDetail = detail.value;
+    const info = routeInfo.value;
+    return currentDetail && info ? [currentDetail, info, slugFieldLabel.value] as const : null;
+  });
+  const storedSlugId = computed(() => { const current = value.value; return current?.route.kind === "entry-field" ? current.route.fieldId : ""; });
+  const storedTitleId = computed(() => { const current = value.value; return current?.route.kind === "entry-field" ? current.route.titleFieldId ?? "" : ""; });
+  const slugChoices = keyedBy(() => fieldChoices(detail.value?.slugFields ?? [], storedSlugId.value, false), choicesKey);
+  const titleChoices = keyedBy(() => fieldChoices(detail.value?.titleFields ?? [], storedTitleId.value, true), choicesKey);
 
   return (
     <div class="sg-sitemapper-source" role="group" aria-label="Mapping">
@@ -110,26 +157,13 @@ export function MappingField({ value: valueInput, routeInfo: routeInfoInput, cat
           )}</Show>
           <Show when={resolved}>{() => (
             <>
-              <Rebuild value={memo(() => [detail.value!, routeInfo.value!, slugFieldLabel.value] as const)}>{([currentDetail, info, slugLabel]) => (
-                <div class="sg-sitemapper-source__card">
-                  <MappingIcon size="sm" class="sg-sitemapper-source__glyph" />
-                  <span class="sg-sitemapper-source__text">
-                    <strong>{currentDetail.name}</strong>
-                    <span>
-                      {`${slugLabel ? `slug field: ${slugLabel} · ` : ""}${info.derivedRouteCount} ${info.derivedRouteCount === 1 ? "route" : "routes"}`}
-                    </span>
-                  </span>
-                  <Chip tone={info.status === "ready" ? "ok" : "warn"} dot>{describeRouteStatus(info.status)}</Chip>
-                  <Button size="xs" variant="ghost" iconOnly aria-label="Change mapping" on:click={openPicker}>
-                    <EditIcon size="xs" />
-                  </Button>
-                </div>
-              )}</Rebuild>
+              <Rebuild value={card}>{(view) => view && <MappingCard detail={view[0]} info={view[1]} slugLabel={view[2]} onChange={openPicker} />}</Rebuild>
               <Show when={computed(() => detail.value?.kind === "collection")}>{() => (
                 <>
                   <Field label="Slug field">{(field) => (
-                    <Keyed value={slugOptions} by={(key) => key}>{() => {
-                      const model = followModel(() => { const current = value.value; return current?.route.kind === "entry-field" ? current.route.fieldId : ""; });
+                    <Keyed value={slugChoices} by={choicesKey}>{(current) => {
+                      const choices = current.value;
+                      const model = followModel(() => pickListed(choices, storedSlugId.value));
                       return (
                         <Select
                           size="sm"
@@ -148,14 +182,15 @@ export function MappingField({ value: valueInput, routeInfo: routeInfoInput, cat
                             });
                           }}
                         >
-                          {(detail.value?.slugFields ?? []).map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                          {choices.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
                         </Select>
                       );
                     }}</Keyed>
                   )}</Field>
                   <Field label="Entry title field">{(field) => (
-                    <Keyed value={titleOptions} by={(key) => key}>{() => {
-                      const model = followModel(() => { const current = value.value; return current?.route.kind === "entry-field" ? current.route.titleFieldId ?? "" : ""; });
+                    <Keyed value={titleChoices} by={choicesKey}>{(current) => {
+                      const choices = current.value;
+                      const model = followModel(() => pickListed(choices, storedTitleId.value));
                       return (
                         <Select
                           size="sm"
@@ -175,15 +210,14 @@ export function MappingField({ value: valueInput, routeInfo: routeInfoInput, cat
                             });
                           }}
                         >
-                          <option value="">Use page title</option>
-                          {(detail.value?.titleFields ?? []).map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                          {choices.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
                         </Select>
                       );
                     }}</Keyed>
                   )}</Field>
                 </>
               )}</Show>
-              <Rebuild value={computed(() => routeInfo.value!)}>{(info) => (
+              <Rebuild value={computed(() => routeInfo.value)}>{(info) => info && (
                 <>
                   {info.diagnostics.map((diagnostic, index) => (
                     <Banner
