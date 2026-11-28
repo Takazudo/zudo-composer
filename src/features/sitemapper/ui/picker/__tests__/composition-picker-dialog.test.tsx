@@ -1,7 +1,4 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, settle, within } from "../../../../../test/render";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CatalogEntry } from "../../../../../sitemapper/catalog";
 import { CompositionPickerDialog } from "../composition-picker-dialog";
@@ -40,6 +37,7 @@ describe("CompositionPickerDialog", () => {
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);
     expect(within(list).getByText("This browser layout")).toBeInTheDocument();
     fireEvent.click(within(list).getByRole("button", { name: /Assign Project files layout/ }));
+    await settle();
     expect(onSelect).toHaveBeenCalledWith(files.ref);
   });
 
@@ -60,10 +58,12 @@ describe("CompositionPickerDialog", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Remote could not be loaded.");
 
     fireEvent.input(screen.getByRole("searchbox", { name: "Filter compositions" }), { target: { value: "project" } });
+    await settle();
     expect(screen.queryByText("This browser layout")).toBeNull();
     expect(screen.getByText("Project files layout")).toBeInTheDocument();
 
     fireEvent.input(screen.getByRole("searchbox", { name: "Filter compositions" }), { target: { value: "nothing" } });
+    await settle();
     expect(screen.getByText("No matches for “nothing”")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Remote could not be loaded.");
   });
@@ -76,6 +76,7 @@ describe("CompositionPickerDialog", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Catalog offline.");
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await settle();
     expect(await screen.findByText("This browser layout")).toBeInTheDocument();
   });
 });

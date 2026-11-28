@@ -1,10 +1,7 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
-import { useRef, useState } from "preact/hooks";
+import { computed, getScope, Show, signal, type Child } from "@takazudo/zfb/zudo-react";
 import { Dialog } from "../../../components/overlay";
-import { Banner, Field, Input } from "../../../components/ui";
+import { toSignal, type MaybeSignal } from "../../../components/reactive";
+import { Banner, Field, Input, isComposingKey } from "../../../components/ui";
 
 // The one naming question the Sitemapper asks — creating a Sitemap, renaming
 // one, renaming a page. It is the shared `Dialog` rather than a native
@@ -13,65 +10,69 @@ import { Banner, Field, Input } from "../../../components/ui";
 // with the text the author typed.
 
 export interface SitemapNameDialogProps {
-  open: boolean;
-  title: string;
-  description: string;
+  open: MaybeSignal<boolean>;
+  title: MaybeSignal<string>;
+  description: MaybeSignal<string>;
   /** Accessible name of the field, e.g. "Sitemap name". */
-  label: string;
-  submitLabel: string;
-  initialValue: string;
-  busy?: boolean;
+  label: MaybeSignal<string>;
+  submitLabel: MaybeSignal<string>;
+  /** Read when the dialog opens. */
+  initialValue: MaybeSignal<string>;
+  busy?: MaybeSignal<boolean>;
   /** A failed save; shown above the field so the entered name survives it. */
-  error?: string | null;
+  error?: MaybeSignal<string | null | undefined>;
   requiredMessage?: string;
   onSubmit: (value: string) => void;
   onClose: () => void;
 }
 
 export function SitemapNameDialog({
-  open,
+  open: openInput,
   title,
   description,
-  label,
-  submitLabel,
-  initialValue,
-  busy = false,
-  error,
+  label: labelInput,
+  submitLabel: submitInput,
+  initialValue: initialInput,
+  busy: busyInput = false,
+  error: errorInput,
   requiredMessage,
   onSubmit,
   onClose,
-}: SitemapNameDialogProps): JSX.Element {
-  // `Input` omits `ref` from its props, so the field is reached through its
-  // wrapper. Preact assigns refs before it flushes layout effects, which is
-  // what lets `Dialog` find the input on the render that opens it.
-  const fieldRef = useRef<HTMLInputElement | null>(null);
-  const [value, setValue] = useState(initialValue);
-  const [missing, setMissing] = useState(false);
+}: SitemapNameDialogProps): Child {
+  const open = toSignal(openInput);
+  const initialValue = toSignal(initialInput);
+  const label = toSignal(labelInput);
+  const busy = toSignal(busyInput);
+  const submitLabel = toSignal(submitInput);
+  const error = toSignal(errorInput);
+  const fieldRef: { current: HTMLInputElement | null } = { current: null };
+  const value = signal(initialValue.value);
+  const missing = signal(false);
 
-  // Reset during the opening render, NOT in an effect. An effect runs after
-  // paint, so the dialog is visible and typeable for a frame before the reset
-  // lands — anything typed or pasted in that window is silently clobbered back
-  // to `initialValue`. Adjusting state during render re-renders before the
-  // commit, so no such window exists. (Found by the coarse-lane browser spec,
-  // which fills the field faster than the effect flushed; a fast typist hits
-  // the same window.)
-  const wasOpen = useRef(open);
-  if (open !== wasOpen.current) {
-    wasOpen.current = open;
-    if (open) {
-      setValue(initialValue);
-      setMissing(false);
+  // Reset on the opening transition, registered before the dialog's own open
+  // effect, so the field holds the initial value before it can be typed into.
+  // (The coarse-lane browser spec fills the field as soon as it is shown; a
+  // reset that landed later would clobber what it typed.)
+  let wasOpen = open.value;
+  getScope().effect(() => {
+    const isOpen = open.value;
+    const initial = initialValue.value;
+    if (isOpen === wasOpen) return;
+    wasOpen = isOpen;
+    if (isOpen) {
+      value.value = initial;
+      missing.value = false;
     }
-  }
+  });
 
   function submit(): void {
-    if (busy) return;
-    const next = value.trim();
+    if (busy.value) return;
+    const next = value.value.trim();
     if (next === "") {
-      setMissing(true);
+      missing.value = true;
       return;
     }
-    setMissing(false);
+    missing.value = false;
     onSubmit(next);
   }
 
@@ -80,43 +81,43 @@ export function SitemapNameDialog({
       open={open}
       title={title}
       initialFocusRef={fieldRef}
-      dismissOnBackdrop={!busy}
+      dismissOnBackdrop={computed(() => !busy.value)}
       onClose={() => {
-        if (!busy) onClose();
+        if (!busy.value) onClose();
       }}
       footer={
         <>
-          <button type="button" class="cms-dialog__action" disabled={busy} onClick={onClose}>
+          <button type="button" class="cms-dialog__action" disabled={busy} on:click={onClose}>
             Cancel
           </button>
-          <button type="button" class="cms-dialog__action cms-dialog__action--primary" disabled={busy} onClick={submit}>
-            {busy ? "Working…" : submitLabel}
+          <button type="button" class="cms-dialog__action cms-dialog__action--primary" disabled={busy} on:click={submit}>
+            {computed(() => (busy.value ? "Working…" : submitLabel.value))}
           </button>
         </>
       }
     >
       <p class="cms-dialog__message">{description}</p>
-      {error ? <Banner tone="err">{error}</Banner> : null}
-      <div
-        ref={(element) => {
-          fieldRef.current = element?.querySelector("input") ?? null;
-        }}
-      >
-        <Field label={label} error={missing ? (requiredMessage ?? `Enter a ${label.toLowerCase()}.`) : undefined}>
-          <Input
-            value={value}
-            autocomplete="off"
-            disabled={busy}
-            onInput={(event) => {
-              setMissing(false);
-              setValue(event.currentTarget.value);
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter") return;
-              event.preventDefault();
-              submit();
-            }}
-          />
+      <Show when={computed(() => !!error.value)}>{() => <Banner tone="err">{computed(() => error.value ?? "")}</Banner>}</Show>
+      <div>
+        <Field
+          label={label}
+          error={computed(() => (missing.value ? (requiredMessage ?? `Enter a ${label.value.toLowerCase()}.`) : null))}
+        >
+          {(field) => (
+            <Input
+              field={field}
+              elementRef={fieldRef}
+              modelValue={value}
+              autocomplete="off"
+              disabled={busy}
+              on:input={() => { missing.value = false; }}
+              on:keydown={(event: KeyboardEvent) => {
+                if (event.key !== "Enter" || isComposingKey(event)) return;
+                event.preventDefault();
+                submit();
+              }}
+            />
+          )}
         </Field>
       </div>
     </Dialog>

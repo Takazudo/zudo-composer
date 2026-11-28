@@ -2,6 +2,7 @@ import { computed, For, getScope, Show, signal, type Child, type ReadonlySignal,
 import { SitemapperIcon } from "../../../../components/icons";
 import { toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Button, EmptyState, SegmentedControl } from "../../../../components/ui";
+import { derive } from "../../../mapping/signals";
 import type { SitemapDocument, SitemapNode as SitemapNodeModel } from "../../../../sitemapper/model";
 import SitemapConnectors from "./connectors";
 import {
@@ -148,11 +149,15 @@ function CanvasSurface({
 
   // The document-reference boundary is intentional: commands preserve the
   // reference for no-ops and replace it for real mutations.
-  const logicalTree = computed(() => buildLogicalTree(document.value));
-  const nodesById = computed(() => nodeMap(document.value));
+  // `derive` keeps each derived object stable until its inputs change: `computed` has no equality cutoff.
+  const logicalTree = derive(() => [document.value] as const, buildLogicalTree);
+  const nodesById = derive(() => [document.value] as const, nodeMap);
   const rootId = computed(() => document.value.root[0]?.id ?? null);
-  const layout = computed<CanvasLayout>(() => layoutSitemap(logicalTree.value, measurements.value.heights, measurements.value.viewportWidth, layoutMode.value));
-  const placed = computed(() => layout.value.nodes.filter((rectangle) => nodesById.value.has(rectangle.id)));
+  const layout = derive(
+    () => [logicalTree.value, measurements.value.heights, measurements.value.viewportWidth, layoutMode.value] as const,
+    (tree, heights, width, mode): CanvasLayout => layoutSitemap(tree, heights, width, mode),
+  );
+  const placed = derive(() => [layout.value, nodesById.value] as const, (current, nodes) => current.nodes.filter((rectangle) => nodes.has(rectangle.id)));
 
   scope.onActivate(() => {
     if (typeof globalThis.matchMedia !== "function") return undefined;

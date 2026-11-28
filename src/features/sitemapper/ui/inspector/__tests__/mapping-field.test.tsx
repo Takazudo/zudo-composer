@@ -1,6 +1,4 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, settle, waitFor, within } from "../../../../../test/render";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MappingAssignmentCatalog } from "../../../../../sitemapper/routes";
 import { MappingField } from "../mapping-field";
@@ -35,8 +33,10 @@ describe("MappingField", () => {
     const value = { kind: "mapping" as const, ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field" as const, fieldId: "slug", titleFieldId: "title" } };
     render(<MappingField value={value} routeInfo={{ status: "ready", derivedRouteCount: 2, diagnostics: [], mapping: mappingMetadata }} catalog={catalog()} onChange={onChange} />);
     fireEvent.change(screen.getByRole("combobox", { name: "Slug field" }), { target: { value: "alternate-slug" } });
+    await settle();
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ route: { kind: "entry-field", fieldId: "alternate-slug", titleFieldId: "title" } }));
     fireEvent.change(screen.getByRole("combobox", { name: "Entry title field" }), { target: { value: "" } });
+    await settle();
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ route: { kind: "entry-field", fieldId: "slug" } }));
   });
 
@@ -58,6 +58,7 @@ describe("MappingField", () => {
     render(<MappingField value={{ kind: "mapping", ref: { providerId: "mapping", recordId: "gone" }, route: { kind: "single" } }} routeInfo={{ status: "blocked", derivedRouteCount: 0, diagnostics: [diagnostic] }} catalog={sourceCatalog} onChange={() => {}} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("assigned Mapping was not found");
     fireEvent.click(screen.getByRole("button", { name: "Change…" }));
+    await settle();
     expect(await screen.findByRole("dialog", { name: "Choose a Mapping" })).toBeInTheDocument();
     expect(sourceCatalog.routes.resolveMapping).not.toHaveBeenCalled();
   });
@@ -76,8 +77,10 @@ describe("MappingField", () => {
     render(<MappingField catalog={sourceCatalog} onChange={() => {}} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose mapping…" }));
+    await settle();
     const dialog = await screen.findByRole("dialog", { name: "Choose a Mapping" });
     fireEvent.click(await within(dialog).findByRole("button", { name: /Assign Article Mapping/ }));
+    await settle();
 
     expect(await screen.findByText("That Mapping no longer exists, so nothing was assigned."))
       .toBeInTheDocument();
@@ -100,8 +103,10 @@ describe("MappingField", () => {
     render(<MappingField catalog={sourceCatalog} onChange={onChange} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose mapping…" }));
+    await settle();
     const dialog = await screen.findByRole("dialog", { name: "Choose a Mapping" });
     fireEvent.click(await within(dialog).findByRole("button", { name: /Assign Article Mapping/ }));
+    await settle();
 
     expect(await screen.findByText("“Articles” has no slug field, so it derives no routes.")).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
@@ -111,6 +116,7 @@ describe("MappingField", () => {
     const sourceCatalog = catalog();
     render(<MappingField catalog={sourceCatalog} onChange={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "Choose mapping…" }));
+    await settle();
     expect(await screen.findByRole("dialog", { name: "Choose a Mapping" })).toBeInTheDocument();
     await waitFor(() => expect(sourceCatalog.list).toHaveBeenCalledTimes(1));
   });

@@ -1,6 +1,7 @@
 import { computed, type Child } from "@takazudo/zfb/zudo-react";
 import { toSignal, type MaybeSignal } from "../../../../components/reactive";
-import { Rebuild } from "../../../../components/rebuild";
+import { derive } from "../../../mapping/signals";
+import { liveSlot, Rebuild, type LiveChild } from "../../../../components/rebuild";
 import { ComposerIcon, MappingIcon } from "../../../../components/icons";
 import { Chip, DataTable, Pane, PaneBody, PaneHeader, type DataTableColumn } from "../../../../components/ui";
 import type { SitemapDocument, SitemapNode } from "../../../../sitemapper/model";
@@ -22,7 +23,7 @@ export interface CanvasPaneProps {
   layoutPreference?: MaybeSignal<CanvasLayoutPreference>;
   onLayoutPreferenceChange?: (preference: CanvasLayoutPreference) => void;
   /** The load/recovery notice, drawn above the surface it applies to. */
-  notice?: Child;
+  notice?: LiveChild;
   onZoomChange: (zoom: number) => void;
   onSelect: (id: string) => void;
   onAddChild: (id: string) => void;
@@ -63,7 +64,7 @@ export function CanvasPane({
   const routeInfo = toSignal(routeInfoInput);
   const selectedId = toSignal(selectedInput);
   const zoom = toSignal(zoomInput);
-  const rows = computed(() => flatten(document.value.root));
+  const rows = derive(() => [document.value] as const, (current) => flatten(current.root));
 
   // The table view is rebuilt with its rows; its cells read the current labels.
   const columns: readonly DataTableColumn<SitemapNode>[] = [
@@ -110,7 +111,7 @@ export function CanvasPane({
       <PaneBody class="sg-sitemapper-main__body">
         {/* Always rendered: the body is a two-row grid, and a missing first row
             would drop the canvas into the `auto` track and collapse it. */}
-        <div class="sg-sitemapper-main__notice">{notice}</div>
+        <div class="sg-sitemapper-main__notice">{liveSlot(notice)}</div>
         {view === "canvas" ? (
           <SitemapCanvas
             document={document}

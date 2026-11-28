@@ -1,10 +1,8 @@
 "use client";
 
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { computed, getScope, Show, signal, type Child } from "@takazudo/zfb/zudo-react";
+import type { AppServices } from "../../../app/services";
+import { Keyed } from "../../../runtime";
 import { Banner } from "../../../components/ui";
 import type { IdFactory } from "../../../shared";
 import type { CompositionCatalog } from "../../../sitemapper/catalog";
@@ -31,6 +29,8 @@ export interface ProductionSitemapperAppProps {
   navigate?: (href: string) => void;
   /** Overrides the parsed location; the browser's own is used otherwise. */
   location?: { readonly pathname: string; readonly search: string };
+  /** The shell's route services; absent when the route is mounted standalone (tests). */
+  services?: AppServices;
 }
 
 type RecordState =
@@ -66,6 +66,7 @@ function SitemapperRecord({
   recordIdFactory,
   now,
   navigate,
+  services,
 }: {
   intent: SitemapperIntent;
   provider: SitemapProvider;
@@ -75,52 +76,60 @@ function SitemapperRecord({
   recordIdFactory?: IdFactory;
   now?: () => string;
   navigate: (href: string) => void;
-}): JSX.Element {
-  const [state, setState] = useState<RecordState>({ status: "loading" });
+  services?: AppServices;
+}): Child {
+  const scope = getScope();
+  const state = signal<RecordState>({ status: "loading" });
   const sitemapId = intent.sitemapId;
 
-  useEffect(() => {
-    let live = true;
-    setState({ status: "loading" });
+  scope.onActivate(() => {
     void provider.store.get(sitemapId)
       .then((loaded) => {
-        if (!live) return;
-        setState(loaded.status === "loaded"
+        if (scope.abortSignal.aborted) return;
+        state.value = loaded.status === "loaded"
           ? { status: "loaded", record: loaded.record }
-          : { status: "unreadable", notice: loadNotice(loaded, sitemapId) });
+          : { status: "unreadable", notice: loadNotice(loaded, sitemapId) };
       })
       .catch((reason: unknown) => {
-        if (!live) return;
-        setState({
+        if (scope.abortSignal.aborted) return;
+        state.value = {
           status: "unreadable",
           notice: {
             kind: "unreadable",
             sitemapId,
             ...(reason instanceof Error ? { reason: reason.message } : {}),
           },
-        });
+        };
       });
-    return () => { live = false; };
-  }, [provider, sitemapId]);
+  });
 
-  if (state.status === "loading") return <p class="sg-sitemapper-loading" role="status">Loading sitemap…</p>;
-  if (state.status === "unreadable") {
-    return <SitemapperLoadNoticeBanner notice={state.notice} onBack={() => navigate(SITEMAPPER_ROUTE)} />;
-  }
+  const loaded = computed(() => (state.value.status === "loaded" ? state.value.record : null));
+  const notice = computed(() => (state.value.status === "unreadable" ? state.value.notice : null));
   return (
-    <SitemapperIntegration
-      providerId={intent.providerId}
-      key={state.record.id}
-      record={state.record}
-      store={provider.store}
-      catalog={catalog}
-      mappingCatalog={mappingCatalog}
-      initialPageId={intent.pageId}
-      navigate={navigate}
-      recordIdFactory={recordIdFactory}
-      idFactory={idFactory}
-      now={now}
-    />
+    <>
+      <Show when={computed(() => state.value.status === "loading")}>{() => <p class="sg-sitemapper-loading" role="status">Loading sitemap…</p>}</Show>
+      <Keyed value={notice} by={(current) => (current === null ? "" : JSON.stringify(current))}>{(current) => (
+        current.value === null ? null : <SitemapperLoadNoticeBanner notice={current.value} onBack={() => navigate(SITEMAPPER_ROUTE)} />
+      )}</Keyed>
+      <Keyed value={loaded} by={(record) => record?.id ?? ""}>{(record) => {
+        const current = record.value;
+        return current === null ? null : (
+          <SitemapperIntegration
+            providerId={intent.providerId}
+            record={current}
+            store={provider.store}
+            catalog={catalog}
+            mappingCatalog={mappingCatalog}
+            initialPageId={intent.pageId}
+            navigate={navigate}
+            recordIdFactory={recordIdFactory}
+            idFactory={idFactory}
+            now={now}
+            services={services}
+          />
+        );
+      }}</Keyed>
+    </>
   );
 }
 
@@ -133,12 +142,11 @@ export function ProductionSitemapperApp({
   now,
   navigate = defaultNavigate,
   location,
-}: ProductionSitemapperAppProps): JSX.Element {
+  services,
+}: ProductionSitemapperAppProps): Child {
   // The intent is read once per load: every transition between the library and
   // a record is a real navigation, so a re-read would only ever agree with it.
-  const navigateRef = useRef(navigate);
-  navigateRef.current = navigate;
-  const outcome = useMemo(() => readSitemapperIntent(location), [location]);
+  const outcome = readSitemapperIntent(location);
   if (outcome.status === "sitemap" && outcome.intent.providerId !== provider.descriptor?.id) return <Banner tone="err">The requested Sitemap provider is unavailable.</Banner>;
 
   return (
@@ -152,13 +160,15 @@ export function ProductionSitemapperApp({
           idFactory={pageIdFactory}
           recordIdFactory={idFactory}
           now={now}
-          navigate={(href) => navigateRef.current(href)}
+          navigate={navigate}
+          services={services}
         />
       ) : (
         <SitemapLibrary
           provider={provider}
-          navigate={(href) => navigateRef.current(href)}
+          navigate={navigate}
           notice={outcome.status === "invalid" ? <Banner tone="err" title="That link could not be opened.">{outcome.message}</Banner> : null}
+          services={services}
           idFactory={idFactory}
           now={now}
         />

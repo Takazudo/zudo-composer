@@ -1,8 +1,5 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { ComponentChildren, JSX } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { getScope, signal, type Child } from "@takazudo/zfb/zudo-react";
+import { read, type MaybeSignal } from "../../../../components/reactive";
 import { Field, Input, Textarea } from "../../../../components/ui";
 
 export type PageTextProperty = "title" | "slug" | "notes";
@@ -10,9 +7,9 @@ export type PageTextProperty = "title" | "slug" | "notes";
 export interface PageTextFieldProps {
   prop: PageTextProperty;
   label: string;
-  value: string;
-  help?: ComponentChildren;
-  kind?: ComponentChildren;
+  value: MaybeSignal<string>;
+  help?: Child;
+  kind?: Child;
   placeholder?: string;
   multiline?: boolean;
   mono?: boolean;
@@ -22,28 +19,29 @@ export interface PageTextFieldProps {
 
 /**
  * Local draft state is deliberately guarded while focused. Together with the
- * selected-page key applied by the inspector, this prevents controlled parent
- * rerenders from replacing the control and moving its caret while typing.
+ * selected-page key applied by the inspector, this prevents a stored value
+ * arriving from replacing the control's text and moving its caret while typing.
  */
-function useTextField(value: string, onCommit: (value: string) => void) {
-  const [draft, setDraft] = useState(value);
-  const focusedRef = useRef(false);
+function createTextField(value: MaybeSignal<string>, onCommit: (value: string) => void) {
+  const draft = signal(read(value));
+  let focused = false;
 
-  useEffect(() => {
-    if (!focusedRef.current) setDraft(value);
-  }, [value]);
+  getScope().effect(() => {
+    const next = read(value);
+    if (!focused && draft.value !== next) draft.value = next;
+  });
 
   return {
     draft,
     onInput(next: string) {
-      setDraft(next);
+      draft.value = next;
       onCommit(next);
     },
     onFocus() {
-      focusedRef.current = true;
+      focused = true;
     },
     onBlur() {
-      focusedRef.current = false;
+      focused = false;
     },
   };
 }
@@ -59,32 +57,35 @@ export function PageTextField({
   mono = false,
   onCommit,
   onFlushPending,
-}: PageTextFieldProps): JSX.Element {
-  const field = useTextField(value, (next) => onCommit(prop, next));
-  const shared = {
-    value: field.draft,
-    placeholder,
-    onFocus: field.onFocus,
-    onBlur: () => {
-      field.onBlur();
-      onFlushPending?.();
-    },
+}: PageTextFieldProps): Child {
+  const text = createTextField(value, (next) => onCommit(prop, next));
+  const onBlur = () => {
+    onFlushPending?.();
+    text.onBlur();
   };
 
   return (
     <Field label={label} help={help} kind={kind}>
-      {multiline ? (
+      {(field) => multiline ? (
         <Textarea
-          {...shared}
+          field={field}
+          modelValue={text.draft}
+          placeholder={placeholder}
           rows={4}
-          onInput={(event) => field.onInput(event.currentTarget.value)}
+          on:focus={text.onFocus}
+          on:blur={onBlur}
+          on:input={(event) => text.onInput(event.currentTarget.value)}
         />
       ) : (
         <Input
-          {...shared}
+          field={field}
+          modelValue={text.draft}
+          placeholder={placeholder}
           size="sm"
           class={mono ? "sg-sitemapper-mono" : undefined}
-          onInput={(event) => field.onInput(event.currentTarget.value)}
+          on:focus={text.onFocus}
+          on:blur={onBlur}
+          on:input={(event) => text.onInput(event.currentTarget.value)}
         />
       )}
     </Field>

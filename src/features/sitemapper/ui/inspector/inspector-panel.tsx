@@ -1,9 +1,9 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import type { JSX } from "preact";
-import { useMemo, useState } from "preact/hooks";
-import { RailCollapseButton } from "../../../../components/editor-chrome";
+import { computed, Show, signal, type Child, type ReadonlySignal, type Signal } from "@takazudo/zfb/zudo-react";
+import { RailCollapseButton, type EditorRailsController } from "../../../../components/editor-chrome";
+import { toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { Rebuild } from "../../../../components/rebuild";
+import { Keyed } from "../../../../runtime";
+import { derive, followModel, memo } from "../../../mapping/signals";
 import { PageIcon, TrashIcon } from "../../../../components/icons";
 import {
   Button,
@@ -37,14 +37,16 @@ const SOURCE_OPTIONS = [
 ];
 
 export interface InspectorPanelProps {
-  sitemap?: { providerId: string; recordId: string; active: boolean };
-  document: SitemapDocument;
-  node: SitemapNode | null;
+  sitemap?: MaybeSignal<{ providerId: string; recordId: string; active: boolean } | undefined>;
+  document: MaybeSignal<SitemapDocument>;
+  node: MaybeSignal<SitemapNode | null>;
   /** Authored route per page id; the Slug field shows the selected page's. */
-  routes: ReadonlyMap<string, string>;
+  routes: MaybeSignal<ReadonlyMap<string, string>>;
   catalog: Pick<CompositionCatalog, "listCompositions" | "resolveComposition">;
   mappingCatalog?: MappingAssignmentCatalog;
-  routeInfo?: SitemapNodeRouteInfo;
+  routeInfo?: MaybeSignal<SitemapNodeRouteInfo | undefined>;
+  /** The editor body's rails controller, for the collapse control. */
+  rails?: EditorRailsController;
   onUpdatePropsDebounced: (pageId: string, patch: Partial<Pick<SitemapNode, "title" | "slug" | "notes">>) => void;
   onFlushPropUpdates?: () => void;
   onUpdateSource: (pageId: string, source: SitemapPageSource) => void;
@@ -55,32 +57,66 @@ export interface InspectorPanelProps {
 }
 
 /** The chip beside the page name: what renders it right now. */
-function assignmentChip(node: SitemapNode, routeInfo?: SitemapNodeRouteInfo): JSX.Element {
-  if (node.source.kind === "composition") return <Chip tone="ok" dot>Composition</Chip>;
-  if (node.source.kind === "mapping") {
-    return <Chip tone={routeInfo?.status === "blocked" ? "warn" : "accent"} dot>Mapping</Chip>;
+function assignmentChip(kind: SourceKind, status: SitemapNodeRouteInfo["status"] | undefined): Child {
+  if (kind === "composition") return <Chip tone="ok" dot>Composition</Chip>;
+  if (kind === "mapping") {
+    return <Chip tone={status === "blocked" ? "warn" : "accent"} dot>Mapping</Chip>;
   }
   return <Chip tone="warn" dot>Unassigned</Chip>;
 }
 
-export function InspectorPanel({
-  sitemap,
-  document,
-  node,
-  routes,
+export function InspectorPanel(props: InspectorPanelProps): Child {
+  const node = toSignal(props.node);
+  const rails = props.rails;
+  const collapse = rails ? <RailCollapseButton rail="insp" rails={rails} /> : undefined;
+  // Both survive a selection change, as the panel's own state did.
+  const tab = signal<InspectorTab>("page");
+  const chosen = signal<{ pageId: string; kind: SourceKind } | null>(null);
+  return (
+    <>
+      <Show when={computed(() => node.value === null)}>{() => (
+        <Pane label="Inspector">
+          <PaneHeader title="Inspector" actions={collapse} />
+          <PaneBody padded>
+            <p class="sg-sitemapper-inspector__empty">Select a page to edit its details.</p>
+          </PaneBody>
+        </Pane>
+      )}</Show>
+      {/* Keyed by page: switching selection discards a focused draft. */}
+      <Keyed value={computed(() => node.value?.id ?? null)} by={(id) => id ?? ""}>{(id) => id.value === null ? null : (
+        <PageInspector {...props} node={node as ReadonlySignal<SitemapNode | null>} tab={tab} chosen={chosen} collapse={collapse} />
+      )}</Keyed>
+    </>
+  );
+}
+
+function PageInspector({
+  sitemap: sitemapInput,
+  document: documentInput,
+  node: nodeInput,
+  routes: routesInput,
   catalog,
   mappingCatalog,
-  routeInfo,
+  routeInfo: routeInfoInput,
   onUpdatePropsDebounced,
   onFlushPropUpdates,
   onUpdateSource,
   onReparent,
   onDelete,
   onConfirm,
-}: InspectorPanelProps): JSX.Element {
-  const [tab, setTab] = useState<InspectorTab>("page");
-  const sourceKind = node?.source.kind;
-  const pageId = node?.id;
+  tab,
+  chosen,
+  collapse,
+}: Omit<InspectorPanelProps, "node"> & { node: ReadonlySignal<SitemapNode | null>; tab: Signal<InspectorTab>; chosen: Signal<{ pageId: string; kind: SourceKind } | null>; collapse: Child }): Child {
+  let last = nodeInput.value!;
+  // Kept across the one pass in which the selection is cleared and this inspector leaves.
+  const node = computed(() => { last = nodeInput.value ?? last; return last; });
+  const pageId = last.id;
+  const document = toSignal(documentInput);
+  const routes = toSignal(routesInput);
+  const routeInfo = toSignal(routeInfoInput);
+  const sitemap = toSignal(sitemapInput);
+  const sourceKind = computed(() => node.value.source.kind);
 
   // The segmented control stands ahead of the document only while the page has
   // nothing assigned: "Composition" is chosen before one is picked, and
@@ -91,49 +127,36 @@ export function InspectorPanel({
   // document cannot tell the clear this control just performed from one made
   // anywhere else. The moment anything is actually assigned — here or in
   // another surface — the document wins.
-  const [chosen, setChosen] = useState<{ pageId: string; kind: SourceKind } | null>(null);
-  const kind: SourceKind = chosen !== null && chosen.pageId === pageId && sourceKind === "unassigned"
-    ? chosen.kind
-    : sourceKind ?? "unassigned";
+  const kind = computed<SourceKind>(() => {
+    const choice = chosen.value;
+    return choice !== null && choice.pageId === pageId && sourceKind.value === "unassigned" ? choice.kind : sourceKind.value;
+  });
 
-  const index = useMemo(() => indexDocument(document), [document]);
-  const parentOptions = useMemo(() => {
-    if (!node) return [];
+  const index = derive(() => [document.value] as const, indexDocument);
+  const parentOptions = computed(() => {
     const excluded = new Set<string>();
     const collect = (current: SitemapNode): void => {
       excluded.add(current.id);
       current.children.forEach(collect);
     };
-    collect(node);
-    return [...index.byId.values()]
+    collect(node.value);
+    return [...index.value.byId.values()]
       .filter((location) => !excluded.has(location.node.id) && location.node.source.kind !== "mapping")
       .map((location) => ({ id: location.node.id, title: location.node.title }));
-  }, [index, node]);
-
-  if (!node) {
-    return (
-      <Pane label="Inspector">
-        <PaneHeader title="Inspector" actions={<RailCollapseButton rail="insp" />} />
-        <PaneBody padded>
-          <p class="sg-sitemapper-inspector__empty">Select a page to edit its details.</p>
-        </PaneBody>
-      </Pane>
-    );
-  }
-
-  const location = index.byId.get(node.id);
-  const isRoot = location?.parentId === null;
-  const descendants = countDescendants(node);
+  });
+  const location = computed(() => index.value.byId.get(pageId));
+  const isRoot = computed(() => location.value?.parentId === null);
+  const descendants = computed(() => countDescendants(node.value));
 
   function commit(prop: PageTextProperty, value: string): void {
-    onUpdatePropsDebounced(node!.id, { [prop]: value });
+    onUpdatePropsDebounced(pageId, { [prop]: value });
   }
 
   function chooseKind(next: SourceKind): void {
-    if (next === kind) return;
-    const assigned = node!.source.kind;
+    if (next === kind.value) return;
+    const assigned = node.value.source.kind;
     if (assigned === "unassigned" || assigned === next) {
-      setChosen({ pageId: node!.id, kind: next });
+      chosen.value = { pageId, kind: next };
       return;
     }
     onConfirm({
@@ -141,74 +164,85 @@ export function InspectorPanel({
       message: "A page renders either a composition or a mapping route family, so switching removes the current one.",
       confirmLabel: "Clear",
       onConfirm: () => {
-        onUpdateSource(node!.id, { kind: "unassigned" });
-        setChosen({ pageId: node!.id, kind: next });
+        onUpdateSource(pageId, { kind: "unassigned" });
+        chosen.value = { pageId, kind: next };
       },
     });
   }
 
+  const parentKey = computed(() => `${isRoot.value}|${parentOptions.value.map((option) => `${option.id}\u0000${option.title}`).join("\u0001")}`);
+
   return (
     <Pane label="Inspector">
       <PaneHeader
-        title={<span class="sg-sitemapper-inspector__name"><PageIcon size="sm" />{node.title}</span>}
-        actions={<RailCollapseButton rail="insp" />}
+        title={<span class="sg-sitemapper-inspector__name"><PageIcon size="sm" />{computed(() => node.value.title)}</span>}
+        actions={collapse}
       >
-        {assignmentChip(node, routeInfo)}
+        <Rebuild value={memo(() => [sourceKind.value, routeInfo.value?.status] as const)}>{([currentKind, status]) => assignmentChip(currentKind, status)}</Rebuild>
       </PaneHeader>
-      <HostPageAuthoringLink sitemap={sitemap} pageId={node.id} routeInfo={routeInfo} flush={onFlushPropUpdates} />
+      <Rebuild value={memo(() => [sitemap.value, routeInfo.value] as const)}>{([currentSitemap, info]) => (
+        <HostPageAuthoringLink sitemap={currentSitemap} pageId={pageId} routeInfo={info} flush={onFlushPropUpdates} />
+      )}</Rebuild>
       <PaneTabs
         label="Inspector"
         tabs={[{ id: "page", label: "Page" }, { id: "source", label: "Source" }]}
         activeId={tab}
-        onSelect={setTab}
+        onSelect={(next) => { tab.value = next; }}
       />
       <PaneBody>
-        {tab === "page" ? (
+        <Show when={computed(() => tab.value === "page")}>{() => (
           <PaneSection title="Page">
             <PageTextField
-              key={`${node.id}:title`}
               prop="title"
               label="Title"
-              value={node.title}
+              value={computed(() => node.value.title)}
               onCommit={commit}
               onFlushPending={onFlushPropUpdates}
             />
             <PageTextField
-              key={`${node.id}:slug`}
               prop="slug"
               label="Slug"
               mono
-              value={node.slug ?? ""}
-              help={<code class="sg-sitemapper-mono">{routes.get(node.id) ?? "/"}</code>}
+              value={computed(() => node.value.slug ?? "")}
+              help={<code class="sg-sitemapper-mono">{computed(() => routes.value.get(pageId) ?? "/")}</code>}
               onCommit={commit}
               onFlushPending={onFlushPropUpdates}
             />
-            <Field label="Parent" help={isRoot ? "The root page has no parent." : undefined}>
-              <Select
-                size="sm"
-                disabled={isRoot}
-                value={location?.parentId ?? ""}
-                onChange={(event) => {
-                  const parentId = event.currentTarget.value;
-                  if (parentId) onReparent(node.id, parentId);
-                }}
-              >
-                {isRoot ? <option value="">No parent</option> : null}
-                {parentOptions.map((option) => <option key={option.id} value={option.id}>{option.title}</option>)}
-              </Select>
+            <Field label="Parent" help={computed(() => isRoot.value ? "The root page has no parent." : null)}>
+              {(field) => (
+                <Keyed value={parentKey} by={(key) => key}>{() => {
+                  const root = isRoot.value;
+                  const model = followModel(() => location.value?.parentId ?? "");
+                  return (
+                    <Select
+                      size="sm"
+                      field={field}
+                      disabled={root}
+                      modelValue={model}
+                      on:change={(event) => {
+                        const parentId = event.currentTarget.value;
+                        if (parentId) onReparent(pageId, parentId);
+                      }}
+                    >
+                      {root ? <option value="">No parent</option> : null}
+                      {parentOptions.value.map((option) => <option key={option.id} value={option.id}>{option.title}</option>)}
+                    </Select>
+                  );
+                }}</Keyed>
+              )}
             </Field>
             <PageTextField
-              key={`${node.id}:notes`}
               prop="notes"
               label="Notes"
               multiline
               placeholder="Internal notes about this page…"
-              value={node.notes ?? ""}
+              value={computed(() => node.value.notes ?? "")}
               onCommit={commit}
               onFlushPending={onFlushPropUpdates}
             />
           </PaneSection>
-        ) : (
+        )}</Show>
+        <Show when={computed(() => tab.value === "source")}>{() => (
           <>
             <PaneSection title="Page source">
               <Field
@@ -223,48 +257,51 @@ export function InspectorPanel({
                   onChange={chooseKind}
                 />
               </Field>
-              {kind === "composition" ? (
+              <Show when={computed(() => kind.value === "composition")}>{() => (
                 <CompositionField
-                  value={node.source.kind === "composition" ? node.source.ref : undefined}
+                  value={computed(() => { const source = node.value.source; return source.kind === "composition" ? source.ref : undefined; })}
                   catalog={catalog}
-                  onChange={(ref) => onUpdateSource(node.id, ref ? { kind: "composition", ref } : { kind: "unassigned" })}
+                  onChange={(ref) => onUpdateSource(pageId, ref ? { kind: "composition", ref } : { kind: "unassigned" })}
                 />
-              ) : null}
-              {kind === "mapping" && mappingCatalog ? (
-                <MappingField
-                  value={node.source.kind === "mapping" ? node.source : undefined}
-                  routeInfo={routeInfo}
-                  catalog={mappingCatalog}
-                  onChange={(source) => onUpdateSource(node.id, source)}
-                />
-              ) : null}
-              {kind === "mapping" && !mappingCatalog ? (
-                <p class="sg-sitemapper-inspector__empty">No Mapping provider is mounted in this build.</p>
-              ) : null}
-              {kind === "unassigned" ? (
+              )}</Show>
+              {mappingCatalog ? (
+                <Show when={computed(() => kind.value === "mapping")}>{() => (
+                  <MappingField
+                    value={computed(() => { const source = node.value.source; return source.kind === "mapping" ? source : undefined; })}
+                    routeInfo={routeInfo}
+                    catalog={mappingCatalog}
+                    onChange={(source) => onUpdateSource(pageId, source)}
+                  />
+                )}</Show>
+              ) : (
+                <Show when={computed(() => kind.value === "mapping")}>{() => (
+                  <p class="sg-sitemapper-inspector__empty">No Mapping provider is mounted in this build.</p>
+                )}</Show>
+              )}
+              <Show when={computed(() => kind.value === "unassigned")}>{() => (
                 <p class="sg-sitemapper-inspector__empty">This page renders nothing until a source is assigned.</p>
-              ) : null}
+              )}</Show>
             </PaneSection>
             <PaneSection title="Danger">
               <Button
                 variant="danger"
                 size="sm"
                 disabled={isRoot}
-                onClick={() => onDelete(node.id)}
+                on:click={() => onDelete(pageId)}
               >
                 <TrashIcon size="sm" />
                 Delete page…
               </Button>
               <p class="cms-field__help">
-                {isRoot
+                {computed(() => isRoot.value
                   ? "The root page cannot be deleted."
-                  : descendants > 0
-                    ? `Its ${descendants} sub-${descendants === 1 ? "page" : "pages"} are deleted with it.`
-                    : "This page is deleted permanently."}
+                  : descendants.value > 0
+                    ? `Its ${descendants.value} sub-${descendants.value === 1 ? "page" : "pages"} are deleted with it.`
+                    : "This page is deleted permanently.")}
               </p>
             </PaneSection>
           </>
-        )}
+        )}</Show>
       </PaneBody>
     </Pane>
   );

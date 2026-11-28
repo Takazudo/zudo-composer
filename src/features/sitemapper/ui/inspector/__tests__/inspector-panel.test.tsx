@@ -1,8 +1,5 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
-import { useState } from "preact/hooks";
+import { batch, computed, signal } from "@takazudo/zfb/zudo-react";
+import { cleanup, fireEvent, render, screen, settle, within } from "../../../../../test/render";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CatalogEntry, CompositionCatalog } from "../../../../../sitemapper/catalog";
 import type { CompositionRef, SitemapDocument, SitemapNode } from "../../../../../sitemapper/model";
@@ -83,21 +80,47 @@ function panelProps(selected: SitemapNode, overrides: Record<string, unknown> = 
   };
 }
 
+type PanelProps = ReturnType<typeof panelProps>;
+
+/** Mounts the panel on signals; `update` replaces what a rerender used to. */
+function mountPanel(initial: PanelProps) {
+  const document = signal(initial.document);
+  const selected = signal(initial.node);
+  const routes = signal(initial.routes);
+  render(<InspectorPanel {...initial} document={document} node={selected} routes={routes} />);
+  return {
+    async update(next: Partial<Pick<PanelProps, "document" | "node" | "routes">>): Promise<void> {
+      batch(() => {
+        if (next.document) document.value = next.document;
+        if (next.node) selected.value = next.node;
+        if (next.routes) routes.value = next.routes;
+      });
+      await settle();
+    },
+  };
+}
+
 /** The Source tab is behind the pane tablist. */
-function openSourceTab(): void {
+async function openSourceTab(): Promise<void> {
   fireEvent.click(screen.getByRole("tab", { name: "Source" }));
+  await settle();
+  await settle();
 }
 
 describe("Sitemapper InspectorPanel", () => {
-  it("renders controlled title, slug, and notes on the debounced channel and flushes on blur", () => {
+  it("renders controlled title, slug, and notes on the debounced channel and flushes on blur", async () => {
     const onUpdatePropsDebounced = vi.fn();
     const onFlushPropUpdates = vi.fn();
     render(<InspectorPanel {...panelProps(node(), { onUpdatePropsDebounced, onFlushPropUpdates })} />);
 
     fireEvent.input(screen.getByLabelText("Title"), { target: { value: "Welcome" } });
+    await settle();
     fireEvent.input(screen.getByLabelText("Slug"), { target: { value: "welcome" } });
+    await settle();
     fireEvent.input(screen.getByLabelText("Notes"), { target: { value: "Landing page" } });
+    await settle();
     fireEvent.blur(screen.getByLabelText("Notes"));
+    await settle();
 
     expect(onUpdatePropsDebounced.mock.calls).toEqual([
       ["home", { title: "Welcome" }],
@@ -107,49 +130,50 @@ describe("Sitemapper InspectorPanel", () => {
     expect(onFlushPropUpdates).toHaveBeenCalledOnce();
   });
 
-  it("shows the page's full route beside the slug field", () => {
+  it("shows the page's full route beside the slug field", async () => {
     const about = node("about", "About");
     render(<InspectorPanel {...panelProps(about, { routes: new Map([["about", "/about"]]) })} />);
     expect(screen.getByText("/about")).toBeInTheDocument();
   });
 
-  it("retains a focused draft across rerenders and remounts it when selection changes", () => {
+  it("retains a focused draft across rerenders and remounts it when selection changes", async () => {
     const first = node("a", "Alpha");
     const props = panelProps(first);
-    const view = render(<InspectorPanel {...props} />);
+    const view = mountPanel(props);
     const input = screen.getByLabelText("Title") as HTMLInputElement;
     input.focus();
     fireEvent.input(input, { target: { value: "Alpha draft" } });
+    await settle();
 
     // The focused guard prevents an external/stale value from clobbering the
     // local draft and caret on a normal rerender.
-    view.rerender(<InspectorPanel {...props} node={{ ...first, title: "Alpha from storage" }} />);
+    await view.update({ node: { ...first, title: "Alpha from storage" } });
     expect(screen.getByLabelText("Title")).toBe(input);
     expect(input).toHaveValue("Alpha draft");
 
     // The page:prop key is the other half: switching selection must discard
     // that focused draft even though the same field component remains.
     const second = node("b", "Beta");
-    view.rerender(<InspectorPanel {...panelProps(second)} />);
+    await view.update(panelProps(second));
     expect(screen.getByLabelText("Title")).not.toBe(input);
     expect(screen.getByLabelText("Title")).toHaveValue("Beta");
   });
 
   it("renders the unassigned, resolved, and broken reference states explicitly", async () => {
-    const view = render(<InspectorPanel {...panelProps(node("home", "Home", FIRST.ref))} />);
-    openSourceTab();
+    const view = mountPanel(panelProps(node("home", "Home", FIRST.ref)));
+    await openSourceTab();
     expect(await screen.findByText("Home layout")).toBeInTheDocument();
     expect(screen.getByText("This browser")).toBeInTheDocument();
 
     const missing = { providerId: "files", recordId: "deleted-record" };
-    view.rerender(<InspectorPanel {...panelProps(node("home", "Home", missing))} />);
-    openSourceTab();
+    await view.update(panelProps(node("home", "Home", missing)));
+    await openSourceTab();
     expect(await screen.findByText("Broken reference")).toBeInTheDocument();
     expect(screen.getByText("files:deleted-record")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Change…" })).toBeInTheDocument();
 
-    view.rerender(<InspectorPanel {...panelProps(node())} />);
-    openSourceTab();
+    await view.update(panelProps(node()));
+    await openSourceTab();
     expect(screen.getByText("This page renders nothing until a source is assigned.")).toBeInTheDocument();
   });
 
@@ -157,7 +181,7 @@ describe("Sitemapper InspectorPanel", () => {
     const fakeCatalog = catalog([FIRST]);
     vi.mocked(fakeCatalog.listCompositions).mockRejectedValue(new Error("List unavailable"));
     render(<InspectorPanel {...panelProps(node("home", "Home", FIRST.ref), { catalog: fakeCatalog })} />);
-    openSourceTab();
+    await openSourceTab();
 
     expect(await screen.findByText("Home layout")).toBeInTheDocument();
     expect(screen.queryByText("Broken reference")).not.toBeInTheDocument();
@@ -165,10 +189,10 @@ describe("Sitemapper InspectorPanel", () => {
     expect(screen.getByText("browser")).toBeInTheDocument();
   });
 
-  it("makes the page source an explicit None / Composition / Mapping choice", () => {
+  it("makes the page source an explicit None / Composition / Mapping choice", async () => {
     const onConfirm = vi.fn();
     render(<InspectorPanel {...panelProps(node(), { onConfirm })} />);
-    openSourceTab();
+    await openSourceTab();
 
     const group = screen.getByRole("radiogroup", { name: "Page source type" });
     expect(within(group).getAllByRole("radio")).toHaveLength(3);
@@ -176,17 +200,19 @@ describe("Sitemapper InspectorPanel", () => {
 
     // Nothing is assigned yet, so choosing a kind asks nothing and clears nothing.
     fireEvent.click(within(group).getByRole("radio", { name: "Composition" }));
+    await settle();
     expect(onConfirm).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Choose composition…" })).toBeInTheDocument();
   });
 
-  it("confirms before switching away from an assigned source, then clears it", () => {
+  it("confirms before switching away from an assigned source, then clears it", async () => {
     const onConfirm = vi.fn();
     const onUpdateSource = vi.fn();
     render(<InspectorPanel {...panelProps(node("home", "Home", FIRST.ref), { onConfirm, onUpdateSource })} />);
-    openSourceTab();
+    await openSourceTab();
 
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Page source type" })).getByRole("radio", { name: "None" }));
+    await settle();
     expect(onUpdateSource).not.toHaveBeenCalled();
     expect(onConfirm).toHaveBeenCalledOnce();
 
@@ -199,11 +225,10 @@ describe("Sitemapper InspectorPanel", () => {
   it("round-trips assign, replace, and clear through the controlled callback", async () => {
     const changes: Array<CompositionRef | null> = [];
     const fakeCatalog = catalog();
-    function Harness() {
-      const [selected, setSelected] = useState<SitemapNode>(node());
-      return (
+    const selected = signal<SitemapNode>(node());
+    render(
         <InspectorPanel
-          document={documentOf(selected)}
+          document={computed(() => documentOf(selected.value))}
           node={selected}
           routes={new Map([["home", "/"]])}
           catalog={fakeCatalog}
@@ -214,49 +239,52 @@ describe("Sitemapper InspectorPanel", () => {
           onUpdateSource={(_id, source) => {
             const composition = source.kind === "composition" ? source.ref : null;
             changes.push(composition);
-            setSelected((current) => ({ ...current, source }));
+            selected.value = { ...selected.value, source };
           }}
-        />
-      );
-    }
-    render(<Harness />);
-    openSourceTab();
+        />,
+    );
+    await openSourceTab();
 
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Page source type" })).getByRole("radio", { name: "Composition" }));
+    await settle();
     fireEvent.click(screen.getByRole("button", { name: "Choose composition…" }));
+    await settle();
     let dialog = await screen.findByRole("dialog", { name: "Choose a composition" });
     fireEvent.click(within(dialog).getByRole("button", { name: /Assign Home layout/ }));
+    await settle();
     expect(await screen.findByText("Home layout")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Change composition" }));
+    await settle();
     dialog = await screen.findByRole("dialog", { name: "Choose a composition" });
     fireEvent.click(within(dialog).getByRole("button", { name: /Replace Other layout/ }));
+    await settle();
     expect(await screen.findByText("Other layout")).toBeInTheDocument();
 
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Page source type" })).getByRole("radio", { name: "None" }));
+    await settle();
     expect(changes).toEqual([FIRST.ref, SECOND.ref, null]);
   });
 
-  it("lands on the kind that was chosen when a switch clears the assigned source", () => {
-    function Harness() {
-      const [selected, setSelected] = useState<SitemapNode>(node("home", "Home", FIRST.ref));
-      return (
-        <InspectorPanel
-          {...panelProps(selected, {
-            document: documentOf(selected),
-            node: selected,
-            onConfirm: (request: { onConfirm: () => void }) => request.onConfirm(),
-            onUpdateSource: (_id: string, source: SitemapNode["source"]) =>
-              setSelected((current) => ({ ...current, source })),
-          })}
-        />
-      );
-    }
-    render(<Harness />);
-    openSourceTab();
+  it("lands on the kind that was chosen when a switch clears the assigned source", async () => {
+    const selected = signal<SitemapNode>(node("home", "Home", FIRST.ref));
+    render(
+      <InspectorPanel
+        {...panelProps(selected.value, {
+          onConfirm: (request: { onConfirm: () => void }) => request.onConfirm(),
+          onUpdateSource: (_id: string, source: SitemapNode["source"]) => {
+            selected.value = { ...selected.value, source };
+          },
+        })}
+        document={computed(() => documentOf(selected.value))}
+        node={selected}
+      />,
+    );
+    await openSourceTab();
 
     const group = () => screen.getByRole("radiogroup", { name: "Page source type" });
     fireEvent.click(within(group()).getByRole("radio", { name: "Mapping" }));
+    await settle();
 
     // Clearing the composition is the first half of the switch, not a reason to
     // send the author back to None.
@@ -264,18 +292,19 @@ describe("Sitemapper InspectorPanel", () => {
     expect(within(group()).getByRole("radio", { name: "None" })).toHaveAttribute("aria-checked", "false");
   });
 
-  it("offers Delete page only below the root, and says what goes with it", () => {
+  it("offers Delete page only below the root, and says what goes with it", async () => {
     const child = node("child", "Child");
     const root = { ...node(), children: [child] };
     const onDelete = vi.fn();
-    const view = render(<InspectorPanel {...panelProps(root, { document: documentOf(root), onDelete })} />);
-    openSourceTab();
+    const view = mountPanel(panelProps(root, { document: documentOf(root), onDelete }));
+    await openSourceTab();
     expect(screen.getByRole("button", { name: "Delete page…" })).toBeDisabled();
     expect(screen.getByText("The root page cannot be deleted.")).toBeInTheDocument();
 
-    view.rerender(<InspectorPanel {...panelProps(child, { document: documentOf(root), node: child, onDelete })} />);
-    openSourceTab();
+    await view.update(panelProps(child, { document: documentOf(root), node: child, onDelete }));
+    await openSourceTab();
     fireEvent.click(screen.getByRole("button", { name: "Delete page…" }));
+    await settle();
     expect(onDelete).toHaveBeenCalledWith("child");
   });
 });

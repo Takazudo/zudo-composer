@@ -1,7 +1,4 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, settle, waitFor, within } from "../../../../test/render";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createSequentialIdFactory } from "../../../../shared";
 import { createCompositionCatalog } from "../../../../sitemapper/catalog";
@@ -78,14 +75,20 @@ describe("production Sitemapper walkthrough", () => {
     // A real filesystem provider under a loaded suite can take well over the
     // default second to finish initializing.
     fireEvent.click(await screen.findByRole("button", { name: "Create your first sitemap" }, { timeout: 10_000 }));
+    await settle();
     const createDialog = screen.getByRole("dialog", { name: "Create sitemap" });
     fireEvent.input(within(createDialog).getByRole("textbox", { name: "Sitemap name" }), { target: { value: "Product map" } });
+    await settle();
     fireEvent.click(within(createDialog).getByRole("button", { name: "Create sitemap" }));
+    await settle();
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper?provider=sitemap-filesystem&sitemap=product-map-1"));
 
-    // The link the library produced is the only state the editor needs.
-    view.rerender(
+    // The link the library produced is the only state the editor needs. The
+    // shell remounts the route on every navigation, so the reopened editor is
+    // a fresh mount of the same entry.
+    view.unmount();
+    render(
       <ProductionSitemapperApp
         provider={provider}
         catalog={catalog()}
@@ -135,10 +138,14 @@ describe("production Sitemapper walkthrough", () => {
     expect(window.location.search).toContain("page=untitled-page-1");
 
     fireEvent.click(screen.getByRole("tab", { name: "Source" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Page source type" })).getByRole("radio", { name: "Composition" }));
+    await settle();
     fireEvent.click(screen.getByRole("button", { name: "Choose composition…" }));
+    await settle();
     const picker = await screen.findByRole("dialog", { name: "Choose a composition" });
     fireEvent.click(await within(picker).findByRole("button", { name: /Assign Hero composition/ }));
+    await settle();
 
     await waitFor(async () => {
       const loaded = await provider.store.get("walk-map");
@@ -165,6 +172,7 @@ describe("production Sitemapper walkthrough", () => {
 
     expect(await screen.findByText(/no longer exists/, undefined, { timeout: 10_000 })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back to Sitemaps" }));
+    await settle();
     expect(navigate).toHaveBeenCalledWith("/sitemapper");
   });
 

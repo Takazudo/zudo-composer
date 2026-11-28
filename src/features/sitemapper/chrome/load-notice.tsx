@@ -1,5 +1,3 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 // Why a Sitemap could not be opened, said out loud.
 //
 // Recovery is intentionally visible and never destructive: a record this build
@@ -7,7 +5,7 @@
 // is rather than repaired in place or overwritten by an empty document. The
 // notice therefore reports and offers the way back, and nothing else.
 
-import type { JSX } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import { Banner, Button } from "../../../components/ui";
 
 export type SitemapperLoadNotice =
@@ -41,13 +39,13 @@ export function SitemapperLoadNoticeBanner({
   notice,
   onBack,
   backLabel = "Back to Sitemaps",
-}: SitemapperLoadNoticeBannerProps): JSX.Element {
+}: SitemapperLoadNoticeBannerProps): Child {
   return (
     <div class="sg-sitemapper-load-notice">
       <Banner
         tone="err"
         title="This sitemap could not be opened."
-        action={<Button size="sm" onClick={onBack}>{backLabel}</Button>}
+        action={<Button size="sm" on:click={() => onBack()}>{backLabel}</Button>}
       >
         {describeSitemapperLoadNotice(notice)}
       </Banner>

@@ -1,14 +1,9 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
-import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, settle } from "../../../../../test/render";
+import { describe, expect, it, vi } from "vitest";
 import type { SitemapDocument, SitemapNode } from "../../../../../sitemapper/model";
 import { SITEMAP_SCHEMA_VERSION } from "../../../../../sitemapper/model";
 import { buildSitemapOutline } from "../outline-model";
 import { PagesPane } from "../pages-pane";
-
-afterEach(cleanup);
 
 function documentOf(root: SitemapNode[]): SitemapDocument {
   return { schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] }, id: "pages", name: "Pages", root };
@@ -38,74 +33,87 @@ function paneProps(document: SitemapDocument, overrides: Record<string, unknown>
 const addRows = () => [...document.querySelectorAll(".cms-tree-add")];
 
 describe("Sitemapper pages pane", () => {
-  it("offers the root's terminal add row even while the root has no children", () => {
+  it("offers the root's terminal add row even while the root has no children", async () => {
     render(<PagesPane {...paneProps(documentOf([page("home", "Home")]))} />);
     expect(addRows()).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Add root page" })).toBeNull();
   });
 
-  it("offers Add root page only on a document with no root yet", () => {
+  it("offers Add root page only on a document with no root yet", async () => {
     const props = paneProps(documentOf([]));
     render(<PagesPane {...props} />);
     fireEvent.click(screen.getByRole("button", { name: "Add root page" }));
+    await settle();
     // With no host handler the tree edits inline, which is what commits the add.
     const input = document.querySelector(".cms-tree-inline input") as HTMLInputElement;
     fireEvent.input(input, { target: { value: "Home" } });
+    await settle();
     fireEvent.keyDown(input, { key: "Enter" });
+    await settle();
     expect(props.onAdd).toHaveBeenCalledWith({ parentId: null, index: 0, title: "Home" });
   });
 
-  it("keeps a childless page a leaf, so it carries no add row of its own", () => {
+  it("keeps a childless page a leaf, so it carries no add row of its own", async () => {
     render(<PagesPane {...paneProps(documentOf([page("home", "Home", [page("about", "About")])]))} />);
     // Only the root category's children list closes with an add row.
     expect(addRows()).toHaveLength(1);
     expect(screen.getByRole("treeitem", { name: /About/ })).toBeInTheDocument();
   });
 
-  it("offers exact-index authored children under a Mapping route family", () => {
+  it("offers exact-index authored children under a Mapping route family", async () => {
     const mapped = page("home", "Home");
     mapped.source = { kind: "mapping", ref: { providerId: "m", recordId: "articles" }, route: { kind: "single" } };
     const props = paneProps(documentOf([mapped]));
     render(<PagesPane {...props} />);
     expect(addRows()).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Add child page to Home" }));
+    await settle();
     expect(props.onAddChild).toHaveBeenCalledWith("home");
-    fireEvent.click(screen.getByRole("button", { name: "Add page", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Add page" }));
+    await settle();
     const input = screen.getByRole("textbox", { name: "Add page" });
     fireEvent.input(input, { target: { value: "Nested page" } }); fireEvent.keyDown(input, { key: "Enter" });
+    await settle();
     expect(props.onAdd).toHaveBeenCalledWith({ parentId: "home", index: 0, title: "Nested page" });
   });
 
-  it("puts move, duplicate and delete behind one row menu, with the root protected", () => {
+  it("puts move, duplicate and delete behind one row menu, with the root protected", async () => {
     const props = paneProps(documentOf([page("home", "Home", [page("about", "About"), page("contact", "Contact")])]));
     render(<PagesPane {...props} />);
 
     fireEvent.click(screen.getByRole("button", { name: "More actions for Home" }));
+    await settle();
     expect(screen.getByRole("menuitem", { name: "Delete…" })).toBeDisabled();
     expect(screen.getByRole("menuitem", { name: "Move up" })).toBeDisabled();
     fireEvent.keyDown(screen.getByRole("menu", { name: "Home actions" }), { key: "Escape" });
+    await settle();
 
     fireEvent.click(screen.getByRole("button", { name: "More actions for Contact" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Move up" }));
+    await settle();
     expect(props.onMove).toHaveBeenCalledWith("contact", "up");
   });
 
-  it("names each dot's meaning and prints the legend that decodes them", () => {
+  it("names each dot's meaning and prints the legend that decodes them", async () => {
     const home = page("home", "Home", [page("about", "About")]);
     home.children[0]!.source = { kind: "composition", ref: { providerId: "p", recordId: "c" } };
     render(<PagesPane {...paneProps(documentOf([home]))} />);
     expect(screen.getByRole("treeitem", { name: /Composition/ })).toBeInTheDocument();
     expect(document.querySelectorAll(".cms-tree__legend .cms-tree-dot")).toHaveLength(3);
   });
-  it("passes F2/IME rename through the shared tree callback", () => {
+  it("passes F2/IME rename through the shared tree callback", async () => {
     const onRename = vi.fn();
     render(<PagesPane {...paneProps(documentOf([page("home", "Home")]), { onRename })} />);
     const row = screen.getByRole("treeitem", { name: /Home/ });
     row.focus();
     fireEvent.keyDown(row, { key: "F2" });
+    await settle();
     const input = document.querySelector(".cms-tree-rename input") as HTMLInputElement;
     fireEvent.input(input, { target: { value: "Accueil" } });
+    await settle();
     fireEvent.keyDown(input, { key: "Enter" });
+    await settle();
     expect(onRename).toHaveBeenCalledWith("home", "Accueil");
   });
 });

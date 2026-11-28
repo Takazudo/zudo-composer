@@ -2,6 +2,7 @@ import { computed, type Child } from "@takazudo/zfb/zudo-react";
 import { RailCollapseButton, type EditorChromeController, type EditorRailsController } from "../../../../components/editor-chrome";
 import { OutlineTree, type OutlineAddRequest, type OutlineInsertTarget } from "../../../../components/outline-tree";
 import { toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { derive } from "../../../mapping/signals";
 import { Pane, PaneBody, PaneHeader } from "../../../../components/ui";
 import { indexDocument, type SitemapDocument } from "../../../../sitemapper/model";
 import type { SitemapOutline } from "./outline-model";
@@ -65,8 +66,8 @@ export function PagesPane({
   const outline = toSignal(outlineInput);
   const selectedId = toSignal(selectedInput);
   const expandedIds = toSignal(expandedInput);
-  const index = computed(() => indexDocument(document.value));
-  const expanded = computed(() => [...expandedIds.value]);
+  const index = derive(() => [document.value] as const, indexDocument);
+  const expanded = derive(() => [expandedIds.value] as const, (ids) => [...ids]);
 
   // The schema keeps exactly one root page, so the root list offers an insert
   // only while it is empty — that insert IS the "create the Home page" action.
