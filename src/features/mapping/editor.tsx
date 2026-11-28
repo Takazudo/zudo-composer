@@ -270,6 +270,7 @@ export function MappingEditor({
             onPreviewError={(message) => controller.setPreviewError(message)}
             controller={controller}
             run={run}
+            assetStore={services?.workspace.integration.assetProvider?.store}
           />
         }
       />

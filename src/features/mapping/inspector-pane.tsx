@@ -8,6 +8,7 @@ import type { MappingDefinitionDiagnostic, MappingEntryDiagnostic } from "../../
 import type { ComposerComponentProvider } from "../composer/component-provider";
 import type { MappingEditorState } from "./controller";
 import type { MappingEditorController } from "./controller";
+import type { VersionedAssetStore } from "../../assets/library";
 import { MappingPreviewHost } from "./preview-host";
 import { diagnosticPath, entryLabel } from "./presentation";
 import { MappingAttachmentPane } from "./attachment-pane";
@@ -30,6 +31,8 @@ export interface InspectorPaneProps {
   onPreviewError: (message: string) => void;
   controller: MappingEditorController;
   run: (action: () => void | Promise<void>) => void;
+  /** The workspace's Asset store, so managed Asset URLs resolve in the preview. */
+  assetStore?: VersionedAssetStore;
 }
 
 type AnyDiagnostic = MappingDefinitionDiagnostic | MappingEntryDiagnostic;
@@ -58,6 +61,7 @@ export function InspectorPane({
   onPreviewError,
   controller,
   run,
+  assetStore,
 }: InspectorPaneProps): Child {
   const activeTab = toSignal(tab);
   const mapping = computed(() => state.value.mapping!);
@@ -134,8 +138,9 @@ export function InspectorPane({
               loading={computed(() => state.value.previewStatus === "loading")}
               onCurrent={onPreviewCurrent}
               onError={onPreviewError}
+              assetStore={assetStore}
             />
-            <MappingAttachmentPane state={state} controller={controller} componentProvider={componentProvider} run={run} />
+            <MappingAttachmentPane state={state} controller={controller} componentProvider={componentProvider} run={run} assetStore={assetStore} />
           </PaneSection>
         </div>
         <div hidden={computed(() => activeTab.value !== "diagnostics")}>

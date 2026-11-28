@@ -1,4 +1,5 @@
 import { computed, Show, signal, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
+import type { VersionedAssetStore } from "../../assets/library";
 import { ComposerIcon, EyeIcon, LinkIcon, SlotIcon, TrashIcon } from "../../components/icons";
 import { ConfirmDialog, Dialog } from "../../components/overlay";
 import { createLibraryConfirm } from "../../components/library-page";
@@ -18,17 +19,19 @@ export interface MappingAttachmentPaneProps {
   controller: MappingEditorController;
   componentProvider: ComposerComponentProvider;
   run: (action: () => void | Promise<void>) => void;
+  /** The workspace's Asset store, so managed Asset URLs resolve in the preview. */
+  assetStore?: VersionedAssetStore;
 }
 
-export function MappingAttachmentPane({ state, controller, componentProvider, run }: MappingAttachmentPaneProps): Child {
+export function MappingAttachmentPane({ state, controller, componentProvider, run, assetStore }: MappingAttachmentPaneProps): Child {
   return (
     <Show when={computed(() => state.value.mapping?.document.mode.kind === "collection")}>{() => (
-      <CollectionAttachmentPane state={state} controller={controller} componentProvider={componentProvider} run={run} />
+      <CollectionAttachmentPane state={state} controller={controller} componentProvider={componentProvider} run={run} assetStore={assetStore} />
     )}</Show>
   );
 }
 
-function CollectionAttachmentPane({ state, controller, componentProvider, run }: MappingAttachmentPaneProps): Child {
+function CollectionAttachmentPane({ state, controller, componentProvider, run, assetStore }: MappingAttachmentPaneProps): Child {
   const dialogOpen = signal(false);
   const fallbackSelection = signal<{ attachmentId: string; targetKey: string } | null>(null);
   const confirm = createLibraryConfirm();
@@ -59,7 +62,7 @@ function CollectionAttachmentPane({ state, controller, componentProvider, run }:
         {item.diagnostics.length ? <div class="cms-mapping-attachment__diagnostics">{item.diagnostics.map((diagnostic) => <Banner key={`${diagnostic.code}:${diagnostic.path ?? ""}`} tone={diagnostic.severity === "blocking" ? "err" : "warn"} title={diagnostic.code}>{diagnostic.message}</Banner>)}</div> : <p class="cms-mapping-attachment__ready">Effective ordered records are materialized by the aggregate compiler.</p>}
         <div class="cms-mapping-attachment__actions"><Button size="sm" variant="ghost" disabled={item.diagnostics.some((diagnostic) => diagnostic.severity === "blocking")} on:click={() => { fallbackSelection.value = null; run(() => controller.previewCollectionAttachment(item.attachment.id)); }}><EyeIcon size="sm" />Preview materialized</Button><Button size="sm" variant="ghost" disabled={!item.staticFallback} on:click={() => { fallbackSelection.value = { attachmentId: item.attachment.id, targetKey: attachmentTargetKey(item.target) }; }}>Inspect static fallback</Button><Button size="sm" variant="ghost" on:click={() => confirm.request({ title: `Detach ${item.target.slotLabel}?`, message: "The owner Composition and collection Mapping remain unchanged. This only removes the aggregate attachment.", confirmLabel: "Detach", tone: "danger", onConfirm: () => run(() => controller.detachCollection(item.attachment.id)) })}><TrashIcon size="sm" />Detach</Button></div>
       </article>)}</div> : null}</Rebuild>
-      <Show when={computed(() => previewDocument.value !== null)}>{() => <section class="cms-mapping-attachment__preview"><h4>{computed(() => fallbackActive.value ? "Static fallback" : "Materialized attachment preview")}</h4><MappingPreviewHost componentProvider={componentProvider} document={previewDocument} loading={computed(() => state.value.attachments.preview?.status === "ready" && !fallbackActive.value)} /></section>}</Show>
+      <Show when={computed(() => previewDocument.value !== null)}>{() => <section class="cms-mapping-attachment__preview"><h4>{computed(() => fallbackActive.value ? "Static fallback" : "Materialized attachment preview")}</h4><MappingPreviewHost componentProvider={componentProvider} assetStore={assetStore} document={previewDocument} loading={computed(() => state.value.attachments.preview?.status === "ready" && !fallbackActive.value)} /></section>}</Show>
       <AttachCollectionDialog open={dialogOpen} targets={targets} onClose={() => { dialogOpen.value = false; }} onSubmit={(target) => run(async () => { await controller.attachCollection({ composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: controller.provider.descriptor.id, recordId: mappingId.value } }); dialogOpen.value = false; })} />
       <ConfirmDialog {...confirm.dialogProps} />
     </PaneSection>
