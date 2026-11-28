@@ -1,6 +1,3 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-
 // Recursive Composer inspector field renderer.
 //
 // Component props remain plain JSON values. This module renders the canonical
@@ -8,9 +5,13 @@
 // the document. Leaf edits carry their exact relative path to InspectorPanel;
 // list/group structure changes carry a structural marker so the controller can
 // make them standalone history checkpoints.
+//
+// Every editor runs once and follows its value through a signal, so a focused
+// leaf keeps its element, caret and draft while siblings update around it.
+// Only a change of SHAPE (an item appearing, a value changing type) mounts or
+// unmounts an editor.
 
-import { useEffect, useRef, useState } from "preact/hooks";
-import type { ComponentChildren, JSX } from "preact";
+import { computed, For, getScope, signal, Show, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import type {
   ArrayValueDefinition,
   FieldDefinition,
@@ -23,11 +24,14 @@ import type {
   ValueDefinition,
 } from "@zudo-composer/component-contract";
 import { ContractValidationError, validateFieldValue } from "@zudo-composer/component-contract";
+import { read, toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { Keyed } from "../../../../runtime";
 import { Button, Checkbox, Field, Input, Select, Textarea } from "../../../../components/ui";
+import type { FieldControl } from "../../../../components/ui/field-context";
 import type { PropPath } from "../../chrome/history-model";
-import { useNumericField } from "./use-numeric-field";
-import { useTextField } from "./use-text-field";
-import { useDomId } from "../../../../components/use-dom-id";
+import { createNumericField } from "./use-numeric-field";
+import { createTextField } from "./use-text-field";
+import { createDomId } from "../../../../components/use-dom-id";
 
 type InspectorDefinition = FieldDefinition | ValueDefinition | ObjectFieldDefinition | TupleItemDefinition;
 type InspectorValue = JsonValue | undefined;
@@ -39,9 +43,9 @@ export type InspectorCommit = (value: JsonValue, path?: PropPath, structural?: b
 
 export interface InspectorFieldProps {
   field: FieldDefinition;
-  /** Undefined is meaningful: it is an omitted optional prop, not JSON null. */
-  value: InspectorValue;
-  disabled: boolean;
+  /** Undefined is meaningful: it is an omitted optional prop, not JSON null. A signal follows the document. */
+  value: MaybeSignal<InspectorValue>;
+  disabled: MaybeSignal<boolean>;
   onCommit: InspectorCommit;
   /** Debounced channel for text/color/number leaves. */
   onCommitDebounced?: InspectorCommit;
@@ -68,20 +72,24 @@ function FieldRow({
 }: {
   label: string | undefined;
   controlId: string;
-  error?: string | null;
-  children: ComponentChildren;
-}): JSX.Element {
+  error?: ReadonlySignal<string | null>;
+  children: (field: FieldControl | undefined) => Child;
+}): Child {
   if (label === undefined) {
     return (
       <div class="sg-composer-inspector-row">
-        {children}
-        {error ? <p class="cms-field__error" role="alert">{error}</p> : null}
+        {children(undefined)}
+        {error ? (
+          <Show when={computed(() => error.value !== null)}>
+            {() => <p class="cms-field__error" role="alert">{error}</p>}
+          </Show>
+        ) : null}
       </div>
     );
   }
   return (
     <Field label={label} controlId={controlId} error={error ?? undefined}>
-      {children}
+      {(field) => children(field)}
     </Field>
   );
 }
@@ -217,25 +225,51 @@ function validationMessage(field: FieldDefinition, value: InspectorValue): strin
 /** One canonical top-level field, including optional omission handling. */
 export function InspectorField({
   field,
+  value: valueProp,
+  disabled,
+  onCommit,
+  onCommitDebounced,
+  onFlushPending,
+  onRemove,
+}: InspectorFieldProps): Child {
+  const value = toSignal(valueProp);
+  const disabledSignal = computed(() => read(disabled));
+  // An absent optional prop is offered by the inspector's own "Optional props"
+  // section, not here: this renderer only ever draws a value that exists.
+  const missing = computed(() => value.value === undefined);
+  return (
+    <Keyed value={missing} by={(isMissing) => (isMissing ? "missing" : "present")}>
+      {(isMissing) => isMissing.value ? (
+        <div class="sg-composer-inspector-row" data-sg-inspector-missing-required={field.prop}>
+          <span class={FIELD_LABEL_CLASS}>{field.label}</span>
+          <p class="cms-field__error" role="alert">Required value is missing.</p>
+        </div>
+      ) : (
+        <PresentInspectorField
+          field={field}
+          value={value}
+          disabled={disabledSignal}
+          onCommit={onCommit}
+          onCommitDebounced={onCommitDebounced}
+          onFlushPending={onFlushPending}
+          onRemove={onRemove}
+        />
+      )}
+    </Keyed>
+  );
+}
+
+function PresentInspectorField({
+  field,
   value,
   disabled,
   onCommit,
   onCommitDebounced,
   onFlushPending,
   onRemove,
-}: InspectorFieldProps): JSX.Element {
-  // An absent optional prop is offered by the inspector's own "Optional props"
-  // section, not here: this renderer only ever draws a value that exists.
-  if (value === undefined) {
-    return (
-      <div class="sg-composer-inspector-row" data-sg-inspector-missing-required={field.prop}>
-        <span class={FIELD_LABEL_CLASS}>{field.label}</span>
-        <p class="cms-field__error" role="alert">Required value is missing.</p>
-      </div>
-    );
-  }
-
-  const editor = isStructured(field) ? (
+}: Omit<InspectorFieldProps, "value" | "disabled"> & { value: ReadonlySignal<InspectorValue>; disabled: ReadonlySignal<boolean> }): Child {
+  const structured = isStructured(field);
+  const editor = structured ? (
       <StructuredFieldDraft
         field={field}
         value={value}
@@ -255,26 +289,28 @@ export function InspectorField({
         onFlushPending={onFlushPending}
       />
     );
-  const invalidValue = isStructured(field) ? null : validationMessage(field, value);
+  const invalidValue = computed(() => (structured ? null : validationMessage(field, value.value)));
   return (
     <div class="sg-composer-inspector-row">
-      {invalidValue && <p class="cms-field__error" role="alert" data-sg-inspector-validation>{invalidValue}</p>}
+      <Show when={computed(() => invalidValue.value !== null)}>
+        {() => <p class="cms-field__error" role="alert" data-sg-inspector-validation>{invalidValue}</p>}
+      </Show>
       {editor}
-      {field.required !== true && onRemove && (
-        <Button size="xs" variant="ghost" disabled={disabled} onClick={onRemove}>
+      {field.required !== true && onRemove ? (
+        <Button size="xs" variant="ghost" disabled={disabled} on:click={() => onRemove()}>
           Remove {field.label}
         </Button>
-      )}
+      ) : null}
     </div>
   );
 }
 
 interface ValueEditorProps {
   definition: InspectorDefinition;
-  value: InspectorValue;
+  value: ReadonlySignal<InspectorValue>;
   path: RelativePath;
   labelOverride?: string;
-  disabled: boolean;
+  disabled: ReadonlySignal<boolean>;
   onLeafCommit: (value: JsonValue, path: RelativePath, channel: Exclude<CommitChannel, "structural">) => void;
   onStructuralCommit: (value: JsonValue) => void;
   onFlushPending?: () => void;
@@ -291,18 +327,16 @@ function ValueEditor({
   onStructuralCommit,
   onFlushPending,
   onEditingChange,
-}: ValueEditorProps): JSX.Element {
-  // Allocate control ids for every editor invocation before branching. This
-  // keeps hook order stable even if a caller replaces a definition at runtime.
-  const inputId = useDomId();
-  const errorId = useDomId();
+}: ValueEditorProps): Child {
+  const inputId = createDomId();
+  const errorId = createDomId();
   const label = labelOverride ?? labelFor(definition);
   switch (definition.editor.kind) {
     case "text":
       return (
         <ScalarTextEditor
           label={label}
-          value={typeof value === "string" ? value : ""}
+          value={computed(() => (typeof value.value === "string" ? value.value : ""))}
           multiline={definition.editor.multiline === true}
           disabled={disabled}
           inputId={inputId}
@@ -315,7 +349,7 @@ function ValueEditor({
       return (
         <ScalarTextEditor
           label={label}
-          value={typeof value === "string" ? value : ""}
+          value={computed(() => (typeof value.value === "string" ? value.value : ""))}
           multiline={false}
           swatch
           disabled={disabled}
@@ -340,7 +374,7 @@ function ValueEditor({
       return (
         <ScalarNumberEditor
           label={label}
-          value={typeof value === "number" ? value : 0}
+          value={computed(() => (typeof value.value === "number" ? value.value : 0))}
           min={(definition as { schema: { min?: number } }).schema.min}
           max={(definition as { schema: { max?: number } }).schema.max}
           step={(definition as { schema: { step?: number } }).schema.step}
@@ -356,7 +390,7 @@ function ValueEditor({
       return (
         <Checkbox
           id={inputId}
-          checked={value === true}
+          checked={computed(() => value.value === true)}
           disabled={disabled}
           // An unlabelled boolean is a list or tuple item, which the composite
           // editors name by position rather than by prop.
@@ -418,10 +452,10 @@ function assertNever(value: never): never {
 
 interface ScalarTextEditorProps {
   label: string | undefined;
-  value: string;
+  value: ReadonlySignal<string>;
   multiline: boolean;
   swatch?: boolean;
-  disabled: boolean;
+  disabled: ReadonlySignal<boolean>;
   inputId: string;
   onCommit: (value: string) => void;
   onFlushPending?: () => void;
@@ -438,8 +472,8 @@ function ScalarTextEditor({
   onCommit,
   onFlushPending,
   onEditingChange,
-}: ScalarTextEditorProps): JSX.Element {
-  const { draft, onInput, onFocus, onBlur } = useTextField({ value, onCommit });
+}: ScalarTextEditorProps): Child {
+  const { draft, onInput, onFocus, onBlur } = createTextField(getScope(), { value, onCommit });
   const handleFocus = () => {
     onFocus();
     onEditingChange?.(true);
@@ -451,46 +485,50 @@ function ScalarTextEditor({
   };
   return (
     <FieldRow label={label} controlId={inputId}>
-      <div class="sg-composer-inspector-control-row">
-        {swatch && <span class="sg-composer-inspector-swatch" style={{ backgroundColor: draft || "transparent" }} aria-hidden="true" />}
-        {multiline ? (
-          <Textarea
-            id={inputId}
-            value={draft}
-            disabled={disabled}
-            rows={3}
-            onInput={(event) => {
-              if (event.currentTarget instanceof HTMLTextAreaElement) onInput(event.currentTarget.value);
-            }}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-          />
-        ) : (
-          <Input
-            id={inputId}
-            type="text"
-            size="sm"
-            value={draft}
-            disabled={disabled}
-            onInput={(event) => {
-              if (event.currentTarget instanceof HTMLInputElement) onInput(event.currentTarget.value);
-            }}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-          />
-        )}
-      </div>
+      {(field) => (
+        <div class="sg-composer-inspector-control-row">
+          {swatch ? <span class="sg-composer-inspector-swatch" style={computed(() => ({ "background-color": draft.value || "transparent" }))} aria-hidden="true" /> : null}
+          {multiline ? (
+            <Textarea
+              field={field}
+              id={inputId}
+              modelValue={draft}
+              disabled={disabled}
+              rows={3}
+              on:input={(event: Event) => {
+                if (event.currentTarget instanceof HTMLTextAreaElement) onInput(event.currentTarget.value);
+              }}
+              on:focus={handleFocus}
+              on:blur={handleBlur}
+            />
+          ) : (
+            <Input
+              field={field}
+              id={inputId}
+              type="text"
+              size="sm"
+              modelValue={draft}
+              disabled={disabled}
+              on:input={(event: Event) => {
+                if (event.currentTarget instanceof HTMLInputElement) onInput(event.currentTarget.value);
+              }}
+              on:focus={handleFocus}
+              on:blur={handleBlur}
+            />
+          )}
+        </div>
+      )}
     </FieldRow>
   );
 }
 
 interface ScalarNumberEditorProps {
   label: string | undefined;
-  value: number;
+  value: ReadonlySignal<number>;
   min?: number;
   max?: number;
   step?: number;
-  disabled: boolean;
+  disabled: ReadonlySignal<boolean>;
   inputId: string;
   errorId: string;
   onCommit: (value: number) => void;
@@ -510,8 +548,18 @@ function ScalarNumberEditor({
   onCommit,
   onFlushPending,
   onEditingChange,
-}: ScalarNumberEditorProps): JSX.Element {
-  const { draft, error, onInput, onFocus, onBlur } = useNumericField({ value, min, max, step, onCommit });
+}: ScalarNumberEditorProps): Child {
+  const inputRef: { current: HTMLInputElement | null } = { current: null };
+  const { draft, error, onInput, onFocus, onBlur } = createNumericField(getScope(), {
+    value,
+    min,
+    max,
+    step,
+    onCommit,
+    writeDom: (text) => {
+      if (inputRef.current && inputRef.current.value !== text) inputRef.current.value = text;
+    },
+  });
   const handleFocus = () => {
     onFocus();
     onEditingChange?.(true);
@@ -521,60 +569,88 @@ function ScalarNumberEditor({
     onEditingChange?.(false);
     onFlushPending?.();
   };
+  const hasError = computed(() => error.value !== null);
   return (
     <FieldRow label={label} controlId={inputId} error={error}>
-      <Input
-        id={inputId}
-        type="number"
-        size="sm"
-        value={draft}
-        min={min}
-        max={max}
-        // An omitted contract step accepts any finite number; HTML defaults to 1.
-        step={step ?? "any"}
-        disabled={disabled}
-        aria-invalid={error !== null ? "true" : undefined}
-        // A labelled field is described by `Field`'s own error element; only the
-        // unlabelled case (a list item's scalar) needs its own wiring.
-        aria-describedby={label === undefined && error !== null ? errorId : undefined}
-        onInput={(event) => {
-          if (event.currentTarget instanceof HTMLInputElement) onInput(event.currentTarget.value);
-        }}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-      />
-      {label === undefined && error !== null && <p id={errorId} class="cms-field__error" role="alert">{error}</p>}
+      {(field) => (
+        <>
+          <Input
+            field={field}
+            elementRef={inputRef}
+            id={inputId}
+            type="number"
+            size="sm"
+            value={draft.value}
+            min={min === undefined ? undefined : String(min)}
+            max={max === undefined ? undefined : String(max)}
+            // An omitted contract step accepts any finite number; HTML defaults to 1.
+            step={step === undefined ? "any" : String(step)}
+            disabled={disabled}
+            aria-invalid={computed(() => (hasError.value ? "true" : undefined))}
+            // A labelled field is described by `Field`'s own error element; only the
+            // unlabelled case (a list item's scalar) needs its own wiring.
+            aria-describedby={label === undefined ? computed(() => (hasError.value ? errorId : undefined)) : field?.describedBy}
+            on:input={(event: Event) => {
+              if (event.currentTarget instanceof HTMLInputElement) onInput(event.currentTarget.value);
+            }}
+            on:focus={handleFocus}
+            on:blur={handleBlur}
+          />
+          {label === undefined ? (
+            <Show when={hasError}>{() => <p id={errorId} class="cms-field__error" role="alert">{error}</p>}</Show>
+          ) : null}
+        </>
+      )}
     </FieldRow>
   );
 }
 
 interface ScalarSelectEditorProps {
   label: string | undefined;
-  value: InspectorValue;
+  value: ReadonlySignal<InspectorValue>;
   options: readonly string[];
-  disabled: boolean;
+  disabled: ReadonlySignal<boolean>;
   inputId: string;
   onCommit: (value: string) => void;
 }
 
-function ScalarSelectEditor({ label, value, options, disabled, inputId, onCommit }: ScalarSelectEditorProps): JSX.Element {
-  const current = typeof value === "string" ? value : "";
-  const invalid = !options.includes(current);
+function ScalarSelectEditor({ label, value, options, disabled, inputId, onCommit }: ScalarSelectEditorProps): Child {
+  const current = computed(() => (typeof value.value === "string" ? value.value : ""));
+  // The option set is static per select, so an invalid stored value (which
+  // needs its own extra option) rebuilds the whole control around it.
+  const optionSet = computed(() => {
+    const now = current.value;
+    return options.includes(now) ? { invalid: null } : { invalid: now };
+  });
   return (
     <FieldRow label={label} controlId={inputId}>
-      <Select
-        id={inputId}
-        size="sm"
-        value={current}
-        disabled={disabled}
-        aria-invalid={invalid ? "true" : undefined}
-        onChange={(event) => {
-          if (event.currentTarget instanceof HTMLSelectElement) onCommit(event.currentTarget.value);
-        }}
-      >
-        {invalid && <option value={current}>{current || "Invalid value"} (invalid)</option>}
-        {options.map((option) => <option key={option} value={option}>{option}</option>)}
-      </Select>
+      {(field) => (
+        <Keyed value={optionSet} by={(set) => (set.invalid === null ? "valid" : `invalid:${set.invalid}`)}>
+          {(set) => {
+            const invalid = set.value.invalid;
+            const model = signal(current.value);
+            getScope().effect(() => {
+              model.value = current.value;
+            });
+            return (
+              <Select
+                field={field}
+                id={inputId}
+                size="sm"
+                modelValue={model}
+                disabled={disabled}
+                aria-invalid={invalid !== null ? "true" : undefined}
+                on:change={(event: Event) => {
+                  if (event.currentTarget instanceof HTMLSelectElement) onCommit(event.currentTarget.value);
+                }}
+              >
+                {invalid !== null ? <option value={invalid}>{`${invalid || "Invalid value"} (invalid)`}</option> : null}
+                {options.map((option) => <option value={option}>{option}</option>)}
+              </Select>
+            );
+          }}
+        </Keyed>
+      )}
     </FieldRow>
   );
 }
@@ -584,17 +660,35 @@ type TupleDefinition = TupleValueDefinition;
 type GroupDefinition = ObjectValueDefinition;
 
 interface CompositeEditorProps {
-  value: InspectorValue;
+  value: ReadonlySignal<InspectorValue>;
   path: RelativePath;
   label: string | undefined;
-  disabled: boolean;
+  disabled: ReadonlySignal<boolean>;
   onLeafCommit: ValueEditorProps["onLeafCommit"];
   onStructuralCommit: (value: JsonValue) => void;
   onFlushPending?: () => void;
   onEditingChange?: (focused: boolean) => void;
 }
 
-function ListValueEditor({
+function ListValueEditor(props: CompositeEditorProps & { definition: ListDefinition }): Child {
+  const { value, label } = props;
+  const isList = computed(() => Array.isArray(value.value));
+  return (
+    <Show
+      when={isList}
+      fallback={() => (
+        <div class="flex flex-col gap-vsp-3xs">
+          {label ? <span class={FIELD_LABEL_CLASS}>{label}</span> : null}
+          <p class="text-caption text-danger" role="alert">{label ?? "Value"} must be an ordered list.</p>
+        </div>
+      )}
+    >
+      {() => <ListItemsEditor {...props} />}
+    </Show>
+  );
+}
+
+function ListItemsEditor({
   definition,
   value,
   path,
@@ -604,130 +698,128 @@ function ListValueEditor({
   onStructuralCommit,
   onFlushPending,
   onEditingChange,
-}: CompositeEditorProps & { definition: ListDefinition }): JSX.Element {
-  const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set());
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const items = Array.isArray(value) ? value : null;
+}: CompositeEditorProps & { definition: ListDefinition }): Child {
+  const expanded = signal<ReadonlySet<number>>(new Set());
+  let draggedIndex: number | null = null;
+  const items = computed(() => (Array.isArray(value.value) ? value.value : []) as readonly JsonValue[]);
+  const indices = computed(() => items.value.map((_, index) => index));
   const itemDefinition = definition.schema.items;
-
-  if (items === null) {
-    return (
-      <div class="flex flex-col gap-vsp-3xs">
-        {label && <span class={FIELD_LABEL_CLASS}>{label}</span>}
-        <p class="text-caption text-danger" role="alert">{label ?? "Value"} must be an ordered list.</p>
-      </div>
-    );
-  }
+  const pathKey = path.join(".");
 
   const move = (from: number, to: number): void => {
-    if (to < 0 || to >= items.length || from === to) return;
-    const next = [...items];
+    const current = items.value;
+    if (to < 0 || to >= current.length || from === to) return;
+    const next = [...current];
     const [item] = next.splice(from, 1);
     next.splice(to, 0, item!);
     onStructuralCommit(next);
-    setExpanded((current) => {
-      const result = new Set<number>();
-      for (const index of current) {
-        if (index === from) result.add(to);
-        else if (from < to && index > from && index <= to) result.add(index - 1);
-        else if (from > to && index >= to && index < from) result.add(index + 1);
-        else result.add(index);
-      }
-      return result;
-    });
+    const result = new Set<number>();
+    for (const index of expanded.value) {
+      if (index === from) result.add(to);
+      else if (from < to && index > from && index <= to) result.add(index - 1);
+      else if (from > to && index >= to && index < from) result.add(index + 1);
+      else result.add(index);
+    }
+    expanded.value = result;
   };
 
   const addSeed = seedValue(itemDefinition);
+  const collapsible = itemDefinition.editor.kind === "group";
   return (
-    <div class="flex flex-col gap-vsp-3xs" data-sg-inspector-list={path.join(".")}>
-      {label && <span class={FIELD_LABEL_CLASS}>{label}</span>}
-      {items.map((item, index) => {
-        const collapsible = itemDefinition.editor.kind === "group";
-        const isExpanded = !collapsible || expanded.has(index);
-        const summary = itemSummary(itemDefinition, item, index);
-        return (
-          <div
-            key={`${path.join(".")}-${index}`}
-            data-sg-inspector-list-item={index}
-            class="flex flex-col gap-vsp-3xs rounded-md border border-border p-hsp-sm"
-            draggable={!disabled}
-            onDragStart={() => setDraggedIndex(index)}
-            onDragEnd={() => setDraggedIndex(null)}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              if (draggedIndex !== null) move(draggedIndex, index);
-              setDraggedIndex(null);
-            }}
-          >
-            <div class="flex flex-wrap items-center gap-hsp-2xs">
-              {collapsible && (
+    <div class="flex flex-col gap-vsp-3xs" data-sg-inspector-list={pathKey}>
+      {label ? <span class={FIELD_LABEL_CLASS}>{label}</span> : null}
+      <For each={indices} by={(index) => `${pathKey}-${index}`}>
+        {(indexSignal) => {
+          const index = indexSignal.value;
+          const item = computed(() => items.value[index] as InspectorValue);
+          const isExpanded = computed(() => !collapsible || expanded.value.has(index));
+          const summary = computed(() => itemSummary(itemDefinition, items.value[index] ?? null, index));
+          return (
+            <div
+              data-sg-inspector-list-item={index}
+              class="flex flex-col gap-vsp-3xs rounded-md border border-border p-hsp-sm"
+              draggable={computed(() => !disabled.value)}
+              on:dragstart={() => { draggedIndex = index; }}
+              on:dragend={() => { draggedIndex = null; }}
+              on:dragover={(event: DragEvent) => event.preventDefault()}
+              on:drop={(event: DragEvent) => {
+                event.preventDefault();
+                if (draggedIndex !== null) move(draggedIndex, index);
+                draggedIndex = null;
+              }}
+            >
+              <div class="flex flex-wrap items-center gap-hsp-2xs">
+                {collapsible ? (
+                  <button
+                    type="button"
+                    class={STRUCTURE_BUTTON_CLASS}
+                    aria-expanded={isExpanded}
+                    disabled={disabled}
+                    on:click={() => {
+                      const next = new Set(expanded.value);
+                      if (next.has(index)) next.delete(index); else next.add(index);
+                      expanded.value = next;
+                    }}
+                  >
+                    {summary}
+                  </button>
+                ) : null}
+                <button type="button" class={STRUCTURE_BUTTON_CLASS} disabled={computed(() => disabled.value || index === 0)} on:click={() => move(index, index - 1)}>
+                  Move up
+                </button>
+                <button type="button" class={STRUCTURE_BUTTON_CLASS} disabled={computed(() => disabled.value || index === items.value.length - 1)} on:click={() => move(index, index + 1)}>
+                  Move down
+                </button>
                 <button
                   type="button"
-                  class={STRUCTURE_BUTTON_CLASS}
-                  aria-expanded={isExpanded}
+                  class={`${STRUCTURE_BUTTON_CLASS} sg-composer-inspector-remove`}
                   disabled={disabled}
-                  onClick={() => setExpanded((current) => {
-                    const next = new Set(current);
-                    if (next.has(index)) next.delete(index); else next.add(index);
-                    return next;
-                  })}
+                  on:click={() => {
+                    const next = items.value.filter((_, itemIndex) => itemIndex !== index);
+                    onStructuralCommit(next);
+                    expanded.value = new Set([...expanded.value].filter((itemIndex) => itemIndex !== index).map((itemIndex) => itemIndex > index ? itemIndex - 1 : itemIndex));
+                  }}
                 >
-                  {summary}
+                  Remove
                 </button>
-              )}
-              <button type="button" class={STRUCTURE_BUTTON_CLASS} disabled={disabled || index === 0} onClick={() => move(index, index - 1)}>
-                Move up
-              </button>
-              <button type="button" class={STRUCTURE_BUTTON_CLASS} disabled={disabled || index === items.length - 1} onClick={() => move(index, index + 1)}>
-                Move down
-              </button>
-              <button
-                type="button"
-                class={`${STRUCTURE_BUTTON_CLASS} sg-composer-inspector-remove`}
-                disabled={disabled}
-                onClick={() => {
-                  const next = items.filter((_, itemIndex) => itemIndex !== index);
-                  onStructuralCommit(next);
-                  setExpanded((current) => new Set([...current].filter((itemIndex) => itemIndex !== index).map((itemIndex) => itemIndex > index ? itemIndex - 1 : itemIndex)));
-                }}
-              >
-                Remove
-              </button>
+              </div>
+              <Show when={isExpanded}>
+                {() => (
+                  <ValueEditor
+                    definition={itemDefinition}
+                    value={item}
+                    path={[...path, index]}
+                    labelOverride={collapsible ? undefined : `Item ${index + 1}`}
+                    disabled={disabled}
+                    onLeafCommit={onLeafCommit}
+                    onStructuralCommit={(next) => {
+                      const nextItems = [...items.value];
+                      nextItems[index] = next;
+                      onStructuralCommit(nextItems);
+                    }}
+                    onFlushPending={onFlushPending}
+                    onEditingChange={onEditingChange}
+                  />
+                )}
+              </Show>
             </div>
-            {isExpanded && (
-              <ValueEditor
-                definition={itemDefinition}
-                value={item}
-                path={[...path, index]}
-                labelOverride={collapsible ? undefined : `Item ${index + 1}`}
-                disabled={disabled}
-                onLeafCommit={onLeafCommit}
-                onStructuralCommit={(next) => {
-                  const nextItems = [...items];
-                  nextItems[index] = next;
-                  onStructuralCommit(nextItems);
-                }}
-                onFlushPending={onFlushPending}
-                onEditingChange={onEditingChange}
-              />
-            )}
-          </div>
-        );
-      })}
+          );
+        }}
+      </For>
       <button
         type="button"
         class={STRUCTURE_BUTTON_CLASS}
-        disabled={disabled || addSeed === undefined}
-        onClick={() => {
+        disabled={computed(() => disabled.value || addSeed === undefined)}
+        on:click={() => {
           if (addSeed === undefined) return;
-          onStructuralCommit([...items, addSeed]);
-          setExpanded((current) => new Set(current).add(items.length));
+          const length = items.value.length;
+          onStructuralCommit([...items.value, addSeed]);
+          expanded.value = new Set(expanded.value).add(length);
         }}
       >
         Add item
       </button>
-      {addSeed === undefined && <p class="text-caption text-danger" role="alert">Cannot add item: required fields have no deterministic seed.</p>}
+      {addSeed === undefined ? <p class="text-caption text-danger" role="alert">Cannot add item: required fields have no deterministic seed.</p> : null}
     </div>
   );
 }
@@ -753,38 +845,46 @@ function TupleValueEditor({
   onStructuralCommit,
   onFlushPending,
   onEditingChange,
-}: CompositeEditorProps & { definition: TupleDefinition }): JSX.Element {
-  if (!Array.isArray(value) || value.length !== definition.schema.items.length) {
-    return (
-      <div class="flex flex-col gap-vsp-3xs">
-        {label && <span class={FIELD_LABEL_CLASS}>{label}</span>}
-        <p class="text-caption text-danger" role="alert">{label ?? "Value"} must contain exactly {definition.schema.items.length} items.</p>
-      </div>
-    );
-  }
+}: CompositeEditorProps & { definition: TupleDefinition }): Child {
+  const valid = computed(() => Array.isArray(value.value) && value.value.length === definition.schema.items.length);
+  const tuple = computed(() => (Array.isArray(value.value) ? value.value : []) as readonly JsonValue[]);
   return (
-    <div class="flex flex-col gap-vsp-xs" data-sg-inspector-tuple={path.join(".")}>
-      {label && <span class={FIELD_LABEL_CLASS}>{label}</span>}
-      {definition.schema.items.map((item, index) => (
-        <ValueEditor
-          key={`${path.join(".")}-${index}`}
-          definition={item}
-          value={value[index]}
-          path={[...path, index]}
-          disabled={disabled}
-          onLeafCommit={onLeafCommit}
-          onStructuralCommit={(next) => {
-            const tuple = [...value];
-            tuple[index] = next;
-            onStructuralCommit(tuple);
-          }}
-          onFlushPending={onFlushPending}
-          onEditingChange={onEditingChange}
-        />
-      ))}
-    </div>
+    <Show
+      when={valid}
+      fallback={() => (
+        <div class="flex flex-col gap-vsp-3xs">
+          {label ? <span class={FIELD_LABEL_CLASS}>{label}</span> : null}
+          <p class="text-caption text-danger" role="alert">{label ?? "Value"} must contain exactly {definition.schema.items.length} items.</p>
+        </div>
+      )}
+    >
+      {() => (
+        <div class="flex flex-col gap-vsp-xs" data-sg-inspector-tuple={path.join(".")}>
+          {label ? <span class={FIELD_LABEL_CLASS}>{label}</span> : null}
+          {definition.schema.items.map((item, index) => (
+            <ValueEditor
+              key={`${path.join(".")}-${index}`}
+              definition={item}
+              value={computed(() => tuple.value[index] as InspectorValue)}
+              path={[...path, index]}
+              disabled={disabled}
+              onLeafCommit={onLeafCommit}
+              onStructuralCommit={(next) => {
+                const nextTuple = [...tuple.value];
+                nextTuple[index] = next;
+                onStructuralCommit(nextTuple);
+              }}
+              onFlushPending={onFlushPending}
+              onEditingChange={onEditingChange}
+            />
+          ))}
+        </div>
+      )}
+    </Show>
   );
 }
+
+type GroupFieldState = "missing-required" | "absent" | "present";
 
 function GroupValueEditor({
   definition,
@@ -796,78 +896,94 @@ function GroupValueEditor({
   onStructuralCommit,
   onFlushPending,
   onEditingChange,
-}: CompositeEditorProps & { definition: GroupDefinition }): JSX.Element {
-  if (!isObjectValue(value)) {
-    return (
-      <div class="flex flex-col gap-vsp-3xs">
-        {label && <span class={FIELD_LABEL_CLASS}>{label}</span>}
-        <p class="text-caption text-danger" role="alert">{label ?? "Value"} must be an object.</p>
-      </div>
-    );
-  }
+}: CompositeEditorProps & { definition: GroupDefinition }): Child {
+  const isObject = computed(() => isObjectValue(value.value));
+  const object = computed(() => (isObjectValue(value.value) ? value.value : {}) as JsonObject);
   return (
-    <div class="flex flex-col gap-vsp-xs" data-sg-inspector-group={path.join(".")}>
-      {label && <span class={FIELD_LABEL_CLASS}>{label}</span>}
-      {definition.schema.fields.map((field) => {
-        const present = Object.hasOwn(value, field.key);
-        if (!present && field.required === true) {
-          return (
-            <div key={field.key} class="flex flex-col gap-vsp-3xs">
-              <span class={FIELD_LABEL_CLASS}>{field.label}</span>
-              <p class="text-caption text-danger" role="alert">Required field is missing.</p>
-            </div>
-          );
-        }
-        if (!present) {
-          const addSeed = seedValue(field);
-          return (
-            <div key={field.key} class="flex flex-col gap-vsp-3xs">
-              <span class={FIELD_LABEL_CLASS}>{field.label}</span>
-              <button
-                type="button"
-                class={STRUCTURE_BUTTON_CLASS}
-                disabled={disabled || addSeed === undefined}
-                onClick={() => {
-                  if (addSeed === undefined) return;
-                  onStructuralCommit({ ...value, [field.key]: addSeed });
+    <Show
+      when={isObject}
+      fallback={() => (
+        <div class="flex flex-col gap-vsp-3xs">
+          {label ? <span class={FIELD_LABEL_CLASS}>{label}</span> : null}
+          <p class="text-caption text-danger" role="alert">{label ?? "Value"} must be an object.</p>
+        </div>
+      )}
+    >
+      {() => (
+        <div class="flex flex-col gap-vsp-xs" data-sg-inspector-group={path.join(".")}>
+          {label ? <span class={FIELD_LABEL_CLASS}>{label}</span> : null}
+          {definition.schema.fields.map((field) => {
+            const fieldState = computed((): GroupFieldState => {
+              const present = Object.hasOwn(object.value, field.key);
+              if (!present && field.required === true) return "missing-required";
+              return present ? "present" : "absent";
+            });
+            return (
+              <Keyed value={fieldState} by={(state) => state}>
+                {(state) => {
+                  if (state.value === "missing-required") {
+                    return (
+                      <div class="flex flex-col gap-vsp-3xs">
+                        <span class={FIELD_LABEL_CLASS}>{field.label}</span>
+                        <p class="text-caption text-danger" role="alert">Required field is missing.</p>
+                      </div>
+                    );
+                  }
+                  if (state.value === "absent") {
+                    const addSeed = seedValue(field);
+                    return (
+                      <div class="flex flex-col gap-vsp-3xs">
+                        <span class={FIELD_LABEL_CLASS}>{field.label}</span>
+                        <button
+                          type="button"
+                          class={STRUCTURE_BUTTON_CLASS}
+                          disabled={computed(() => disabled.value || addSeed === undefined)}
+                          on:click={() => {
+                            if (addSeed === undefined) return;
+                            onStructuralCommit({ ...object.value, [field.key]: addSeed });
+                          }}
+                        >
+                          Add {field.label}
+                        </button>
+                        {addSeed === undefined ? <p class="text-caption text-danger" role="alert">Cannot add {field.label}: no deterministic seed is available.</p> : null}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div class="flex flex-col gap-vsp-3xs" data-sg-inspector-object-field={field.key}>
+                      <ValueEditor
+                        definition={field}
+                        value={computed(() => object.value[field.key] as InspectorValue)}
+                        path={[...path, field.key]}
+                        disabled={disabled}
+                        onLeafCommit={onLeafCommit}
+                        onStructuralCommit={(next) => onStructuralCommit({ ...object.value, [field.key]: next })}
+                        onFlushPending={onFlushPending}
+                        onEditingChange={onEditingChange}
+                      />
+                      {field.required !== true ? (
+                        <button
+                          type="button"
+                          class={`${STRUCTURE_BUTTON_CLASS} sg-composer-inspector-remove`}
+                          disabled={disabled}
+                          on:click={() => {
+                            const next: Record<string, JsonValue> = { ...object.value };
+                            delete next[field.key];
+                            onStructuralCommit(next);
+                          }}
+                        >
+                          Remove {field.label}
+                        </button>
+                      ) : null}
+                    </div>
+                  );
                 }}
-              >
-                Add {field.label}
-              </button>
-              {addSeed === undefined && <p class="text-caption text-danger" role="alert">Cannot add {field.label}: no deterministic seed is available.</p>}
-            </div>
-          );
-        }
-        return (
-          <div key={field.key} class="flex flex-col gap-vsp-3xs" data-sg-inspector-object-field={field.key}>
-            <ValueEditor
-              definition={field}
-              value={value[field.key]}
-              path={[...path, field.key]}
-              disabled={disabled}
-              onLeafCommit={onLeafCommit}
-              onStructuralCommit={(next) => onStructuralCommit({ ...value, [field.key]: next })}
-              onFlushPending={onFlushPending}
-              onEditingChange={onEditingChange}
-            />
-            {field.required !== true && (
-              <button
-                type="button"
-                class={`${STRUCTURE_BUTTON_CLASS} sg-composer-inspector-remove`}
-                disabled={disabled}
-                onClick={() => {
-                  const next: Record<string, JsonValue> = { ...value };
-                  delete next[field.key];
-                  onStructuralCommit(next);
-                }}
-              >
-                Remove {field.label}
-              </button>
-            )}
-          </div>
-        );
-      })}
-    </div>
+              </Keyed>
+            );
+          })}
+        </div>
+      )}
+    </Show>
   );
 }
 
@@ -878,26 +994,24 @@ function GroupValueEditor({
  */
 export function StructuredFieldDraft({
   field,
-  value,
+  value: valueProp,
   disabled,
   onCommit,
   onCommitDebounced,
   onFlushPending,
-}: InspectorFieldProps): JSX.Element {
-  const [draft, setDraft] = useState<InspectorValue>(() => value);
-  const draftRef = useRef<InspectorValue>(value);
-  const sourceFingerprintRef = useRef(fingerprint(value));
-  const focusedRef = useRef(false);
-  const incomingFingerprint = fingerprint(value);
+}: InspectorFieldProps): Child {
+  const value = toSignal(valueProp);
+  const draft = signal<InspectorValue>(value.value);
+  let sourceFingerprint = fingerprint(value.value);
+  let focused = false;
 
-  useEffect(() => {
-    if (incomingFingerprint === sourceFingerprintRef.current) return;
-    sourceFingerprintRef.current = incomingFingerprint;
-    if (!focusedRef.current) {
-      draftRef.current = value;
-      setDraft(value);
-    }
-  }, [incomingFingerprint, value]);
+  getScope().effect(() => {
+    const incoming = value.value;
+    const incomingFingerprint = fingerprint(incoming);
+    if (incomingFingerprint === sourceFingerprint) return;
+    sourceFingerprint = incomingFingerprint;
+    if (!focused) draft.value = incoming;
+  });
 
   const emit = (next: JsonValue, path: PropPath | undefined, channel: CommitChannel): void => {
     if (channel === "structural") {
@@ -910,32 +1024,32 @@ export function StructuredFieldDraft({
   };
 
   const leafCommit: ValueEditorProps["onLeafCommit"] = (next, relativePath, channel) => {
-    const current = draftRef.current;
+    const current = draft.value;
     if (current === undefined) return;
     const nextDraft = setAtPath(current, relativePath.slice(1), next);
-    draftRef.current = nextDraft;
-    setDraft(nextDraft);
+    draft.value = nextDraft;
     emit(nextDraft, relativePath.length === 0 ? undefined : relativePath as PropPath, channel);
   };
   const structuralCommit = (next: JsonValue): void => {
-    draftRef.current = next;
-    setDraft(next);
+    draft.value = next;
     emit(next, undefined, "structural");
   };
-  const editingChange = (focused: boolean): void => {
-    focusedRef.current = focused;
+  const editingChange = (isFocused: boolean): void => {
+    focused = isFocused;
   };
 
-  const validationError = validationMessage(field, draft);
+  const validationError = computed(() => validationMessage(field, draft.value));
 
   return (
     <div class="flex flex-col gap-vsp-3xs">
-      {validationError && <p class="text-caption text-danger" role="alert" data-sg-inspector-validation>{validationError}</p>}
+      <Show when={computed(() => validationError.value !== null)}>
+        {() => <p class="text-caption text-danger" role="alert" data-sg-inspector-validation>{validationError}</p>}
+      </Show>
       <ValueEditor
         definition={field}
         value={draft}
         path={[field.prop]}
-        disabled={disabled}
+        disabled={computed(() => read(disabled))}
         onLeafCommit={leafCommit}
         onStructuralCommit={structuralCommit}
         onFlushPending={onFlushPending}

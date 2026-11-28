@@ -1,8 +1,6 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../test-support/cleanup";
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/preact";
+import { render, screen } from "../../../../test/render";
 import type { CompositionNode } from "../../../../composer/browser";
 import { ComposerClipboardChip } from "../composer-clipboard-chip";
 
