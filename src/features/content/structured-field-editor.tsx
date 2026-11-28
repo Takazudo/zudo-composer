@@ -3,13 +3,12 @@ import type { JsonValue } from "@zudo-composer/component-contract";
 import { encodeContentValuePath } from "../../app/route-intents";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, TrashIcon, WarningIcon } from "../../components/icons";
 import { Rebuild } from "../../components/rebuild";
-import { keyedBy, toSignal, type MaybeSignal } from "../../components/reactive";
+import { externalDraft, keyedBy, toSignal, type MaybeSignal } from "../../components/reactive";
 import { Button, Checkbox, Field, Select, type FieldControl } from "../../components/ui";
 import type { ContentEntryRef, ContentFieldDefinition, ContentAssetRef, ContentAssetUse, ContentValueSchema } from "../../content";
 import type { ContentAuthoringController } from "./controller";
 import { ContentScalarControl } from "./scalar-control";
 import { AssetUseCard } from "./asset-use-card";
-import { externalDraft } from "./reactive-draft";
 
 type ContentAuthorRun = (action: () => void | Promise<void>) => void;
 export type ContentAssetPickerRenderer = (request: {

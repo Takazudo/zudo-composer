@@ -1,11 +1,10 @@
 import { computed, getScope, signal, type Ref } from "@takazudo/zfb/zudo-react";
 import type { JsonValue } from "@zudo-composer/component-contract";
-import { read, toSignal, type MaybeSignal } from "../../components/reactive";
+import { externalDraft, followExternal, read, toSignal, type MaybeSignal } from "../../components/reactive";
 import type { FieldControl } from "../../components/ui/field-context";
 import { Input, Select, Textarea } from "../../components/ui/form-controls";
 import type { ContentValueSchema } from "../../content/model/types";
 import { ContentBooleanControl } from "./boolean-control";
-import { externalDraft, followExternal } from "./reactive-draft";
 
 export interface ContentScalarControlProps {
   schema: ContentValueSchema;

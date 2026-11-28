@@ -1,12 +1,11 @@
 import { computed, For, getScope, Show, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
-import { keyedBy, read, toSignal, type MaybeSignal } from "../components/reactive";
+import { externalDraft, keyedBy, read, toSignal, type MaybeSignal } from "../components/reactive";
 import { Rebuild } from "../components/rebuild";
 import { createDomId } from "../components/use-dom-id";
 import { Input, Select, Switch, Textarea } from "../components/ui/form-controls";
 import { ContentScalarControl } from "../features/content/scalar-control";
 import type { MarkdownEditorController } from "../features/content/markdown-source";
 import { applyMarkdownFormat, type MarkdownFormat } from "../features/content/markdown-formatting";
-import { externalDraft } from "../features/content/reactive-draft";
 import type { ContentFieldDefinition, ContentValueSchema } from "../content/model/types";
 import type { ContentEntryRef, HostedFieldPermission, HostedPolicy, HostedState, JsonValue } from "./types";
 

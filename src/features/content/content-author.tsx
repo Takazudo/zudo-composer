@@ -2,7 +2,7 @@ import { computed, For, getScope, Show, signal, type Child, type ReadonlySignal,
 import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, ErrorIcon, InfoIcon, PlusIcon, TrashIcon } from "../../components/icons";
 import { formatLibraryTimestampFull } from "../../components/library-page";
 import { createMenu, Menu, MenuItem, MenuSeparator } from "../../components/overlay";
-import { keyedBy, toSignal, type MaybeSignal } from "../../components/reactive";
+import { externalDraft, followExternal, keyedBy, toSignal, type MaybeSignal } from "../../components/reactive";
 import { Rebuild } from "../../components/rebuild";
 import { Button, Chip, DataTable, Field, Input, Select, Switch, Textarea, type DataTableColumn, type FieldControl } from "../../components/ui";
 import { createDomId } from "../../components/use-dom-id";
@@ -14,7 +14,6 @@ import type { ContentAuthoringController, ContentAuthoringState } from "./contro
 import { EntryHistory } from "./entry-history";
 import { FieldKindPicker, contentFieldKindPresentation } from "./field-kind-picker";
 import { MarkdownEditor } from "./markdown-editor";
-import { externalDraft, followExternal } from "./reactive-draft";
 import { deriveSlug } from "./slug";
 import { StructuredValueEditor, type ContentAssetPickerRenderer } from "./structured-field-editor";
 import type { ProductionProviderIntegration } from "../../app/provider-integration";

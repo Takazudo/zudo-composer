@@ -7,9 +7,8 @@ import { Rebuild } from "../../components/rebuild";
 import { Button, Chip, Field, Input, Select, Switch, Textarea } from "../../components/ui";
 import type { ContentAssetUse } from "../../content";
 import type { ContentAssetCatalogItem, ContentAuthoringController } from "./controller";
-import { externalDraft } from "./reactive-draft";
 import type { ContentAssetPickerRenderer } from "./structured-field-editor";
-import { keyedBy } from "../../components/reactive";
+import { externalDraft, keyedBy } from "../../components/reactive";
 
 interface AssetUseCardProps {
   kind: ContentAssetUse["kind"];

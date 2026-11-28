@@ -3,7 +3,6 @@ import { Rebuild } from "../components/rebuild";
 import { Select } from "../components/ui/form-controls";
 import { diagnoseContentEntryCompleteness } from "../content/library/helpers";
 import type { ContentCompletenessDiagnostic, ContentValueSchema } from "../content/model/types";
-import { externalDraft } from "../features/content/reactive-draft";
 import { COMPOSER_ROOT_BUILD, Keyed, mountOwnedChild } from "../runtime";
 import { canonicalSerialize } from "./canonical";
 import { HostedContentSession } from "./session";
@@ -12,7 +11,7 @@ import { hostedEditorLabels } from "./labels";
 import type { HostedEditorErrorCode, HostedEditorLabels } from "./labels";
 import type { HostedEditorSessionState, HostedSessionOptions } from "./session";
 import type { ContentEntryRef, ContentFieldDefinition, HostedFieldPermission, HostedPolicy, HostedResult, HostedState, JsonValue } from "./types";
-import { keyedBy } from "../components/reactive";
+import { externalDraft, keyedBy } from "../components/reactive";
 
 export * from "./preview-browser";
 export type { HostedEditorSessionState, HostedPreviewFailure, HostedRecoveryCheckpoint, HostedPreviewAdapter, HostedSessionOptions } from "./session";
