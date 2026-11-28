@@ -17,6 +17,7 @@ const packageOperations = new Set(["install", "pack", "add", "remove", "rebuild"
 // zfb is a static site generator; it never talks to Cloudflare.
 const localBinaries = new Set(["vite", "vitest", "tsc", "eslint", "playwright", "rollup", "zudo-composer", "zfb", "zudo-sg"]);
 const shellBinaries = new Set(["sh", "bash", "zsh"]);
+const vitePlusBinaries = new Set(["vp", "vpx", "vpr", "vite-plus"]);
 const ordinaryBinaries = new Set(["git", "tar", "find", "grep", "echo", "printf", "test", "true", "false", "mkdir", "rm", "cp", "mv", "cat", "pwd", "chmod"]);
 const processNames = new Set(["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "run", "runCommand", "runInitCommand"]);
 const nativeProcessNames = new Set(["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync"]);
@@ -226,6 +227,9 @@ export function checkNoDeploy({ root = resolve(import.meta.dirname, ".."), entri
       return;
     }
     if (ordinaryBinaries.has(binary)) return;
+    // Vite+ adoption was deferred (zudo-composer#1007): `vp run`/`exec`/`dlx`
+    // and the vpx/vpr shims can launch any command, so no Vite+ grammar is accepted.
+    if (vitePlusBinaries.has(binary)) fail(`Vite+ command has no accepted no-deploy grammar: ${[binary, ...words].join(" ")}`, origin);
     const file = sourcePath(resolve(cwd, executable));
     if (file) return source(file, cwd, origin);
     fail(`unreviewed command ${binary}`, origin);
