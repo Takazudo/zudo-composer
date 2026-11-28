@@ -314,13 +314,18 @@ function AssetInspector({ previewUrl, record: recordSignal, state, controller, d
   let scanEpoch = 0;
   scope.onActivate(() => controller.contentServices?.subscribeChanges(() => { scanEpoch++; batch(() => { scan.value = null; contentGeneration.value += 1; }); }));
   const mutationToken = computed(() => state.value.snapshot?.mutationToken);
+  // Rescan only when the token or Content generation value changes; any other
+  // library state write (busy, phase, errors) re-runs this effect too.
+  let scannedKey: string | null = null;
   scope.effect(() => {
-    void mutationToken.value; void contentGeneration.value;
+    const key = JSON.stringify([mutationToken.value ?? null, contentGeneration.value]);
+    if (key === scannedKey) return;
+    scannedKey = key;
     const epoch = ++scanEpoch;
     scan.value = null;
     void controller.scan(latest).then((value) => { if (scanEpoch === epoch) scan.value = value; });
-    return () => { scanEpoch++; };
   });
+  scope.onCleanup(() => { scanEpoch++; });
   // `capability` reads the controller's plain state; reading the state signal first keeps every gate tracked.
   const can = (name: Parameters<AssetLibraryController["capability"]>[0]) => { void state.value; return controller.capability(name); };
   const busy = computed(() => state.value.busy);

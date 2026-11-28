@@ -105,6 +105,21 @@ describe("Asset workspace", () => {
     }
   });
 
+  it("keeps the inspector's usage scan when an unrelated library state write lands", async () => {
+    const { provider, filesystem } = await providerFixture();
+    await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
+    const services = completeServices();
+    const scan = vi.spyOn(services, "scan");
+    const controller = createAssetLibraryController(provider, { contentServices: services });
+    render(<AssetApp provider={provider} controller={controller} contentServices={services} intent={{ status: "none" }} />);
+    await fire.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
+    await waitFor(() => expect(scan).toHaveBeenCalledTimes(1));
+    controller.reportFailure(new Error("Unrelated failure")); await settle();
+    controller.clearNotice(); await settle();
+    await new Promise((resolve) => setTimeout(resolve, 20)); await settle();
+    expect(scan).toHaveBeenCalledTimes(1);
+  });
+
   it("shows actionable additional project uses inside the blocked trash dialog", async () => {
     const { provider, filesystem } = await providerFixture();
     await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
