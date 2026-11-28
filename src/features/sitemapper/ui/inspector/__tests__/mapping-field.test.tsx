@@ -163,4 +163,27 @@ describe("MappingField", () => {
     expect(screen.getByRole("combobox", { name: "Entry title field" })).toHaveValue("retired-title");
     expect(view.diagnostics).toEqual([]);
   });
+
+  it.each([
+    { name: "Slug field", stored: "retired-slug", next: "alternate-slug" },
+    { name: "Entry title field", stored: "retired-title", next: "title" },
+  ])("keeps focus on the $name select when picking a listed field drops the stale option", async ({ name, stored, next }) => {
+    type MappingSource = Extract<SitemapPageSource, { kind: "mapping" }>;
+    const value = signal<MappingSource | undefined>({ kind: "mapping", ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field", fieldId: "retired-slug", titleFieldId: "retired-title" } });
+    const onChange = (source: SitemapPageSource) => { if (source.kind === "mapping") value.value = source; };
+    const view = render(<MappingField value={value} routeInfo={{ status: "ready", derivedRouteCount: 2, diagnostics: [], mapping: mappingMetadata }} catalog={catalog()} onChange={onChange} />);
+    const before = screen.getByRole("combobox", { name });
+    expect(before).toHaveValue(stored);
+    before.focus();
+    expect(document.activeElement).toBe(before);
+
+    fireEvent.change(before, { target: { value: next } });
+    await settle();
+
+    const after = screen.getByRole("combobox", { name });
+    expect(after).toHaveValue(next);
+    expect(within(after).queryByRole("option", { name: `Missing field (${stored}) · stale` })).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(after);
+    expect(view.diagnostics).toEqual([]);
+  });
 });

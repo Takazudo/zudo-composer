@@ -1,4 +1,4 @@
-import { computed, Show, signal, type Child } from "@takazudo/zfb/zudo-react";
+import { computed, getScope, Show, signal, type Child } from "@takazudo/zfb/zudo-react";
 import { followModel, keyedBy, memo, toSignal, type MaybeSignal } from "../../../../components/reactive";
 import { Rebuild } from "../../../../components/rebuild";
 import { Keyed } from "../../../../runtime";
@@ -49,6 +49,28 @@ function choicesKey(choices: readonly FieldChoice[]): string {
 /** A model for one mounted option set: a value it does not list waits for the rebuild that adds it. */
 function pickListed(choices: readonly FieldChoice[], stored: string): string {
   return choices.some((choice) => choice.id === stored) ? stored : choices[0]?.id ?? "";
+}
+
+/**
+ * A new option set rebuilds the whole select, and the removed element takes
+ * focus with it. While the field's select holds focus, each rebuilt select
+ * reclaims it — but only from `<body>`, never from a control the author moved to.
+ */
+function focusCarry(controlId: string) {
+  let focused = false;
+  return {
+    onFocus: () => { focused = true; },
+    // A browser that blurs a removed element does so once it is disconnected.
+    onBlur: (event: FocusEvent) => { if ((event.currentTarget as Element).isConnected) focused = false; },
+    restoreOnMount: () => {
+      getScope().onActivate(() => {
+        if (!focused) return;
+        const active = document.activeElement;
+        if (active !== null && active !== document.body) return;
+        document.getElementById(controlId)?.focus();
+      });
+    },
+  };
 }
 
 function MappingCard({ detail: currentDetail, info, slugLabel, onChange }: { detail: NonNullable<SitemapNodeRouteInfo["mapping"]>; info: SitemapNodeRouteInfo; slugLabel: string | null; onChange: () => void }): Child {
@@ -160,61 +182,73 @@ export function MappingField({ value: valueInput, routeInfo: routeInfoInput, cat
               <Rebuild value={card}>{(view) => view && <MappingCard detail={view[0]} info={view[1]} slugLabel={view[2]} onChange={openPicker} />}</Rebuild>
               <Show when={computed(() => detail.value?.kind === "collection")}>{() => (
                 <>
-                  <Field label="Slug field">{(field) => (
-                    <Keyed value={slugChoices} by={choicesKey}>{(current) => {
-                      const choices = current.value;
-                      const model = followModel(() => pickListed(choices, storedSlugId.value));
-                      return (
-                        <Select
-                          size="sm"
-                          field={field}
-                          modelValue={model}
-                          on:change={(event) => {
-                            const current = value.value;
-                            if (!current) return;
-                            onChange({
-                              ...current,
-                              route: {
-                                kind: "entry-field",
-                                fieldId: event.currentTarget.value,
-                                ...(current.route.kind === "entry-field" && current.route.titleFieldId ? { titleFieldId: current.route.titleFieldId } : {}),
-                              },
-                            });
-                          }}
-                        >
-                          {choices.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                        </Select>
-                      );
-                    }}</Keyed>
-                  )}</Field>
-                  <Field label="Entry title field">{(field) => (
-                    <Keyed value={titleChoices} by={choicesKey}>{(current) => {
-                      const choices = current.value;
-                      const model = followModel(() => pickListed(choices, storedTitleId.value));
-                      return (
-                        <Select
-                          size="sm"
-                          field={field}
-                          modelValue={model}
-                          on:change={(event) => {
-                            const current = value.value;
-                            if (!current) return;
-                            const titleFieldId = event.currentTarget.value;
-                            onChange({
-                              ...current,
-                              route: {
-                                kind: "entry-field",
-                                fieldId: current.route.kind === "entry-field" ? current.route.fieldId : detail.value?.slugFields[0]?.id ?? "missing-slug-field",
-                                ...(titleFieldId ? { titleFieldId } : {}),
-                              },
-                            });
-                          }}
-                        >
-                          {choices.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                        </Select>
-                      );
-                    }}</Keyed>
-                  )}</Field>
+                  <Field label="Slug field">{(field) => {
+                    const carry = focusCarry(field.controlId);
+                    return (
+                      <Keyed value={slugChoices} by={choicesKey}>{(current) => {
+                        carry.restoreOnMount();
+                        const choices = current.value;
+                        const model = followModel(() => pickListed(choices, storedSlugId.value));
+                        return (
+                          <Select
+                            size="sm"
+                            field={field}
+                            modelValue={model}
+                            on:focus={carry.onFocus}
+                            on:blur={carry.onBlur}
+                            on:change={(event) => {
+                              const current = value.value;
+                              if (!current) return;
+                              onChange({
+                                ...current,
+                                route: {
+                                  kind: "entry-field",
+                                  fieldId: event.currentTarget.value,
+                                  ...(current.route.kind === "entry-field" && current.route.titleFieldId ? { titleFieldId: current.route.titleFieldId } : {}),
+                                },
+                              });
+                            }}
+                          >
+                            {choices.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                          </Select>
+                        );
+                      }}</Keyed>
+                    );
+                  }}</Field>
+                  <Field label="Entry title field">{(field) => {
+                    const carry = focusCarry(field.controlId);
+                    return (
+                      <Keyed value={titleChoices} by={choicesKey}>{(current) => {
+                        carry.restoreOnMount();
+                        const choices = current.value;
+                        const model = followModel(() => pickListed(choices, storedTitleId.value));
+                        return (
+                          <Select
+                            size="sm"
+                            field={field}
+                            modelValue={model}
+                            on:focus={carry.onFocus}
+                            on:blur={carry.onBlur}
+                            on:change={(event) => {
+                              const current = value.value;
+                              if (!current) return;
+                              const titleFieldId = event.currentTarget.value;
+                              onChange({
+                                ...current,
+                                route: {
+                                  kind: "entry-field",
+                                  fieldId: current.route.kind === "entry-field" ? current.route.fieldId : detail.value?.slugFields[0]?.id ?? "missing-slug-field",
+                                  ...(titleFieldId ? { titleFieldId } : {}),
+                                },
+                              });
+                            }}
+                          >
+                            {choices.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                          </Select>
+                        );
+                      }}</Keyed>
+                    );
+                  }}</Field>
                 </>
               )}</Show>
               <Rebuild value={computed(() => routeInfo.value)}>{(info) => info && (
