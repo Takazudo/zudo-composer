@@ -1,11 +1,11 @@
-import { cleanup, render, waitFor } from "@testing-library/preact";
+import { render, waitFor } from "../../../test/render";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { activeComponentProvider } from "../../composer/active-pack";
 import { MappingPreviewHost } from "../preview-host";
 
 describe("MappingPreviewHost", () => {
-  afterEach(() => { cleanup(); document.documentElement.removeAttribute("data-theme"); });
+  afterEach(() => { document.documentElement.removeAttribute("data-theme"); });
   it("sends transient data in preview mode and exposes no Mapping chrome to the frame", () => {
     const renderSnapshot = vi.fn();
     const createBridge = vi.fn((options: Parameters<NonNullable<Parameters<typeof MappingPreviewHost>[0]["createBridge"]>>[0]) => { options.onReady?.(); return { render: renderSnapshot, updateSession: vi.fn(), restoreFocus: vi.fn(), dispose: vi.fn(), ready: true, terminal: false, revision: 0 }; });
