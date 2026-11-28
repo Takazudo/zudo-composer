@@ -10,7 +10,7 @@ import type { MappingCollectionCondition, MappingCollectionConditionOperator, Ma
 import type { MappingEditorState } from "./controller";
 import { ReferenceQueryValue } from "./reference-query-value";
 import { entryLabel, fieldKindLabel } from "./presentation";
-import { followModel, memo, writeDomValue } from "./signals";
+import { derive, followModel, memo, writeDomValue } from "./signals";
 
 export interface CollectionQueryPaneProps {
   referenceEntries?: (target: { providerId: string; recordId: string }) => Promise<readonly { ref: { providerId: string; modelId: string; recordId: string }; label: string }[]>;
@@ -54,7 +54,7 @@ export function CollectionQueryPane({ state: given, onModeChange, onQueryChange,
   const query = computed(() => { const mode = mapping.value?.document.mode; return mode?.kind === "collection" ? mode.query : null; });
   const fields = memo(() => queryFields(model.value) as readonly ContentFieldDefinition[]);
   const queryFieldList = computed(() => fields.value);
-  const unsupportedFields = computed(() => model.value?.document.fields.filter((field) => !isSupportedQueryField(field)) ?? []);
+  const unsupportedFields = derive(() => [model.value] as const, (current) => current?.document.fields.filter((field) => !isSupportedQueryField(field)) ?? []);
   const shape = computed(() => !mapping.value ? "none" : query.value && model.value ? "body" : query.value ? "unavailable" : "single");
   const evaluation = computed(() => state.value.collectionEvaluation);
 

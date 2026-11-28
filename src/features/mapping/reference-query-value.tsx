@@ -22,20 +22,27 @@ export function ReferenceQueryValue({ target, value, label, load, onChange }: {
   const scope = computed(() => JSON.stringify([currentTarget.value.providerId, currentTarget.value.recordId]));
   const refresh = signal(0);
   const state = signal<{ scope: string; options: readonly Option[]; error: string | null; loading: boolean }>({ scope: scope.value, options: [], error: null, loading: true });
+  // `computed` has no equality cutoff, so the effect re-runs on any upstream
+  // change; only a different scope or an explicit refresh starts a load.
+  const lifetime = getScope();
+  let lastKey: string | null = null;
+  let request = 0;
   getScope().effect(() => {
     const requested = scope.value;
     const owner = currentTarget.value;
-    void refresh.value;
-    let live = true;
+    const loadKey = `${requested}\u0000${refresh.value}`;
+    if (loadKey === lastKey) return;
+    lastKey = loadKey;
+    const current = ++request;
+    const isLive = () => current === request && !lifetime.abortSignal.aborted;
     state.value = { scope: requested, options: [], error: null, loading: true };
     void (async () => {
       if (!load) throw new Error("The reference Entry catalog is unavailable.");
       const options = await load(owner);
       if (options.some(option => !reference(option.ref) || option.ref.providerId !== owner.providerId || option.ref.modelId !== owner.recordId)) throw new Error("The reference catalog returned a different provider or model.");
       if (new Set(options.map(option => key(option.ref))).size !== options.length) throw new Error("The reference catalog returned duplicate Entry identities.");
-      if (live) state.value = { scope: requested, options, error: null, loading: false };
-    })().catch(cause => { if (live) state.value = { scope: requested, options: [], error: cause instanceof Error ? cause.message : "Reference catalog unavailable.", loading: false }; });
-    return () => { live = false; };
+      if (isLive()) state.value = { scope: requested, options, error: null, loading: false };
+    })().catch(cause => { if (isLive()) state.value = { scope: requested, options: [], error: cause instanceof Error ? cause.message : "Reference catalog unavailable.", loading: false }; });
   });
   const options = computed(() => state.value.scope === scope.value ? state.value.options : []);
   const current = computed(() => reference(read(value)));

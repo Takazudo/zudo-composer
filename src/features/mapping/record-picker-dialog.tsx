@@ -5,7 +5,7 @@ import { Dialog } from "../../components/overlay";
 import { toSignal, type MaybeSignal } from "../../components/reactive";
 import { Rebuild } from "../../components/rebuild";
 import { Button, EmptyState, Input } from "../../components/ui";
-import { memo } from "./signals";
+import { derive, memo } from "./signals";
 
 // The toolbar's two source/target pickers. They replace the editor's old
 // `<select>` pair: a catalog is a list of records to search, not a dropdown to
@@ -61,7 +61,7 @@ export function RecordPickerDialog({
     if (next) search.value = "";
   });
 
-  const visible = computed(() => entryList.value.filter((entry) => matchesLibrarySearch(`${entry.name} ${entry.detail}`, search.value)));
+  const visible = derive(() => [entryList.value, search.value] as const, (list, text) => list.filter((entry) => matchesLibrarySearch(`${entry.name} ${entry.detail}`, text)));
 
   return (
     <Dialog

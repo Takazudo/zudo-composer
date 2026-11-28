@@ -18,7 +18,7 @@ import {
 import { createLibraryConfirm } from "../../components/library-page";
 import { ConfirmDialog, createMenu, Menu, MenuItem, MenuSeparator } from "../../components/overlay";
 import { liveSlot, Rebuild } from "../../components/rebuild";
-import { memo } from "./signals";
+import { derive, memo } from "./signals";
 import { Banner, Button } from "../../components/ui";
 import type { MappingCollectionQuery } from "../../mapping";
 import { formatComposerRoute } from "../composer/routing";
@@ -101,7 +101,7 @@ export function MappingEditor({
   bindBreadcrumb(scope, services?.chrome ?? null, computed(() => [{ label: "Mappings", href: MAPPING_ROUTE }, { label: mapping.value.document.name }]));
 
   const definition = computed(() => state.value.definition);
-  const rows = computed(() => buildBindingRows(mapping.value, definition.value));
+  const rows = derive(() => [mapping.value, definition.value] as const, buildBindingRows);
   const modelName = computed(() => definition.value?.contentModel?.document.name
     ?? state.value.contentModels.find((entry) => refKey(entry.ref) === refKey(mapping.value.document.contentModel))?.summary.name
     ?? mapping.value.document.contentModel.recordId);
@@ -280,7 +280,7 @@ export function MappingEditor({
         searchLabel="Filter Content models"
         currentKey={computed(() => refKey(mapping.value.document.contentModel))}
         emptyMessage="No Content models are available."
-        entries={computed(() => state.value.contentModels.map((entry) => ({
+        entries={derive(() => [state.value.contentModels] as const, (contentModels) => contentModels.map((entry) => ({
           key: refKey(entry.ref),
           name: entry.summary.name,
           detail: `${entry.summary.kind} · ${entry.providerLabel} · ${entry.ref.recordId}`,
@@ -299,7 +299,7 @@ export function MappingEditor({
         searchLabel="Filter Compositions"
         currentKey={computed(() => refKey(mapping.value.document.composition))}
         emptyMessage="No Compositions are available."
-        entries={computed(() => state.value.compositions.map((entry) => ({
+        entries={derive(() => [state.value.compositions] as const, (compositions) => compositions.map((entry) => ({
           key: refKey(entry.ref),
           name: entry.summary.name,
           detail: `${entry.providerLabel} · ${entry.ref.recordId}`,

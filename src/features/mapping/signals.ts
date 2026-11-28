@@ -16,6 +16,23 @@ export function memo<const T extends readonly unknown[]>(read: () => T): Readonl
   });
 }
 
+/**
+ * A derived value recomputed only when one of its inputs changes identity.
+ * zudo-react's `computed` has no equality cutoff, so a plain derived object is
+ * rebuilt (and every identity-keyed consumer rebuilt with it) on each upstream
+ * change; this keeps it stable across changes that did not touch its inputs.
+ */
+export function derive<const I extends readonly unknown[], O>(inputs: () => I, build: (...values: I) => O): ReadonlySignal<O> {
+  const key = memo(inputs);
+  let last: { key: I; value: O } | null = null;
+  return computed(() => {
+    const current = key.value;
+    if (last && last.key === current) return last.value;
+    last = { key: current, value: build(...current) };
+    return last.value;
+  });
+}
+
 /** A computed whose identity changes only when `key` of its value does. */
 export function keyedBy<T>(read: () => T, key: (value: T) => string): ReadonlySignal<T> {
   let last: { key: string; value: T } | null = null;
