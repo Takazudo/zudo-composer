@@ -430,7 +430,7 @@ export default { async fetch(_request, env) {
   return Response.json(report);
 } };
 `, resolveDir: resolve(import.meta.dirname), sourcefile: "d1-conformance-worker.js" }, bundle: true, platform: "neutral", format: "esm", target: "es2022", write: false, metafile: true });
-  for (const input of Object.keys(bundled.metafile.inputs)) assert.ok(!/^node:|node:sqlite|sqlite-storage|hosted-content\/node|child_process|preact|codemirror/.test(input), `D1 Worker graph leak ${input}`);
+  for (const input of Object.keys(bundled.metafile.inputs)) assert.ok(!/^node:|node:sqlite|sqlite-storage|hosted-content\/node|child_process|preact|zudo-react|@takazudo[+/]zfb|codemirror/.test(input), `D1 Worker graph leak ${input}`);
   const runtime = await startD1Runtime({ persist: await mkdtemp(join(directory, "composer-d1-in-worker-")), script: bundled.outputFiles[0].text, name: "d1-in-worker-conformance" });
   try {
     const response = await runtime.fetch("http://d1.local/");

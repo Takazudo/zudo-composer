@@ -1,18 +1,106 @@
 import { r as diagnoseContentEntryCompleteness, t as canonicalSerialize } from "./chunks/canonical-CF-xy2oG.mjs";
 import { t as EditorialError } from "./chunks/types-nfgY3xip.mjs";
 import { HostedPreviewError, buildHostedPreviewLocation, createHostedPreviewController, createHostedPreviewFullscreen, createHostedPreviewHost } from "./preview.mjs";
-import { createContext, h, render } from "preact";
-import { useContext, useEffect, useRef, useState } from "preact/hooks";
-import { Fragment, jsx, jsxs } from "preact/jsx-runtime";
-import { defaultKeymap, history, historyKeymap, isolateHistory } from "@codemirror/commands";
-import { insertNewlineContinueMarkup, markdown, markdownKeymap } from "@codemirror/lang-markdown";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { Annotation, Compartment, EditorSelection, EditorState, Transaction } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
-import { tags } from "@lezer/highlight";
+import { For, Show, computed, getScope, h, isDescription, signal } from "@takazudo/zfb/zudo-react";
+import { mount } from "@takazudo/zfb/zudo-react/client";
+import { Fragment, jsx, jsxs } from "@takazudo/zfb/zudo-react/jsx-runtime";
+import { isolateHistory } from "@codemirror/commands";
+import { EditorSelection } from "@codemirror/state";
+//#region src/runtime/root.ts
+/** The build half of every root identity Composer mounts in the browser. */
+var COMPOSER_ROOT_BUILD = "zudo-composer";
+/**
+* A connected host element carrying the zudo-react/1 caller-owned (skip-SSR)
+* wrapper contract: the four attributes come from zfb's hydration docs,
+* "Mount from a host you own", and `mount` refuses a host without them.
+*/
+function createOwnedRootHost(identity, parent = document.body) {
+	const host = parent.ownerDocument.createElement("div");
+	host.setAttribute("data-zfb-island-skip-ssr", identity.component);
+	host.setAttribute("data-zfb-transport", "json/1");
+	host.setAttribute("data-zfb-protocol", "zudo-react/1");
+	host.setAttribute("data-zfb-build", identity.build);
+	parent.append(host);
+	return host;
+}
+function asIdentityRoot(node, component) {
+	if (isDescription(node) && typeof node.type === "function" && (node.type.displayName ?? node.type.name) === component) return node;
+	const Root = () => node;
+	Root.displayName = component;
+	return h(Root, null);
+}
+/** Mount any `Child` as a caller-owned root, named `identity.component`, under a fresh wrapper host. */
+function mountOwnedChild(node, options) {
+	const host = createOwnedRootHost(options.identity, options.parent);
+	const diagnostics = [];
+	const handle = mount(asIdentityRoot(node, options.identity.component), host, {
+		identity: options.identity,
+		signal: options.signal,
+		report: (diagnostic) => {
+			diagnostics.push(diagnostic);
+			options.report?.(diagnostic);
+		}
+	});
+	let stopped = false;
+	return {
+		host,
+		handle,
+		diagnostics,
+		stop() {
+			if (stopped) return;
+			stopped = true;
+			handle?.unmount();
+			host.remove();
+		}
+	};
+}
+//#endregion
+//#region src/runtime/keyed.tsx
+/**
+* Replacement for a Preact `key={k}` remount: one keyed `For` item. A key
+* change disposes the old subtree (cleanups, abort) and runs a fresh setup.
+* The preview renderer keys each composition node by `(nodeId, propsRevision)`
+* so plain-value pack components remount on a prop change (see `nodeRenderKey`).
+*/
+function Keyed(props) {
+	const items = computed(() => [props.value.value]);
+	return /* @__PURE__ */ jsx(For, {
+		each: items,
+		by: props.by,
+		children: (item) => props.children(item)
+	});
+}
+//#endregion
+//#region src/components/rebuild.tsx
+/**
+* Remounts `children` whenever `value` changes identity. For read-only views
+* whose whole shape follows one snapshot (a summary, a status card); a surface
+* with inputs or focus that must survive an update binds signals instead.
+*/
+function Rebuild(props) {
+	let revision = 0;
+	let last = null;
+	const keyed = computed(() => {
+		const value = props.value.value;
+		if (last === null || !Object.is(last.value, value)) {
+			revision += 1;
+			last = { value };
+		}
+		return {
+			revision,
+			value
+		};
+	});
+	return /* @__PURE__ */ jsx(Keyed, {
+		value: keyed,
+		by: (entry) => entry.revision,
+		children: (entry) => props.children(entry.value.value)
+	});
+}
+//#endregion
 //#region src/components/icons/index.ts
 /**
-* Composer/Sitemapper app-chrome icon set — renderer-safe: plain `.ts` + Preact `h()`,
+* Composer/Sitemapper app-chrome icon set — renderer-safe: plain `.ts` + zudo-react `h()`,
 * NO JSX. The composer preview iframe bundle is deliberately JSX-free (see the
 * header of `src/features/composer/preview/preview-app.ts`: root-`src` `.tsx`
 * modules cannot be imported under the shared vitest config), and this module
@@ -743,31 +831,92 @@ lineIcon(() => [h("line", {
 	y2: 13.25
 }), h("polyline", { points: "4.5 9.75 8 13.25 11.5 9.75" })]);
 //#endregion
+//#region src/components/reactive.ts
+function isSignal(value) {
+	return typeof value === "object" && value !== null && "$$zudoReactive" in value;
+}
+/** The current value; reading it inside `computed`/`effect` tracks the signal. */
+function read(value) {
+	return isSignal(value) ? value.value : value;
+}
+/** A readonly signal over either form, for bindings that need one. */
+function toSignal(value) {
+	return isSignal(value) ? value : computed(() => value);
+}
+/** A computed whose identity changes only when `key` of its value does. */
+function keyedBy(read, key) {
+	let last = null;
+	return computed(() => {
+		const value = read();
+		const next = key(value);
+		if (last && last.key === next) return last.value;
+		last = {
+			key: next,
+			value
+		};
+		return value;
+	});
+}
+/**
+* Calls `apply` whenever `source` changes after setup. The comparison is against
+* the last value seen, never against the control's own draft, so the effect
+* tracks only the external value and a keystroke cannot re-trigger it.
+*/
+function followExternal(scope, source, apply, equals = Object.is) {
+	let seen = source.value;
+	scope.effect(() => {
+		const next = source.value;
+		if (equals(next, seen)) return;
+		seen = next;
+		apply(next);
+	});
+}
+/** A writable draft for a `modelValue` control that is reset only by an external change of `source`. */
+function externalDraft(scope, source) {
+	const draft = signal(source.value);
+	followExternal(scope, source, (next) => {
+		draft.value = next;
+	});
+	return draft;
+}
+//#endregion
 //#region src/components/ui/class-names.ts
 /** Joins class-name parts, dropping the falsy branches conditional classes produce. */
 function cx(...parts) {
 	return parts.filter(Boolean).join(" ");
 }
 //#endregion
-//#region src/components/ui/field-context.ts
-var FieldContext = createContext(null);
-/** `null` outside a <Field> — every control keeps working standalone. */
-function useFieldControl() {
-	return useContext(FieldContext);
-}
-//#endregion
 //#region src/components/ui/form-controls.tsx
+/** Resolves an `ElementRef` to a plain `Ref` the JSX `ref` prop accepts. */
+function useElementRef(elementRef) {
+	if (elementRef === void 0) return { current: null };
+	if (typeof elementRef !== "function") return elementRef;
+	const ref = { current: null };
+	getScope().onActivate(() => {
+		elementRef(ref.current);
+		return () => elementRef(null);
+	});
+	return ref;
+}
+/** The wiring a `<Field>` hands its control: pass it as the control's `field` prop. */
+function fieldAttributes(field, own) {
+	return {
+		id: own.id ?? field?.controlId,
+		"aria-describedby": own["aria-describedby"] ?? field?.describedBy,
+		"aria-invalid": own["aria-invalid"] ?? (field ? computed(() => field.invalid.value ? "true" : void 0) : void 0),
+		required: own.required ?? field?.required
+	};
+}
 /** `class` lands on the outermost node: the input, or the wrapper an icon adds. */
-function Input({ size = "md", icon: Icon, class: className, elementRef, ...rest }) {
-	const field = useFieldControl();
+function Input(props) {
+	const { size = "md", icon: Icon, class: className, elementRef, field, ...rest } = props;
+	const ref = useElementRef(elementRef);
+	const own = rest;
 	const input = /* @__PURE__ */ jsx("input", {
 		...rest,
-		ref: elementRef,
+		ref,
 		class: cx("cms-input", size === "sm" && "cms-input--sm", !Icon && className),
-		id: rest.id ?? field?.controlId,
-		"aria-describedby": rest["aria-describedby"] ?? field?.describedBy,
-		"aria-invalid": rest["aria-invalid"] ?? (field?.invalid ? "true" : void 0),
-		required: rest.required ?? field?.required
+		...fieldAttributes(field, own)
 	});
 	if (!Icon) return input;
 	return /* @__PURE__ */ jsxs("span", {
@@ -781,19 +930,18 @@ function Input({ size = "md", icon: Icon, class: className, elementRef, ...rest 
 /**
 * The caret is a real icon rather than a background image: a data-URI SVG could
 * not take its stroke from a colour token, and no component may carry a literal.
-* `class` lands on the wrapper, which is what callers lay out.
+* `class` lands on the wrapper, which is what callers lay out. Options are the
+* select's static `<option>` children; rebuild the whole `Select` (keyed) when
+* they change.
 */
-function Select({ size = "md", class: className, children, ...rest }) {
-	const field = useFieldControl();
+function Select(props) {
+	const { size = "md", class: className, children, field, ...rest } = props;
 	return /* @__PURE__ */ jsxs("span", {
 		class: cx("cms-select-wrap", className),
 		children: [/* @__PURE__ */ jsx("select", {
 			...rest,
 			class: cx("cms-select", size === "sm" && "cms-select--sm"),
-			id: rest.id ?? field?.controlId,
-			"aria-describedby": rest["aria-describedby"] ?? field?.describedBy,
-			"aria-invalid": rest["aria-invalid"] ?? (field?.invalid ? "true" : void 0),
-			required: rest.required ?? field?.required,
+			...fieldAttributes(field, rest),
 			children
 		}), /* @__PURE__ */ jsx(ChevronDownIcon, {
 			size: "sm",
@@ -801,34 +949,47 @@ function Select({ size = "md", class: className, children, ...rest }) {
 		})]
 	});
 }
-function Textarea({ class: className, ...rest }) {
-	const field = useFieldControl();
+function Textarea(props) {
+	const { class: className, field, elementRef, ...rest } = props;
+	const ref = useElementRef(elementRef);
 	return /* @__PURE__ */ jsx("textarea", {
 		...rest,
+		ref,
 		class: cx("cms-textarea", className),
-		id: rest.id ?? field?.controlId,
-		"aria-describedby": rest["aria-describedby"] ?? field?.describedBy,
-		"aria-invalid": rest["aria-invalid"] ?? (field?.invalid ? "true" : void 0),
-		required: rest.required ?? field?.required
+		...fieldAttributes(field, rest)
 	});
 }
+/**
+* The checkbox model follows `checked`; a click the parent has not answered yet
+* keeps the browser's toggled state, as an uncontrolled-in-between control does.
+*/
+function useToggleModel(checked) {
+	const model = signal(read(checked));
+	getScope().effect(() => {
+		model.value = read(checked);
+	});
+	return model;
+}
+function disabledClass(base, disabled, className) {
+	return computed(() => cx(base, disabled !== void 0 && read(disabled) && `${base}--disabled`, className));
+}
 function Switch(props) {
-	const { checked, onCheckedChange, disabled, name, id, class: className, label, ...aria } = props;
-	const field = useFieldControl();
+	const { checked, onCheckedChange, disabled, name, id, class: className, label, field, ...aria } = props;
+	const model = useToggleModel(checked);
 	return /* @__PURE__ */ jsxs("label", {
-		class: cx("cms-switch", disabled && "cms-switch--disabled", className),
+		class: disabledClass("cms-switch", disabled, className),
 		children: [
 			/* @__PURE__ */ jsx("input", {
 				...aria,
 				type: "checkbox",
 				role: "switch",
 				class: "cms-switch__input",
-				checked,
+				modelChecked: model,
 				disabled,
 				name,
 				id: id ?? field?.controlId,
 				"aria-describedby": aria["aria-describedby"] ?? field?.describedBy,
-				onChange: (event) => onCheckedChange(event.currentTarget.checked)
+				"on:change": (event) => onCheckedChange(event.currentTarget.checked)
 			}),
 			/* @__PURE__ */ jsx("span", {
 				class: "cms-switch__track",
@@ -1402,36 +1563,43 @@ var HostedContentSession = class {
 //#endregion
 //#region src/components/use-dom-id.ts
 var nextDomId = 0;
-function useDomId() {
-	const [id] = useState(() => `cms-id-${++nextDomId}`);
-	return id;
+function createDomId() {
+	return `cms-id-${++nextDomId}`;
 }
 //#endregion
 //#region src/components/ui/button.tsx
 function Button(props) {
 	const { variant = "default", size = "md", iconOnly = false, class: className, type = "button", elementRef, busy = false, disabled, children, ...rest } = props;
+	const ariaBusy = rest["aria-busy"];
+	const ref = useElementRef(elementRef);
+	const busyNow = computed(() => Boolean(read(busy)));
 	return /* @__PURE__ */ jsxs("button", {
-		ref: elementRef,
+		ref,
 		type,
 		class: cx("cms-btn", variant !== "default" && `cms-btn--${variant}`, size !== "md" && `cms-btn--${size}`, iconOnly && "cms-btn--icon", className),
 		...rest,
-		disabled: busy || disabled,
-		"aria-busy": busy ? true : rest["aria-busy"],
-		children: [busy ? /* @__PURE__ */ jsx(LoadingIcon, {
-			size: "sm",
-			class: "cms-btn__spinner"
-		}) : null, children]
+		disabled: computed(() => busyNow.value || Boolean(read(disabled))),
+		"aria-busy": computed(() => busyNow.value ? true : read(ariaBusy)),
+		children: [/* @__PURE__ */ jsx(Show, {
+			when: busyNow,
+			children: () => /* @__PURE__ */ jsx(LoadingIcon, {
+				size: "sm",
+				class: "cms-btn__spinner"
+			})
+		}), children]
 	});
 }
 //#endregion
 //#region src/features/content/boolean-control.tsx
 /** Absence stays absent until the author explicitly chooses Yes or No. */
-function ContentBooleanControl({ value, label = "Boolean", id, required, disabled, describedBy, class: className, onChange }) {
-	const unsetId = useDomId();
-	const field = useFieldControl();
-	const description = [describedBy ?? field?.describedBy, value === void 0 ? unsetId : void 0].filter(Boolean).join(" ") || void 0;
+function ContentBooleanControl({ value, label = "Boolean", id, required, disabled = false, describedBy, field, class: className, onChange }) {
+	const unsetId = createDomId();
+	const current = toSignal(value);
+	const unset = computed(() => current.value === void 0);
+	const description = computed(() => [read(describedBy) ?? field?.describedBy.value, unset.value ? unsetId : void 0].filter(Boolean).join(" ") || void 0);
+	const isDisabled = computed(() => Boolean(read(disabled)));
 	return /* @__PURE__ */ jsxs("div", { children: [/* @__PURE__ */ jsx(Switch, {
-		id,
+		id: id ?? field?.controlId,
 		class: className,
 		"aria-label": label,
 		label: /* @__PURE__ */ jsxs(Fragment, { children: [label, required ? /* @__PURE__ */ jsx("span", {
@@ -1439,67 +1607,87 @@ function ContentBooleanControl({ value, label = "Boolean", id, required, disable
 			"aria-hidden": "true",
 			children: " *"
 		}) : null] }),
-		checked: value === true,
-		disabled,
+		checked: computed(() => current.value === true),
+		disabled: isDisabled,
 		"aria-describedby": description,
 		onCheckedChange: onChange
-	}), value === void 0 ? /* @__PURE__ */ jsxs("div", { children: [
-		/* @__PURE__ */ jsx("span", {
-			id: unsetId,
-			children: "Not set"
-		}),
-		" ",
-		/* @__PURE__ */ jsx(Button, {
-			size: "sm",
-			disabled,
-			"aria-label": `Set ${label} to No`,
-			onClick: () => {
-				if (!disabled) onChange(false);
-			},
-			children: "Set to No"
-		})
-	] }) : null] });
+	}), /* @__PURE__ */ jsx(Show, {
+		when: unset,
+		children: () => /* @__PURE__ */ jsxs("div", { children: [
+			/* @__PURE__ */ jsx("span", {
+				id: unsetId,
+				children: "Not set"
+			}),
+			" ",
+			/* @__PURE__ */ jsx(Button, {
+				size: "sm",
+				disabled: isDisabled,
+				"aria-label": `Set ${label} to No`,
+				"on:click": () => {
+					if (!isDisabled.value) onChange(false);
+				},
+				children: "Set to No"
+			})
+		] })
+	})] });
 }
 //#endregion
 //#region src/features/content/scalar-control.tsx
 var text = (value) => typeof value === "string" || typeof value === "number" ? String(value) : "";
 /** The same primitive value widgets serve local structured forms and hosted forms. */
-function ContentScalarControl({ schema, value, label, required, maxLength, disabled, emptyChoiceLabel = "Choose an option", emptyChoiceDisabled, retainIncompleteNumber, allowEmptyNumber = true, onIncompleteNumber, invalid, describedBy, onChange }) {
+function ContentScalarControl(props) {
+	const { schema, label, required, maxLength, disabled, emptyChoiceLabel = "Choose an option", emptyChoiceDisabled, retainIncompleteNumber, allowEmptyNumber = true, onIncompleteNumber, invalid, describedBy, field, onChange } = props;
+	const scope = getScope();
+	const value = toSignal(props.value);
 	const common = {
 		"aria-label": label,
 		required,
-		disabled,
-		"aria-invalid": invalid ? "true" : void 0,
-		"aria-describedby": describedBy
+		disabled: disabled === void 0 ? void 0 : computed(() => Boolean(read(disabled)))
 	};
-	if (schema.kind === "choice") return /* @__PURE__ */ jsxs(Select, {
-		...common,
-		value: text(value),
-		onChange: (event) => onChange(event.currentTarget.value || void 0),
-		children: [/* @__PURE__ */ jsx("option", {
-			value: "",
-			disabled: emptyChoiceDisabled,
-			children: emptyChoiceLabel
-		}), schema.options.map((option) => /* @__PURE__ */ jsx("option", {
-			value: option.value,
-			children: option.label
-		}, option.value))]
-	});
+	if (invalid !== void 0) common["aria-invalid"] = computed(() => read(invalid) ? "true" : void 0);
+	if (describedBy !== void 0) common["aria-describedby"] = describedBy;
+	const attrs = common;
+	if (schema.kind === "choice") {
+		const options = schema.options;
+		const draft = externalDraft(scope, computed(() => {
+			const current = text(value.value);
+			return options.some((option) => option.value === current) ? current : "";
+		}));
+		return /* @__PURE__ */ jsxs(Select, {
+			...attrs,
+			field,
+			modelValue: draft,
+			"on:change": (event) => onChange(event.currentTarget.value || void 0),
+			children: [/* @__PURE__ */ jsx("option", {
+				value: "",
+				disabled: emptyChoiceDisabled,
+				children: emptyChoiceLabel
+			}), options.map((option) => /* @__PURE__ */ jsx("option", {
+				value: option.value,
+				children: option.label
+			}))]
+		});
+	}
 	if (schema.kind === "boolean") return /* @__PURE__ */ jsx(ContentBooleanControl, {
 		label,
 		value,
 		required,
 		disabled,
 		describedBy,
+		field,
 		onChange
 	});
-	if (schema.kind === "long-text") return /* @__PURE__ */ jsx(Textarea, {
-		...common,
-		rows: 5,
-		maxLength,
-		value: text(value),
-		onInput: (event) => onChange(event.currentTarget.value)
-	});
+	if (schema.kind === "long-text") {
+		const draft = externalDraft(scope, computed(() => text(value.value)));
+		return /* @__PURE__ */ jsx(Textarea, {
+			...attrs,
+			field,
+			rows: 5,
+			maxlength: maxLength,
+			modelValue: draft,
+			"on:input": (event) => onChange(event.currentTarget.value)
+		});
+	}
 	if (schema.kind === "number" && retainIncompleteNumber) return /* @__PURE__ */ jsx(RetainedNumberControl, {
 		value,
 		label,
@@ -1507,190 +1695,94 @@ function ContentScalarControl({ schema, value, label, required, maxLength, disab
 		disabled,
 		invalid,
 		describedBy,
+		field,
 		allowEmpty: allowEmptyNumber,
 		onIncomplete: onIncompleteNumber,
 		onChange
 	});
-	if (schema.kind === "number") return /* @__PURE__ */ jsx(Input, {
-		...common,
-		type: "number",
-		value: text(value),
-		onInput: (event) => onChange(event.currentTarget.value === "" ? void 0 : event.currentTarget.valueAsNumber)
-	});
+	if (schema.kind === "number" || schema.kind === "date" || schema.kind === "color") {
+		const element = { current: null };
+		let emitted = value.value;
+		followExternal(scope, value, (next) => {
+			if (Object.is(next, emitted)) return;
+			emitted = next;
+			if (element.current) element.current.value = text(next);
+		});
+		const emit = (next) => {
+			emitted = next;
+			onChange(next);
+		};
+		if (schema.kind === "number") return /* @__PURE__ */ jsx(Input, {
+			...attrs,
+			field,
+			elementRef: element,
+			type: "number",
+			value: text(value.value),
+			"on:input": (event) => emit(event.currentTarget.value === "" ? void 0 : event.currentTarget.valueAsNumber)
+		});
+		return /* @__PURE__ */ jsx(Input, {
+			...attrs,
+			field,
+			elementRef: element,
+			type: schema.kind,
+			value: text(value.value),
+			"on:input": (event) => emit(event.currentTarget.value)
+		});
+	}
+	const draft = externalDraft(scope, computed(() => text(value.value)));
 	return /* @__PURE__ */ jsx(Input, {
-		...common,
-		maxLength,
-		type: schema.kind === "date" ? "date" : schema.kind === "color" ? "color" : schema.kind === "url" ? "url" : "text",
-		value: text(value),
-		onInput: (event) => onChange(event.currentTarget.value)
+		...attrs,
+		field,
+		maxlength: maxLength,
+		type: schema.kind === "url" ? "url" : "text",
+		modelValue: draft,
+		"on:input": (event) => onChange(event.currentTarget.value)
 	});
 }
 /** Transient invalid browser text stays local; only complete finite numbers reach Content. */
-function RetainedNumberControl({ value, label, required, disabled, invalid, describedBy, allowEmpty, onIncomplete, onChange }) {
-	const [draft, setDraft] = useState(text(value));
-	const [incomplete, setIncomplete] = useState(false);
-	const external = useRef(value);
-	const emitted = useRef(value);
-	if (external.current !== value) {
-		external.current = value;
-		if (emitted.current !== value) setDraft(text(value));
-	}
+function RetainedNumberControl({ value, label, required, disabled, invalid, describedBy, field, allowEmpty, onIncomplete, onChange }) {
+	const scope = getScope();
+	const current = toSignal(value);
+	const element = { current: null };
+	const incomplete = signal(false);
+	let emitted = current.value;
+	followExternal(scope, current, (next) => {
+		if (Object.is(next, emitted)) return;
+		if (element.current) element.current.value = text(next);
+	});
 	return /* @__PURE__ */ jsx(Input, {
 		type: "number",
 		step: "any",
+		field,
+		elementRef: element,
 		"aria-label": label,
 		required,
-		disabled,
-		"aria-invalid": incomplete || invalid ? "true" : void 0,
+		disabled: computed(() => Boolean(read(disabled))),
+		"aria-invalid": computed(() => incomplete.value || read(invalid) ? "true" : void 0),
 		"aria-describedby": describedBy,
-		value: draft,
-		onInput: (event) => {
+		value: text(current.value),
+		"on:input": (event) => {
 			const control = event.currentTarget;
 			const raw = control.value;
 			const numeric = control.valueAsNumber;
-			setDraft(raw);
 			if (raw === "" && allowEmpty && !control.validity.badInput) {
-				emitted.current = void 0;
-				setIncomplete(false);
+				emitted = void 0;
+				incomplete.value = false;
 				onIncomplete?.(null);
 				onChange(void 0);
 				return;
 			}
 			if (raw === "" || !Number.isFinite(numeric)) {
-				setIncomplete(true);
+				incomplete.value = true;
 				onIncomplete?.(raw);
 				return;
 			}
-			emitted.current = numeric;
-			setIncomplete(false);
+			emitted = numeric;
+			incomplete.value = false;
 			onIncomplete?.(null);
 			onChange(numeric);
 		}
 	});
-}
-//#endregion
-//#region src/features/content/markdown-source.ts
-var externalValue = Annotation.define();
-var semanticHighlightStyle = HighlightStyle.define([
-	{
-		tag: tags.heading,
-		color: "var(--sg-content-markdown-syntax-heading)",
-		fontWeight: "700"
-	},
-	{
-		tag: [tags.strong, tags.emphasis],
-		color: "var(--sg-content-markdown-syntax-emphasis)"
-	},
-	{
-		tag: [tags.link, tags.url],
-		color: "var(--sg-content-markdown-syntax-link)"
-	},
-	{
-		tag: [tags.monospace, tags.processingInstruction],
-		color: "var(--sg-content-markdown-syntax-code)"
-	},
-	{
-		tag: tags.quote,
-		color: "var(--sg-content-markdown-syntax-quote)"
-	}
-]);
-var editorTheme = EditorView.theme({
-	"&": {
-		minHeight: "12rem",
-		color: "var(--sg-content-markdown-editor-fg)",
-		backgroundColor: "var(--sg-content-markdown-editor-bg)",
-		fontSize: "var(--text-sm)"
-	},
-	"&.cm-focused": {
-		outline: "2px solid var(--color-focus)",
-		outlineOffset: "-2px"
-	},
-	".cm-content": {
-		minHeight: "12rem",
-		padding: "var(--spacing-vsp-xs) var(--spacing-hsp-md)",
-		caretColor: "var(--sg-content-markdown-editor-caret)",
-		fontFamily: "var(--font-mono, ui-monospace, monospace)",
-		lineHeight: "var(--leading-relaxed, 1.6)"
-	},
-	".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "var(--sg-content-markdown-editor-selection)" },
-	".cm-cursor": { borderLeftColor: "var(--sg-content-markdown-editor-caret)" },
-	".cm-gutters": {
-		color: "var(--color-muted)",
-		backgroundColor: "var(--sg-content-markdown-editor-bg)",
-		borderRightColor: "var(--color-border)"
-	}
-});
-/** Imperative lifecycle boundary used by the Preact wrapper and focused tests. */
-function createMarkdownEditor(options) {
-	const themeCompartment = new Compartment();
-	const validityCompartment = new Compartment();
-	const validity = (invalid, describedBy) => EditorView.contentAttributes.of({
-		...invalid ? { "aria-invalid": "true" } : {},
-		...describedBy ? { "aria-describedby": describedBy } : {}
-	});
-	const state = EditorState.create({
-		doc: options.value,
-		extensions: [
-			history(),
-			markdown(),
-			syntaxHighlighting(semanticHighlightStyle),
-			EditorView.lineWrapping,
-			editorTheme,
-			themeCompartment.of(EditorView.darkTheme.of(options.theme === "dark")),
-			EditorView.contentAttributes.of({
-				"aria-labelledby": options.labelledBy,
-				"aria-multiline": "true",
-				...options.required ? { "aria-required": "true" } : {},
-				autocorrect: "off",
-				autocomplete: "off",
-				autocapitalize: "off",
-				spellcheck: "true",
-				writingsuggestions: "false"
-			}),
-			validityCompartment.of(validity(options.invalid, options.describedBy)),
-			keymap.of([
-				{
-					key: "Enter",
-					run: insertNewlineContinueMarkup
-				},
-				...defaultKeymap,
-				...historyKeymap,
-				...markdownKeymap
-			]),
-			EditorView.updateListener.of((update) => {
-				if (!update.docChanged || update.transactions.some((transaction) => transaction.annotation(externalValue))) return;
-				options.onChange(update.state.doc.toString());
-			})
-		]
-	});
-	const view = new EditorView({
-		state,
-		parent: options.parent
-	});
-	return {
-		view,
-		setValue(value) {
-			if (value === view.state.doc.toString()) return;
-			const { anchor, head } = view.state.selection.main;
-			const max = value.length;
-			view.dispatch({
-				changes: {
-					from: 0,
-					to: view.state.doc.length,
-					insert: value
-				},
-				selection: EditorSelection.single(Math.min(anchor, max), Math.min(head, max)),
-				annotations: [externalValue.of(true), Transaction.addToHistory.of(false)]
-			});
-		},
-		setTheme(theme) {
-			view.dispatch({ effects: themeCompartment.reconfigure(EditorView.darkTheme.of(theme === "dark")) });
-		},
-		setInvalid(invalid, describedBy) {
-			view.dispatch({ effects: validityCompartment.reconfigure(validity(invalid, describedBy)) });
-		},
-		destroy: () => view.destroy()
-	};
 }
 //#endregion
 //#region src/features/content/markdown-formatting.ts
@@ -1868,43 +1960,50 @@ function protectedShape(schema) {
 		"asset-use"
 	].includes(schema.kind) || schema.kind === "object" && schema.fields.some(protectedShape) || schema.kind === "list" && protectedShape(schema.item);
 }
-function MarkdownSourceControl({ identity, label, required, invalid, describedBy, value, onChange, labels }) {
-	const labelId = `hosted-markdown-${useDomId()}`;
-	const mount = useRef(null);
-	const controller = useRef(null);
-	const callback = useRef(onChange);
-	callback.current = onChange;
-	const validity = useRef({
-		invalid,
-		describedBy
+/**
+* One CodeMirror source per mounted control. The editor module is imported on
+* activation, so a control removed before it arrives creates nothing; otherwise
+* the editor is created once and destroyed once, with the control's scope.
+*/
+function MarkdownSourceControl({ label, required, invalid, describedBy, value, onChange, labels }) {
+	const scope = getScope();
+	const labelId = `hosted-markdown-${createDomId()}`;
+	const mount = { current: null };
+	let controller = null;
+	const validity = computed(() => ({
+		invalid: Boolean(read(invalid)),
+		describedBy: read(describedBy)
+	}));
+	scope.onCleanup(() => {
+		controller?.destroy();
+		controller = null;
 	});
-	validity.current = {
-		invalid,
-		describedBy
-	};
-	useEffect(() => {
-		if (!mount.current) return;
-		const created = createMarkdownEditor({
-			parent: mount.current,
-			value,
-			labelledBy: labelId,
-			required,
-			...validity.current,
-			theme: "light",
-			onChange: (next) => callback.current(next)
+	scope.onActivate(() => {
+		import("./chunks/markdown-source-CTnN48Pl.mjs").then(({ createMarkdownEditor }) => {
+			if (scope.abortSignal.aborted || !mount.current) return;
+			appliedValidity = JSON.stringify(validity.value);
+			controller = createMarkdownEditor({
+				parent: mount.current,
+				value: value.value,
+				labelledBy: labelId,
+				required,
+				...validity.value,
+				theme: "light",
+				onChange: (next) => onChange(next)
+			});
 		});
-		controller.current = created;
-		return () => {
-			controller.current = null;
-			created.destroy();
-		};
-	}, [
-		identity,
-		labelId,
-		required
-	]);
-	useEffect(() => controller.current?.setValue(value), [identity, value]);
-	useEffect(() => controller.current?.setInvalid(!!invalid, describedBy), [invalid, describedBy]);
+	});
+	scope.effect(() => {
+		const next = value.value;
+		controller?.setValue(next);
+	});
+	let appliedValidity = JSON.stringify(validity.value);
+	scope.effect(() => {
+		const next = validity.value, key = JSON.stringify(next);
+		if (key === appliedValidity || !controller) return;
+		appliedValidity = key;
+		controller.setInvalid(next.invalid, next.describedBy);
+	});
 	const actions = [
 		{
 			label: labels.bold,
@@ -1937,24 +2036,31 @@ function MarkdownSourceControl({ identity, label, required, invalid, describedBy
 				"aria-label": label,
 				children: actions.map((action) => /* @__PURE__ */ jsx("button", {
 					type: "button",
-					onPointerDown: (event) => event.preventDefault(),
-					onClick: () => {
-						if (controller.current) applyMarkdownFormat(controller.current.view, action.format);
+					"on:pointerdown": (event) => event.preventDefault(),
+					"on:click": () => {
+						if (controller) applyMarkdownFormat(controller.view, action.format);
 					},
 					children: action.label
-				}, action.format))
+				}))
 			}),
 			/* @__PURE__ */ jsx("div", { ref: mount })
 		]
 	});
 }
+var SWITCHES = [
+	"decorative",
+	"showSize",
+	"showType"
+];
 /**
 * Typed values only. No routes, provider constructors, upload, schema or source execution.
 * Object/list/asset controls are separate from the local StructuredValueEditor/AssetUseCard (#903 §6) because those
 * take the full ContentAuthoringController, route intents ("Open in Assets") and upload; scalars and Markdown source are shared.
 */
 function HostedFieldControl(props) {
-	const { schema, field, value, permission, identity, label, content, policy, labels, onChange } = props;
+	const { schema, field, permission, identity, label, policy, labels, onChange } = props;
+	const scope = getScope();
+	const value = toSignal(props.value);
 	if (!permission.replace && ![
 		"object",
 		"list",
@@ -1963,10 +2069,13 @@ function HostedFieldControl(props) {
 		"reference-list"
 	].includes(schema.kind)) return /* @__PURE__ */ jsx("output", {
 		"aria-label": label,
-		children: value === void 0 ? labels.none : typeof value === "string" ? value : JSON.stringify(value)
+		children: computed(() => {
+			const current = value.value;
+			return current === void 0 ? labels.none : typeof current === "string" ? current : JSON.stringify(current);
+		})
 	});
 	if (schema.kind === "object") {
-		const current = object(value);
+		const current = computed(() => object(value.value));
 		return /* @__PURE__ */ jsxs("fieldset", {
 			class: "hosted-content-editor__structured",
 			children: [/* @__PURE__ */ jsx("legend", { children: label }), schema.fields.map((child) => {
@@ -1976,6 +2085,7 @@ function HostedFieldControl(props) {
 					clear: permission.clear
 				} : void 0);
 				if (!allowed || !fieldEditable(child, allowed)) return null;
+				const childId = `${identity}/${child.id}`;
 				return /* @__PURE__ */ jsxs("div", {
 					class: "hosted-content-editor__field",
 					children: [
@@ -1987,11 +2097,11 @@ function HostedFieldControl(props) {
 							schema: child,
 							field: child,
 							label: `${label}: ${child.label}`,
-							value: current[child.id],
+							value: computed(() => current.value[child.id]),
 							permission: allowed,
-							identity: `${identity}/${child.id}`,
+							identity: childId,
 							onChange: (next) => {
-								const updated = { ...current };
+								const updated = { ...current.value };
 								if (next === void 0) delete updated[child.id];
 								else updated[child.id] = next;
 								onChange(updated);
@@ -1999,84 +2109,92 @@ function HostedFieldControl(props) {
 						}),
 						fieldClearable(child, allowed) ? /* @__PURE__ */ jsx("button", {
 							type: "button",
-							disabled: !!props.hasIncompleteInput?.(`${identity}/${child.id}`),
+							disabled: computed(() => !!props.hasIncompleteInput?.(childId)),
 							"aria-label": `${labels.clear}: ${label}: ${child.label}`,
-							onClick: () => {
-								if (props.hasIncompleteInput?.(`${identity}/${child.id}`)) return;
-								props.onIncompleteNumber?.(`${identity}/${child.id}`, null);
-								const updated = { ...current };
+							"on:click": () => {
+								if (props.hasIncompleteInput?.(childId)) return;
+								props.onIncompleteNumber?.(childId, null);
+								const updated = { ...current.value };
 								delete updated[child.id];
 								onChange(updated);
 							},
 							children: labels.clear
 						}) : null
 					]
-				}, child.id);
+				});
 			})]
 		});
 	}
 	if (schema.kind === "list") {
-		const items = Array.isArray(value) ? value : [];
+		const items = computed(() => Array.isArray(value.value) ? value.value : []);
+		const slots = keyedBy(() => items.value.map((_, index) => index), (indexes) => String(indexes.length));
 		const shapeAllowed = permission.replace && !protectedShape(schema.item);
-		const incomplete = !!props.hasIncompleteInput?.(identity);
+		const incomplete = computed(() => !!props.hasIncompleteInput?.(identity));
 		return /* @__PURE__ */ jsxs("div", {
 			class: "hosted-content-editor__list",
-			children: [items.map((item, index) => /* @__PURE__ */ jsxs("div", {
-				class: "hosted-content-editor__list-item",
-				children: [/* @__PURE__ */ jsx(HostedFieldControl, {
-					...props,
-					invalid: void 0,
-					describedBy: void 0,
-					schema: schema.item,
-					listItem: true,
-					value: item,
-					label: `${label}: ${labels.item} ${index + 1}`,
-					identity: `${identity}/${index}`,
-					permission: {
-						...permission,
-						maxLength: void 0,
-						clear: permission.listRemove
-					},
-					onChange: (next) => {
-						if (next === void 0) return;
-						const updated = [...items];
-						updated[index] = next;
-						onChange(updated);
-					}
-				}), /* @__PURE__ */ jsxs("div", {
-					class: "hosted-content-editor__actions",
-					children: [shapeAllowed && permission.listRemove ? /* @__PURE__ */ jsx("button", {
-						type: "button",
-						disabled: incomplete,
-						"aria-label": `${labels.removeItem}: ${label} ${index + 1}`,
-						onClick: () => onChange(items.filter((_, i) => i !== index)),
-						children: labels.removeItem
-					}) : null, permission.listReorder && permission.replace && !protectedShape(schema.item) ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("button", {
-						type: "button",
-						disabled: incomplete || index === 0,
-						"aria-label": `${labels.moveUp}: ${label} ${index + 1}`,
-						onClick: () => {
-							const updated = [...items];
-							[updated[index - 1], updated[index]] = [updated[index], updated[index - 1]];
-							onChange(updated);
-						},
-						children: labels.moveUp
-					}), /* @__PURE__ */ jsx("button", {
-						type: "button",
-						disabled: incomplete || index === items.length - 1,
-						"aria-label": `${labels.moveDown}: ${label} ${index + 1}`,
-						onClick: () => {
-							const updated = [...items];
-							[updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
-							onChange(updated);
-						},
-						children: labels.moveDown
-					})] }) : null]
-				})]
-			}, index)), shapeAllowed && permission.listAdd ? /* @__PURE__ */ jsxs("button", {
+			children: [/* @__PURE__ */ jsx(For, {
+				each: slots,
+				by: (index) => index,
+				children: (slot) => {
+					const index = slot.value;
+					return /* @__PURE__ */ jsxs("div", {
+						class: "hosted-content-editor__list-item",
+						children: [/* @__PURE__ */ jsx(HostedFieldControl, {
+							...props,
+							invalid: void 0,
+							describedBy: void 0,
+							schema: schema.item,
+							listItem: true,
+							value: computed(() => items.value[index]),
+							label: `${label}: ${labels.item} ${index + 1}`,
+							identity: `${identity}/${index}`,
+							permission: {
+								...permission,
+								maxLength: void 0,
+								clear: permission.listRemove
+							},
+							onChange: (next) => {
+								if (next === void 0) return;
+								const updated = [...items.value];
+								updated[index] = next;
+								onChange(updated);
+							}
+						}), /* @__PURE__ */ jsxs("div", {
+							class: "hosted-content-editor__actions",
+							children: [shapeAllowed && permission.listRemove ? /* @__PURE__ */ jsx("button", {
+								type: "button",
+								disabled: incomplete,
+								"aria-label": `${labels.removeItem}: ${label} ${index + 1}`,
+								"on:click": () => onChange(items.value.filter((_, i) => i !== index)),
+								children: labels.removeItem
+							}) : null, permission.listReorder && permission.replace && !protectedShape(schema.item) ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("button", {
+								type: "button",
+								disabled: computed(() => incomplete.value || index === 0),
+								"aria-label": `${labels.moveUp}: ${label} ${index + 1}`,
+								"on:click": () => {
+									const updated = [...items.value];
+									[updated[index - 1], updated[index]] = [updated[index], updated[index - 1]];
+									onChange(updated);
+								},
+								children: labels.moveUp
+							}), /* @__PURE__ */ jsx("button", {
+								type: "button",
+								disabled: computed(() => incomplete.value || index === items.value.length - 1),
+								"aria-label": `${labels.moveDown}: ${label} ${index + 1}`,
+								"on:click": () => {
+									const updated = [...items.value];
+									[updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
+									onChange(updated);
+								},
+								children: labels.moveDown
+							})] }) : null]
+						})]
+					});
+				}
+			}), shapeAllowed && permission.listAdd ? /* @__PURE__ */ jsxs("button", {
 				type: "button",
-				disabled: incomplete || permission.maxLength !== void 0 && items.length >= permission.maxLength,
-				onClick: () => onChange([...items, defaultValue(schema.item)]),
+				disabled: computed(() => incomplete.value || permission.maxLength !== void 0 && items.value.length >= permission.maxLength),
+				"on:click": () => onChange([...items.value, defaultValue(schema.item)]),
 				children: [
 					labels.addItem,
 					": ",
@@ -2086,16 +2204,22 @@ function HostedFieldControl(props) {
 		});
 	}
 	if (schema.kind === "reference" || schema.kind === "reference-list") {
-		const refs = schema.kind === "reference-list" ? Array.isArray(value) ? value : [] : value ? [value] : [];
+		const refs = computed(() => schema.kind === "reference-list" ? Array.isArray(value.value) ? value.value : [] : value.value ? [value.value] : []);
 		return /* @__PURE__ */ jsx("ul", {
 			class: "hosted-content-editor__references",
-			children: refs.map((ref) => /* @__PURE__ */ jsx("li", { children: entryLabel(content, ref) }, key(ref)))
+			children: /* @__PURE__ */ jsx(For, {
+				each: refs,
+				by: key,
+				children: (ref) => /* @__PURE__ */ jsx("li", { children: computed(() => entryLabel(read(props.content), ref.value)) })
+			})
 		});
 	}
 	if (schema.kind === "asset-use") {
-		const current = object(value);
-		const currentRef = object(current.asset);
-		const selected = policy.assets.find((asset) => asset.providerId === currentRef.providerId && asset.assetId === currentRef.assetId);
+		const current = computed(() => object(value.value));
+		const selected = computed(() => {
+			const ref = object(current.value.asset);
+			return policy.assets.find((asset) => asset.providerId === ref.providerId && asset.assetId === ref.assetId);
+		});
 		const descriptive = schema.use === "image" ? [
 			"alt",
 			"decorative",
@@ -2106,27 +2230,29 @@ function HostedFieldControl(props) {
 			"showType"
 		] : schema.use === "card" ? ["title", "description"] : ["label"];
 		const patch = (name, next) => onChange({
-			...current,
+			...current.value,
 			[name]: next
 		});
-		const canInitialize = !!current.kind || descriptive.every((name) => permission.assetDescription?.includes(name));
+		const initialized = computed(() => !!current.value.kind);
+		const canInitialize = computed(() => initialized.value || descriptive.every((name) => permission.assetDescription?.includes(name)));
+		const assetKey = (asset) => key({
+			providerId: asset.providerId,
+			modelId: "asset",
+			recordId: asset.assetId
+		});
+		const textOf = (name) => computed(() => {
+			const text = current.value[name];
+			return typeof text === "string" ? text : "";
+		});
 		return /* @__PURE__ */ jsxs("div", {
 			class: "hosted-content-editor__asset",
 			children: [
 				permission.assetSelect ? /* @__PURE__ */ jsxs(Select, {
 					"aria-label": `${label}: ${labels.asset}`,
-					value: selected ? key({
-						providerId: selected.providerId,
-						modelId: "asset",
-						recordId: selected.assetId
-					}) : "",
-					onChange: (event) => {
-						const asset = policy.assets.find((item) => key({
-							providerId: item.providerId,
-							modelId: "asset",
-							recordId: item.assetId
-						}) === event.currentTarget.value);
-						if (!asset || !canInitialize) return;
+					modelValue: externalDraft(scope, computed(() => selected.value ? assetKey(selected.value) : "")),
+					"on:change": (event) => {
+						const asset = policy.assets.find((item) => assetKey(item) === event.currentTarget.value);
+						if (!asset || !canInitialize.value) return;
 						const initial = {
 							kind: schema.use,
 							asset: {
@@ -2134,65 +2260,58 @@ function HostedFieldControl(props) {
 								assetId: asset.assetId
 							}
 						};
-						for (const name of descriptive) initial[name] = [
-							"decorative",
-							"showSize",
-							"showType"
-						].includes(name) ? false : "";
-						onChange(current.kind ? {
-							...current,
+						for (const name of descriptive) initial[name] = SWITCHES.includes(name) ? false : "";
+						onChange(current.value.kind ? {
+							...current.value,
 							asset: initial.asset
 						} : initial);
 					},
-					disabled: !canInitialize,
+					disabled: computed(() => !canInitialize.value),
 					children: [/* @__PURE__ */ jsx("option", {
 						value: "",
 						disabled: true,
 						children: labels.none
 					}), policy.assets.map((asset) => /* @__PURE__ */ jsx("option", {
-						value: key({
-							providerId: asset.providerId,
-							modelId: "asset",
-							recordId: asset.assetId
-						}),
+						value: assetKey(asset),
 						children: asset.label
-					}, `${asset.providerId}/${asset.assetId}`))]
-				}) : /* @__PURE__ */ jsx("p", { children: selected?.label ?? labels.unavailable }),
-				selected && schema.use === "image" ? /* @__PURE__ */ jsx("img", {
-					class: "hosted-content-editor__asset-image",
-					src: selected.url,
-					alt: ""
+					}))]
+				}) : /* @__PURE__ */ jsx("p", { children: computed(() => selected.value?.label ?? labels.unavailable) }),
+				schema.use === "image" ? /* @__PURE__ */ jsx(Rebuild, {
+					value: computed(() => selected.value?.url ?? null),
+					children: (url) => url === null ? null : /* @__PURE__ */ jsx("img", {
+						class: "hosted-content-editor__asset-image",
+						src: url,
+						alt: ""
+					})
 				}) : null,
-				current.kind ? descriptive.filter((name) => permission.assetDescription?.includes(name)).map((name) => /* @__PURE__ */ jsxs("div", {
-					class: "hosted-content-editor__field",
-					children: [/* @__PURE__ */ jsx("span", { children: labels[name] }), [
-						"decorative",
-						"showSize",
-						"showType"
-					].includes(name) ? /* @__PURE__ */ jsx(Switch, {
-						"aria-label": `${label}: ${labels[name]}`,
-						checked: current[name] === true,
-						onCheckedChange: (next) => patch(name, next)
-					}) : name === "description" ? /* @__PURE__ */ jsx(Textarea, {
-						"aria-label": `${label}: ${labels.description}`,
-						value: typeof current[name] === "string" ? current[name] : "",
-						onInput: (event) => patch(name, event.currentTarget.value)
-					}) : /* @__PURE__ */ jsx(Input, {
-						"aria-label": `${label}: ${labels[name]}`,
-						value: typeof current[name] === "string" ? current[name] : "",
-						onInput: (event) => patch(name, event.currentTarget.value)
-					})]
-				}, name)) : null
+				/* @__PURE__ */ jsx(Show, {
+					when: initialized,
+					children: () => /* @__PURE__ */ jsx(Fragment, { children: descriptive.filter((name) => permission.assetDescription?.includes(name)).map((name) => /* @__PURE__ */ jsxs("div", {
+						class: "hosted-content-editor__field",
+						children: [/* @__PURE__ */ jsx("span", { children: labels[name] }), SWITCHES.includes(name) ? /* @__PURE__ */ jsx(Switch, {
+							"aria-label": `${label}: ${labels[name]}`,
+							checked: computed(() => current.value[name] === true),
+							onCheckedChange: (next) => patch(name, next)
+						}) : name === "description" ? /* @__PURE__ */ jsx(Textarea, {
+							"aria-label": `${label}: ${labels.description}`,
+							modelValue: externalDraft(getScope(), textOf(name)),
+							"on:input": (event) => patch(name, event.currentTarget.value)
+						}) : /* @__PURE__ */ jsx(Input, {
+							"aria-label": `${label}: ${labels[name]}`,
+							modelValue: externalDraft(getScope(), textOf(name)),
+							"on:input": (event) => patch(name, event.currentTarget.value)
+						})]
+					})) })
+				})
 			]
 		});
 	}
 	if (schema.kind === "markdown") return /* @__PURE__ */ jsx(MarkdownSourceControl, {
-		identity,
 		label,
 		required: field.required,
 		invalid: props.invalid,
 		describedBy: props.describedBy,
-		value: typeof value === "string" ? value : "",
+		value: computed(() => typeof value.value === "string" ? value.value : ""),
 		onChange,
 		labels
 	});
@@ -2382,27 +2501,33 @@ var hostedErrorMessagesJa = {
 };
 //#endregion
 //#region src/hosted-content/editor.tsx
-var defaultViews = /* @__PURE__ */ new WeakMap();
-function renderDefaultInto(context, element) {
-	const draw = (next) => render(defaultViews.get(next)(), element);
-	draw(context);
-	return {
-		update: draw,
-		destroy: () => render(null, element)
-	};
-}
+var HOSTED_ROOT = {
+	component: "HostedContentEditor",
+	build: COMPOSER_ROOT_BUILD
+};
+var HOSTED_FIELD_ROOT = {
+	component: "HostedDefaultField",
+	build: COMPOSER_ROOT_BUILD
+};
+/** A host renderer's element and lifetime: mounted once, told each new context, destroyed with the field. */
 function CustomField({ renderer, context }) {
-	const host = useRef(null), mounted = useRef(null), latest = useRef(context);
-	latest.current = context;
-	useEffect(() => {
-		mounted.current = renderer.mount(host.current, latest.current);
+	const scope = getScope();
+	const host = { current: null };
+	let mounted = null;
+	let told = context.value;
+	scope.onActivate(() => {
+		told = context.value;
+		mounted = renderer.mount(host.current, told);
 		return () => {
-			mounted.current?.destroy();
-			mounted.current = null;
+			mounted?.destroy();
+			mounted = null;
 		};
-	}, [renderer]);
-	useEffect(() => {
-		mounted.current?.update(context);
+	});
+	scope.effect(() => {
+		const next = context.value;
+		if (next === told) return;
+		told = next;
+		mounted?.update(next);
 	});
 	return /* @__PURE__ */ jsx("div", {
 		ref: host,
@@ -2491,11 +2616,9 @@ function mountHostedContentEditor(container, options) {
 		].join(": ");
 		return (diagnostic.code === "required-value-missing" ? labels.diagnosticRequired : labels.diagnosticAccessibleText).replace("{field}", name);
 	}
-	let selection = options.selection;
+	const state = signal(session.state);
+	const selection = signal(options.selection);
 	let disposed = false;
-	const draw = (state = session.state) => {
-		if (!disposed) render(/* @__PURE__ */ jsx(Editor, { state }), container);
-	};
 	async function navigate(next) {
 		if (disposed) throw new Error("Editor presentation is disposed");
 		if (!permitted(options, next, session.state.content)) throw new Error("Selection is not permitted");
@@ -2505,12 +2628,11 @@ function mountHostedContentEditor(container, options) {
 		if (session.state.dirty) throw new Error("Save or cancel the new item before navigating");
 		if (disposed) throw new Error("Editor presentation is disposed");
 		await options.onNavigate?.(next);
-		selection = next;
-		draw();
+		selection.value = next;
 	}
 	const preview = () => options.routeId ? session.captureAndPreview(options.routeId) : Promise.reject(/* @__PURE__ */ new Error("A host-owned route is required"));
 	function ConflictReview({ review, fields, local }) {
-		const current = selected(review, selection)?.entry.values ?? {};
+		const current = selected(review, selection.value)?.entry.values ?? {};
 		const differing = fields.filter((field) => !sameValue(local[field.id], current[field.id]));
 		const unchanged = fields.filter((field) => !differing.includes(field));
 		const headingId = `${domPrefix}-differing`;
@@ -2543,7 +2665,7 @@ function mountHostedContentEditor(container, options) {
 							displayValue(current[field.id], labels.none)
 						] })
 					]
-				}, field.id)) }) : /* @__PURE__ */ jsx("p", { children: labels.noDifferingFields })]
+				})) }) : /* @__PURE__ */ jsx("p", { children: labels.noDifferingFields })]
 			}), unchanged.length ? /* @__PURE__ */ jsxs("details", {
 				class: "hosted-content-editor__unchanged",
 				children: [/* @__PURE__ */ jsxs("summary", { children: [
@@ -2551,7 +2673,7 @@ function mountHostedContentEditor(container, options) {
 					" (",
 					unchanged.length,
 					")"
-				] }), /* @__PURE__ */ jsx("ul", { children: unchanged.map((field) => /* @__PURE__ */ jsx("li", { children: field.label }, field.id)) })]
+				] }), /* @__PURE__ */ jsx("ul", { children: unchanged.map((field) => /* @__PURE__ */ jsx("li", { children: field.label })) })]
 			}) : null]
 		});
 	}
@@ -2567,7 +2689,7 @@ function mountHostedContentEditor(container, options) {
 					children: labels.previewFailed
 				}),
 				/* @__PURE__ */ jsx("p", { children: reason }),
-				diagnostics.length ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("p", { children: labels.submissionIncomplete }), /* @__PURE__ */ jsx("ul", { children: diagnostics.map((diagnostic, index) => /* @__PURE__ */ jsx("li", { children: diagnosticText(content, selection.entry, diagnostic) }, index)) })] }) : null,
+				diagnostics.length ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("p", { children: labels.submissionIncomplete }), /* @__PURE__ */ jsx("ul", { children: diagnostics.map((diagnostic) => /* @__PURE__ */ jsx("li", { children: diagnosticText(content, selection.value.entry, diagnostic) })) })] }) : null,
 				detail && detail !== reason ? /* @__PURE__ */ jsxs("p", {
 					class: "hosted-content-editor__detail",
 					children: [
@@ -2579,449 +2701,599 @@ function mountHostedContentEditor(container, options) {
 			]
 		});
 	}
-	function Editor({ state }) {
-		const [actionError, setActionError] = useState(null);
-		const [review, setReview] = useState(null);
-		const [creating, setCreating] = useState(session.state.creationDraft?.collectionId ?? null);
-		const [createValues, setCreateValues] = useState(session.state.creationDraft?.values ?? {});
-		const [existing, setExisting] = useState({});
-		useEffect(() => {
-			if (!state.creationDraft && state.lastCreatedEntry) {
-				setCreating(null);
-				setCreateValues({});
+	function Editor() {
+		const actionError = signal(null);
+		const review = signal(null);
+		const creating = signal(session.state.creationDraft?.collectionId ?? null);
+		const createValues = signal(session.state.creationDraft?.values ?? {});
+		const existing = signal({});
+		const scope = getScope();
+		let seenCreation = null;
+		scope.effect(() => {
+			const { creationDraft, lastCreatedEntry } = state.value;
+			if (seenCreation && seenCreation[0] === creationDraft && seenCreation[1] === lastCreatedEntry) return;
+			seenCreation = [creationDraft, lastCreatedEntry];
+			if (!creationDraft && lastCreatedEntry) {
+				creating.value = null;
+				createValues.value = {};
 			}
-		}, [state.creationDraft, state.lastCreatedEntry]);
+		});
 		const run = (action) => {
-			setActionError(null);
-			action().catch(setActionError);
+			actionError.value = null;
+			action().catch((error) => {
+				actionError.value = error;
+			});
 		};
-		if (!state.content) return /* @__PURE__ */ jsx("section", {
+		const busy = computed(() => state.value.phase === "saving");
+		const pending = computed(() => !!state.value.pending);
+		const rejected = computed(() => !!state.value.pending?.rejected);
+		const hasIncompleteInput = (prefix) => state.value.invalidInputs.some((controlId) => controlId === prefix || controlId.startsWith(`${prefix}/`));
+		const onIncompleteNumber = (controlId, raw) => {
+			session.setIncompleteInput(controlId, raw !== null);
+			actionError.value = raw === null ? null : new Error(labels.cannotClear);
+		};
+		const loading = () => /* @__PURE__ */ jsx("section", {
 			class: "hosted-content-editor",
-			"aria-busy": state.phase === "loading",
+			"aria-busy": computed(() => state.value.phase === "loading"),
 			children: /* @__PURE__ */ jsx("p", {
 				role: "status",
-				children: state.phase === "failed" ? labels.failed : labels.loading
+				children: computed(() => state.value.phase === "failed" ? labels.failed : labels.loading)
 			})
 		});
-		const content = state.content;
-		const item = selected(content, selection);
-		if (!item || !permitted(options, selection, content)) return /* @__PURE__ */ jsx("section", {
-			class: "hosted-content-editor",
-			children: /* @__PURE__ */ jsx("p", {
-				role: "alert",
-				children: labels.unavailable
-			})
-		});
-		const modelPermission = options.policy.models.find((model) => model.providerId === selection.entry.providerId && model.modelId === selection.entry.modelId);
-		const fields = item.model.document.fields.filter((field) => (options.presentation !== "field" || field.id === selection.fieldId) && fieldEditable(field, modelPermission.fields.find((permission) => permission.fieldId === field.id)));
-		const records = content.providers.flatMap((provider) => provider.entries.flatMap((entry) => {
-			const ref = {
-				providerId: provider.providerId,
-				modelId: entry.modelId,
-				recordId: entry.id
-			};
-			const field = provider.models.find((model) => model.id === entry.modelId)?.document.fields.find((field) => fieldEditable(field, permission(options, {
-				entry: ref,
-				fieldId: field.id
-			})));
-			return field && permittedRef(options, ref, content) ? [{
-				selection: {
+		const loaded = () => {
+			let lastContent = state.value.content;
+			const content = computed(() => {
+				const current = state.value.content;
+				if (current) lastContent = current;
+				return lastContent;
+			});
+			const item = computed(() => selected(content.value, selection.value));
+			const available = computed(() => !!item.value && permitted(options, selection.value, content.value));
+			const error = computed(() => actionError.value ?? state.value.error);
+			const message = computed(() => {
+				const current = error.value;
+				return current && current !== state.value.previewFailure?.error ? messageFor(current) : null;
+			});
+			const records = computed(() => content.value.providers.flatMap((provider) => provider.entries.flatMap((entry) => {
+				const ref = {
+					providerId: provider.providerId,
+					modelId: entry.modelId,
+					recordId: entry.id
+				};
+				const field = provider.models.find((model) => model.id === entry.modelId)?.document.fields.find((field) => fieldEditable(field, permission(options, {
 					entry: ref,
 					fieldId: field.id
-				},
-				label: entryLabel(content, ref)
-			}] : [];
-		}));
-		const busy = state.phase === "saving";
-		const rejected = !!state.pending?.rejected;
-		const collections = options.policy.collections.filter((collection) => sameRef(collection.owner, selection.entry));
-		const error = actionError ?? state.error;
-		const previewFailure = state.previewFailure;
-		const message = error && error !== previewFailure?.error ? messageFor(error) : null;
-		const completeness = diagnoseContentEntryCompleteness(item.model, item.entry);
-		return /* @__PURE__ */ jsxs("section", {
-			class: "hosted-content-editor",
-			"aria-busy": busy,
-			children: [
-				records.length > 1 && options.presentation !== "field" ? /* @__PURE__ */ jsxs("div", {
-					class: "hosted-content-editor__field",
-					children: [/* @__PURE__ */ jsx("span", { children: labels.content }), /* @__PURE__ */ jsx(Select, {
-						"aria-label": labels.content,
-						value: refKey(selection.entry),
-						onChange: (event) => {
-							const next = records.find((record) => refKey(record.selection.entry) === event.currentTarget.value);
-							if (next) run(() => navigate(next.selection));
-						},
-						children: records.map((record) => /* @__PURE__ */ jsx("option", {
-							value: refKey(record.selection.entry),
-							children: record.label
-						}, refKey(record.selection.entry)))
-					})]
-				}) : null,
-				/* @__PURE__ */ jsx("div", {
-					class: "hosted-content-editor__fields",
-					children: fields.map((field, fieldIndex) => {
-						const allowed = modelPermission.fields.find((permission) => permission.fieldId === field.id);
-						const change = (next) => {
-							if (next === void 0 && !allowed.clear) {
-								setActionError(new Error(labels.cannotClear));
-								return;
-							}
-							setActionError(null);
-							session.edit(selection.entry, field.id, next);
-						};
-						const problems = completeness.filter((diagnostic) => (diagnostic.path?.[0] ?? diagnostic.fieldId) === field.id);
-						const problemId = problems.length ? `${domPrefix}-problem-${fieldIndex}` : void 0;
-						const control = () => /* @__PURE__ */ jsx(HostedFieldControl, {
-							schema: field,
-							field,
-							invalid: !!problems.length,
-							describedBy: problemId,
-							value: item.entry.values[field.id],
-							permission: allowed,
-							identity: `${refKey(selection.entry)}/${field.id}`,
-							hasIncompleteInput: (prefix) => state.invalidInputs.some((controlId) => controlId === prefix || controlId.startsWith(`${prefix}/`)),
-							onIncompleteNumber: (controlId, raw) => {
-								session.setIncompleteInput(controlId, raw !== null);
-								setActionError(raw === null ? null : new Error(labels.cannotClear));
-							},
-							label: field.label,
-							content,
-							policy: options.policy,
-							labels,
-							onChange: change
-						});
-						const renderer = options.fieldRenderers?.find((candidate) => candidate.matches(field, selection.entry));
-						let custom = null;
-						if (renderer) {
-							const context = {
-								entry: selection.entry,
-								field,
-								permission: allowed,
-								value: item.entry.values[field.id],
-								disabled: busy,
-								labels,
-								invalid: !!problems.length,
-								...problemId ? { describedBy: problemId } : {},
-								setValue: change,
-								renderDefault: (element) => renderDefaultInto(context, element)
-							};
-							defaultViews.set(context, control);
-							custom = /* @__PURE__ */ jsx(CustomField, {
-								renderer,
-								context
-							});
+				})));
+				return field && permittedRef(options, ref, content.value) ? [{
+					selection: {
+						entry: ref,
+						fieldId: field.id
+					},
+					label: entryLabel(content.value, ref)
+				}] : [];
+			})));
+			const recordChoices = keyedBy(() => ({
+				records: records.value,
+				current: refKey(selection.value.entry)
+			}), (value) => JSON.stringify([value.current, value.records.map((record) => [refKey(record.selection.entry), record.label])]));
+			const form = () => {
+				const current = selection.value;
+				const modelPermission = options.policy.models.find((model) => model.providerId === current.entry.providerId && model.modelId === current.entry.modelId);
+				let lastItem = item.value;
+				const live = computed(() => {
+					const next = item.value;
+					if (next) lastItem = next;
+					return lastItem;
+				});
+				const fields = computed(() => live.value.model.document.fields.filter((field) => (options.presentation !== "field" || field.id === current.fieldId) && fieldEditable(field, modelPermission.fields.find((permission) => permission.fieldId === field.id))));
+				const completeness = computed(() => diagnoseContentEntryCompleteness(live.value.model, live.value.entry));
+				const slots = keyedBy(() => fields.value.map((field, index) => ({
+					field,
+					index,
+					key: `${refKey(current.entry)}/${field.id}/${state.value.presentationRevision}`
+				})), (list) => list.map((slot) => slot.key).join("\0"));
+				const collections = options.policy.collections.filter((collection) => sameRef(collection.owner, current.entry));
+				const fieldRow = (slot) => {
+					const { field, index: fieldIndex } = slot;
+					const allowed = modelPermission.fields.find((permission) => permission.fieldId === field.id);
+					const change = (next) => {
+						if (next === void 0 && !allowed.clear) {
+							actionError.value = new Error(labels.cannotClear);
+							return;
 						}
-						return /* @__PURE__ */ jsxs("div", {
-							class: "hosted-content-editor__field",
-							"data-hosted-field": field.id,
-							"data-invalid": problems.length ? "true" : void 0,
-							children: [
-								/* @__PURE__ */ jsx("span", { children: field.label }),
-								custom ?? control(),
-								problemId ? /* @__PURE__ */ jsx("p", {
-									id: problemId,
+						actionError.value = null;
+						session.edit(current.entry, field.id, next);
+					};
+					const problems = computed(() => completeness.value.filter((diagnostic) => (diagnostic.path?.[0] ?? diagnostic.fieldId) === field.id));
+					const invalid = computed(() => problems.value.length > 0);
+					const id = `${domPrefix}-problem-${fieldIndex}`;
+					const problemId = computed(() => invalid.value ? id : void 0);
+					const value = computed(() => live.value.entry.values[field.id]);
+					const identity = `${refKey(current.entry)}/${field.id}`;
+					const control = (bound) => /* @__PURE__ */ jsx(HostedFieldControl, {
+						schema: field,
+						field,
+						invalid: bound.invalid,
+						describedBy: bound.describedBy,
+						value: bound.value,
+						permission: allowed,
+						identity,
+						hasIncompleteInput,
+						onIncompleteNumber,
+						label: field.label,
+						content,
+						policy: options.policy,
+						labels,
+						onChange: change
+					});
+					const renderer = options.fieldRenderers?.find((candidate) => candidate.matches(field, current.entry));
+					let body;
+					if (renderer) {
+						const renderDefault = (element) => {
+							const told = signal(context.value);
+							const root = mountOwnedChild(control({
+								value: computed(() => told.value.value),
+								invalid: computed(() => told.value.invalid),
+								describedBy: computed(() => told.value.describedBy)
+							}), {
+								identity: HOSTED_FIELD_ROOT,
+								parent: element
+							});
+							return {
+								update: (next) => {
+									told.value = next;
+								},
+								destroy: () => root.stop()
+							};
+						};
+						const context = computed(() => ({
+							entry: current.entry,
+							field,
+							permission: allowed,
+							value: value.value,
+							disabled: busy.value,
+							labels,
+							invalid: invalid.value,
+							...problemId.value ? { describedBy: problemId.value } : {},
+							setValue: change,
+							renderDefault
+						}));
+						body = /* @__PURE__ */ jsx(CustomField, {
+							renderer,
+							context
+						});
+					} else body = control({
+						value,
+						invalid,
+						describedBy: problemId
+					});
+					return /* @__PURE__ */ jsxs("div", {
+						class: "hosted-content-editor__field",
+						"data-hosted-field": field.id,
+						"data-invalid": computed(() => invalid.value ? "true" : void 0),
+						children: [
+							/* @__PURE__ */ jsx("span", { children: field.label }),
+							body,
+							/* @__PURE__ */ jsx(Show, {
+								when: invalid,
+								children: () => /* @__PURE__ */ jsx("p", {
+									id,
 									class: "hosted-content-editor__problem",
-									children: problems.map((diagnostic) => [...diagnosticLabels(field, diagnostic.path), diagnostic.code === "required-value-missing" ? labels.requiredMissing : labels.accessibleTextMissing].join(": ")).join(" ")
-								}) : null,
-								fieldClearable(field, allowed) ? /* @__PURE__ */ jsx("button", {
-									type: "button",
-									class: "hosted-content-editor__clear",
-									"aria-label": `${labels.clear}: ${field.label}`,
-									onClick: () => {
-										for (const controlId of state.invalidInputs) if (controlId.startsWith(`${refKey(selection.entry)}/${field.id}`)) session.setIncompleteInput(controlId, false);
-										session.edit(selection.entry, field.id, void 0);
-									},
-									children: labels.clear
-								}) : null
-							]
-						}, `${refKey(selection.entry)}/${field.id}/${state.presentationRevision}`);
-					})
-				}),
-				options.presentation !== "field" ? collections.map((collection) => {
-					const members = memberRefs(content, collection.owner, collection.fieldId);
-					const collectionLabel = item.model.document.fields.find((field) => field.id === collection.fieldId)?.label ?? labels.content;
-					const targetProvider = content.providers.find((provider) => provider.providerId === collection.target.providerId);
-					const targetModel = targetProvider?.models.find((model) => model.id === collection.target.modelId);
+									children: computed(() => problems.value.map((diagnostic) => [...diagnosticLabels(field, diagnostic.path), diagnostic.code === "required-value-missing" ? labels.requiredMissing : labels.accessibleTextMissing].join(": ")).join(" "))
+								})
+							}),
+							fieldClearable(field, allowed) ? /* @__PURE__ */ jsx("button", {
+								type: "button",
+								class: "hosted-content-editor__clear",
+								"aria-label": `${labels.clear}: ${field.label}`,
+								"on:click": () => {
+									for (const controlId of state.value.invalidInputs) if (controlId.startsWith(identity)) session.setIncompleteInput(controlId, false);
+									session.edit(current.entry, field.id, void 0);
+								},
+								children: labels.clear
+							}) : null
+						]
+					});
+				};
+				const collectionBlock = (collection) => {
+					const members = computed(() => memberRefs(content.value, collection.owner, collection.fieldId));
+					const collectionLabel = live.value.model.document.fields.find((field) => field.id === collection.fieldId)?.label ?? labels.content;
+					const targetModel = computed(() => content.value.providers.find((provider) => provider.providerId === collection.target.providerId)?.models.find((model) => model.id === collection.target.modelId));
 					const targetPermission = options.policy.models.find((model) => model.providerId === collection.target.providerId && model.modelId === collection.target.modelId);
-					const candidates = targetProvider?.entries.filter((entry) => entry.modelId === collection.target.modelId && !members.some((member) => member.recordId === entry.id) && permittedRef(options, {
+					const candidates = computed(() => content.value.providers.find((provider) => provider.providerId === collection.target.providerId)?.entries.filter((entry) => entry.modelId === collection.target.modelId && !members.value.some((member) => member.recordId === entry.id) && permittedRef(options, {
 						...collection.target,
 						recordId: entry.id
-					}, content)) ?? [];
-					const atLimit = members.length >= collection.maxItems;
+					}, content.value)) ?? []);
+					const atLimit = computed(() => members.value.length >= collection.maxItems);
+					const blocked = computed(() => busy.value || pending.value || atLimit.value);
+					const editableFields = (model, permitted) => model.document.fields.filter((field) => fieldEditable(field, permitted.fields.find((permission) => permission.fieldId === field.id)));
+					const createForm = (model, permitted) => /* @__PURE__ */ jsxs("form", {
+						class: "hosted-content-editor__create",
+						novalidate: true,
+						"on:submit": (event) => {
+							event.preventDefault();
+							run(async () => {
+								const result = await session.createEntry(collection.id, session.state.creationDraft?.values ?? createValues.value);
+								creating.value = null;
+								createValues.value = {};
+								const editable = editableFields(model, permitted)[0];
+								if (result.createdEntry && editable) await navigate({
+									entry: result.createdEntry,
+									fieldId: editable.id
+								});
+							});
+						},
+						children: [editableFields(model, permitted).map((field) => /* @__PURE__ */ jsxs("div", {
+							class: "hosted-content-editor__field",
+							children: [/* @__PURE__ */ jsx("span", { children: field.label }), /* @__PURE__ */ jsx(HostedFieldControl, {
+								schema: field,
+								field,
+								permission: permitted.fields.find((permission) => permission.fieldId === field.id),
+								value: computed(() => createValues.value[field.id] ?? collection.initialValues[field.id]),
+								identity: `create/${collection.id}/${field.id}`,
+								disabledNumber: computed(() => busy.value || pending.value && !rejected.value),
+								hasIncompleteInput,
+								onIncompleteNumber,
+								label: field.label,
+								content,
+								policy: options.policy,
+								labels,
+								onChange: (next) => {
+									if (next === void 0) {
+										actionError.value = new Error(labels.cannotClear);
+										return;
+									}
+									const updated = {
+										...createValues.value,
+										[field.id]: next
+									};
+									session.stageCreation(collection.id, updated);
+									createValues.value = updated;
+								}
+							})]
+						})), /* @__PURE__ */ jsxs("div", {
+							class: "hosted-content-editor__actions",
+							children: [/* @__PURE__ */ jsx("button", {
+								type: "submit",
+								disabled: blocked,
+								children: labels.create
+							}), /* @__PURE__ */ jsx("button", {
+								type: "button",
+								disabled: computed(() => busy.value || pending.value && !rejected.value),
+								"on:click": () => {
+									try {
+										session.cancelCreation();
+										creating.value = null;
+										createValues.value = {};
+									} catch (error) {
+										actionError.value = error;
+									}
+								},
+								children: labels.cancel
+							})]
+						})]
+					});
 					return /* @__PURE__ */ jsxs("fieldset", {
 						class: "hosted-content-editor__collection",
 						children: [
 							/* @__PURE__ */ jsx("legend", { children: collectionLabel }),
-							/* @__PURE__ */ jsx("ol", { children: members.map((ref, index) => {
-								const label = entryLabel(content, ref);
-								const editable = (content.providers.find((provider) => provider.providerId === ref.providerId)?.models.find((model) => model.id === ref.modelId))?.document.fields.find((field) => fieldEditable(field, permission(options, {
-									entry: ref,
-									fieldId: field.id
-								})));
-								const move = (direction) => {
-									const ordered = [...members];
-									[ordered[index], ordered[index + direction]] = [ordered[index + direction], ordered[index]];
-									return session.reorder(collection.id, ordered);
-								};
-								return /* @__PURE__ */ jsxs("li", { children: [/* @__PURE__ */ jsx("span", { children: label }), /* @__PURE__ */ jsxs("div", {
-									class: "hosted-content-editor__actions",
-									children: [editable ? /* @__PURE__ */ jsx("button", {
-										type: "button",
-										disabled: busy,
-										"aria-label": `${labels.edit}: ${label}`,
-										onClick: () => run(() => navigate({
-											entry: ref,
-											fieldId: editable.id
-										})),
-										children: labels.edit
-									}) : null, collection.reorder ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("button", {
-										type: "button",
-										disabled: busy || !!state.pending || index === 0,
-										"aria-label": `${labels.moveUp}: ${label}`,
-										onClick: () => run(() => move(-1)),
-										children: labels.moveUp
-									}), /* @__PURE__ */ jsx("button", {
-										type: "button",
-										disabled: busy || !!state.pending || index === members.length - 1,
-										"aria-label": `${labels.moveDown}: ${label}`,
-										onClick: () => run(() => move(1)),
-										children: labels.moveDown
-									})] }) : null]
-								})] }, refKey(ref));
+							/* @__PURE__ */ jsx("ol", { children: /* @__PURE__ */ jsx(For, {
+								each: members,
+								by: refKey,
+								children: (member, index) => {
+									const ref = member.value;
+									const label = computed(() => entryLabel(content.value, ref));
+									const editable = (content.value.providers.find((provider) => provider.providerId === ref.providerId)?.models.find((model) => model.id === ref.modelId))?.document.fields.find((field) => fieldEditable(field, permission(options, {
+										entry: ref,
+										fieldId: field.id
+									})));
+									const move = (direction) => {
+										const ordered = [...members.value], at = index.value;
+										[ordered[at], ordered[at + direction]] = [ordered[at + direction], ordered[at]];
+										return session.reorder(collection.id, ordered);
+									};
+									return /* @__PURE__ */ jsxs("li", { children: [/* @__PURE__ */ jsx("span", { children: label }), /* @__PURE__ */ jsxs("div", {
+										class: "hosted-content-editor__actions",
+										children: [editable ? /* @__PURE__ */ jsx("button", {
+											type: "button",
+											disabled: busy,
+											"aria-label": computed(() => `${labels.edit}: ${label.value}`),
+											"on:click": () => run(() => navigate({
+												entry: ref,
+												fieldId: editable.id
+											})),
+											children: labels.edit
+										}) : null, collection.reorder ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("button", {
+											type: "button",
+											disabled: computed(() => busy.value || pending.value || index.value === 0),
+											"aria-label": computed(() => `${labels.moveUp}: ${label.value}`),
+											"on:click": () => run(() => move(-1)),
+											children: labels.moveUp
+										}), /* @__PURE__ */ jsx("button", {
+											type: "button",
+											disabled: computed(() => busy.value || pending.value || index.value === members.value.length - 1),
+											"aria-label": computed(() => `${labels.moveDown}: ${label.value}`),
+											"on:click": () => run(() => move(1)),
+											children: labels.moveDown
+										})] }) : null]
+									})] });
+								}
 							}) }),
-							collection.create && targetModel && targetPermission ? creating === collection.id && state.creationDraft?.collectionId === collection.id ? /* @__PURE__ */ jsxs("form", {
-								class: "hosted-content-editor__create",
-								noValidate: true,
-								onSubmit: (event) => {
-									event.preventDefault();
-									run(async () => {
-										const result = await session.createEntry(collection.id, session.state.creationDraft?.values ?? createValues);
-										setCreating(null);
-										setCreateValues({});
-										const editable = targetModel.document.fields.find((field) => fieldEditable(field, targetPermission.fields.find((permission) => permission.fieldId === field.id)));
-										if (result.createdEntry && editable) await navigate({
-											entry: result.createdEntry,
-											fieldId: editable.id
-										});
-									});
-								},
-								children: [targetModel.document.fields.filter((field) => fieldEditable(field, targetPermission.fields.find((permission) => permission.fieldId === field.id))).map((field) => /* @__PURE__ */ jsxs("div", {
-									class: "hosted-content-editor__field",
-									children: [/* @__PURE__ */ jsx("span", { children: field.label }), /* @__PURE__ */ jsx(HostedFieldControl, {
-										schema: field,
-										field,
-										permission: targetPermission.fields.find((permission) => permission.fieldId === field.id),
-										value: createValues[field.id] ?? collection.initialValues[field.id],
-										identity: `create/${collection.id}/${field.id}`,
-										disabledNumber: busy || !!state.pending && !state.pending.rejected,
-										hasIncompleteInput: (prefix) => state.invalidInputs.some((controlId) => controlId === prefix || controlId.startsWith(`${prefix}/`)),
-										onIncompleteNumber: (controlId, raw) => {
-											session.setIncompleteInput(controlId, raw !== null);
-											setActionError(raw === null ? null : new Error(labels.cannotClear));
+							collection.create && targetPermission ? /* @__PURE__ */ jsx(Rebuild, {
+								value: computed(() => targetModel.value ? creating.value === collection.id && state.value.creationDraft?.collectionId === collection.id ? "form" : "button" : null),
+								children: (mode) => {
+									const model = targetModel.value;
+									if (mode === null || !model) return null;
+									if (mode === "form") return createForm(model, targetPermission);
+									return /* @__PURE__ */ jsxs("button", {
+										type: "button",
+										disabled: blocked,
+										"on:click": () => {
+											session.stageCreation(collection.id, {});
+											createValues.value = {};
+											creating.value = collection.id;
 										},
-										label: field.label,
-										content,
-										policy: options.policy,
-										labels,
-										onChange: (next) => {
-											if (next === void 0) {
-												setActionError(new Error(labels.cannotClear));
-												return;
-											}
-											setCreateValues((current) => {
-												const updated = {
-													...current,
-													[field.id]: next
-												};
-												session.stageCreation(collection.id, updated);
-												return updated;
-											});
-										}
-									})]
-								}, field.id)), /* @__PURE__ */ jsxs("div", {
+										children: [
+											labels.create,
+											": ",
+											collectionLabel
+										]
+									});
+								}
+							}) : null,
+							collection.add ? /* @__PURE__ */ jsx(Rebuild, {
+								value: keyedBy(() => candidates.value, (list) => JSON.stringify(list.map((candidate) => [candidate.id, entryLabel(content.value, {
+									...collection.target,
+									recordId: candidate.id
+								})]))),
+								children: (list) => list.length ? /* @__PURE__ */ jsxs("div", {
 									class: "hosted-content-editor__actions",
-									children: [/* @__PURE__ */ jsx("button", {
-										type: "submit",
-										disabled: busy || !!state.pending || atLimit,
-										children: labels.create
+									children: [/* @__PURE__ */ jsxs(Select, {
+										"aria-label": `${labels.addExisting}: ${collectionLabel}`,
+										modelValue: externalDraft(getScope(), computed(() => existing.value[collection.id] ?? "")),
+										"on:change": (event) => {
+											existing.value = {
+												...existing.value,
+												[collection.id]: event.currentTarget.value
+											};
+										},
+										children: [/* @__PURE__ */ jsx("option", {
+											value: "",
+											children: labels.choose
+										}), list.map((candidate) => /* @__PURE__ */ jsx("option", {
+											value: candidate.id,
+											children: entryLabel(content.value, {
+												...collection.target,
+												recordId: candidate.id
+											})
+										}))]
 									}), /* @__PURE__ */ jsx("button", {
 										type: "button",
-										disabled: busy || !!state.pending && !state.pending.rejected,
-										onClick: () => {
-											try {
-												session.cancelCreation();
-												setCreating(null);
-												setCreateValues({});
-											} catch (error) {
-												setActionError(error);
-											}
-										},
-										children: labels.cancel
+										disabled: computed(() => blocked.value || !existing.value[collection.id]),
+										"on:click": () => run(async () => {
+											await session.addEntry(collection.id, {
+												...collection.target,
+												recordId: existing.value[collection.id]
+											});
+											existing.value = {
+												...existing.value,
+												[collection.id]: ""
+											};
+										}),
+										children: labels.addExisting
 									})]
-								})]
-							}) : /* @__PURE__ */ jsxs("button", {
-								type: "button",
-								disabled: busy || !!state.pending || atLimit,
-								onClick: () => {
-									session.stageCreation(collection.id, {});
-									setCreateValues({});
-									setCreating(collection.id);
-								},
-								children: [
-									labels.create,
-									": ",
-									collectionLabel
-								]
-							}) : null,
-							collection.add && candidates.length ? /* @__PURE__ */ jsxs("div", {
-								class: "hosted-content-editor__actions",
-								children: [/* @__PURE__ */ jsxs(Select, {
-									"aria-label": `${labels.addExisting}: ${collectionLabel}`,
-									value: existing[collection.id] ?? "",
-									onChange: (event) => setExisting((current) => ({
-										...current,
-										[collection.id]: event.currentTarget.value
-									})),
-									children: [/* @__PURE__ */ jsx("option", {
-										value: "",
-										children: labels.choose
-									}), candidates.map((candidate) => /* @__PURE__ */ jsx("option", {
-										value: candidate.id,
-										children: entryLabel(content, {
-											...collection.target,
-											recordId: candidate.id
-										})
-									}, candidate.id))]
-								}), /* @__PURE__ */ jsx("button", {
-									type: "button",
-									disabled: busy || !!state.pending || atLimit || !existing[collection.id],
-									onClick: () => run(async () => {
-										await session.addEntry(collection.id, {
-											...collection.target,
-											recordId: existing[collection.id]
-										});
-										setExisting((current) => ({
-											...current,
-											[collection.id]: ""
-										}));
-									}),
-									children: labels.addExisting
-								})]
+								}) : null
 							}) : null
 						]
-					}, collection.id);
-				}) : null,
-				/* @__PURE__ */ jsxs("div", {
-					class: "hosted-content-editor__actions",
+					});
+				};
+				return /* @__PURE__ */ jsxs("section", {
+					class: "hosted-content-editor",
+					"aria-busy": busy,
 					children: [
-						/* @__PURE__ */ jsx("button", {
-							type: "button",
-							disabled: busy || rejected || !!state.invalidInputs.length,
-							onClick: () => run(() => session.flush()),
-							children: labels.save
+						options.presentation !== "field" ? /* @__PURE__ */ jsx(Rebuild, {
+							value: recordChoices,
+							children: ({ records: list, current: currentKey }) => list.length > 1 ? /* @__PURE__ */ jsxs("div", {
+								class: "hosted-content-editor__field",
+								children: [/* @__PURE__ */ jsx("span", { children: labels.content }), /* @__PURE__ */ jsx(Select, {
+									"aria-label": labels.content,
+									modelValue: signal(currentKey),
+									"on:change": (event) => {
+										const next = list.find((record) => refKey(record.selection.entry) === event.currentTarget.value);
+										if (next) run(() => navigate(next.selection));
+									},
+									children: list.map((record) => /* @__PURE__ */ jsx("option", {
+										value: refKey(record.selection.entry),
+										children: record.label
+									}))
+								})]
+							}) : null
+						}) : null,
+						/* @__PURE__ */ jsx("div", {
+							class: "hosted-content-editor__fields",
+							children: /* @__PURE__ */ jsx(For, {
+								each: slots,
+								by: (slot) => slot.key,
+								children: (slot) => fieldRow(slot.value)
+							})
 						}),
-						options.preview && options.routeId ? /* @__PURE__ */ jsx("button", {
-							type: "button",
-							disabled: busy || rejected || !!state.invalidInputs.length,
-							onClick: () => {
-								setActionError(null);
-								preview().catch(() => void 0);
-							},
-							children: labels.preview
-						}) : null,
-						options.preview && submission ? /* @__PURE__ */ jsx("button", {
-							type: "button",
-							disabled: !state.reviewedSnapshot || state.dirty || !!state.pending || !!state.reviewedSnapshot.diagnostics.length,
-							onClick: () => run(() => session.submit()),
-							children: labels.submit
-						}) : null,
-						/* @__PURE__ */ jsx("button", {
-							type: "button",
-							disabled: busy || state.dirty || !!state.pending,
-							onClick: () => run(() => session.refresh()),
-							children: labels.reload
-						})
-					]
-				}),
-				/* @__PURE__ */ jsx("p", {
-					role: "status",
-					"aria-live": "polite",
-					children: labels[state.phase]
-				}),
-				options.preview && (state.reviewedSnapshot || submission) ? /* @__PURE__ */ jsx("p", { children: state.reviewedSnapshot ? labels.previewCurrent : labels.previewRequired }) : null,
-				state.reviewedSnapshot?.diagnostics.length ? /* @__PURE__ */ jsxs("div", {
-					role: "alert",
-					children: [/* @__PURE__ */ jsx("p", { children: labels.submissionIncomplete }), /* @__PURE__ */ jsx("ul", { children: state.reviewedSnapshot.diagnostics.map((diagnostic, index) => /* @__PURE__ */ jsx("li", { children: diagnosticText(content, selection.entry, diagnostic) }, index)) })]
-				}) : null,
-				previewFailure ? /* @__PURE__ */ jsx(PreviewFailure, {
-					error: previewFailure.error,
-					diagnostics: previewFailure.diagnostics,
-					content
-				}) : null,
-				message ? /* @__PURE__ */ jsx("p", {
-					role: "alert",
-					children: message
-				}) : null,
-				rejected ? /* @__PURE__ */ jsxs("div", {
-					class: "hosted-content-editor__recovery",
-					children: [/* @__PURE__ */ jsx("button", {
-						type: "button",
-						onClick: () => run(async () => setReview(await session.reviewAuthoritative())),
-						children: labels.review
-					}), review ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx(ConflictReview, {
-						review,
-						fields,
-						local: item.entry.values
-					}), /* @__PURE__ */ jsxs("div", {
-						class: "hosted-content-editor__actions",
-						children: [/* @__PURE__ */ jsx("button", {
-							type: "button",
-							onClick: () => run(async () => {
-								await session.reapply(review);
-								setReview(null);
-							}),
-							children: labels.reapply
-						}), /* @__PURE__ */ jsx("button", {
-							type: "button",
-							onClick: () => run(async () => {
-								await session.discard(review);
-								setReview(null);
-							}),
-							children: labels.discard
-						})]
-					})] }) : null]
-				}) : null,
-				state.publication ? /* @__PURE__ */ jsxs("div", {
-					class: "hosted-content-editor__publication",
-					children: [
-						/* @__PURE__ */ jsxs("p", {
+						options.presentation !== "field" ? collections.map(collectionBlock) : null,
+						/* @__PURE__ */ jsxs("div", {
+							class: "hosted-content-editor__actions",
+							children: [
+								/* @__PURE__ */ jsx("button", {
+									type: "button",
+									disabled: computed(() => busy.value || rejected.value || !!state.value.invalidInputs.length),
+									"on:click": () => run(() => session.flush()),
+									children: labels.save
+								}),
+								options.preview && options.routeId ? /* @__PURE__ */ jsx("button", {
+									type: "button",
+									disabled: computed(() => busy.value || rejected.value || !!state.value.invalidInputs.length),
+									"on:click": () => {
+										actionError.value = null;
+										preview().catch(() => void 0);
+									},
+									children: labels.preview
+								}) : null,
+								options.preview && submission ? /* @__PURE__ */ jsx("button", {
+									type: "button",
+									disabled: computed(() => {
+										const { reviewedSnapshot, dirty } = state.value;
+										return !reviewedSnapshot || dirty || pending.value || !!reviewedSnapshot.diagnostics.length;
+									}),
+									"on:click": () => run(() => session.submit()),
+									children: labels.submit
+								}) : null,
+								/* @__PURE__ */ jsx("button", {
+									type: "button",
+									disabled: computed(() => busy.value || state.value.dirty || pending.value),
+									"on:click": () => run(() => session.refresh()),
+									children: labels.reload
+								})
+							]
+						}),
+						/* @__PURE__ */ jsx("p", {
 							role: "status",
-							children: [state.publicationStale ? `${labels.lastKnownStatus}: ` : "", labels[state.publication.status]]
+							"aria-live": "polite",
+							children: computed(() => labels[state.value.phase])
 						}),
-						state.publication.message ? /* @__PURE__ */ jsx("p", { children: state.publication.message }) : null,
-						state.publicationError ? /* @__PURE__ */ jsx("p", {
-							role: "alert",
-							children: labels.statusUnavailable
+						options.preview ? /* @__PURE__ */ jsx(Show, {
+							when: computed(() => !!state.value.reviewedSnapshot || submission),
+							children: () => /* @__PURE__ */ jsx("p", { children: computed(() => state.value.reviewedSnapshot ? labels.previewCurrent : labels.previewRequired) })
 						}) : null,
-						/* @__PURE__ */ jsx("button", {
-							type: "button",
-							onClick: () => run(() => session.refreshPublication()),
-							children: labels.refreshStatus
+						/* @__PURE__ */ jsx(Rebuild, {
+							value: keyedBy(() => state.value.reviewedSnapshot?.diagnostics.length ? state.value.reviewedSnapshot.diagnostics : null, (diagnostics) => JSON.stringify(diagnostics)),
+							children: (diagnostics) => diagnostics ? /* @__PURE__ */ jsxs("div", {
+								role: "alert",
+								children: [/* @__PURE__ */ jsx("p", { children: labels.submissionIncomplete }), /* @__PURE__ */ jsx("ul", { children: diagnostics.map((diagnostic) => /* @__PURE__ */ jsx("li", { children: diagnosticText(content.value, current.entry, diagnostic) })) })]
+							}) : null
+						}),
+						/* @__PURE__ */ jsx(Rebuild, {
+							value: keyedBy(() => state.value.previewFailure ?? null, (failure) => failure ? JSON.stringify([
+								messageFor(failure.error),
+								errorCode(failure.error),
+								String(failure.error),
+								failure.diagnostics
+							]) : ""),
+							children: (failure) => failure ? /* @__PURE__ */ jsx(PreviewFailure, {
+								error: failure.error,
+								diagnostics: failure.diagnostics,
+								content: content.value
+							}) : null
+						}),
+						/* @__PURE__ */ jsx(Show, {
+							when: computed(() => message.value !== null),
+							children: () => /* @__PURE__ */ jsx("p", {
+								role: "alert",
+								children: computed(() => message.value ?? "")
+							})
+						}),
+						/* @__PURE__ */ jsx(Show, {
+							when: rejected,
+							children: () => /* @__PURE__ */ jsxs("div", {
+								class: "hosted-content-editor__recovery",
+								children: [/* @__PURE__ */ jsx("button", {
+									type: "button",
+									"on:click": () => run(async () => {
+										review.value = await session.reviewAuthoritative();
+									}),
+									children: labels.review
+								}), /* @__PURE__ */ jsx(Rebuild, {
+									value: review,
+									children: (authoritative) => authoritative ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx(ConflictReview, {
+										review: authoritative,
+										fields: fields.value,
+										local: live.value.entry.values
+									}), /* @__PURE__ */ jsxs("div", {
+										class: "hosted-content-editor__actions",
+										children: [/* @__PURE__ */ jsx("button", {
+											type: "button",
+											"on:click": () => run(async () => {
+												await session.reapply(authoritative);
+												review.value = null;
+											}),
+											children: labels.reapply
+										}), /* @__PURE__ */ jsx("button", {
+											type: "button",
+											"on:click": () => run(async () => {
+												await session.discard(authoritative);
+												review.value = null;
+											}),
+											children: labels.discard
+										})]
+									})] }) : null
+								})]
+							})
+						}),
+						/* @__PURE__ */ jsx(Rebuild, {
+							value: keyedBy(() => {
+								const { publication, publicationStale, publicationError } = state.value;
+								return publication ? {
+									publication,
+									stale: publicationStale,
+									failed: !!publicationError
+								} : null;
+							}, (status) => JSON.stringify(status)),
+							children: (status) => status ? /* @__PURE__ */ jsxs("div", {
+								class: "hosted-content-editor__publication",
+								children: [
+									/* @__PURE__ */ jsxs("p", {
+										role: "status",
+										children: [status.stale ? `${labels.lastKnownStatus}: ` : "", labels[status.publication.status]]
+									}),
+									status.publication.message ? /* @__PURE__ */ jsx("p", { children: status.publication.message }) : null,
+									status.failed ? /* @__PURE__ */ jsx("p", {
+										role: "alert",
+										children: labels.statusUnavailable
+									}) : null,
+									/* @__PURE__ */ jsx("button", {
+										type: "button",
+										"on:click": () => run(() => session.refreshPublication()),
+										children: labels.refreshStatus
+									})
+								]
+							}) : null
 						})
 					]
-				}) : null
-			]
+				});
+			};
+			return /* @__PURE__ */ jsx(Show, {
+				when: available,
+				fallback: () => /* @__PURE__ */ jsx("section", {
+					class: "hosted-content-editor",
+					children: /* @__PURE__ */ jsx("p", {
+						role: "alert",
+						children: labels.unavailable
+					})
+				}),
+				children: () => /* @__PURE__ */ jsx(Keyed, {
+					value: selection,
+					by: (current) => `${refKey(current.entry)}/${current.fieldId}`,
+					children: form
+				})
+			});
+		};
+		return /* @__PURE__ */ jsx(Show, {
+			when: computed(() => state.value.content !== null),
+			fallback: loading,
+			children: loaded
 		});
 	}
-	const unsubscribeSession = session.subscribe(draw);
+	const unsubscribeSession = session.subscribe((next) => {
+		if (!disposed) state.value = next;
+	});
+	const root = mountOwnedChild(/* @__PURE__ */ jsx(Editor, {}), {
+		identity: HOSTED_ROOT,
+		parent: container
+	});
 	return {
 		get state() {
 			return session.state;
 		},
 		ready: session.initialize().then(() => {
-			const field = selected(session.state.content, selection)?.model.document.fields.find((field) => field.id === selection.fieldId);
-			if (!field || !permitted(options, selection, session.state.content) || !fieldEditable(field, permission(options, selection))) throw new Error("Selection is not permitted");
+			const field = selected(session.state.content, selection.value)?.model.document.fields.find((field) => field.id === selection.value.fieldId);
+			if (!field || !permitted(options, selection.value, session.state.content) || !fieldEditable(field, permission(options, selection.value))) throw new Error("Selection is not permitted");
 		}),
 		subscribe: (listener) => session.subscribe(listener),
 		flush: () => session.flush(),
@@ -3031,7 +3303,7 @@ function mountHostedContentEditor(container, options) {
 		submit: () => submission ? session.submit() : Promise.reject(/* @__PURE__ */ new Error("Submission is not offered by this host")),
 		refreshPublication: () => session.refreshPublication(),
 		get selection() {
-			return selection;
+			return selection.value;
 		},
 		restore(entry, revisionId) {
 			if (disposed) return Promise.reject(/* @__PURE__ */ new Error("Editor presentation is disposed"));
@@ -3042,7 +3314,7 @@ function mountHostedContentEditor(container, options) {
 			if (disposed) return;
 			disposed = true;
 			unsubscribeSession();
-			render(null, container);
+			root.stop();
 			session.dispose();
 		}
 	};

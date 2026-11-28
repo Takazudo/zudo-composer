@@ -24,7 +24,7 @@ export default { async fetch() {
   return new Response(JSON.stringify({ report, projection, digest: saved.snapshot.digest, canonical: canonicalSerialize({ text: "日本語", zero: 0, bool: false }) }), { headers: { "content-type": "application/json" } });
 } };
 `, resolveDir: process.cwd(), sourcefile: "hosted-worker-entry.js" }, bundle: true, platform: "neutral", format: "esm", target: "es2022", write: false, metafile: true });
-for (const input of Object.keys(result.metafile.inputs)) assert.ok(!/node:|preact|codemirror|vite|virtual:/.test(input), `Worker graph leak ${input}`);
+for (const input of Object.keys(result.metafile.inputs)) assert.ok(!/node:|preact|zudo-react|@takazudo[+/]zfb|codemirror|vite|virtual:/.test(input), `Worker graph leak ${input}`);
 await writeFile("worker-metafile.json", JSON.stringify(result.metafile, null, 2));
 const worker = new Miniflare({ workers: [{ config: {
   name: "hosted-portable-proof", compatibilityDate: "2026-10-01",

@@ -1,7 +1,7 @@
 import { CartButton, CategoryBody, Container, Footer, Header, NavLink } from "demo-webshop/components";
 
 export type CompositionOutlets = {
-  "category-page-outlet"?: import("preact").ComponentChildren;
+  "category-page-outlet"?: import("@takazudo/zfb/zudo-react").Child;
 };
 
 export default function Composition({ outlets = {} }: { outlets?: CompositionOutlets }) {
