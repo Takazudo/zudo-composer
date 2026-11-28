@@ -1,5 +1,7 @@
-import { Component, type ComponentChildren, type JSX } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { computed, ErrorBoundary, getScope, signal, type Child, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
+import { Keyed } from "../../runtime";
+import { liveSlot, Rebuild } from "../../components/rebuild";
+import { toSignal, type MaybeSignal } from "../../components/reactive";
 import type { ProductionProviderIntegration } from "../../app/provider-integration";
 import { type SiteBuildPlan, type SiteCompiledRoute } from "../../site-project/compiler";
 import type { WorkspaceCapture } from "../../app/workspace-snapshot";
@@ -71,74 +73,117 @@ async function retryDeliverySnapshot(source: DeliverySourceContract): Promise<De
   }
 }
 
-class DeliveryGuard extends Component<{ children: ComponentChildren }, { failed: boolean }> {
-  state = { failed: false };
-  componentDidCatch(error: unknown): void { console.error("Delivery page failed", error); this.setState({ failed: true }); }
-  render(): ComponentChildren { return this.state.failed ? <main class="site-delivery__state"><h1>Page unavailable</h1><p>This page could not be displayed safely.</p></main> : this.props.children; }
+function DeliveryUnavailable({ error }: { error: unknown }): Child {
+  console.error("Delivery page failed", error);
+  return <main class="site-delivery__state"><h1>Page unavailable</h1><p>This page could not be displayed safely.</p></main>;
 }
 
-function StateMessage({ heading, message, children, busy, focus, onFocused }: { heading: string; message: ComponentChildren; children?: ComponentChildren; busy?: boolean; focus?: boolean; onFocused?: () => void }): JSX.Element {
-  const root = useRef<HTMLElement>(null);
-  useEffect(() => { if (focus) { root.current?.focus(); onFocused?.(); } }, [focus, onFocused]);
-  return <main ref={root} class="site-delivery__state" data-site-delivery-state tabIndex={-1} aria-busy={busy || undefined}>
-    <div role="status" aria-live="polite" aria-atomic="true"><h1>{heading}</h1><p>{message}</p></div>
-    {children}
+/** One non-page state: loading, an error, or a missing route. */
+interface StatePage { heading: string; message: Child; action?: Child; busy?: boolean; focus: boolean }
+
+/**
+ * Every state page shares one mounted <main>, so its live region persists
+ * while the heading and message change, and a retry that lands on another
+ * state can move focus to it.
+ */
+function StateMessage({ page, onFocused }: { page: ReadonlySignal<StatePage>; onFocused: () => void }): Child {
+  const scope = getScope();
+  const root: Ref<HTMLElement> = { current: null };
+  scope.effect(() => { if (page.value.focus) { root.current?.focus(); onFocused(); } });
+  const heading = computed(() => page.value.heading);
+  const busy = computed(() => page.value.busy || undefined);
+  return <main ref={root} class="site-delivery__state" data-site-delivery-state tabindex={-1} aria-busy={busy}>
+    <div role="status" aria-live="polite" aria-atomic="true"><h1>{heading}</h1><p>{liveSlot(computed(() => page.value.message))}</p></div>
+    {liveSlot(computed(() => page.value.action ?? null))}
   </main>;
 }
 
-function DeliveryChrome({ route, pack, report, focus, onFocused, basePath }: { route: SiteCompiledRoute; pack: ProductionProviderIntegration["componentProvider"]["pack"]; report: (detail: DeliveryComponentError) => void; focus?: boolean; onFocused?: () => void; basePath: DeliveryBasePath }): JSX.Element {
-  const content = useRef<HTMLElement>(null);
-  useEffect(() => {
+function DeliveryChrome({ route, pack, report, focus, onFocused, basePath }: { route: ReadonlySignal<SiteCompiledRoute>; pack: ProductionProviderIntegration["componentProvider"]["pack"]; report: (detail: DeliveryComponentError) => void; focus?: boolean; onFocused?: () => void; basePath: DeliveryBasePath }): Child {
+  const scope = getScope();
+  const content: Ref<HTMLElement> = { current: null };
+  scope.effect(() => {
+    void route.value;
     const root = content.current;
     if (!root) return;
     normalizeDeliveryLinks(root, basePath);
     const observer = new MutationObserver(() => normalizeDeliveryLinks(root, basePath));
     observer.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ["href"] });
     return () => { observer.disconnect(); };
-  }, [route, basePath]);
-  useEffect(() => { if (focus) { content.current?.focus(); onFocused?.(); } }, [focus, onFocused]);
-  const guardLink = (event: JSX.TargetedMouseEvent<HTMLElement>): void => {
+  });
+  scope.onActivate(() => { if (focus) { content.current?.focus(); onFocused?.(); } });
+  const guardLink = (event: MouseEvent): void => {
     const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a") : null;
     if (!target || !content.current?.contains(target)) return;
     if (!target.closest(".zc-prose-md")) return;
     const hadHref = target.hasAttribute("href");
     if (hadHref && normalizeDeliveryLink(target, basePath) === undefined) event.preventDefault();
   };
+  // Pack components take plain props, so a new compiled composition (another
+  // route, or a re-captured draft) remounts the page body; the chrome and its
+  // <main> stay.
+  const composition = computed(() => route.value.composition);
   // Every base path renders the visitor shape: the site owns its header,
   // navigation, breadcrumbs and footer as global-template nodes, and the tool
   // keeps only the skip link and <main>.
   return <div class="site-root">
     <a class="site-root__skip" href="#main-content">Skip to main content</a>
-    <main ref={content} class="site-root__main" id="main-content" tabIndex={-1} onClickCapture={guardLink}><DeliveryRuntime composition={route.composition} pack={pack} onComponentError={report} basePath={basePath} /></main>
+    <main ref={content} class="site-root__main" id="main-content" tabindex={-1} {...{ "on:click:capture": guardLink }}>
+      <Rebuild value={composition}>{(value) => <DeliveryRuntime composition={value} pack={pack} onComponentError={report} basePath={basePath} />}</Rebuild>
+    </main>
   </div>;
 }
 
-export function SiteDelivery({ source, pathname = window.location.pathname, hostedDemo = false, onReady, onComponentError = (detail) => console.error("Delivery component failed", detail) }: { source: DeliverySourceContract; pathname?: string; hostedDemo?: boolean; onReady?: (build: SiteBuildPlan) => void; onComponentError?: (detail: DeliveryComponentError) => void }): JSX.Element {
-  const [state, setState] = useState<DeliveryState>({ status: "loading" });
+/** What the page body shows: a ready route keeps one key so its chrome survives navigation and re-capture. */
+type DeliveryView =
+  | { key: "page"; kind: "page"; page: StatePage }
+  | { key: "ready"; kind: "ready"; route: SiteCompiledRoute };
+
+export interface SiteDeliveryProps {
+  source: DeliverySourceContract;
+  /** The visitor address; pass a signal to follow in-place navigation without reloading the snapshot. */
+  pathname?: MaybeSignal<string>;
+  hostedDemo?: boolean;
+  onReady?: (build: SiteBuildPlan) => void;
+  onComponentError?: (detail: DeliveryComponentError) => void;
+}
+
+export function SiteDelivery({ source, pathname: pathnameProp = window.location.pathname, hostedDemo = false, onReady, onComponentError = (detail) => console.error("Delivery component failed", detail) }: SiteDeliveryProps): Child {
+  const scope = getScope();
+  const pathname = toSignal(pathnameProp);
+  const state = signal<DeliveryState>({ status: "loading" });
   // The broadcast only reports transitions, so `false` is the starting truth
   // rather than something this tab waits to be told.
-  const [pending, setPending] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [recaptureError, setRecaptureError] = useState<string | undefined>(undefined);
-  const request = useRef(0);
-  const focusAfterRetry = useRef(false);
+  const pending = signal(false);
+  const refreshing = signal(false);
+  const recaptureError = signal<string | undefined>(undefined);
+  let request = 0;
+  let focusAfterRetry = false;
   // Whether a working page has ever reached the screen, which decides whether
   // a later failure replaces it or is reported beside it. A retry renders one
-  // too, so this cannot live in the re-capture effect's own closure.
-  const rendered = useRef(false);
+  // too, so this cannot live in the re-capture activation's own closure.
+  let rendered = false;
+  const live = (): boolean => !scope.abortSignal.aborted;
   // This document builds its own integration, whose id resolves inside the
-  // first capture, so the id is itself the dependency: the render that settles
-  // that snapshot is where it is re-read and the subscription finally opens.
-  // The id must come from the same identity source the publisher uses — a
-  // capture can settle `unavailable`, and a reader waiting on one would never
-  // subscribe at all.
-  const readingWorkspaceId = source.kind === "working-preview" ? source.providers.workspace.id : undefined;
-  useEffect(() => source.kind === "working-preview" ? subscribePendingState(readingWorkspaceId, setPending) : undefined, [source, readingWorkspaceId]);
-  useEffect(() => {
+  // first capture, so the id is re-read whenever a snapshot settles and the
+  // subscription finally opens then. The id must come from the same identity
+  // source the publisher uses — a capture can settle `unavailable`, and a
+  // reader waiting on one would never subscribe at all.
+  if (source.kind === "working-preview") {
+    let subscribed: { id: string | undefined; stop: () => void } | undefined;
+    scope.effect(() => {
+      void state.value;
+      const id = source.providers.workspace.id;
+      if (subscribed && subscribed.id === id) return;
+      subscribed?.stop();
+      subscribed = { id, stop: subscribePendingState(id, (value) => { if (live()) pending.value = value; }) };
+    });
+    scope.onCleanup(() => { subscribed?.stop(); subscribed = undefined; });
+  }
+  scope.onActivate(() => {
     if (source.kind !== "working-preview") {
-      const current = ++request.current;
-      void loadDeliverySnapshot(source).then((next) => { if (request.current === current) setState(next); });
-      return () => { request.current += 1; };
+      const current = ++request;
+      void loadDeliverySnapshot(source).then((next) => { if (live() && request === current) state.value = next; });
+      return () => { request += 1; };
     }
     const { providers } = source;
     let disposed = false;
@@ -164,28 +209,28 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
       // until something unrelated changed again.
       const queued = again;
       again = false;
-      if (request.current !== current) { setRefreshing(false); if (queued) schedule(); return; }
-      if (next.status === "ready") { rendered.current = true; setRecaptureError(undefined); setState(next); }
+      if (request !== current) { refreshing.value = false; if (queued) schedule(); return; }
+      if (next.status === "ready") { rendered = true; recaptureError.value = undefined; state.value = next; }
       // A re-capture that fails keeps the last good render on screen and
       // reports why through the strip; only a first load has nothing to keep.
-      else if (rendered.current) setRecaptureError(recaptureFailure(next));
-      else setState(next);
+      else if (rendered) recaptureError.value = recaptureFailure(next);
+      else state.value = next;
       if (queued) { schedule(); return; }
-      if (!snapshot) { setRefreshing(false); return; }
+      if (!snapshot) { refreshing.value = false; return; }
       // Change notifications are a hint, so this render is only declared
       // current once the captured tokens themselves still agree.
       void providers.isCaptureCurrent(snapshot).then(
-        (fresh) => { if (disposed || request.current !== current) return; if (fresh) setRefreshing(false); else schedule(); },
-        () => { if (!disposed && request.current === current) setRefreshing(false); },
+        (fresh) => { if (disposed || request !== current) return; if (fresh) refreshing.value = false; else schedule(); },
+        () => { if (!disposed && request === current) refreshing.value = false; },
       );
     };
     const run = (): void => {
       if (disposed) return;
       running = true;
       again = false;
-      setRefreshing(!initial);
+      refreshing.value = !initial;
       initial = false;
-      const current = ++request.current;
+      const current = ++request;
       let snapshot: WorkspaceCapture | undefined;
       void loadWorkingPreviewSnapshot(providers, (value) => { snapshot = value; }).then((next) => settle(next, snapshot, current));
     };
@@ -195,53 +240,86 @@ export function SiteDelivery({ source, pathname = window.location.pathname, host
     // already knows is stale.
     const stop = providers.subscribeChanges(schedule);
     run();
-    return () => { disposed = true; stop(); if (timer !== undefined) clearTimeout(timer); request.current += 1; };
-  }, [source]);
-  useEffect(() => source.kind === "activated" && source.subscribe ? source.subscribe(() => { const current = ++request.current; setState({ status: "loading" }); void loadDeliverySnapshot(source).then((next) => { if (request.current === current) setState(next); }); }) : undefined, [source]);
+    return () => { disposed = true; stop(); if (timer !== undefined) clearTimeout(timer); request += 1; };
+  });
+  if (source.kind === "activated" && source.subscribe) {
+    const subscribe = source.subscribe;
+    scope.onActivate(() => subscribe(() => {
+      const current = ++request;
+      state.value = { status: "loading" };
+      void loadDeliverySnapshot(source).then((next) => { if (live() && request === current) state.value = next; });
+    }));
+  }
   // The entry that owns this document installs its navigation from the routes
   // a ready build carries, so it learns them from the one snapshot load here
   // rather than compiling the working draft a second time.
-  useEffect(() => { if (state.status === "ready") onReady?.(state.build); }, [state, onReady]);
+  scope.effect(() => { const current = state.value; if (current.status === "ready") onReady?.(current.build); });
   const basePath: DeliveryBasePath = deliveryBasePath(source);
-  const route = state.status === "ready" ? matchDeliveryRoute(state.build.routes, pathname, basePath) : undefined;
-  const routeTitle = route?.displayTitle;
-  const pageTitle = state.status === "ready"
-    ? `${routeTitle ?? "Page not found"} — ${state.project.name}`
-    : state.status === "loading"
-      ? "Loading site — Site delivery"
-      : state.status === "provider-error"
-        ? "Site unavailable — Site delivery"
-        : state.status === "validation-error"
-          ? "Site data blocked — Site delivery"
-          : "Site build blocked — Site delivery";
-  useEffect(() => {
+  const route = computed(() => { const current = state.value; return current.status === "ready" ? matchDeliveryRoute(current.build.routes, pathname.value, basePath) : undefined; });
+  const pageTitle = computed(() => {
+    const current = state.value;
+    return current.status === "ready"
+      ? `${route.value?.displayTitle ?? "Page not found"} — ${current.project.name}`
+      : current.status === "loading"
+        ? "Loading site — Site delivery"
+        : current.status === "provider-error"
+          ? "Site unavailable — Site delivery"
+          : current.status === "validation-error"
+            ? "Site data blocked — Site delivery"
+            : "Site build blocked — Site delivery";
+  });
+  scope.effect(() => {
     const prior = document.title;
-    document.title = pageTitle;
+    document.title = pageTitle.value;
     return () => { document.title = prior; };
-  }, [pageTitle]);
-  const completeRetryFocus = (): void => { focusAfterRetry.current = false; };
+  });
+  const completeRetryFocus = (): void => { focusAfterRetry = false; };
   const retry = (): void => {
-    const current = ++request.current;
-    focusAfterRetry.current = true;
-    setRecaptureError(undefined);
-    setState({ status: "loading" });
-    void retryDeliverySnapshot(source).then((next) => { if (request.current !== current) return; if (next.status === "ready") rendered.current = true; setState(next); });
+    const current = ++request;
+    focusAfterRetry = true;
+    recaptureError.value = undefined;
+    state.value = { status: "loading" };
+    void retryDeliverySnapshot(source).then((next) => { if (!live() || request !== current) return; if (next.status === "ready") rendered = true; state.value = next; });
   };
   const label = source.kind === "activated" ? "Activated local release — not deployed" : "Live working preview — not activated";
   // Freshness is a working-preview concern only; an activated release is a
   // finished artifact and passes none of these.
   const freshness = source.kind === "working-preview" ? { pending, refreshing, error: recaptureError } : {};
-  // A site delivered at its own origin root is the published document itself,
-  // so only the tool's own base paths carry the strip.
-  const withPreviewStrip = (content: JSX.Element, routes?: readonly SiteCompiledRoute[]): JSX.Element => basePath === "/" ? content : <>
-    <PreviewStrip label={label} basePath={basePath} pathname={pathname} hostedDemo={hostedDemo} routes={routes} {...freshness} />
-    {content}
-  </>;
-  if (state.status === "loading") return withPreviewStrip(<StateMessage heading="Loading site" message={source.kind === "activated" ? "Reading the completed activated local release…" : source.kind === "static" ? "Reading the published site…" : "Flushing and compiling the live working draft…"} busy />);
-  if (state.status === "provider-error") return withPreviewStrip(<StateMessage heading="Site unavailable" message={<>{source.kind === "activated" ? UNAVAILABLE_ACTIVATED : UNAVAILABLE_WORKING} {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus}>{state.retryable && <button type="button" onClick={retry}>Retry loading site</button>}</StateMessage>);
-  if (state.status === "validation-error") return withPreviewStrip(<StateMessage heading="Site data blocked" message={<>{DATA_BLOCKED} {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />);
-  if (state.status === "compiler-error") return withPreviewStrip(<StateMessage heading="Site build blocked" message={<>{BUILD_BLOCKED} {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />);
-  if (!route) return withPreviewStrip(<StateMessage heading="Page not found" message={source.kind === "static" ? "There is no page at this address." : "This page is not present in the selected delivery snapshot."} focus={focusAfterRetry.current} onFocused={completeRetryFocus}><a href={basePath}>Return to site home</a></StateMessage>);
+  // Only a matched ready route offers the strip's picker.
+  const stripRoutes = computed(() => { const current = state.value; return current.status === "ready" && route.value ? current.build.routes : undefined; });
   const componentProvider = source.kind === "working-preview" ? source.providers.componentProvider : source.componentProvider;
-  return withPreviewStrip(<DeliveryGuard><DeliveryChrome route={route} pack={componentProvider.pack} report={onComponentError} focus={focusAfterRetry.current} onFocused={completeRetryFocus} basePath={basePath} /></DeliveryGuard>, state.build.routes);
+  const statePage = (current: Exclude<DeliveryState, { status: "ready" }>): StatePage => {
+    if (current.status === "loading") return { heading: "Loading site", message: source.kind === "activated" ? "Reading the completed activated local release…" : source.kind === "static" ? "Reading the published site…" : "Flushing and compiling the live working draft…", busy: true, focus: false };
+    if (current.status === "provider-error") return { heading: "Site unavailable", message: <>{source.kind === "activated" ? UNAVAILABLE_ACTIVATED : UNAVAILABLE_WORKING} {current.message}</>, action: current.retryable ? <button type="button" on:click={retry}>Retry loading site</button> : undefined, focus: focusAfterRetry };
+    if (current.status === "validation-error") return { heading: "Site data blocked", message: <>{DATA_BLOCKED} {current.message}</>, focus: focusAfterRetry };
+    return { heading: "Site build blocked", message: <>{BUILD_BLOCKED} {current.message}</>, focus: focusAfterRetry };
+  };
+  const view = computed((): DeliveryView => {
+    const current = state.value;
+    if (current.status !== "ready") return { key: "page", kind: "page", page: statePage(current) };
+    const matched = route.value;
+    if (matched) return { key: "ready", kind: "ready", route: matched };
+    return { key: "page", kind: "page", page: { heading: "Page not found", message: source.kind === "static" ? "There is no page at this address." : "This page is not present in the selected delivery snapshot.", action: <a href={basePath}>Return to site home</a>, focus: focusAfterRetry } };
+  });
+  const renderView = (item: ReadonlySignal<DeliveryView>): Child => {
+    const initialView = item.value;
+    // A retained key keeps its branch while the view changes kind on its way
+    // out, so each branch holds its own last value.
+    if (initialView.kind === "page") {
+      let lastPage = initialView.page;
+      return <StateMessage page={computed(() => { const current = item.value; if (current.kind === "page") lastPage = current.page; return lastPage; })} onFocused={completeRetryFocus} />;
+    }
+    let lastRoute = initialView.route;
+    const readyRoute = computed(() => { const current = item.value; if (current.kind === "ready") lastRoute = current.route; return lastRoute; });
+    return <ErrorBoundary children={() => <DeliveryChrome route={readyRoute} pack={componentProvider.pack} report={onComponentError} focus={focusAfterRetry} onFocused={completeRetryFocus} basePath={basePath} />} fallback={(error) => <DeliveryUnavailable error={error} />} />;
+  };
+  const body = <Keyed value={view} by={(value) => value.key}>{renderView}</Keyed>;
+  // A site delivered at its own origin root is the published document itself,
+  // so only the tool's own base paths carry the strip. The strip stays mounted
+  // through every state so its live region is never re-created.
+  if (basePath === "/") return body;
+  return <>
+    <PreviewStrip label={label} basePath={basePath} pathname={pathname} hostedDemo={hostedDemo} routes={stripRoutes} {...freshness} />
+    {body}
+  </>;
 }

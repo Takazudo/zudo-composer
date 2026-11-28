@@ -1,4 +1,4 @@
-import type { JSX } from "preact";
+import { computed, For, Show, type Child, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import { assetKindForMime, ASSET_KIND_LABELS, type AssetKindName, type AssetSummary } from "../../assets";
 import { CopyIcon, MarkdownIcon, PreviewIcon, TrashIcon } from "../../components/icons";
 import {
@@ -17,11 +17,13 @@ import {
   type LibraryView,
   type RowMenuProps,
 } from "../../components/library-page";
+import { liveSlot, type LiveChild } from "../../components/rebuild";
 import { Button, Checkbox, SegmentedControl, type DataTableColumn } from "../../components/ui";
 import { compareAssetSummariesNewestFirst } from "../../assets";
 import type { AssetDimensionStore } from "./assets-dimensions";
 import { formatBytes, assetCaption, assetTypeLabel } from "./assets-format";
 import { AssetThumb } from "./assets-thumb";
+import { AssetView } from "./live";
 
 export type AssetTypeFilter = "all" | AssetKindName;
 
@@ -35,7 +37,7 @@ export const ASSET_SORTS: readonly LibrarySort<AssetSummary>[] = [
 /**
  * The type filter.
  *
- * It is a facet as far as `useLibraryQuery` is concerned — that is what makes
+ * It is a facet as far as `createLibraryQuery` is concerned — that is what makes
  * filtering and the no-match state work — but the toolbar renders facets as
  * menus, and the prototype's control is a `SegmentedControl` carrying counts.
  * The definition and the control therefore live together here.
@@ -53,22 +55,22 @@ export const ASSET_TYPE_FACET: LibraryFacet<AssetSummary> = {
 
 export interface AssetLibraryProps {
   /** Every asset in the library, for the filter counts and the pager total. */
-  records: readonly AssetSummary[];
+  records: ReadonlySignal<readonly AssetSummary[]>;
   query: LibraryQueryController<AssetSummary>;
   selection: LibrarySelectionController<AssetSummary>;
   dimensions: AssetDimensionStore;
-  view: LibraryView;
+  view: ReadonlySignal<LibraryView>;
   onViewChange(view: LibraryView): void;
   /** The asset the detail panel is showing. */
-  activeId: string | null;
+  activeId: ReadonlySignal<string | null>;
   onActivate(record: AssetSummary): void;
   onCopyUrl(record: AssetSummary): void;
   onCopyMarkdown(record: AssetSummary): void;
   onDelete(records: readonly AssetSummary[]): void;
   /** The bulk bar, supplied by the route so both views show the same one. */
-  bulkBar?: JSX.Element | null;
+  bulkBar?: LiveChild;
   /** The compact drop strip and its queue, placed under the toolbar. */
-  uploadPanel?: JSX.Element | null;
+  uploadPanel?: Child;
 }
 
 const CONTRACT: LibraryRowContract<AssetSummary> = {
@@ -97,17 +99,19 @@ export function AssetLibrary({
   onDelete,
   bulkBar,
   uploadPanel,
-}: AssetLibraryProps): JSX.Element {
-  const facets = ASSET_TYPE_FACET.options.filter((option) => option.id === "all" || option.id === query.facetValue(ASSET_TYPE_FILTER_ID) || records.some((record) => option.match?.(record)));
-  const filter = query.facetValue(ASSET_TYPE_FILTER_ID) as AssetTypeFilter;
-  const totalBytes = records.reduce((sum, record) => sum + record.byteLength, 0);
+}: AssetLibraryProps): Child {
+  const filter = computed(() => query.facetValue(ASSET_TYPE_FILTER_ID) as AssetTypeFilter);
+  // The segments are static per control, so the control is rebuilt whenever
+  // the set of offered types changes; counts stay live inside each label.
+  const facetSets = computed(() => [ASSET_TYPE_FACET.options.filter((option) => option.id === "all" || option.id === filter.value || records.value.some((record) => option.match?.(record))).map((option) => option.id)]);
+  const totalBytes = computed(() => records.value.reduce((sum, record) => sum + record.byteLength, 0));
 
   const columns: readonly DataTableColumn<AssetSummary>[] = [
     { key: "type", header: "Type", variant: "muted", cell: (row) => assetTypeLabel(row.mimeType) },
     { key: "size", header: "Size", variant: "num", cell: (row) => formatBytes(row.byteLength) },
   ];
 
-  const rowMenu = (row: AssetSummary) => ({
+  const rowMenu = (row: AssetSummary): RowMenuProps => ({
     label: row.fileName,
     open: { id: "details", label: "Show details", icon: PreviewIcon, onSelect: () => onActivate(row) },
     actions: [
@@ -117,7 +121,7 @@ export function AssetLibrary({
     destructive: [{ id: "delete", label: "Delete…", icon: TrashIcon, onSelect: () => onDelete([row]) }],
   });
 
-  const noMatch = <LibraryNoMatch search={query.search} onClearFilters={query.clearFilters} />;
+  const noMatch = () => <LibraryNoMatch search={query.search} onClearFilters={query.clearFilters} />;
 
   return (
     <div class="sg-assets-browser">
@@ -132,61 +136,73 @@ export function AssetLibrary({
         searchPlaceholder="Filter by file name or ID"
         end={<LibraryViewToggle value={view} onChange={onViewChange} tableLabel="List view" cardsLabel="Grid view" />}
       >
-        <SegmentedControl<AssetTypeFilter>
-          label="Type"
-          size="sm"
-          value={filter}
-          onChange={(next) => query.setFacetValue(ASSET_TYPE_FILTER_ID, next)}
-          options={facets.map((option) => ({ value: option.id as AssetTypeFilter, label: <TypeSegment label={option.label} count={option.match ? records.filter(option.match).length : records.length} /> }))}
-        />
+        <For each={facetSets} by={(ids) => ids.join("\u0000")}>{(ids) => (
+          <SegmentedControl<AssetTypeFilter>
+            label="Type"
+            size="sm"
+            value={filter}
+            onChange={(next) => query.setFacetValue(ASSET_TYPE_FILTER_ID, next)}
+            options={ids.value.map((id) => {
+              const option = ASSET_TYPE_FACET.options.find((candidate) => candidate.id === id)!;
+              const count = computed(() => (option.match ? records.value.filter(option.match).length : records.value.length));
+              return { value: option.id as AssetTypeFilter, label: <TypeSegment label={option.label} count={count} /> };
+            })}
+          />
+        )}</For>
         <LibrarySortMenu sorts={ASSET_SORTS} value={query.sortId} onChange={query.setSortId} />
       </LibraryToolbar>
 
       {uploadPanel}
 
-      {view === "cards" ? (
-        <>
-          {bulkBar ? <div class="cms-table__bulk">{bulkBar}</div> : null}
-          {query.rows.length === 0 ? noMatch : (
-            <ul class="sg-assets-grid" aria-label="Assets">
-              {query.rows.map((row) => (
-                <AssetTile
-                  key={row.id}
-                  record={row}
-                  dimensions={dimensions}
-                  active={row.id === activeId}
-                  selected={selection.isSelected(row.id)}
-                  onToggleSelected={(selected) => selection.toggleRow(row.id, selected)}
-                  onActivate={() => onActivate(row)}
-                  onCopyUrl={() => onCopyUrl(row)}
-                  rowMenu={rowMenu(row)}
-                />
-              ))}
-            </ul>
-          )}
-        </>
-      ) : (
-        <LibraryTable
-          caption="Assets"
-          rows={query.rows}
-          contract={CONTRACT}
-          columns={columns}
-          selection={selection}
-          updatedHeader="Added"
-          bulkBar={bulkBar ?? undefined}
-          empty={noMatch}
-          rowMenu={rowMenu}
-        />
-      )}
+      <Show
+        when={computed(() => view.value === "cards")}
+        fallback={() => (
+          <LibraryTable
+            caption="Assets"
+            rows={query.rows}
+            contract={CONTRACT}
+            columns={columns}
+            selection={selection}
+            updatedHeader="Added"
+            bulkBar={bulkBar}
+            empty={noMatch()}
+            rowMenu={rowMenu}
+          />
+        )}
+      >
+        {() => (
+          <>
+            {liveSlot(bulkBar, (content) => <div class="cms-table__bulk">{content}</div>)}
+            <Show when={computed(() => query.rows.value.length === 0)} fallback={() => (
+              <ul class="sg-assets-grid" aria-label="Assets">
+                <For each={query.rows} by={(row) => row.id}>{(item) => (
+                  <AssetView record={item}>{(row) => (
+                    <AssetTile
+                      record={row}
+                      dimensions={dimensions}
+                      active={computed(() => row.id === activeId.value)}
+                      selected={computed(() => selection.isSelected(row.id))}
+                      onToggleSelected={(selected) => selection.toggleRow(row.id, selected)}
+                      onActivate={() => onActivate(row)}
+                      onCopyUrl={() => onCopyUrl(row)}
+                      rowMenu={rowMenu(row)}
+                    />
+                  )}</AssetView>
+                )}</For>
+              </ul>
+            )}>{noMatch}</Show>
+          </>
+        )}
+      </Show>
 
       <LibraryPagination
-        summary={`${query.rows.length} of ${records.length} assets · ${formatBytes(totalBytes)} · /uploaded-assets/`}
+        summary={computed(() => `${query.rows.value.length} of ${records.value.length} assets · ${formatBytes(totalBytes.value)} · /uploaded-assets/`)}
       />
     </div>
   );
 }
 
-function TypeSegment({ label, count }: { label: string; count: number }): JSX.Element {
+function TypeSegment({ label, count }: { label: string; count: ReadonlySignal<number> }): Child {
   return (
     <>
       {label}
@@ -198,17 +214,17 @@ function TypeSegment({ label, count }: { label: string; count: number }): JSX.El
 interface AssetTileProps {
   record: AssetSummary;
   dimensions: AssetDimensionStore;
-  active: boolean;
-  selected: boolean;
+  active: ReadonlySignal<boolean>;
+  selected: ReadonlySignal<boolean>;
   onToggleSelected(selected: boolean): void;
   onActivate(): void;
   onCopyUrl(): void;
   rowMenu: RowMenuProps;
 }
 
-function AssetTile({ record, dimensions, active, selected, onToggleSelected, onActivate, onCopyUrl, rowMenu }: AssetTileProps): JSX.Element {
+function AssetTile({ record, dimensions, active, selected, onToggleSelected, onActivate, onCopyUrl, rowMenu }: AssetTileProps): Child {
   return (
-    <li class={`sg-assets-asset${active ? " sg-assets-asset--active" : ""}${selected ? " sg-assets-asset--selected" : ""}`}>
+    <li class={computed(() => `sg-assets-asset${active.value ? " sg-assets-asset--active" : ""}${selected.value ? " sg-assets-asset--selected" : ""}`)}>
       <div class="sg-assets-asset__thumb">
         <button
           type="button"
@@ -217,9 +233,9 @@ function AssetTile({ record, dimensions, active, selected, onToggleSelected, onA
           // shows exactly one asset — `aria-current` says which, where
           // `aria-pressed` would promise a toggle that clicking again does not
           // perform.
-          aria-current={active ? "true" : undefined}
+          aria-current={computed(() => (active.value ? "true" : undefined))}
           aria-label={`Show details for ${record.fileName}`}
-          onClick={onActivate}
+          on:click={onActivate}
         >
           <AssetThumb record={record} dimensions={dimensions} />
         </button>
@@ -227,7 +243,7 @@ function AssetTile({ record, dimensions, active, selected, onToggleSelected, onA
           <Checkbox checked={selected} onCheckedChange={onToggleSelected} aria-label={record.fileName} />
         </span>
         <span class="sg-assets-asset__acts">
-          <Button size="sm" iconOnly aria-label={`Copy URL for ${record.fileName}`} onClick={onCopyUrl}>
+          <Button size="sm" iconOnly aria-label={`Copy URL for ${record.fileName}`} on:click={onCopyUrl}>
             <CopyIcon size="sm" />
           </Button>
           <RowMenu {...rowMenu} />
@@ -235,7 +251,7 @@ function AssetTile({ record, dimensions, active, selected, onToggleSelected, onA
       </div>
       <div class="sg-assets-asset__caption">
         <span class="sg-assets-asset__name" title={record.fileName}>{record.fileName}</span>
-        <span class="sg-assets-asset__meta">{assetCaption(record, dimensions.get(record.id))}</span>
+        <span class="sg-assets-asset__meta">{computed(() => assetCaption(record, dimensions.get(record.id)))}</span>
       </div>
     </li>
   );

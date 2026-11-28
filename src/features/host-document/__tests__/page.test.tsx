@@ -1,5 +1,6 @@
-import { cleanup, render, waitFor } from "@testing-library/preact";
+import { fireEvent, render, settle, waitFor } from "../../../test/render";
 import { afterEach, expect, it, vi } from "vitest";
+import type { AppServices } from "../../../app/services";
 import { createWorkspaceSaveRegistry } from "../../../app/workspace-sessions";
 import { notifyPersistenceChange } from "../../../shared/persistence-generation";
 import { COMPOSITION_FILE_PROVIDER_CHANNEL } from "../../../composer/storage/file-provider";
@@ -12,7 +13,6 @@ const mocks = vi.hoisted(() => ({ request: vi.fn(), integration: { workspace: { 
 Object.assign(mocks.integration, { sessions: createWorkspaceSaveRegistry() });
 vi.mock("../../native-editing/session", () => ({ nativeEditRequest: mocks.request, holdNativeAuthoringReload: () => () => false }));
 vi.mock("../protocol", async importOriginal => ({ ...await importOriginal<typeof import("../protocol")>(), matchesHostDocumentFrame: () => true }));
-vi.mock("../../../app/workspace-context", () => ({ useWorkspace: () => ({ integration: mocks.integration }) }));
 const receiptFor = (request: Parameters<typeof canonicalStringifyJson>[0] & { operationId: string; workspaceId: string; revision: string; target: { recordId: string } }) => ({
   operationId: `host-${request.operationId}`, planDigest: createHash("sha256").update(canonicalStringifyJson(request)).digest("hex"),
   workspaceId: request.workspaceId, beforeRevision: request.revision, recordId: request.target.recordId,
@@ -20,11 +20,12 @@ const receiptFor = (request: Parameters<typeof canonicalStringifyJson>[0] & { op
 });
 Object.defineProperty(globalThis.crypto, "subtle", { configurable: true, value: webcrypto.subtle });
 const hosts: TemporaryWorkspaceProviders[] = [];
-afterEach(async () => { cleanup(); await Promise.all(hosts.splice(0).map(host => host.dispose())); localStorage.clear(); sessionStorage.clear(); vi.clearAllMocks(); });
+const services = () => ({ workspace: { integration: mocks.integration }, pageLoading: null }) as unknown as AppServices;
+afterEach(async () => { await Promise.all(hosts.splice(0).map(host => host.dispose())); localStorage.clear(); sessionStorage.clear(); vi.clearAllMocks(); });
 it("does not enroll an empty, unresponsive iframe before the saved document arrives", async () => {
   let finish!: (value: unknown) => void;
   mocks.request.mockReturnValue(new Promise(resolve => { finish = resolve; }));
-  const { container, getByRole } = render(<HostDocumentPage />);
+  const { container, getByRole } = render(<HostDocumentPage services={services()} />);
   await waitFor(() => expect(mocks.request).toHaveBeenCalled());
   expect(container.querySelector("iframe")).toBeNull();
   expect(getByRole("status").textContent).toBe("Opening saved page…");
@@ -34,7 +35,6 @@ it("does not enroll an empty, unresponsive iframe before the saved document arri
 
 it("blocks refresh, selection, and workspace flush while a field draft is unsaved; discard restores navigation", async () => {
   const { defineComponentPack } = await import("@zudo-composer/component-contract");
-  const { fireEvent } = await import("@testing-library/preact");
   const host = await createTemporaryWorkspaceProviders(); hosts.push(host);
   const integration = createProductionProviderIntegration({ createProviders: host.createProviders, assetProvider: null });
   const sessions = integration.sessions;
@@ -44,12 +44,14 @@ it("blocks refresh, selection, and workspace flush while a field draft is unsave
   const targets = ["first", "second"].map(id => ({ renderedNodeId: id, parentRenderedNodeId: null, slotId: null, providerId: "files", recordId: "page", nodeId: id, componentId: "paragraph", props: { text: id }, entries: [], capabilities: { fields: { allowed: true }, structure: { allowed: true }, placement: { allowed: false }, uses: ["/"], insertSlots: [] } }));
   const preview = { identity, editAuthority: "c".repeat(64), frameId: "frame", documentUrl: "about:blank", targets, routes: [] };
   mocks.request.mockResolvedValue(preview);
-  const view = render(<HostDocumentPage />);
+  const view = render(<HostDocumentPage services={services()} />);
   await waitFor(() => expect(view.container.querySelector("iframe")).toBeTruthy());
   const send = (data: object) => fireEvent(window, new MessageEvent("message", { source: view.container.querySelector("iframe")!.contentWindow, origin: window.location.origin, data: { protocol: "zudo-host-document-v1", identity, frameId: "frame", ...data } }));
   await waitFor(() => { send({ type: "ready" }); expect(view.getByRole("status").textContent).toBe("Saved snapshot rendered"); });
   send({ type: "select", target: { renderedNodeId: "first", providerId: "files", recordId: "page", nodeId: "first" } });
+  await settle();
   fireEvent.input(await view.findByRole("textbox", { name: "Text" }), { target: { value: "Unsaved" } });
+  await settle();
   expect((await sessions.flush()).status).toBe("failed");
   expect((view.getByRole("button", { name: "Save field" }) as HTMLButtonElement).disabled).toBe(false);
   const requests = mocks.request.mock.calls.length;
@@ -57,26 +59,36 @@ it("blocks refresh, selection, and workspace flush while a field draft is unsave
   const recovery = createHostEditRecovery(localStorage, sessionStorage, window.location.origin);
   const foreign = recovery.save(identity, { workspaceId: "proof", revision: identity.revision, pathname: "/", operationId: crypto.randomUUID(), target: { renderedNodeId: "second", providerId: "files", recordId: "page", nodeId: "second" }, change: { kind: "field", prop: "text", value: "Another tab" } });
   fireEvent(window, new Event("storage"));
+  await settle();
   fireEvent.click(await view.findByRole("button", { name: /Recover pending save/ }));
+  await settle();
   expect(view.getByRole("alert").textContent).toContain("before recovering a different retained operation");
   expect(mocks.request.mock.calls).toHaveLength(requests);
   expect((view.getByRole("textbox", { name: "Text" }) as HTMLInputElement).value).toBe("Unsaved");
   recovery.complete(foreign); fireEvent(window, new Event("storage"));
+  await settle();
   fireEvent.click(view.getByRole("button", { name: "Refresh saved page" }));
+  await settle();
   expect(mocks.request.mock.calls).toHaveLength(requests);
   send({ type: "select", target: { renderedNodeId: "second", providerId: "files", recordId: "page", nodeId: "second" } });
+  await settle();
   expect((view.getByRole("textbox", { name: "Text" }) as HTMLInputElement).value).toBe("Unsaved");
   expect(mocks.request.mock.calls).toHaveLength(requests);
   notifyPersistenceChange(COMPOSITION_FILE_PROVIDER_CHANNEL);
+  await settle();
   expect((view.getByRole("textbox", { name: "Text" }) as HTMLInputElement).value).toBe("Unsaved");
   await waitFor(() => expect((view.getByRole("button", { name: "Save field" }) as HTMLButtonElement).disabled).toBe(true));
   fireEvent.click(view.getByRole("button", { name: "Discard local draft" }));
+  await settle();
   expect((await sessions.flush()).status).toBe("ready");
   fireEvent.click(view.getByRole("button", { name: "Refresh saved page" }));
+  await settle();
   await waitFor(() => expect(mocks.request.mock.calls.length).toBeGreaterThan(requests));
   await waitFor(() => { send({ type: "ready" }); expect(view.getByRole("status").textContent).toBe("Saved snapshot rendered"); });
   send({ type: "select", target: { renderedNodeId: "first", providerId: "files", recordId: "page", nodeId: "first" } });
+  await settle();
   fireEvent.input(await view.findByRole("textbox", { name: "Text" }), { target: { value: "Explicit save" } });
+  await settle();
   let original: unknown;
   let writes = 0;
   mocks.request.mockImplementation(async (operation, request) => {
@@ -88,26 +100,31 @@ it("blocks refresh, selection, and workspace flush while a field draft is unsave
     return receiptFor(request);
   });
   fireEvent.click(view.getByRole("button", { name: "Save field" }));
+  await settle();
   await waitFor(() => expect(view.getByRole("alert").textContent).toContain("outcome remains uncertain"));
   expect(original).toMatchObject({ target: { nodeId: "first" }, change: { kind: "field", prop: "text", value: "Explicit save" } });
   expect((view.getByRole("textbox", { name: "Text" }) as HTMLInputElement).value).toBe("Explicit save");
   expect((await sessions.flush()).status).toBe("failed");
   fireEvent.click(view.getByRole("button", { name: /Recover pending save/ }));
+  await settle();
   await waitFor(() => expect(writes).toBe(2));
   await waitFor(() => expect(view.queryByRole("button", { name: /Recover pending save/ })).toBeNull());
   expect((await sessions.flush()).status).toBe("ready");
   await waitFor(() => { send({ type: "ready" }); expect(view.getByRole("status").textContent).toBe("Saved snapshot rendered"); });
   send({ type: "select", target: { renderedNodeId: "first", providerId: "files", recordId: "page", nodeId: "first" } });
+  await settle();
   fireEvent.input(await view.findByRole("textbox", { name: "Text" }), { target: { value: "Retain on source change" } });
+  await settle();
   expect((view.getByRole("button", { name: "Save field" }) as HTMLButtonElement).disabled).toBe(false);
   fireEvent(window, new Event("native-authoring-invalidated"));
+  await settle();
   expect((view.getByRole("button", { name: "Save field" }) as HTMLButtonElement).disabled).toBe(true);
   expect((view.getByRole("textbox", { name: "Text" }) as HTMLInputElement).value).toBe("Retain on source change");
   expect(writes).toBe(2);
   fireEvent.click(view.getByRole("button", { name: "Discard local draft" }));
+  await settle();
 });
 it("retains the exact qualified Remove through response loss and wrong receipt, then settles the matching refusal", async () => {
-  const { fireEvent } = await import("@testing-library/preact");
   Object.assign(mocks.integration, { sessions: createWorkspaceSaveRegistry(), subscribeChanges: () => () => {}, componentProvider: { manifest: { components: [] } } });
   const identity = { workspaceId: "proof", pathname: "/", revision: "a".repeat(64), packId: "proof", packVersion: "1", rendererId: "proof", rendererVersion: "1", rendererDigest: "b".repeat(64) };
   const target = { renderedNodeId: "rendered-child", parentRenderedNodeId: "parent", slotId: "items", providerId: "files", recordId: "page", nodeId: "child", componentId: "paragraph", props: {}, entries: [], capabilities: { fields: { allowed: true }, structure: { allowed: true }, placement: { allowed: false }, remove: { allowed: true }, uses: ["/"], insertSlots: [] } };
@@ -121,36 +138,40 @@ it("retains the exact qualified Remove through response loss and wrong receipt, 
     if (requests.length === 2) return { ...receipt, operationId: `host-${crypto.randomUUID()}` };
     throw Object.assign(new Error("Stale preview"), { code: "document-edit-not-accepted", receipt: { ...receipt, outcome: "document-edit-not-accepted" } });
   });
-  let view = render(<HostDocumentPage />);
+  let view = render(<HostDocumentPage services={services()} />);
   await waitFor(() => expect(view.container.querySelector("iframe")).toBeTruthy());
   const send = (data: object) => fireEvent(window, new MessageEvent("message", { source: view.container.querySelector("iframe")!.contentWindow, origin: window.location.origin, data: { protocol: "zudo-host-document-v1", identity, frameId: "frame", ...data } }));
   await waitFor(() => { send({ type: "ready" }); expect(view.getByRole("status").textContent).toBe("Saved snapshot rendered"); });
   send({ type: "select", target: { renderedNodeId: target.renderedNodeId, providerId: target.providerId, recordId: target.recordId, nodeId: target.nodeId } });
+  await settle();
   fireEvent.click(view.getByRole("button", { name: "Remove component" }));
+  await settle();
   await waitFor(() => expect(view.getByRole("alert").textContent).toContain("outcome remains uncertain"));
   expect(requests[0]).toMatchObject({ revision: identity.revision, pathname: "/", target: { renderedNodeId: "rendered-child", providerId: "files", recordId: "page", nodeId: "child" }, change: { kind: "remove" } });
-  view.unmount(); sessionStorage.clear(); view = render(<HostDocumentPage />);
+  view.unmount(); sessionStorage.clear(); view = render(<HostDocumentPage services={services()} />);
   fireEvent.click(await view.findByRole("button", { name: /Recover pending save/ }));
+  await settle();
   await waitFor(() => expect(requests).toHaveLength(2));
   expect(requests[1]).toEqual(requests[0]);
   await waitFor(() => expect(view.getByRole("alert").textContent).toContain("could not record"));
   fireEvent.click(view.getByRole("button", { name: /Recover pending save/ }));
+  await settle();
   await waitFor(() => expect(view.queryByRole("button", { name: /Recover pending save/ })).toBeNull());
   expect(requests[2]).toEqual(requests[0]);
   expect(view.getByText(/changed before this page edit was accepted/)).toBeTruthy();
   window.history.replaceState(null, "");
 });
 it("sends the qualified Sitemap page on handoff and clears it for deliberate page navigation", async () => {
-  const { fireEvent } = await import("@testing-library/preact");
   const previous = window.location.href;
   window.history.replaceState(null, "", "/composer?native=1&sitemapProvider=sitemaps-filesystem&sitemap=main&page=lessons&visitor=%2Flessons");
   Object.assign(mocks.integration, { sessions: createWorkspaceSaveRegistry(), subscribeChanges: () => () => {} });
   mocks.request.mockImplementation(async (_operation, request) => ({ identity: { workspaceId: "proof", pathname: request.pathname, revision: "a".repeat(64), packId: "proof", packVersion: "1", rendererId: "proof", rendererVersion: "1", rendererDigest: "b".repeat(64) }, frameId: "frame", documentUrl: "about:blank", targets: [], routes: [{ pathname: "/lessons", title: "Lessons", pageId: "lessons" }, { pathname: "/about", title: "About", pageId: "about" }] }));
   try {
-    const view = render(<HostDocumentPage />);
+    const view = render(<HostDocumentPage services={services()} />);
     await waitFor(() => expect((view.getByRole("combobox", { name: "Page" }) as HTMLSelectElement).disabled).toBe(false));
     expect(mocks.request.mock.calls[0]).toEqual(["document-preview", { workspaceId: "proof", sitemapProviderId: "sitemaps-filesystem", sitemapId: "main", pageId: "lessons", pathname: "/lessons", visitorUrl: "/lessons" }]);
     fireEvent.change(view.getByRole("combobox", { name: "Page" }), { target: { value: "/about" } });
+    await settle();
     await waitFor(() => expect(mocks.request.mock.calls).toHaveLength(2));
     expect(mocks.request.mock.calls[1]).toEqual(["document-preview", { workspaceId: "proof", pathname: "/about", visitorUrl: "/about" }]);
     expect(new URL(window.location.href).searchParams.has("sitemapProvider")).toBe(false);

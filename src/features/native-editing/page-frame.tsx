@@ -1,68 +1,79 @@
-import { useEffect, useMemo, useRef } from "preact/hooks";
+import { getScope, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
 import type { ComposerComponentProvider } from "../composer/component-provider";
 import { buildComposerPreviewUrl, composerPreviewFrameProps, createComposerPreviewBridge } from "../composer/preview/bridge";
 import type { ComposerPreviewSnapshot, NativeReviewIdentity, ReviewAnnotatedMessage } from "../composer/preview/protocol";
-import { useResolvedTheme } from "../../theme/use-resolved-theme";
+import { resolvedThemeSignal } from "../../theme/use-resolved-theme";
+import { read, type MaybeSignal } from "../../components/reactive";
+import { watch } from "./live";
 import type { NativeIdentity } from "./types";
 
-export function NativePageFrame({ provider, snapshot, review, selecting, identity, draftRevision, onSelect, onEvidence, onError, onReviewAnnotated, onRenderReady, focusAnnotation, title = "Native page preview" }: {
-  provider: ComposerComponentProvider; snapshot: ComposerPreviewSnapshot;
-  review?: Omit<NativeReviewIdentity, "frameSession">; selecting: boolean; identity: NativeIdentity; draftRevision: string;
+export interface NativePageFrameProps {
+  provider: ComposerComponentProvider; snapshot: ReadonlySignal<ComposerPreviewSnapshot | null>;
+  review?: ReadonlySignal<Omit<NativeReviewIdentity, "frameSession"> | undefined>; selecting: MaybeSignal<boolean>; identity: ReadonlySignal<NativeIdentity | null>; draftRevision: ReadonlySignal<string>;
   onSelect(id: string, revision: number): void; onEvidence(value: boolean): void; onError(message: string): void;
   onRenderReady?(value: boolean): void;
-  onReviewAnnotated?(message: ReviewAnnotatedMessage): void; focusAnnotation?: { id: string; nonce: number } | null; title?: string;
-}) {
-  const frame = useRef<HTMLIFrameElement>(null);
-  const bridge = useRef<ReturnType<typeof createComposerPreviewBridge> | null>(null);
-  const current = useRef({ snapshot, review, selecting, identity, draftRevision, onSelect, onEvidence, onError, onReviewAnnotated, onRenderReady });
-  current.current = { snapshot, review, selecting, identity, draftRevision, onSelect, onEvidence, onError, onReviewAnnotated, onRenderReady };
-  const invalidated = useRef(false), stale = useRef(false);
-  const sentSnapshot = useRef<ComposerPreviewSnapshot | null>(null);
-  const renderedOwner = useRef<NativeIdentity | null>(null);
-  const session = useRef(crypto.randomUUID());
-  const theme = useResolvedTheme();
-  const location = useMemo(() => buildComposerPreviewUrl(), []);
+  onReviewAnnotated?(message: ReviewAnnotatedMessage): void; focusAnnotation?: ReadonlySignal<{ id: string; nonce: number } | null>; title?: MaybeSignal<string>;
+}
+
+/** Live inputs are signals; callbacks are read once and must not read the signals they write. */
+export function NativePageFrame(props: NativePageFrameProps) {
+  const { provider, onSelect, onEvidence, onError, onReviewAnnotated, onRenderReady } = props;
+  const scope = getScope();
+  const frame: Ref<HTMLIFrameElement> = { current: null };
+  let bridge: ReturnType<typeof createComposerPreviewBridge> | null = null;
+  let invalidated = false, stale = false;
+  let sentSnapshot: ComposerPreviewSnapshot | null = null;
+  let renderedOwner: NativeIdentity | null = null;
+  let session: string = crypto.randomUUID();
+  const theme = resolvedThemeSignal(scope);
+  const location = buildComposerPreviewUrl();
+  const review = () => props.review?.value;
   const send = () => {
-    current.current.onEvidence(false);
-    current.current.onRenderReady?.(false);
-    const value = current.current;
-    if (stale.current) return;
-    invalidated.current = false;
-    sentSnapshot.current = value.snapshot;
-    renderedOwner.current = value.identity;
-    bridge.current?.render({ ...value.snapshot, nativePage: { identity: value.identity, draftRevision: value.draftRevision, frameSession: session.current }, selectNative: value.selecting && !value.review, ...(value.review ? { nativeReview: { ...value.review, frameSession: session.current } } : {}) }, { mode: "preview", theme, selectedId: null });
+    onEvidence(false);
+    onRenderReady?.(false);
+    const snapshot = props.snapshot.value, identity = props.identity.value;
+    if (stale || !snapshot || !identity) return;
+    invalidated = false;
+    sentSnapshot = snapshot;
+    renderedOwner = identity;
+    const nativeReview = review();
+    bridge?.render({ ...snapshot, nativePage: { identity, draftRevision: props.draftRevision.value, frameSession: session }, selectNative: read(props.selecting) && !nativeReview, ...(nativeReview ? { nativeReview: { ...nativeReview, frameSession: session } } : {}) }, { mode: "preview", theme: theme.value, selectedId: null });
   };
-  useEffect(() => {
-    if (!frame.current) return;
+  scope.onActivate(() => {
+    if (!frame.current) return undefined;
     const connection = createComposerPreviewBridge({ frame: frame.current, location, hostWindow: window, pack: { packId: provider.manifest.packId, packVersion: provider.manifest.packVersion },
-      onReady: () => { session.current = crypto.randomUUID(); send(); },
+      onReady: () => { session = crypto.randomUUID(); send(); },
       onNativeSelect: message => {
-        const value = current.current;
-        if (value.selecting && !value.review && message.revision === connection.revision && message.nativePage.frameSession === session.current && message.nativePage.draftRevision === value.draftRevision && JSON.stringify(message.nativePage.identity) === JSON.stringify(value.identity) && JSON.stringify(renderedOwner.current) === JSON.stringify(value.identity)) value.onSelect(message.nodeId, message.revision);
+        const identity = props.identity.value;
+        if (read(props.selecting) && !review() && message.revision === connection.revision && message.nativePage.frameSession === session && message.nativePage.draftRevision === props.draftRevision.value && JSON.stringify(message.nativePage.identity) === JSON.stringify(identity) && JSON.stringify(renderedOwner) === JSON.stringify(identity)) onSelect(message.nodeId, message.revision);
       },
       onNativePageRendered: message => {
-        const value = current.current;
-        if (sentSnapshot.current === value.snapshot && !invalidated.current && !stale.current && message.revision === connection.revision && message.nativePage.frameSession === session.current && message.nativePage.draftRevision === value.draftRevision && JSON.stringify(message.nativePage.identity) === JSON.stringify(value.identity)) value.onRenderReady?.(true);
+        if (sentSnapshot === props.snapshot.value && !invalidated && !stale && message.revision === connection.revision && message.nativePage.frameSession === session && message.nativePage.draftRevision === props.draftRevision.value && JSON.stringify(message.nativePage.identity) === JSON.stringify(props.identity.value)) onRenderReady?.(true);
       },
       onRendered: message => {
-        const expected = current.current.review;
-        if (invalidated.current || stale.current || sentSnapshot.current !== current.current.snapshot || !expected || message.nativeReview.frameSession !== session.current || message.nativeReview.planId !== expected.planId || message.nativeReview.digest !== expected.digest || message.nativeReview.dependencyDigest !== expected.dependencyDigest || JSON.stringify(message.nativeReview.identity) !== JSON.stringify(expected.identity)) return;
-        current.current.onEvidence(true);
+        const expected = review();
+        if (invalidated || stale || sentSnapshot !== props.snapshot.value || !expected || message.nativeReview.frameSession !== session || message.nativeReview.planId !== expected.planId || message.nativeReview.digest !== expected.digest || message.nativeReview.dependencyDigest !== expected.dependencyDigest || JSON.stringify(message.nativeReview.identity) !== JSON.stringify(expected.identity)) return;
+        onEvidence(true);
       },
-      onError: message => { invalidated.current = true; current.current.onEvidence(false); current.current.onRenderReady?.(false); current.current.onError(message); },
-      onReviewAnnotated: message => current.current.onReviewAnnotated?.(message),
-      onRejected: reason => { if (reason === "pack-mismatch" || reason === "invalid-payload") { invalidated.current = true; current.current.onEvidence(false); current.current.onRenderReady?.(false); current.current.onError("Preview identity or schema mismatch."); } },
+      onError: message => { invalidated = true; onEvidence(false); onRenderReady?.(false); onError(message); },
+      onReviewAnnotated: message => onReviewAnnotated?.(message),
+      onRejected: reason => { if (reason === "pack-mismatch" || reason === "invalid-payload") { invalidated = true; onEvidence(false); onRenderReady?.(false); onError("Preview identity or schema mismatch."); } },
     });
-    bridge.current = connection; send();
-    return () => { current.current.onEvidence(false); current.current.onRenderReady?.(false); connection.dispose(); bridge.current = null; };
-  }, [provider, location]);
-  useEffect(send, [snapshot, review, selecting, theme, identity, draftRevision]);
-  useEffect(() => {
-    const invalidate = (event: Event) => { invalidated.current = true; if (event.type === "native-authoring-stale") stale.current = true; current.current.onRenderReady?.(false); };
+    bridge = connection; send();
+    const invalidate = (event: Event) => { invalidated = true; if (event.type === "native-authoring-stale") stale = true; onRenderReady?.(false); };
     window.addEventListener("native-authoring-stale", invalidate);
     window.addEventListener("native-authoring-invalidated", invalidate);
-    return () => { window.removeEventListener("native-authoring-stale", invalidate); window.removeEventListener("native-authoring-invalidated", invalidate); };
-  }, []);
-  useEffect(() => { if (focusAnnotation) bridge.current?.focusAnnotation?.(focusAnnotation.id); }, [focusAnnotation]);
-  return <iframe ref={frame} {...composerPreviewFrameProps(location, title)} onLoad={() => { session.current = crypto.randomUUID(); send(); }} />;
+    return () => {
+      window.removeEventListener("native-authoring-stale", invalidate); window.removeEventListener("native-authoring-invalidated", invalidate);
+      onEvidence(false); onRenderReady?.(false); connection.dispose(); bridge = null;
+    };
+  });
+  // Resend whenever any rendered input changes, as the Preact effect on these dependencies did.
+  watch(scope, () => [props.snapshot.value, review(), read(props.selecting), theme.value, props.identity.value, props.draftRevision.value] as const, () => { if (bridge) send(); });
+  if (props.focusAnnotation) {
+    const focus = props.focusAnnotation;
+    watch(scope, () => [focus.value] as const, ([value]) => { if (value) bridge?.focusAnnotation?.(value.id); });
+  }
+  const frameProps = composerPreviewFrameProps(location, read(props.title ?? "Native page preview"));
+  return <iframe ref={frame} {...frameProps} title={props.title ?? "Native page preview"} on:load={() => { session = crypto.randomUUID(); send(); }} />;
 }

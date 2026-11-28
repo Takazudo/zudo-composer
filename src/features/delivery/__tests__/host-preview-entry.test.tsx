@@ -1,10 +1,9 @@
-import { render } from "preact";
 import { afterEach, expect, it, vi } from "vitest";
 vi.mock("virtual:composer-file-provider-config", () => ({ fileProviderConfig: { nativeEditing: { hostDocument: true } } }));
 // A regression importing the old runtime must fail before any component can run.
 vi.mock("../visitor-entry", () => { throw new Error("Incompatible visitor runtime was imported"); });
-afterEach(() => { const root = document.getElementById("app"); if (root) render(null, root); document.body.innerHTML = ""; window.history.replaceState(null, "", "/"); vi.resetModules(); });
-it.each(["/site/notes/example", "/website-preview/lessons"])("guards direct %s before importing Preact visitor delivery", async pathname => {
+afterEach(() => { document.body.innerHTML = ""; window.history.replaceState(null, "", "/"); vi.resetModules(); });
+it.each(["/site/notes/example", "/website-preview/lessons"])("guards direct %s before importing the visitor delivery runtime", async pathname => {
   document.body.innerHTML = '<div id="app"></div>';
   window.history.replaceState(null, "", pathname);
   await import("../../../main");

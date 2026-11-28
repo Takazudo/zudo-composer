@@ -1,7 +1,5 @@
-import { cleanup, render, waitFor } from "@testing-library/preact";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { WorkspaceContext } from "../../../../app/workspace-context";
-import type { ProductionProviderIntegration } from "../../../../app/provider-integration";
+import { render, waitFor } from "../../../../test/render";
+import { describe, expect, it, vi } from "vitest";
 import { notifyPersistenceChange } from "../../../../shared/persistence-generation";
 import { providerFixture, PNG } from "../../../assets/__tests__/versioned-fixture";
 import { activeComponentProvider } from "../../active-pack";
@@ -10,7 +8,6 @@ import type { CompositionDocument } from "../../../../composer/model/types";
 import { resolvePreviewAssetSnapshot } from "../assets-snapshot";
 import { LiveAssetReferenceResolver } from "../../../../assets/references";
 import { localPreviewSnapshot } from "../protocol";
-afterEach(cleanup);
 describe("host-only draft Asset resolution", () => {
   it("preserves already pinned output without requiring a mutable provider", async () => {
     const href = `/uploaded-assets/sha256-${"a".repeat(64)}.png`;
@@ -23,8 +20,7 @@ describe("host-only draft Asset resolution", () => {
     const { provider } = await providerFixture();
     const document: CompositionDocument = { schemaVersion: 2, id: "preview", name: "Preview", root: [{ id: "link", componentId: "ui.cta-button", componentVersion: 1, props: { href, children: "Download" }, slots: {} }] };
     const send = vi.fn(), error = vi.fn();
-    const integration = { assetProvider: provider } as unknown as ProductionProviderIntegration;
-    const view = render(<WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}><CompositionPreviewHost componentProvider={activeComponentProvider} document={document} onError={error} createBridge={(() => ({ ready: true, render: send, dispose() {}, updateSession() {} })) as never} location={{ src: "/composer/preview", targetOrigin: "https://example.test" }} hostWindow={{ addEventListener() {}, removeEventListener() {} }} /></WorkspaceContext.Provider>);
+    const view = render(<CompositionPreviewHost componentProvider={activeComponentProvider} assetStore={provider.store} document={document} onError={error} createBridge={(() => ({ ready: true, render: send, dispose() {}, updateSession() {} })) as never} location={{ src: "/composer/preview", targetOrigin: "https://example.test" }} hostWindow={{ addEventListener() {}, removeEventListener() {} }} />);
     await waitFor(() => expect(error).toHaveBeenCalled());
     expect(send).not.toHaveBeenCalled();
     expect(view.container.querySelector("iframe")?.style.display).toBe("none");
@@ -34,8 +30,7 @@ describe("host-only draft Asset resolution", () => {
     const record = await filesystem.upload({ fileName: "preview.png", declaredMimeType: "image/png", bytes: PNG });
     const document: CompositionDocument = { schemaVersion: 2, id: "preview", name: "Preview", root: [{ id: "link", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-assets/asset-${record.id}`, children: "Download" }, slots: {} }] };
     const renderSnapshot = vi.fn(); const createBridge = vi.fn(() => ({ ready: true, render: renderSnapshot, dispose: vi.fn(), updateSession: vi.fn() }));
-    const integration = { assetProvider: provider } as unknown as ProductionProviderIntegration;
-    render(<WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}><CompositionPreviewHost componentProvider={activeComponentProvider} document={document} createBridge={createBridge as never} location={{ src: "/composer/preview", targetOrigin: "https://example.test" }} hostWindow={{ addEventListener() {}, removeEventListener() {} }} /></WorkspaceContext.Provider>);
+    render(<CompositionPreviewHost componentProvider={activeComponentProvider} assetStore={provider.store} document={document} createBridge={createBridge as never} location={{ src: "/composer/preview", targetOrigin: "https://example.test" }} hostWindow={{ addEventListener() {}, removeEventListener() {} }} />);
     await waitFor(() => expect(renderSnapshot).toHaveBeenCalledWith(expect.objectContaining({ document: expect.objectContaining({ root: [expect.objectContaining({ props: expect.objectContaining({ href: record.document.versions[0]!.url }) })] }) }), expect.anything()));
     const next = await filesystem.replace(record.id, { bytes: new Uint8Array([...PNG, 9]) }, { expectedRevision: record.revision });
     notifyPersistenceChange("assets");

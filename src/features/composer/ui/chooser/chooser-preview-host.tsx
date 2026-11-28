@@ -1,8 +1,4 @@
 "use client";
-import { useAssetResolvedPreviewSnapshot } from "../../preview/assets-snapshot";
-
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 // The chooser's live preview pane (issue Takazudo/zudo-sg#254).
 //
 // Mounts a SECOND, dedicated preview iframe with its OWN instance-scoped Takazudo/zudo-sg#248
@@ -28,8 +24,11 @@ import { useAssetResolvedPreviewSnapshot } from "../../preview/assets-snapshot";
 // (`sg-composer-chooser-preview-stage`, styles.css) keeps the frame itself
 // out of the tab/click order — this pane is look-only.
 
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { ComponentChildren, JSX } from "preact";
+import { computed, getScope, Show, signal, type Child, type Ref } from "@takazudo/zfb/zudo-react";
+import type { VersionedAssetStore } from "../../../../assets/library";
+import { toSignal, type MaybeSignal } from "../../../../components/reactive";
+import { liveSlot, type LiveChild } from "../../../../components/rebuild";
+import { assetResolvedPreviewSnapshot } from "../../preview/assets-snapshot";
 import type { CompositionDocument, CompositionNode } from "../../../../composer/browser";
 import { COMPOSITION_SCHEMA_VERSION } from "../../../../composer/browser";
 import type { ComponentDefinition, ComposerComponentProvider } from "../../active-pack";
@@ -43,7 +42,7 @@ import {
   type MessageTarget,
   type PreviewSession,
 } from "../../preview";
-import { useResolvedTheme } from "../../../../theme/use-resolved-theme";
+import { resolvedThemeSignal } from "../../../../theme/use-resolved-theme";
 
 /** Stable id of the fixture pack's designated preview child (see module header). */
 export const CHOOSER_PREVIEW_PLACEHOLDER_ID = "ui.placeholder-box";
@@ -95,15 +94,17 @@ export function buildChooserPreviewDocument(
 export interface ChooserPreviewHostProps {
   componentProvider: ComposerComponentProvider;
   /** The catalog entry currently previewed. Null before the first hover/focus. */
-  entry: ComponentDefinition | null;
+  entry: MaybeSignal<ComponentDefinition | null>;
   /** A fully loaded Pattern source document, rendered intact rather than as a single component preview. */
-  sourceDocument?: CompositionDocument | null;
+  sourceDocument?: MaybeSignal<CompositionDocument | null | undefined>;
   /** Keeps the shared isolated-preview shell correctly labelled in each chooser tab. */
   label?: string;
   /** Chooser-owned context shown between the description and the stage. */
-  notice?: ComponentChildren;
+  notice?: LiveChild;
   /** Full catalog lookup, for resolving the PlaceholderBox preview child. */
   catalogById: ReadonlyMap<string, ComponentDefinition>;
+  /** The workspace's versioned Asset store, for resolving managed Asset references. */
+  assetStore?: VersionedAssetStore;
 
   // ── Test seams (production defaults) — mirror ComposerCanvasHost's ────────
   createBridge?: typeof createComposerPreviewBridge;
@@ -111,49 +112,54 @@ export interface ChooserPreviewHostProps {
   hostWindow?: MessageTarget;
 }
 
-export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element {
+/**
+ * The bridge and iframe live as long as the pane: entry and Pattern changes
+ * arrive through signals and are sent over the same bridge.
+ */
+export function ChooserPreviewHost(props: ChooserPreviewHostProps): Child {
   const {
     componentProvider,
-    entry,
-    sourceDocument,
     label = "Live preview",
     notice,
     catalogById,
+    assetStore,
     createBridge = createComposerPreviewBridge,
     location: locationProp,
     hostWindow,
   } = props;
+  const scope = getScope();
+  const entry = toSignal(props.entry);
+  const sourceDocument = toSignal(props.sourceDocument ?? null);
 
-  const frameRef = useRef<HTMLIFrameElement | null>(null);
-  const bridgeRef = useRef<ComposerPreviewBridge | null>(null);
-  const renderedDocumentRef = useRef<CompositionDocument | null>(null);
-  const [fatalError, setFatalError] = useState<string | null>(null);
-  const activeTheme = useResolvedTheme();
+  const frameRef: Ref<HTMLIFrameElement> = { current: null };
+  let bridge: ComposerPreviewBridge | null = null;
+  let renderedDocument: CompositionDocument | null = null;
+  let renderedTheme: "light" | "dark" | null = null;
+  const fatalError = signal<string | null>(null);
+  const activeTheme = resolvedThemeSignal(scope);
 
-  const location = useMemo(() => locationProp ?? buildComposerPreviewUrl(), [locationProp]);
-  const frameProps = useMemo(
-    () => composerPreviewFrameProps(location, PREVIEW_IFRAME_TITLE),
-    [location],
-  );
-  const authoredPreviewDocument = useMemo(
-    () => sourceDocument ?? (entry ? buildChooserPreviewDocument(entry, catalogById) : null),
-    [catalogById, entry, sourceDocument],
-  );
-  const authoredSnapshot = useMemo(() => authoredPreviewDocument ? localPreviewSnapshot(authoredPreviewDocument, authoredPreviewDocument.id) : null, [authoredPreviewDocument]);
-  const asset = useAssetResolvedPreviewSnapshot(authoredSnapshot, componentProvider.catalog);
-  const previewDocument = asset.snapshot?.document ?? null;
-  const latestPreviewDocumentRef = useRef(previewDocument);
-  latestPreviewDocumentRef.current = previewDocument;
-  const latestThemeRef = useRef(activeTheme);
-  latestThemeRef.current = activeTheme;
+  const location = locationProp ?? buildComposerPreviewUrl();
+  const frameProps = composerPreviewFrameProps(location, PREVIEW_IFRAME_TITLE);
+  let lastInputs: readonly [ComponentDefinition | null, CompositionDocument | null | undefined] | null = null;
+  let lastSnapshot: ReturnType<typeof localPreviewSnapshot> | null = null;
+  const authoredSnapshot = computed(() => {
+    const inputs = [entry.value, sourceDocument.value] as const;
+    if (lastInputs && lastInputs[0] === inputs[0] && lastInputs[1] === inputs[1]) return lastSnapshot;
+    lastInputs = inputs;
+    const document = inputs[1] ?? (inputs[0] ? buildChooserPreviewDocument(inputs[0], catalogById) : null);
+    lastSnapshot = document ? localPreviewSnapshot(document, document.id) : null;
+    return lastSnapshot;
+  });
+  const asset = assetResolvedPreviewSnapshot(scope, authoredSnapshot, componentProvider.catalog, { store: assetStore });
+  const previewDocument = computed(() => asset.value.snapshot?.document ?? null);
 
   // Created on mount, disposed on unmount — this pane's whole lifetime is the
   // dialog being open, which is exactly the "ephemeral" contract (Takazudo/zudo-sg#254): no
   // singleton, no persistence, isolated readiness/revision state per pane.
-  useEffect(() => {
+  scope.onActivate(() => {
     const frame = frameRef.current;
-    if (!frame) return;
-    const bridge = createBridge({
+    if (!frame) return undefined;
+    const created = createBridge({
       frame,
       location,
       hostWindow: hostWindow ?? window,
@@ -163,67 +169,75 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
       },
       onRejected: (reason, detail) => {
         if (reason === "pack-mismatch") {
-          setFatalError(`Preview cannot start: ${detail ?? "The host and preview loaded different packs."}`);
+          fatalError.value = `Preview cannot start: ${detail ?? "The host and preview loaded different packs."}`;
         }
       },
     });
-    bridgeRef.current = bridge;
-    renderedDocumentRef.current = null;
+    bridge = created;
+    renderedDocument = null;
     // A Pattern host can mount only after an asynchronous source load. Render
     // the latest document here as well as in the update effect so the initial
     // snapshot cannot be lost to effect ordering during that transition.
-    const initialDocument = latestPreviewDocumentRef.current;
+    const initialDocument = previewDocument.value;
     if (initialDocument) {
-      bridge.render(localPreviewSnapshot(initialDocument, initialDocument.id), {
+      const theme = activeTheme.value;
+      created.render(localPreviewSnapshot(initialDocument, initialDocument.id), {
         mode: "preview",
-        theme: latestThemeRef.current,
+        theme,
         selectedId: null,
       });
-      renderedDocumentRef.current = initialDocument;
+      renderedDocument = initialDocument;
+      renderedTheme = theme;
     }
     return () => {
-      bridge.dispose();
-      bridgeRef.current = null;
-      renderedDocumentRef.current = null;
+      created.dispose();
+      bridge = null;
+      renderedDocument = null;
+      renderedTheme = null;
     };
-  }, [componentProvider.manifest.packId, componentProvider.manifest.packVersion, createBridge, location, hostWindow]);
+  });
 
-  useEffect(() => {
-    const bridge = bridgeRef.current;
-    if (!bridge || !previewDocument || renderedDocumentRef.current === previewDocument) return;
-    const session: PreviewSession = {
-      mode: "preview",
-      theme: activeTheme,
-      selectedId: null,
-    };
-    bridge.render(localPreviewSnapshot(previewDocument, previewDocument.id), session);
-    renderedDocumentRef.current = previewDocument;
-  }, [activeTheme, previewDocument]);
+  scope.effect(() => {
+    const document = previewDocument.value;
+    const theme = activeTheme.value;
+    if (!bridge || !document) return;
+    const session: PreviewSession = { mode: "preview", theme, selectedId: null };
+    if (renderedDocument !== document) {
+      bridge.render(localPreviewSnapshot(document, document.id), session);
+      renderedDocument = document;
+      renderedTheme = theme;
+    } else if (renderedTheme !== theme) {
+      bridge.updateSession(session);
+      renderedTheme = theme;
+    }
+  });
 
-  useEffect(() => {
-    if (!bridgeRef.current || !renderedDocumentRef.current) return;
-    bridgeRef.current.updateSession({ mode: "preview", theme: activeTheme, selectedId: null });
-  }, [activeTheme]);
+  const titled = computed(() => entry.value !== null || !!sourceDocument.value);
+  const hasEntry = computed(() => entry.value !== null);
+  const hasFatal = computed(() => fatalError.value !== null);
+  const empty = computed(() => previewDocument.value === null);
+  const assetError = computed(() => asset.value.error ?? null);
+  const hasAssetError = computed(() => assetError.value !== null);
 
   return (
     <div class="sg-composer-chooser-preview">
       <p class="sg-composer-chooser-preview-label">{label}</p>
-      {(entry || sourceDocument) && (
-        <h3 class="sg-composer-chooser-preview-title">{entry?.title ?? sourceDocument?.name}</h3>
-      )}
-      {entry && <p class="sg-composer-chooser-preview-description">{entry.description}</p>}
-      {notice}
+      <Show when={titled}>{() => (
+        <h3 class="sg-composer-chooser-preview-title">{computed(() => entry.value?.title ?? sourceDocument.value?.name ?? "")}</h3>
+      )}</Show>
+      <Show when={hasEntry}>{() => <p class="sg-composer-chooser-preview-description">{computed(() => entry.value?.description ?? "")}</p>}</Show>
+      {liveSlot(notice)}
       <div class="sg-composer-chooser-preview-stage">
-        {fatalError && (
+        <Show when={hasFatal}>{() => (
           <p class="sg-composer-chooser-pattern-error" role="alert" data-composer-preview-fatal="pack-mismatch">
-            {fatalError}
+            {computed(() => fatalError.value ?? "")}
           </p>
-        )}
-        {!previewDocument && (
+        )}</Show>
+        <Show when={empty}>{() => (
           <p class="sg-composer-chooser-preview-empty">Hover or focus a component to preview it here.</p>
-        )}
-        {asset.error && <p role="alert">{asset.error}</p>}
-        <iframe ref={frameRef} hidden={!previewDocument} style={{ display: previewDocument ? undefined : "none" }} class="sg-composer-preview-iframe" {...frameProps} />
+        )}</Show>
+        <Show when={hasAssetError}>{() => <p role="alert">{computed(() => assetError.value ?? "")}</p>}</Show>
+        <iframe ref={frameRef} hidden={empty} style={computed(() => (empty.value ? "display: none;" : null))} class="sg-composer-preview-iframe" {...frameProps} />
       </div>
     </div>
   );

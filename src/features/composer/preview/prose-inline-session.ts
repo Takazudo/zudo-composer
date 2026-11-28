@@ -25,7 +25,7 @@
 //      plain-text walker (`readEditableValue`) is not a markdown serializer,
 //      so reading back an edited *rendered* tree could not reconstruct the
 //      source. What is edited must therefore be the source itself.
-//   2. `ProseMd` paints through `dangerouslySetInnerHTML` and reaches it via
+//   2. `ProseMd` paints through `rawHtml` and reaches it via
 //      an ASYNC render (the wasm markdown runtime resolves after mount). An
 //      imperatively-inserted text node inside that element is wiped the moment
 //      the component's pending → ready transition lands — a race no amount of
@@ -55,9 +55,8 @@
 // the host's mode (`editModeOverride`). It is cleared the moment the session
 // ends, or as soon as the host sends any Edit-mode snapshot of its own.
 
-import { Fragment, h } from "preact";
-import type { ComponentChildren, RefObject } from "preact";
-import { useCallback, useLayoutEffect, useRef, useState } from "preact/hooks";
+
+import { computed, For, h, Show, signal, type Child, type ReadonlySignal, type Ref, type Scope } from "@takazudo/zfb/zudo-react";
 import type { CompositionDocument, CompositionNode } from "../headless-api";
 import type { ComposerRuntimeEntry } from "../active-pack";
 import {
@@ -88,7 +87,7 @@ export const PROSE_CHROME_ATTR = "data-zc-prose-chrome";
 const DIALOG_TITLE_ID = "zc-prose-dialog-title";
 const DIALOG_TEXT_ID = "zc-prose-dialog-text";
 
-/** Which editable is mounted. `epoch` re-runs the mount effect on a re-mount. */
+/** Which editable is mounted. A fresh object per (re-)mount re-runs the mount effect. */
 interface ProseMount {
   nodeId: string;
   fieldKey: string;
@@ -97,15 +96,20 @@ interface ProseMount {
 
 export interface ProseInlineSessionOptions {
   /** The document on screen — an identity change is an incoming render. */
-  document: CompositionDocument;
+  document: ReadonlySignal<CompositionDocument>;
+  /**
+   * Anything else whose change rebuilds node wrappers (the linked source, the
+   * local record identity). Read only to know when to re-check the editable.
+   */
+  structure?: ReadonlySignal<unknown>;
   /** Registry lookup, keyed by `componentId`. */
   entryById: ReadonlyMap<string, ComposerRuntimeEntry>;
   /** The revision on screen; captured at session START and never refreshed (Takazudo/zudo-sg#288). */
-  revision: number;
+  revision: ReadonlySignal<number>;
   /** The HOST's mode. A local Edit override may sit on top of it — see the header. */
-  mode: PreviewMode;
+  mode: ReadonlySignal<PreviewMode>;
   /** The canvas root, used to locate the mounted editable. */
-  canvasRef: RefObject<HTMLElement | null>;
+  canvasRef: Ref<HTMLElement>;
   /**
    * Whether the canvas renders this node as OPAQUE (Takazudo/zudo-sg#245) — an unknown
    * component, an unsupported version, a structurally invalid payload. Such a
@@ -120,19 +124,18 @@ export interface ProseInlineSessionOptions {
 
 export interface ProseInlineSession {
   /** The node whose editable is mounted — null when idle OR stashed. */
-  mountedNodeId: string | null;
-  /** A live ref (not state) so imperative canvas handlers see the current value. */
+  mountedNodeId: ReadonlySignal<string | null>;
+  /** A live view (not a signal) so imperative canvas handlers see the current value. */
   activeRef: { readonly current: boolean };
   /** Draw the canvas in Edit mode even though the host says Preview — see the header. */
-  editModeOverride: boolean;
+  editModeOverride: ReadonlySignal<boolean>;
   /** Open a session on `nodeId`; false when the node has no markdown-source field. */
   tryEnter: (nodeId: string) => boolean;
   /** The raw-source editable, rendered in place of the node's body. */
-  renderEditor: () => ComponentChildren;
+  renderEditor: () => Child;
   /** The floating Save button and the confirmation dialog. */
-  renderChrome: () => ComponentChildren;
+  renderChrome: () => Child;
 }
-
 /**
  * `contenteditable="plaintext-only"` is what keeps a RICH paste from smuggling
  * markup into a field whose value is markdown text — but Firefox only shipped
@@ -206,103 +209,94 @@ function leftTheBrowser(ownerDoc: Document, editable: HTMLElement): boolean {
   return ownerDoc.activeElement === editable;
 }
 
-export function useProseInlineSession(options: ProseInlineSessionOptions): ProseInlineSession {
+/**
+ * Create the prose session inside the canvas's setup. Every effect below is
+ * owned by `scope`, so the session's listeners end with the canvas.
+ */
+export function createProseInlineSession(scope: Scope, options: ProseInlineSessionOptions): ProseInlineSession {
   const { canvasRef } = options;
 
-  // Every option that an imperative listener (attached outside Preact) reads is
-  // mirrored into a ref, so a listener installed for one mount never closes
-  // over a stale document/provider/revision.
-  const optionsRef = useRef(options);
-  optionsRef.current = options;
+  // Listener-visible mirrors: the imperative listeners (attached outside the
+  // renderer) and the effects read these without subscribing to them.
+  let stateNow: ProseSessionState = idleProseSession;
+  const state = signal<ProseSessionState>(idleProseSession);
+  const activeRef = { get current() { return stateNow.kind !== "idle"; } };
 
-  const [state, setStateValue] = useState<ProseSessionState>(idleProseSession);
-  const stateRef = useRef<ProseSessionState>(idleProseSession);
-  const activeRef = useRef(false);
-
-  const [mount, setMountValue] = useState<ProseMount | null>(null);
-  const mountRef = useRef<ProseMount | null>(null);
-  const epochRef = useRef(0);
+  const mount = signal<ProseMount | null>(null);
+  let epoch = 0;
   /**
    * Exact text seeded into the currently mounted editor. This is deliberately
    * separate from `draft.initialValue`: the machine keeps the latter as the
    * immutable session-start baseline, while DOM reads decode against this
    * per-mount seed (which can be a restored/relocated draft).
    */
-  const mountSeedRef = useRef<string | null>(null);
+  let mountSeed: string | null = null;
 
-  const [dialog, setDialog] = useState<ProseDialogKind | null>(null);
-  const [editModeOverride, setEditModeOverride] = useState(false);
+  const dialog = signal<ProseDialogKind | null>(null);
+  const editModeOverride = signal(false);
 
-  const editableRef = useRef<HTMLElement | null>(null);
-  /** Set by `refocus`; consumed after the render that (re)mounted the editable. */
-  const pendingFocusRef = useRef(false);
+  let editable: HTMLElement | null = null;
+  /** Set by `refocus`; consumed after the commit that (re)mounted the editable. */
+  let pendingFocus = false;
   /** A click-away that opened a dialog is CONSUMED, never replayed (Takazudo/zudo-sg#374's header). */
-  const swallowClickRef = useRef(false);
+  let swallowClick = false;
 
-  const setMount = useCallback((next: ProseMount | null) => {
-    mountRef.current = next;
-    if (next === null) mountSeedRef.current = null;
-    setMountValue(next);
-  }, []);
+  const setMount = (next: ProseMount | null): void => {
+    if (next === null) mountSeed = null;
+    mount.value = next;
+  };
 
-  const mountEditor = useCallback(
-    (nodeId: string, fieldKey: string, seed: string) => {
-      mountSeedRef.current = seed;
-      epochRef.current += 1;
-      setMount({ nodeId, fieldKey, epoch: epochRef.current });
-    },
-    [setMount],
-  );
+  const mountEditor = (nodeId: string, fieldKey: string, seed: string): void => {
+    mountSeed = seed;
+    epoch += 1;
+    setMount({ nodeId, fieldKey, epoch });
+  };
 
-  const dispatch = useCallback(
-    (input: ProseSessionInput) => {
-      const { state: next, effects } = proseSessionTransition(stateRef.current, input);
-      stateRef.current = next;
-      activeRef.current = next.kind !== "idle";
-      setStateValue(next);
+  const dispatch = (input: ProseSessionInput): void => {
+    const { state: next, effects } = proseSessionTransition(stateNow, input);
+    stateNow = next;
+    state.value = next;
 
-      for (const effect of effects) {
-        switch (effect.type) {
-          case "commit":
-            // The ONE commit path. Stamped with the SESSION-START revision the
-            // draft has carried since `start` — never the revision on screen
-            // now (issue Takazudo/zudo-sg#288's invariant).
-            optionsRef.current.onCommit?.(
-              effect.draft.nodeId,
-              effect.draft.fieldKey,
-              effect.draft.value,
-              effect.draft.startRevision,
-            );
-            setMount(null);
-            setEditModeOverride(false);
-            break;
-          case "discard":
-            setMount(null);
-            setEditModeOverride(false);
-            break;
-          case "stash-draft":
-            // The editable is about to be destroyed; the draft lives on in the
-            // machine's state until the dialog is answered.
-            setMount(null);
-            break;
-          case "restore-editing":
-            setEditModeOverride(true);
-            mountEditor(effect.draft.nodeId, effect.draft.fieldKey, effect.draft.value);
-            break;
-          case "refocus":
-            pendingFocusRef.current = true;
-            break;
-          case "show-dialog":
-            setDialog(effect.dialog);
-            break;
-          case "close-dialog":
-            setDialog(null);
-            break;
-        }
+    for (const effect of effects) {
+      switch (effect.type) {
+        case "commit":
+          // The ONE commit path. Stamped with the SESSION-START revision the
+          // draft has carried since `start` — never the revision on screen
+          // now (issue Takazudo/zudo-sg#288's invariant).
+          options.onCommit?.(
+            effect.draft.nodeId,
+            effect.draft.fieldKey,
+            effect.draft.value,
+            effect.draft.startRevision,
+          );
+          setMount(null);
+          editModeOverride.value = false;
+          break;
+        case "discard":
+          setMount(null);
+          editModeOverride.value = false;
+          break;
+        case "stash-draft":
+          // The editable is about to be destroyed; the draft lives on in the
+          // machine's state until the dialog is answered.
+          setMount(null);
+          break;
+        case "restore-editing":
+          editModeOverride.value = true;
+          mountEditor(effect.draft.nodeId, effect.draft.fieldKey, effect.draft.value);
+          break;
+        case "refocus":
+          pendingFocus = true;
+          break;
+        case "show-dialog":
+          dialog.value = effect.dialog;
+          break;
+        case "close-dialog":
+          dialog.value = null;
+          break;
       }
-    },
-    [mountEditor, setMount],
-  );
+    }
+  };
 
   /**
    * Push the editable's CURRENT text into the machine before any stimulus that
@@ -311,51 +305,48 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
    * one keystroke behind — and the difference decides both dirtiness and what
    * a commit would carry. Cheap, and it removes the whole race class.
    */
-  const syncValueFromDom = useCallback(() => {
-    const el = editableRef.current;
-    const draft = proseSessionDraft(stateRef.current);
-    const mountSeed = mountSeedRef.current;
-    if (!el || !draft || mountSeed === null) return;
-    dispatch({ type: "input", value: readNormalizedEditableValue(el, true, mountSeed) });
-  }, [dispatch]);
+  const syncValueFromDom = (): void => {
+    const el = editable;
+    const draft = proseSessionDraft(stateNow);
+    const seed = mountSeed;
+    if (!el || !draft || seed === null) return;
+    dispatch({ type: "input", value: readNormalizedEditableValue(el, true, seed) });
+  };
 
-  const tryEnter = useCallback(
-    (nodeId: string): boolean => {
-      if (stateRef.current.kind !== "idle") return false;
-      const { document, entryById, revision, isOpaque } = optionsRef.current;
-      const targetNode = findNodeById(document.root, nodeId);
-      if (!targetNode) return false;
-      // An opaque node is read-only — see `isOpaque`. (The auto-commit session
-      // is protected by a different mechanism: it edits the COMPONENT's own
-      // DOM, which an opaque node never renders, so its adapter simply fails to
-      // resolve. This session brings its own editable, so it must ask.)
-      if (isOpaque(targetNode)) return false;
-      const entry = entryById.get(targetNode.componentId);
-      const editable = inlineEditableForEntry(entry);
-      if (!editable || editable.mode !== "markdown-source") return false;
-      const initialValue = effectiveFieldValue(targetNode, entry, editable.field);
-      mountEditor(nodeId, editable.field, initialValue);
-      dispatch({
-        type: "start",
-        nodeId,
-        fieldKey: editable.field,
-        value: initialValue,
-        startRevision: revision,
-      });
-      return true;
-    },
-    [dispatch, mountEditor],
-  );
+  const tryEnter = (nodeId: string): boolean => {
+    if (stateNow.kind !== "idle") return false;
+    const document = options.document.value;
+    const targetNode = findNodeById(document.root, nodeId);
+    if (!targetNode) return false;
+    // An opaque node is read-only — see `isOpaque`. (The auto-commit session
+    // is protected by a different mechanism: it edits the COMPONENT's own
+    // DOM, which an opaque node never renders, so its adapter simply fails to
+    // resolve. This session brings its own editable, so it must ask.)
+    if (options.isOpaque(targetNode)) return false;
+    const entry = options.entryById.get(targetNode.componentId);
+    const editableField = inlineEditableForEntry(entry);
+    if (!editableField || editableField.mode !== "markdown-source") return false;
+    const initialValue = effectiveFieldValue(targetNode, entry, editableField.field);
+    mountEditor(nodeId, editableField.field, initialValue);
+    dispatch({
+      type: "start",
+      nodeId,
+      fieldKey: editableField.field,
+      value: initialValue,
+      startRevision: options.revision.value,
+    });
+    return true;
+  };
 
   // ── Mount / tear down the raw-source editable ─────────────────────────────
   //
-  // A LAYOUT effect: it runs after the differently-keyed body has committed the
-  // fresh element but before paint, so the seeded text and the caret are in
-  // place with no flicker. `epoch` is in the key so a RE-mount (keeping a
-  // stashed draft) re-runs it even though node/field are unchanged.
-  useLayoutEffect(() => {
-    const active = mountRef.current;
-    if (!active) return;
+  // An effect runs after the differently-keyed body has committed the fresh
+  // element, so the seeded text and the caret are placed on the element the
+  // user sees. A fresh `ProseMount` per (re-)mount re-runs it even though
+  // node/field are unchanged.
+  scope.effect(() => {
+    const active = mount.value;
+    if (!active) return undefined;
 
     const el = editorElement(canvasRef.current, active.nodeId);
     if (!el) {
@@ -363,22 +354,22 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
       // Abandon rather than strand the user in a session with no editor; the
       // draft is unsaveable anyway (its target is gone).
       dispatch({ type: "node-removed", nodeId: active.nodeId });
-      return;
+      return undefined;
     }
-    editableRef.current = el;
+    editable = el;
 
     const ownerDoc = el.ownerDocument;
-    const mountSeed = mountSeedRef.current;
-    if (mountSeed === null) {
+    const seed = mountSeed;
+    if (seed === null) {
       dispatch({ type: "node-removed", nodeId: active.nodeId });
-      return;
+      return undefined;
     }
     el.setAttribute(INLINE_EDITING_ATTR, "");
     // This is a SOURCE editor — see `editableAttrValue` for why the value is
     // probed rather than hardcoded.
     el.setAttribute("contenteditable", editableAttrValue(ownerDoc));
-    // Imperative, never a vdom child — see the module header.
-    el.appendChild(ownerDoc.createTextNode(mountSeed));
+    // Imperative, never a rendered child — see the module header.
+    el.appendChild(ownerDoc.createTextNode(seed));
     el.focus();
     placeCaretAtEnd(el);
 
@@ -393,11 +384,11 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
       syncValueFromDom();
     };
     const onInput = (): void => {
-      if (proseSessionDraft(stateRef.current) === null) return;
-      // `mountSeed` is frozen for this element. A restored or relocated draft
+      if (proseSessionDraft(stateNow) === null) return;
+      // `seed` is frozen for this element. A restored or relocated draft
       // may differ from the session-start baseline, and must keep its own
       // terminal-newline quota while this editor remains mounted.
-      dispatch({ type: "input", value: readNormalizedEditableValue(el, true, mountSeed) });
+      dispatch({ type: "input", value: readNormalizedEditableValue(el, true, seed) });
     };
     const onKeyDown = (event: KeyboardEvent): void => {
       // Enter is deliberately UNHANDLED: it inserts a newline in the source and
@@ -416,7 +407,7 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
       // Only a live editing session can lose focus meaningfully: a teardown
       // (commit/discard/stash) also fires focusout, and while a dialog is open
       // the pending decision already owns the session.
-      if (stateRef.current.kind !== "editing") return;
+      if (stateNow.kind !== "editing") return;
       const next = event.relatedTarget;
       if (next && (el.contains(next as Node) || inProseChrome(next))) return;
       // Focus left the editable with no in-iframe successor. That is the ONLY
@@ -441,10 +432,10 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
       // edited field alone leaves the session alone.
       const view = ownerDoc.defaultView;
       const decide = (): void => {
-        if (stateRef.current.kind !== "editing") return;
+        if (stateNow.kind !== "editing") return;
         // Already rebound to a fresh editable: this focusout belonged to the
         // element that was replaced, and the replacement is focused already.
-        if (editableRef.current !== el) return;
+        if (editable !== el) return;
         if (ownerDoc.hasFocus()) {
           // Nothing left the canvas — restore the caret and carry on. The
           // selection itself is left alone: the user's caret position is not
@@ -508,7 +499,7 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
     // is already too late — focus has moved by then and `focusout` would have
     // raised the same stimulus a second time.
     const onDocMouseDownCapture = (event: MouseEvent): void => {
-      if (stateRef.current.kind !== "editing") return;
+      if (stateNow.kind !== "editing") return;
       // Only a PRIMARY press is an intent to go somewhere else. A right-click
       // (reaching for the browser's own Paste/Copy menu) or a middle-click is
       // not — and `preventDefault` here would not suppress the `contextmenu`
@@ -517,22 +508,22 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
       if (event.button !== 0) return;
       if (inProseEditable(event.target) || inProseChrome(event.target)) return;
       syncValueFromDom();
-      if (proseSessionIsDirty(stateRef.current)) {
+      if (proseSessionIsDirty(stateNow)) {
         // Keep focus (and the caret) exactly where they are behind the dialog,
         // and CONSUME the gesture — the machine never replays it.
         event.preventDefault();
         event.stopPropagation();
-        swallowClickRef.current = true;
+        swallowClick = true;
       }
       dispatch({ type: "outside-intent" });
     };
     const onDocClickCapture = (event: MouseEvent): void => {
-      if (!swallowClickRef.current) return;
+      if (!swallowClick) return;
       // Our own chrome is never the swallowed gesture: a click on the dialog is
       // the ANSWER to the prompt that gesture raised. (It also cannot be the
       // pair of the intercepted mousedown — that landed outside the chrome.)
       if (inProseChrome(event.target)) return;
-      swallowClickRef.current = false;
+      swallowClick = false;
       event.preventDefault();
       event.stopPropagation();
     };
@@ -551,67 +542,73 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
       ownerDoc.removeEventListener("click", onDocClickCapture, true);
       el.removeAttribute("contenteditable");
       el.removeAttribute(INLINE_EDITING_ATTR);
-      swallowClickRef.current = false;
-      if (editableRef.current === el) editableRef.current = null;
+      swallowClick = false;
+      if (editable === el) editable = null;
     };
-  }, [mount?.nodeId, mount?.fieldKey, mount?.epoch]);
+  });
 
   // An incoming render can MOVE the edited node to a different parent slot
   // without touching its field value — the ground-check deliberately keeps the
-  // session alive for that (the field did not change), but Preact builds the
-  // node's DOM afresh under its new parent, so the live editable is replaced by
-  // an empty element with no text, no `contenteditable`, and no listeners while
-  // `editableRef` still points at the detached one. Re-mount from the current
-  // draft instead of leaving the session bound to a dead node. Runs on every
-  // render (the check is one `querySelector` and only while a session is open)
-  // and converges: the re-mount makes the identities agree again.
-  useLayoutEffect(() => {
-    const active = mountRef.current;
+  // session alive for that (the field did not change), but the moved node's
+  // wrapper is built afresh under its new parent, so the live editable is
+  // replaced by an empty element with no text, no `contenteditable`, and no
+  // listeners while `editable` still points at the detached one. Re-mount
+  // from the current draft instead of leaving the session bound to a dead
+  // node. Runs after every structural render while a session is open and
+  // converges: the re-mount makes the identities agree again.
+  scope.effect(() => {
+    void options.document.value;
+    void options.structure?.value;
+    const active = mount.value;
     if (!active) return;
     const el = editorElement(canvasRef.current, active.nodeId);
-    if (!el || el === editableRef.current) return;
-    const draft = proseSessionDraft(stateRef.current);
+    if (!el || el === editable) return;
+    const draft = proseSessionDraft(stateNow);
     if (!draft) return;
     mountEditor(draft.nodeId, draft.fieldKey, draft.value);
   });
 
-  // `refocus`, deferred to after the render that (re)mounted the editable — a
+  // `refocus`, deferred to after the commit that (re)mounted the editable — a
   // "keep editing" from a STASHED draft has no element to focus until then.
   // Declared AFTER the mount effect so it always sees the fresh element.
-  useLayoutEffect(() => {
-    if (!pendingFocusRef.current) return;
-    const el = editableRef.current;
+  scope.effect(() => {
+    void state.value;
+    void mount.value;
+    if (!pendingFocus) return;
+    const el = editable;
     if (!el) return;
-    pendingFocusRef.current = false;
+    pendingFocus = false;
     el.focus();
     placeCaretAtEnd(el);
   });
 
   // ── Host mode changes ─────────────────────────────────────────────────────
-  const prevModeRef = useRef(options.mode);
-  useLayoutEffect(() => {
-    const previous = prevModeRef.current;
-    prevModeRef.current = options.mode;
-    if (previous === options.mode) return;
+  let previousMode: PreviewMode | null = null;
+  scope.effect(() => {
+    const mode = options.mode.value;
+    const previous = previousMode;
+    previousMode = mode;
+    if (previous === null || previous === mode) return;
     // The host reasserting Edit mode makes any local override redundant.
-    if (options.mode === "edit") setEditModeOverride(false);
-    if (stateRef.current.kind === "idle") return;
+    if (mode === "edit") editModeOverride.value = false;
+    if (stateNow.kind === "idle") return;
     // The keyed body is not remounted by a mere mode change, so the editable is
     // still live here and its text can be captured before the stash.
     syncValueFromDom();
-    dispatch({ type: "mode-switch", mode: options.mode });
-  }, [options.mode]);
+    dispatch({ type: "mode-switch", mode });
+  });
 
   // ── Incoming renders (Takazudo/zudo-sg#288's ground-check, prose edition) ─────────────────
   // Keyed on document IDENTITY: a session-only message (mode, theme, selection)
   // keeps the same document reference, so this only fires for a real render.
-  const prevDocumentRef = useRef(options.document);
-  useLayoutEffect(() => {
-    const previous = prevDocumentRef.current;
-    prevDocumentRef.current = options.document;
-    const draft = proseSessionDraft(stateRef.current);
-    if (!draft || previous === options.document) return;
-    const targetNode = findNodeById(options.document.root, draft.nodeId);
+  let previousDocument: CompositionDocument | null = null;
+  scope.effect(() => {
+    const document = options.document.value;
+    const previous = previousDocument;
+    previousDocument = document;
+    const draft = proseSessionDraft(stateNow);
+    if (!draft || previous === null || previous === document) return;
+    const targetNode = findNodeById(document.root, draft.nodeId);
     if (!targetNode) {
       dispatch({ type: "node-removed", nodeId: draft.nodeId });
       return;
@@ -622,16 +619,16 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
       fieldKey: draft.fieldKey,
       value: effectiveFieldValue(
         targetNode,
-        optionsRef.current.entryById.get(targetNode.componentId),
+        options.entryById.get(targetNode.componentId),
         draft.fieldKey,
       ),
     });
-  }, [options.document]);
+  });
 
   // Put initial focus on the SAFE action whenever a dialog opens.
-  const dialogRef = useRef<HTMLElement | null>(null);
-  useLayoutEffect(() => {
-    if (!dialog) return;
+  const dialogRef: Ref<HTMLElement> = { current: null };
+  scope.effect(() => {
+    if (!dialog.value) return undefined;
     const defaultAction =
       dialogRef.current?.querySelector<HTMLElement>("[data-zc-dialog-default]") ?? null;
     defaultAction?.focus();
@@ -648,7 +645,7 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
     // already holds focus this is a no-op.
     const ownerDoc = dialogRef.current?.ownerDocument;
     const view = ownerDoc?.defaultView;
-    if (!ownerDoc || !view) return;
+    if (!ownerDoc || !view) return undefined;
     const timer = view.setTimeout(() => {
       if (ownerDoc.hasFocus()) return;
       // …but never drag a BACKGROUND tab to the front to show a dialog.
@@ -657,42 +654,37 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
       defaultAction?.focus();
     }, 0);
     return () => view.clearTimeout(timer);
-  }, [dialog]);
+  });
 
   // ── Rendering ─────────────────────────────────────────────────────────────
 
-  const renderEditor = useCallback(
-    (): ComponentChildren =>
-      h("div", {
-        key: "zc-prose-source",
-        class: "zc-prose-source",
-        [PROSE_EDITING_ATTR]: "",
-        [INLINE_EDITING_ATTR]: "",
-        // No vdom children, ever: the text node is inserted imperatively so a
-        // re-render can never reset the caret (module header).
-        spellcheck: false,
-        role: "textbox",
-        "aria-multiline": "true",
-        "aria-label": "Markdown source",
-      }),
-    [],
-  );
+  const renderEditor = (): Child =>
+    h("div", {
+      class: "zc-prose-source",
+      [PROSE_EDITING_ATTR]: "",
+      [INLINE_EDITING_ATTR]: "",
+      // No rendered children, ever: the text node is inserted imperatively so
+      // a re-render can never reset the caret (module header).
+      spellcheck: false,
+      role: "textbox",
+      "aria-multiline": "true",
+      "aria-label": "Markdown source",
+    });
 
   const dialogAction = (
     label: string,
     tone: "neutral" | "danger" | "primary",
     onActivate: () => void,
     extra: Record<string, unknown> = {},
-  ): ComponentChildren =>
+  ): Child =>
     h(
       "button",
       {
-        key: `zc-prose-dialog-${label}`,
         type: "button",
         class: `zc-prose-dialog-action zc-prose-dialog-action--${tone}`,
         "data-zc-affordance": "",
         "data-zc-dialog-action": "",
-        onClick: onActivate,
+        "on:click": onActivate,
         ...extra,
       },
       label,
@@ -725,7 +717,7 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
     }
   };
 
-  const renderDialog = (kind: ProseDialogKind): ComponentChildren => {
+  const renderDialog = (kind: ProseDialogKind): Child => {
     // Only the LEAVE dialog offers Save. The escape dialog is confirming a
     // discard gesture, and on the stale dialog a save cannot succeed at all —
     // the host's revision gate would drop it (see `prose-session-machine.ts`).
@@ -741,7 +733,6 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
     return h(
       "div",
       {
-        key: "zc-prose-dialog-backdrop",
         class: "zc-prose-dialog-backdrop",
         [PROSE_CHROME_ATTR]: "",
         "data-zc-affordance": "",
@@ -754,10 +745,8 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
           "aria-modal": "true",
           "aria-labelledby": DIALOG_TITLE_ID,
           "aria-describedby": DIALOG_TEXT_ID,
-          ref: (el: HTMLElement | null) => {
-            dialogRef.current = el;
-          },
-          onKeyDown: onDialogKeyDown,
+          ref: dialogRef,
+          "on:keydown": onDialogKeyDown,
         },
         h("p", { id: DIALOG_TITLE_ID, class: "zc-prose-dialog-title" }, title),
         h("p", { id: DIALOG_TEXT_ID, class: "zc-prose-dialog-text" }, text),
@@ -784,49 +773,60 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
     );
   };
 
-  const renderChrome = (): ComponentChildren => {
-    if (state.kind === "idle") return null;
-    const dirty = proseSessionIsDirty(state);
-    // While a dialog is open it owns the decision — the backdrop covers the bar
-    // anyway, and a second Save affordance would be a second accent element.
-    const savebar =
-      dialog !== null
-        ? null
-        : h(
-            "div",
-            {
-              key: "zc-prose-savebar",
-              class: "zc-prose-savebar",
-              [PROSE_CHROME_ATTR]: "",
-              "data-zc-affordance": "",
-            },
-            dirty
-              ? h("span", { class: "zc-prose-savebar-status", role: "status" }, "Unsaved changes")
-              : null,
-            h(
-              "button",
-              {
-                type: "button",
-                class: "zc-prose-save",
-                "data-zc-affordance": "",
-                "data-zc-dirty": dirty ? "" : undefined,
-                // Keeping the mousedown default suppressed is what stops the
-                // button from stealing focus: a focusout here would be read as
-                // a click-away and raise the leave dialog instead of saving.
-                onMouseDown: (event: MouseEvent) => event.preventDefault(),
-                onClick: () => {
-                  syncValueFromDom();
-                  dispatch({ type: "save-click" });
-                },
-              },
-              dirty ? "Save" : "Done",
-            ),
-          );
-    return h(Fragment, null, savebar, dialog === null ? null : renderDialog(dialog));
-  };
+  const sessionOpen = computed(() => state.value.kind !== "idle");
+  const dirty = computed(() => proseSessionIsDirty(state.value));
+  const noDialog = computed(() => dialog.value === null);
+  const openDialogs = computed(() => (dialog.value === null ? [] : [dialog.value]));
+
+  const renderSavebar = (): Child =>
+    h(
+      "div",
+      {
+        class: "zc-prose-savebar",
+        [PROSE_CHROME_ATTR]: "",
+        "data-zc-affordance": "",
+      },
+      h(Show, {
+        when: dirty,
+        children: () => h("span", { class: "zc-prose-savebar-status", role: "status" }, "Unsaved changes"),
+      }),
+      h(
+        "button",
+        {
+          type: "button",
+          class: "zc-prose-save",
+          "data-zc-affordance": "",
+          "data-zc-dirty": computed(() => (dirty.value ? "" : null)),
+          // Keeping the mousedown default suppressed is what stops the
+          // button from stealing focus: a focusout here would be read as
+          // a click-away and raise the leave dialog instead of saving.
+          "on:mousedown": (event: MouseEvent) => event.preventDefault(),
+          "on:click": () => {
+            syncValueFromDom();
+            dispatch({ type: "save-click" });
+          },
+        },
+        computed(() => (dirty.value ? "Save" : "Done")),
+      ),
+    );
+
+  const renderChrome = (): Child =>
+    h(Show, {
+      when: sessionOpen,
+      children: () => [
+        // While a dialog is open it owns the decision — the backdrop covers the
+        // bar anyway, and a second Save affordance would be a second accent element.
+        h(Show, { when: noDialog, children: renderSavebar }),
+        h(For<ProseDialogKind>, {
+          each: openDialogs,
+          by: (kind: ProseDialogKind) => kind,
+          children: (kind: ReadonlySignal<ProseDialogKind>) => renderDialog(kind.value),
+        }),
+      ],
+    });
 
   return {
-    mountedNodeId: mount?.nodeId ?? null,
+    mountedNodeId: computed(() => mount.value?.nodeId ?? null),
     activeRef,
     editModeOverride,
     tryEnter,

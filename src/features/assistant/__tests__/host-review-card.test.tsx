@@ -1,12 +1,12 @@
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
+import { fireEvent, render, waitFor } from "../../../test/render";
 import { afterEach, expect, it, vi } from "vitest";
 import { HostReviewCard } from "../host-review-card";
 import type { HostReviewAcknowledgement, HostReviewPreview } from "../../../shared/host-review-types";
 import type { ProductionProviderIntegration } from "../../../app/provider-integration";
 const mocks = vi.hoisted(() => ({ request: vi.fn(), current: true }));
 vi.mock("../../native-editing/session", () => ({ assistantRequest: mocks.request }));
-vi.mock("../host-review-frame", () => ({ HostReviewFrame: ({ value, onReady }: { value: HostReviewPreview; onReady: (ack: HostReviewAcknowledgement, current: () => boolean) => void }) => <button onClick={() => onReady({ reviewId: value.reviewId, candidateDigest: value.candidateDigest, baseDigest: value.baseDigest, identity: value.preview.identity, frameId: "frame" }, () => mocks.current)}>Acknowledge fixture</button> }));
-afterEach(() => { cleanup(); localStorage.clear(); vi.clearAllMocks(); mocks.current = true; });
+vi.mock("../host-review-frame", () => ({ HostReviewFrame: ({ value, onReady }: { value: HostReviewPreview; onReady: (ack: HostReviewAcknowledgement, current: () => boolean) => void }) => <button on:click={() => onReady({ reviewId: value.reviewId, candidateDigest: value.candidateDigest, baseDigest: value.baseDigest, identity: value.preview.identity, frameId: "frame" }, () => mocks.current)}>Acknowledge fixture</button> }));
+afterEach(() => { localStorage.clear(); vi.clearAllMocks(); mocks.current = true; });
 it("retains the exact lost Apply across remount and replays it without issuing a new review", async () => {
   const card = { id: "review", ownerLabel: "Course price", operation: { domain: "content" }, summary: "Price", affectedUses: [], routes: [{ pathname: "/", title: "Home" }], status: "open" };
   const preview = { reviewId: "review", candidateDigest: "candidate", baseDigest: "base", preview: { identity: { pathname: "/" } } };

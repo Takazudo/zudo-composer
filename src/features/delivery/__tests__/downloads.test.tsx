@@ -1,9 +1,9 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/preact";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
+import { render, screen, waitFor } from "../../../test/render";
 import ts from "typescript";
 import { ProseMd } from "@zudo-composer/ui";
-import { h, Fragment } from "preact";
-import { render as renderToString } from "preact-render-to-string";
+import { Fragment, h, type Child } from "@takazudo/zfb/zudo-react";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { activeComponentProvider } from "../../composer/active-pack";
 import { DeliveryRuntime } from "../runtime";
 import { project, model, entry, composition, mapping, page, mappingSource } from "../../../site-project/compiler/__tests__/fixtures";
@@ -20,7 +20,6 @@ import { generateJsx } from "../../../composer/source/generate-jsx";
 import { CompositionCanvas } from "../../composer/preview/renderer";
 
 const ZIP = Uint8Array.from([0x50, 0x4b, 0x03, 0x04, ...Array(18).fill(0)]);
-afterEach(cleanup);
 
 function downloadProject(assetId: string, providerId: string) {
   const contentModel = model("single");
@@ -59,10 +58,10 @@ describe("managed downloads in the stock Markdown component", () => {
     expect(anchor).toHaveAttribute("download", asset.document.fileName);
     expect(anchor.outerHTML).toContain('&amp;'); expect(anchor.outerHTML).toContain('&quot;'); expect(anchor.outerHTML).not.toContain('.zip.zip');
     const generated = generateJsx(route.composition.document, catalog, { componentName: "Composition" });
-    expect(generated.ok).toBe(true); expect(generated.code).toContain("<a onClick="); expect(generated.code).toContain("download=");
+    expect(generated.ok).toBe(true); expect(generated.code).toContain("<a on:click="); expect(generated.code).toContain("download=");
     // Execute the exported JSX with its real pack import. It contains no runtime asset lookups.
     const js = ts.transpileModule(generated.code, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, jsxFactory: "h", jsxFragmentFactory: "Fragment" } }).outputText;
-    const exported = { exports: {} as { Composition(): ReturnType<typeof h> } };
+    const exported = { exports: {} as { Composition(): Child } };
     new Function("require", "module", "exports", "h", "Fragment", js)(() => ({ ProseMd }), exported, exported.exports, h, Fragment);
     const html = renderToString(exported.exports.Composition());
     expect(html).toContain('download="資料 &amp; &quot;files&quot;.zip"');
