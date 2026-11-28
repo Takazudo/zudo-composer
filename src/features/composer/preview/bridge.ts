@@ -90,7 +90,7 @@ export interface ComposerPreviewFrameProps {
   src: string;
   /** Accessible name — an iframe without one is an unlabelled landmark. */
   title: string;
-  /** Same-origin so the parent can address `contentWindow`; scripts for Preact. */
+  /** Same-origin so the parent can address `contentWindow`; scripts for zudo-react. */
   sandbox: string;
 }
 

@@ -82,7 +82,7 @@ describe("ContentPreviewPane", () => {
   });
 });
 
-it("keeps Mapping metadata but never mounts Preact fragment renderer for a host document pack", async () => {
+it("keeps Mapping metadata but never mounts the zudo-react fragment renderer for a host document pack", async () => {
  hostMode.enabled = true; const source = sourceFixture();
  render(<ContentPreviewPane providerId="content-filesystem" model={model} entry={entry} entryName="Draft" saveStatus="dirty" componentProvider={{} as never} createPreviewSource={() => source}/>);
  await screen.findByRole("combobox", {name: "Mapping definition"});

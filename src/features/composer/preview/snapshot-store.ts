@@ -1,6 +1,6 @@
 // The preview iframe's snapshot state + the REVISION GUARD.
 //
-// Pure, DOM-free, and Preact-free on purpose: revision ordering is the part of
+// Pure, DOM-free, and runtime-free on purpose: revision ordering is the part of
 // this feature most likely to break silently (a late `render` overtaking a
 // newer one after a reload, a re-delivered message re-applying an old document),
 // so it is a plain function that can be exhaustively tested without a renderer.

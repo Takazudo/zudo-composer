@@ -124,7 +124,7 @@ function phraseMatcher(phrase) {
   const words = phrase.split(" ").map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   return new RegExp(words.join("\\s+"), "i");
 }
-assert.match(readme, /installable Preact authoring \*\*tool\*\*/i, "README must frame zudo-composer as an installable tool, not an application");
+assert.match(readme, /installable zudo-react authoring \*\*tool\*\*/i, "README must frame zudo-composer as an installable tool, not an application");
 assert.match(readme, phraseMatcher("Composer owns its document model, source generation, reuse rules, chrome"));
 assert.match(readme, phraseMatcher("Content owns its model, Entry library, and authoring UI"));
 assert.match(readme, phraseMatcher("Mapping owns its binding model, resolver, preview handoff, and authoring UI"));

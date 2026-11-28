@@ -22,10 +22,10 @@ import { createContentAiProvider } from "zudo-composer/hosted-content/node";
 
 | Entry | Runs in | Contents |
 | --- | --- | --- |
-| `zudo-composer/hosted-content` | Worker or Node (portable, no Preact) | `createHostedContentService`, `HostedContentError`, the command/state/storage types, `canonicalSerialize`, the preview wire schemas and message builders, and the route projection (`projectHostedSite`, `createHostedSiteProjector`) |
-| `zudo-composer/hosted-content/editor` | Browser (Preact peer, CodeMirror) | `mountHostedContentEditor`, `HostedContentSession`, `hostedEditorLabels`, `hostedEditorLabelsJa`, `hostedErrorMessages`, `hostedErrorMessagesJa`, and the parent-side preview controller, host receiver and fullscreen helper |
+| `zudo-composer/hosted-content` | Worker or Node (portable, no UI runtime) | `createHostedContentService`, `HostedContentError`, the command/state/storage types, `canonicalSerialize`, the preview wire schemas and message builders, and the route projection (`projectHostedSite`, `createHostedSiteProjector`) |
+| `zudo-composer/hosted-content/editor` | Browser (`@takazudo/zfb` zudo-react peer, CodeMirror) | `mountHostedContentEditor`, `HostedContentSession`, `hostedEditorLabels`, `hostedEditorLabelsJa`, `hostedErrorMessages`, `hostedErrorMessagesJa`, and the parent-side preview controller, host receiver and fullscreen helper |
 | `zudo-composer/hosted-content/editor.css` | Browser | Explicit stylesheet; the editor never injects CSS itself |
-| `zudo-composer/hosted-content/preview` | Browser, framework-free | `createHostedPreviewController` (parent), `createHostedPreviewHost` (visitor frame), `createHostedPreviewFullscreen`; no Preact, CodeMirror or CSS |
+| `zudo-composer/hosted-content/preview` | Browser, framework-free | `createHostedPreviewController` (parent), `createHostedPreviewHost` (visitor frame), `createHostedPreviewFullscreen`; no zudo-react, CodeMirror or CSS |
 | `zudo-composer/hosted-content/testing` | Node test runner | `runHostedContentConformance`, `createMemoryHostedConformanceFactory`, `createMemoryHostedStorage`, the conformance seed and policy builders |
 | `zudo-composer/hosted-content/node` | Node only | `createContentAiProvider`: the explicit Content-AI provider (`fake`, `claude-cli`, `codex-cli`) a host runs in its own Node process; see [Content-AI for an independent host](#content-ai-for-an-independent-host) |
 
@@ -46,7 +46,7 @@ helper, but it compiles no source and reads no files.
 Use a reachable full Composer package-root Git SHA and install the independent
 contract peer separately. The reproducibility fixture uses Node 24, pnpm 11.5.2,
 contract root SHA `c0b452da075b66757c60bd0d721a47062d4354d0` (package 1.0.0,
-protocol 2) and Preact 10.29.8. ZFB/zudo-sg belong to the host's own independently
+protocol 2) and `@takazudo/zfb` 7.2.0. ZFB/zudo-sg belong to the host's own independently
 locked projects, never the tool's runtime dependency list. Keep the generated
 consumer manifests and locks; a workspace link or copied private source is not
 an installed-consumer proof.
@@ -701,7 +701,7 @@ comment), not in this file.
 | --- | --- |
 | `zudo-composer/content`, `/host-storage`, `/export` | `zudo-composer/hosted-content` (portable service, types, projection) |
 | `zudo-composer/preview-protocol` | `zudo-composer/hosted-content/preview` (receiver and controller) and the wire schemas from `zudo-composer/hosted-content` |
-| `zudo-composer/content-editor` (TypeScript source, `contentEditorPlugins()` from `zudo-composer/vite`) | `zudo-composer/hosted-content/editor` (prebuilt ESM, Preact peer); drop the Vite plugin and import `zudo-composer/hosted-content/editor.css` explicitly |
+| `zudo-composer/content-editor` (TypeScript source, `contentEditorPlugins()` from `zudo-composer/vite`) | `zudo-composer/hosted-content/editor` (prebuilt ESM, `@takazudo/zfb` zudo-react peer); drop the Vite plugin and import `zudo-composer/hosted-content/editor.css` explicitly |
 | `runContentStorageConformance`, `createMemoryContentDraftStorage` | `zudo-composer/hosted-content/testing` |
 
 The #904 content utilities (`validateSiteProject`, entry validation, digests,

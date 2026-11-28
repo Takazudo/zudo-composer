@@ -1,6 +1,6 @@
 # zudo-composer
 
-`zudo-composer` is an installable Preact authoring **tool**, not an application
+`zudo-composer` is an installable zudo-react authoring **tool**, not an application
 with its own content. A host project installs it, points it at its own
 components and a `zudo-composer.config.ts`, and gets five authoring products
 over a shared filesystem storage engine:
@@ -76,7 +76,7 @@ never contain `@takazudo/zudo-sg`; `provider:boundary` enforces that
 separation. Stories belong to this host and never live under `packages/ui`.
 
 All four catalogs use the published zudo-react/Wind shell and a separate,
-same-origin Preact/Tailwind preview at `/components/preview`. Descriptors,
+same-origin zudo-react/Tailwind preview at `/components/preview`. Descriptors,
 variant source and preview loaders come from each host’s actual story corpus.
 The host-owned detail route uses public layout, workbench and code-panel APIs.
 Preview assets and settled component thumbnails are built before the shell;
@@ -184,7 +184,7 @@ persistence and production providers remain host-owned.
 | Import | Use |
 | --- | --- |
 | `zudo-composer/hosted-content` | Worker or Node service, storage and projection types, `createHostedSiteProjector` |
-| `zudo-composer/hosted-content/editor` and `/editor.css` | Browser editor (Preact peer), English and Japanese label sets |
+| `zudo-composer/hosted-content/editor` and `/editor.css` | Browser editor (`@takazudo/zfb` zudo-react peer), English and Japanese label sets |
 | `zudo-composer/hosted-content/preview` | Framework-free iframe controller and receiver |
 | `zudo-composer/hosted-content/testing` | Storage conformance runner for a host's adapter |
 | `zudo-composer/hosted-content/node` | Node-only Content-AI provider selection (`fake`, `claude-cli`, `codex-cli`) for a host's own server |
@@ -470,7 +470,7 @@ The package publishes five entry points. Everything else is internal:
 | `zudo-composer/styles` | the canonical Composer stylesheet |
 | `zudo-composer/package.json` | the manifest |
 
-Vite and its Preact/Tailwind plugins are runtime `dependencies` rather than
+Vite and its Tailwind plugins are runtime `dependencies` rather than
 `devDependencies`: they are dev-only for *this* repository but are loaded by the
 installed launcher, so a host must receive them. The published archive ships the
 TypeScript sources under `src/`, `server/`, and `plugins/` — not a built

@@ -4,7 +4,7 @@ Composer is a reusable authoring product. Pinsel is the acceptance consumer for
 [full adoption](https://github.com/zudolab/pinsel/issues/51). A generic feature is
 not accepted for that effort until an independent immutable install uses it in
 Pinsel's real scenario. The component contract establishes schema compatibility;
-it does not establish rendering compatibility between Preact and another runtime.
+it does not establish rendering compatibility between zudo-react and another runtime.
 
 ## Ownership before editing
 
@@ -77,7 +77,7 @@ or proof that a migrated project renders correctly.
 
 A trusted host document adapter renders the entire compiled route with the host's
 production renderer. Composer does not acquire a dependency on that application
-runtime and does not require a handwritten Preact duplicate. Keep preview CSS and
+runtime and does not require a handwritten zudo-react duplicate. Keep preview CSS and
 assets in the isolated document. Bind render acknowledgements and selected owners
 to the exact workspace revision, route, component pack and renderer identity.
 Check the iframe sender and origin and reject stale or foreign messages.
@@ -208,8 +208,8 @@ Local release compilation/activation remains available, but **activated-release
 preview is unavailable** for host document rendering until an exact-release adapter
 exists. It must never show newer working state under the immutable release label.
 Direct `/site` and `/website-preview` bookmarks show this boundary before loading
-the Preact visitor renderer. Use the host's independently verified exact-snapshot
-static build for release rendering evidence. Ordinary Preact hosts and static
+the zudo-react visitor renderer. Use the host's independently verified exact-snapshot
+static build for release rendering evidence. Ordinary zudo-react hosts and static
 builds retain their existing visitor routes.
 
 ## Host Content value policy
@@ -331,10 +331,10 @@ scenario after an independently installed immutable package before acceptance.
 ### Saved affected-page previews for host-rendered Content
 
 When `hostDocument` is configured, the Content inspector does not send the host's
-components to the Preact fragment renderer. It offers **Saved page preview** through
+components to the zudo-react fragment renderer. It offers **Saved page preview** through
 the same trusted `renderDocument` module as native pages. Mapping definitions and
 model Usage remain visible; they are not proof that a fragment is placed on a page.
-The ordinary Preact-compatible Content preview continues to evaluate local drafts.
+The ordinary zudo-react Content preview continues to evaluate local drafts.
 
 The readonly native operations `content-preview-context` and
 `content-document-preview` require the connected client/capability/epoch. They use

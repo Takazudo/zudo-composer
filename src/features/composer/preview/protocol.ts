@@ -5,7 +5,7 @@
 // The preview runs in an isolated same-origin iframe. Only JSON DATA crosses
 // the bridge: never a component function, never a VNode, never source text.
 // The iframe receives the trusted local provider and maps the
-// received document's stable slot ids onto real Preact props locally. Nothing
+// received document's stable slot ids onto real component props locally. Nothing
 // received from a message is ever parsed as code or evaluated.
 //
 // Every inbound message passes THREE gates, in this order (see `guard` below):

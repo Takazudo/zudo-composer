@@ -10,7 +10,7 @@ export type MarkdownBlock =
 /**
  * The tiny markdown subset the landing copy needs: headings (h1/h2 → h2,
  * deeper → h3), paragraphs, `-`/`*`/`1.` lists, and inline strong, em and links.
- * No HTML passes through; everything becomes Preact nodes.
+ * No HTML passes through; everything becomes zudo-react nodes.
  */
 export function parseMarkdown(source: string): MarkdownBlock[] {
   const blocks: MarkdownBlock[] = [];

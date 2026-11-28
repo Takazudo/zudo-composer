@@ -56,7 +56,7 @@ packages/demo-<name>/
 ├── zudo-composer.config.ts    pack: "demo-<name>/components" via `zudo-composer/config`
 ├── components/
 │   ├── pack.ts                defineComponentPack({ packId: "demo-<name>", ... })
-│   └── *.tsx                  the host's own Preact components
+│   └── *.tsx                  the host's own zudo-react components
 ├── styles/base.css            Tailwind preflight + utilities, one @theme namespace, @source "../components"
 ├── site-project.ts            the authored site, written with zudo-composer/authoring
 ├── site-project.json          generated from site-project.ts; committed; guarded by the CLI
@@ -206,7 +206,7 @@ export default site;
 
 ## Gate wiring
 
-- **TypeScript.** Each demo package has its own `tsconfig.json` (Preact JSX,
+- **TypeScript.** Each demo package has its own `tsconfig.json` (zudo-react JSX,
   Bundler resolution) referenced from the root `tsconfig.json`;
   `tsconfig.app.json` deliberately includes only `src` and the image editor.
   Every `packages/demo-*/zudo-composer.config.ts` is named in
@@ -215,9 +215,9 @@ export default site;
 - **Vitest.** Each demo owns a `vitest.config.ts` and declares the test
   dependencies it imports, so `corepack pnpm test` runs from that host's own
   directory. The root `demos` project remains an aggregate Node lane with the
-  same Preact JSX runtime and none of the `app` project's `virtual:*` aliases;
+  same zudo-react JSX runtime and none of the `app` project's `virtual:*` aliases;
   the `app` project excludes `packages/demo-*/**`.
-  Component render tests use `preact-render-to-string`.
+  Component render tests use `renderToString` from `@takazudo/zfb/zudo-react/server`.
 - **ESLint.** `eslint .` covers the packages with the root config; only the
   `packages/*/bin/**/*.mjs` Node globals were added.
 - **Packaging.** The root `files` allowlist already keeps `packages/demo-*` out
@@ -429,9 +429,10 @@ slot**, already materialised. It never receives an array prop. Therefore:
 
 - **Filter, sort, search and pagination are client-side operations over
   children.** The list component (`shop.product-grid`, `land.pricing-table`,
-  `blog.article-list`, …) creates a Preact context holding the current filter /
-  sort / search / page state and the toolbar that edits it. Each item component
-  subscribes to the context and decides for itself whether to render hidden
+  `blog.article-list`, …) owns the current filter / sort / search / page state and the toolbar that
+  edits it. Each item component registers with it through the pack's DOM slot
+  link (`components/slot-link.ts`, a bubbling event answered by the nearest
+  list) and decides for itself whether to render hidden
   (`hidden` attribute; the node stays mounted) and which CSS `order` to take.
   Sorting is expressed with `order` on the items inside a flex/grid parent, so
   the DOM order — which matches the Mapping query's sort — is never mutated.

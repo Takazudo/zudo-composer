@@ -48,7 +48,7 @@ interchangeable with it.
 The standalone `styleguide/sample/` host is outside this tool; it catalogs the
 tool's pack without making the styleguide engine part of the tool.
 The four independent catalog shells use zudo-react/Wind. Their actual packs
-remain in host-owned Preact/Tailwind preview graphs; do not serialize render
+remain in host-owned zudo-react/Tailwind preview graphs; do not serialize render
 functions or merge preview CSS into the shell Wind graph. Browser thumbnail
 capture requires the host-owned pinned Playwright browser before each build.
 

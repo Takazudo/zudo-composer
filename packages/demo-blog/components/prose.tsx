@@ -2,7 +2,7 @@ import type { Child } from "@takazudo/zfb/zudo-react";
 
 // A tiny in-pack markdown renderer (no WASM, no HTML passthrough): headings,
 // paragraphs, lists, blockquotes, fenced code, hr, block images with captions
-// and inline code / links / em / strong. Output is Preact vnodes, so authored
+// and inline code / links / em / strong. Output is zudo-react nodes, so authored
 // text can never inject markup.
 
 type Block =

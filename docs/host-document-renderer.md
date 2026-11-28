@@ -1,7 +1,7 @@
 # Trusted host document renderer
 
-A host whose production components use a runtime other than Preact can opt into
-whole-document preview. Per-component `adapters.render` remains Preact-specific.
+A host whose production components use a runtime other than zudo-react can opt into
+whole-document preview. Per-component `adapters.render` remains zudo-react-specific.
 The host document adapter is trusted installed code; model responses cannot
 select modules or supply executable HTML.
 
