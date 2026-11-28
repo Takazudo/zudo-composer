@@ -21,7 +21,7 @@ export const SITE_HEADERS = "_headers";
 // all on a container checkout such as `/__w` or `/app`. Only the emitted literal
 // counts: the zudo-react runtime itself reads `source.columnNumber` when a dev
 // site is present, and that property read is not dev metadata.
-export const DEV_JSX_SITE_MARKER = /["']?\bcolumnNumber["']?\s*:\s*\d/;
+export const DEV_JSX_SITE_MARKER = /\bcolumnNumber["']?\s*:\s*\d/;
 
 // Markers that would mean the authoring tool's server, filesystem or release
 // plumbing leaked into a visitor bundle.

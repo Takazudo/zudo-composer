@@ -354,7 +354,7 @@ describe("CI and aggregate packed-host coverage", () => {
     expect(markerStep).toBeDefined();
     expect(markerStep.run).toContain("/home/");
     // The emitted jsxDEV literal only; the runtime's own `source.columnNumber` read is allowed.
-    expect(markerStep.run).toContain(`[\\"']?columnNumber[\\"']?[[:space:]]*:[[:space:]]*[0-9]`);
+    expect(markerStep.run).toContain(`\\bcolumnNumber[\\"']?[[:space:]]*:[[:space:]]*[0-9]`);
     expect(markerStep.run).toContain("packages/demo-*/dist-editor/assets");
   });
 

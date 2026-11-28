@@ -432,7 +432,7 @@ jobs:
       # paths from its upstream Rust build and would always match.
       - name: Reject leaked filesystem paths or dev sourcemap markers
         run: |
-          grep -rlE --include='*.js' --include='*.mjs' --include='*.css' --include='*.html' "/home/|[\"']?columnNumber[\"']?[[:space:]]*:[[:space:]]*[0-9]" packages/demo-*/dist-editor/assets && false
+          grep -rlE --include='*.js' --include='*.mjs' --include='*.css' --include='*.html' "/home/|\bcolumnNumber[\"']?[[:space:]]*:[[:space:]]*[0-9]" packages/demo-*/dist-editor/assets && false
           echo "No forbidden markers found in demo editor batch output"
 
   doc-site-build:

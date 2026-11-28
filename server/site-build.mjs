@@ -67,7 +67,7 @@ function resolveSiteSourceRevision(sourceRevision, env = process.env) {
 //#region server/site-build/artifact.mjs
 var SITE_MANIFEST = "site-manifest.json";
 var SITE_HEADERS = "_headers";
-var DEV_JSX_SITE_MARKER = /["']?\bcolumnNumber["']?\s*:\s*\d/;
+var DEV_JSX_SITE_MARKER = /\bcolumnNumber["']?\s*:\s*\d/;
 var FORBIDDEN_ARTIFACT_MARKERS = [
 	"sourceMappingURL",
 	"/Users/",
