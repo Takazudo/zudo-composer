@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "../../../test/render";
 import { afterEach, describe, expect, it } from "vitest";
 import { ContentApp } from "../content-app";
 import { createMemoryContentProvider } from "../fixtures";

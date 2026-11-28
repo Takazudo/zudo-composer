@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, settle, settleTasks, waitFor, within } from "../../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ContentApp } from "../content-app";
 import { createContentAuthoringController } from "../controller";
@@ -67,6 +67,7 @@ describe("Content route intents", () => {
     expect(new URLSearchParams(window.location.search).get("view")).toBe("missing");
     const tree = screen.getByRole("tree", { name: "Content" });
     fireEvent.click(within(tree).getByRole("treeitem", { name: /^Hello/ }));
+    await settleTasks();
     expect(await screen.findByRole("textbox", { name: "Entry title" })).toHaveValue("Hello");
     await waitFor(() => expect(window.location.search).toBe("?provider=content-filesystem&model=articles&entry=entry-1"));
     expect(screen.queryByText('Content view "missing" is unavailable for this model.')).toBeNull();
@@ -93,6 +94,7 @@ describe("Content route intents", () => {
     expect(failure).toHaveTextContent('Content view "missing" is unavailable for this model.');
     expect(window.location.search).toBe("?provider=content-filesystem&model=articles&view=missing");
     fireEvent.click(entry);
+    await settleTasks();
     expect(await screen.findByRole("textbox", { name: "Entry title" })).toHaveValue("Hello");
     await waitFor(() => expect(window.location.search).toBe("?provider=content-filesystem&model=articles&entry=entry-1"));
     expect(screen.queryByText(/Entry provider temporarily unavailable\./)).toBeNull();
@@ -158,6 +160,7 @@ describe("Content navigator and toolbar", () => {
   it("offers the other authoring mode from the overflow menu", async () => {
     await openArticles();
     fireEvent.click(screen.getByRole("button", { name: "More Content actions" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("menu", { name: "Content actions" })).getByRole("menuitem", { name: "Edit schema" }));
 
     await waitFor(() => expect(within(screen.getByRole("region", { name: "Editor" })).getByText("Schema", { exact: true })).toBeVisible());

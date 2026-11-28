@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/preact";
+import { fireEvent, screen, waitFor } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createContentEntryRecord, createContentModelRecord } from "../../content";
 import { hostedEditorLabelsJa, hostedErrorMessagesJa, mountHostedContentEditor } from "../editor";
