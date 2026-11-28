@@ -1,6 +1,6 @@
-import type { JSX } from "preact";
-import { useRef, useState } from "preact/hooks";
+import { computed, getScope, Show, signal, type Ref } from "@takazudo/zfb/zudo-react";
 import { Dialog } from "../../components/overlay";
+import { read, type MaybeSignal } from "../../components/reactive";
 import { Banner, Field, Input, SegmentedControl } from "../../components/ui";
 import type { ContentModelKind } from "../../content";
 
@@ -10,10 +10,10 @@ import type { ContentModelKind } from "../../content";
 // the author then has to find and rename.
 
 export interface ContentAddModelDialogProps {
-  open: boolean;
-  busy?: boolean;
+  open: MaybeSignal<boolean>;
+  busy?: MaybeSignal<boolean>;
   /** A failed create; shown above the field so the typed name survives it. */
-  error?: string | null;
+  error?: MaybeSignal<string | null | undefined>;
   onSubmit(name: string, kind: ContentModelKind): void;
   onClose(): void;
 }
@@ -23,37 +23,37 @@ const KIND_OPTIONS = [
   { value: "single" as const, label: "Single" },
 ];
 
-export function ContentAddModelDialog({ open, busy = false, error, onSubmit, onClose }: ContentAddModelDialogProps): JSX.Element {
-  // `Input` omits `ref` from its props, so the field is reached through its
-  // wrapper; Preact assigns refs before it flushes layout effects, which is
-  // what lets `Dialog` find the input on the render that opens it.
-  const fieldRef = useRef<HTMLInputElement | null>(null);
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState<ContentModelKind>("collection");
-  const [missing, setMissing] = useState(false);
+export function ContentAddModelDialog({ open, busy = false, error, onSubmit, onClose }: ContentAddModelDialogProps) {
+  const scope = getScope();
+  const fieldRef: Ref<HTMLInputElement> = { current: null };
+  const name = signal("");
+  const kind = signal<ContentModelKind>("collection");
+  const missing = signal(false);
+  const isBusy = computed(() => Boolean(read(busy)));
+  const errorText = computed(() => read(error) ?? null);
 
-  // Reset during the opening render, NOT in an effect: an effect runs after
-  // paint, so the dialog is visible and typeable for a frame before the reset
-  // lands and anything typed in that window is silently clobbered.
-  const wasOpen = useRef(open);
-  if (open !== wasOpen.current) {
-    wasOpen.current = open;
-    if (open) {
-      setName("");
-      setKind("collection");
-      setMissing(false);
+  // Each opening starts blank, reset in the same flush that shows the panel.
+  let wasOpen = read(open);
+  scope.effect(() => {
+    const now = read(open);
+    if (now === wasOpen) return;
+    wasOpen = now;
+    if (now) {
+      name.value = "";
+      kind.value = "collection";
+      missing.value = false;
     }
-  }
+  });
 
   function submit(): void {
-    if (busy) return;
-    const next = name.trim();
+    if (isBusy.value) return;
+    const next = name.value.trim();
     if (next === "") {
-      setMissing(true);
+      missing.value = true;
       return;
     }
-    setMissing(false);
-    onSubmit(next, kind);
+    missing.value = false;
+    onSubmit(next, kind.value);
   }
 
   return (
@@ -61,38 +61,40 @@ export function ContentAddModelDialog({ open, busy = false, error, onSubmit, onC
       open={open}
       title="Add Content model"
       initialFocusRef={fieldRef}
-      dismissOnBackdrop={!busy}
-      onClose={() => { if (!busy) onClose(); }}
+      dismissOnBackdrop={computed(() => !isBusy.value)}
+      onClose={() => { if (!isBusy.value) onClose(); }}
       footer={
         <>
-          <button type="button" class="cms-dialog__action" disabled={busy} onClick={onClose}>Cancel</button>
-          <button type="button" class="cms-dialog__action cms-dialog__action--primary" disabled={busy} onClick={submit}>
-            {busy ? "Working…" : "Add model"}
+          <button type="button" class="cms-dialog__action" disabled={isBusy} on:click={onClose}>Cancel</button>
+          <button type="button" class="cms-dialog__action cms-dialog__action--primary" disabled={isBusy} on:click={submit}>
+            {computed(() => (isBusy.value ? "Working…" : "Add model"))}
           </button>
         </>
       }
     >
       <p class="cms-dialog__message">A Collection holds many Entries; a Single holds exactly one workspace.</p>
-      {error ? <Banner tone="err">{error}</Banner> : null}
-      <div ref={(element) => { fieldRef.current = element?.querySelector("input") ?? null; }}>
-        <Field label="Model name" error={missing ? "Enter a model name." : undefined}>
+      <Show when={computed(() => Boolean(errorText.value))}>{() => <Banner tone="err">{computed(() => errorText.value ?? "")}</Banner>}</Show>
+      <Field label="Model name" error={computed(() => (missing.value ? "Enter a model name." : undefined))}>
+        {(control) => (
           <Input
-            value={name}
+            field={control}
+            elementRef={fieldRef}
+            modelValue={name}
             autocomplete="off"
-            disabled={busy}
-            onInput={(event) => { setMissing(false); setName(event.currentTarget.value); }}
-            onKeyDown={(event) => {
+            disabled={isBusy}
+            on:input={() => { missing.value = false; }}
+            on:keydown={(event) => {
               if (event.key !== "Enter") return;
               event.preventDefault();
               submit();
             }}
           />
-        </Field>
-      </div>
+        )}
+      </Field>
       <SegmentedControl<ContentModelKind>
         label="Model kind"
         value={kind}
-        onChange={setKind}
+        onChange={(next) => { kind.value = next; }}
         options={KIND_OPTIONS}
       />
     </Dialog>
