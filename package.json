@@ -88,6 +88,7 @@
     "packages/image-editor/src/ui/index.ts",
     "packages/image-editor/src/ui/resize-panel.tsx",
     "packages/image-editor/src/ui/rotate-controls.tsx",
+    "packages/image-editor/src/ui/sync-value.ts",
     "packages/image-editor/src/ui/tone-panel.tsx",
     "packages/image-editor/src/ui/use-editor-state.ts",
     "packages/image-editor/src/worker/client.ts",
