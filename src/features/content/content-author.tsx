@@ -147,7 +147,7 @@ const targetKey = (ref: { providerId: string; recordId: string }) => `${ref.prov
 
 function ReferenceTargetSelect({ field, models, controller, run }: { field: ReadonlySignal<Extract<ContentFieldDefinition, { kind: "reference" | "reference-list" }>>; models: readonly ReferenceModel[]; controller: ContentAuthoringController; run: ContentAuthorRun }) {
   const draft = externalDraft(getScope(), computed(() => targetKey(field.value.target)));
-  return <Select aria-label={computed(() => `Target model for ${field.value.label}`)} modelValue={draft} on:change={(event) => { const target = models.find((item) => targetKey(item.ref) === event.currentTarget.value)?.ref; if (target) run(() => controller.replaceField(field.value.id, { ...field.value, target })); }}>{models.map((model) => <option value={targetKey(model.ref)}>{model.label} · {model.providerLabel}</option>)}</Select>;
+  return <Select aria-label={computed(() => `Target model for ${field.value.label}`)} modelValue={draft} on:change={(event) => { const target = models.find((item) => targetKey(item.ref) === event.currentTarget.value)?.ref; if (target) run(() => controller.replaceField(field.value.id, { ...field.value, target })); }}>{models.map((model) => <option value={targetKey(model.ref)}>{`${model.label} · ${model.providerLabel}`}</option>)}</Select>;
 }
 
 /** Configuration for one field kind; a kind change mounts a fresh editor, a value change binds. */

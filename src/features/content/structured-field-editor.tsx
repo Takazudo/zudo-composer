@@ -63,7 +63,7 @@ function ReferenceControl({ schema, value, path, label, multiple, controller, co
 
 function SingleReferenceSelect({ label, selected, options, stale, onChange }: { label: string; selected: ReadonlySignal<ContentEntryRef[]>; options: readonly ReferenceOption[]; stale: readonly ContentEntryRef[]; onChange(recordId: string): void }) {
   const draft = externalDraft(getScope(), computed(() => selected.value[0]?.recordId ?? ""));
-  return <Select aria-label={label} modelValue={draft} on:change={(event) => onChange(event.currentTarget.value)}><option value="">No Entry selected</option>{options.map((option) => <option value={option.ref.recordId}>{option.label} · {option.lifecycle}</option>)}{stale.map((ref) => <option value={ref.recordId}>Missing Entry · {ref.recordId}</option>)}</Select>;
+  return <Select aria-label={label} modelValue={draft} on:change={(event) => onChange(event.currentTarget.value)}><option value="">No Entry selected</option>{options.map((option) => <option value={option.ref.recordId}>{`${option.label} · ${option.lifecycle}`}</option>)}{stale.map((ref) => <option value={ref.recordId}>{`Missing Entry · ${ref.recordId}`}</option>)}</Select>;
 }
 
 export interface StructuredValueEditorProps {
