@@ -12,13 +12,11 @@
 // parent's newest snapshot (see `bridge.ts`) — and the freshly booted state
 // starts at revision `-1`, so it accepts it.
 //
-// Written with `h()` rather than JSX for the same reason as `renderer.ts`: a
-// root-`src` `.tsx` module cannot be imported by the current vitest config
-// (owned by the Composer host), and keeping this JSX-free keeps it testable.
+// Written with `h()` rather than JSX for the same reason as `renderer.ts`: the
+// preview route graph is checked by file name, so the module keeps its `.ts`
+// name.
 
-import { h } from "preact";
-import type { JSX } from "preact";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { computed, getScope, h, Show, signal, type Child } from "@takazudo/zfb/zudo-react";
 import { diagnoseDocument } from "../../../composer/model/validate";
 import type { InsertionTarget } from "../headless-api";
 import type { ComposerComponentProvider } from "../active-pack";
@@ -45,7 +43,7 @@ function isFramed(): boolean {
   return window.parent !== window;
 }
 
-export interface ComposerPreviewAppProps { provider: ComposerComponentProvider }
+export type ComposerPreviewAppProps = { provider: ComposerComponentProvider };
 
 /**
  * Match a history request owned by canvas chrome. Inline sessions and native
@@ -60,29 +58,30 @@ export function canvasHistoryRequest(
   return matchesUndoRedoShortcut(event);
 }
 
-export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps): JSX.Element {
-  const [state, setState] = useState<PreviewState>(INITIAL_PREVIEW_STATE);
-  const [error, setError] = useState<string | null>(null);
-  const [fatalError, setFatalError] = useState<string | null>(null);
-  const [framed] = useState(isFramed);
-  const failedRevision = useRef<number | null>(null);
-  const clientRef = useRef<PreviewClient | null>(null);
-  const annotatorRef = useRef<ReturnType<typeof createReviewAnnotator> | null>(null);
+export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps): Child {
+  const scope = getScope();
+  const state = signal<PreviewState>(INITIAL_PREVIEW_STATE);
+  const error = signal<string | null>(null);
+  const fatalError = signal<string | null>(null);
+  const framed = isFramed();
+  let failedRevision: number | null = null;
+  let client: PreviewClient | null = null;
+  let annotator: ReturnType<typeof createReviewAnnotator> | null = null;
   // A valid parent snapshot may replace the selected node's DOM ancestry (the
   // linked consumer/source view can revalidate while history is applying), so
   // keyed chrome alone cannot guarantee that the focused control survives.
   // Capture only immediately before accepting a newer snapshot and consume it
-  // once the corresponding Preact commit has completed.
-  const acceptedFocusTokenRef = useRef<string | null>(null);
+  // once the corresponding commit has completed.
+  let acceptedFocusToken: string | null = null;
 
-  useEffect(() => {
-    if (!framed) return;
+  scope.onActivate(() => {
+    if (!framed) return undefined;
 
     const hostWindow = window as unknown as MessageTarget;
     const parentWindow = window.parent as unknown as MessagePoster;
     const origin = window.location.origin;
 
-    const client = createPreviewClient({
+    const created = createPreviewClient({
       hostWindow,
       parentWindow,
       // The parent frame is the ONLY window this preview will take orders from.
@@ -98,19 +97,19 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
       onState: (next) => {
         // `onState` is called only after the client's strict revision guard
         // accepts the message. If focus moved to the host while the message
-        // was in flight, this deliberately records no token and the layout
-        // effect below will not pull focus back into the iframe.
-        acceptedFocusTokenRef.current = activeFocusToken();
-        failedRevision.current = null;
-        setState(next);
+        // was in flight, this deliberately records no token and the effect
+        // below will not pull focus back into the iframe.
+        acceptedFocusToken = activeFocusToken();
+        failedRevision = null;
+        state.value = next;
         // A valid snapshot means the bridge is healthy again.
-        setError(null);
+        error.value = null;
       },
       // Host answered a request-node-menu / request-insert-menu once its menu
       // closed (issue Takazudo/zudo-sg#256) — restore focus to the exact control that opened
-      // it. Not a state transition, so it never touches `setState`.
+      // it. Not a state transition, so it never touches `state`.
       onRestoreFocus: (focusToken) => focusByToken(focusToken),
-      onFocusAnnotation: (_key, id) => annotatorRef.current?.focus(id),
+      onFocusAnnotation: (_key, id) => annotator?.focus(id),
       isAuthoringClean: () => !document.querySelector('[data-zc-inline-editing], [data-zc-prose-editing], [data-zc-prose-chrome], [contenteditable]:not([contenteditable="false"])'),
       onRejected: (reason: GuardFailure, detail) => {
         // A wrong-source / wrong-origin message is just noise: ANY page in ANY
@@ -119,39 +118,46 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
         // Drop it silently; only a malformed message from our OWN parent is a
         // real bug worth surfacing.
         if (reason === "pack-mismatch") {
-          setFatalError(
-            `Component pack mismatch. ${detail ?? "The host and preview loaded different component packs."}`,
-          );
+          fatalError.value =
+            `Component pack mismatch. ${detail ?? "The host and preview loaded different component packs."}`;
           return;
         }
         if (reason !== "invalid-payload") return;
         const message =
           "The Composer sent a message this preview could not understand. The last valid composition is still shown.";
-        setError(message);
-        client.emitError(detail ? `${message} (${detail})` : message, true);
+        error.value = message;
+        created.emitError(detail ? `${message} (${detail})` : message, true);
       },
     });
-    clientRef.current = client;
-    annotatorRef.current = createReviewAnnotator(window, () => document.querySelector("[data-composer-preview-root]"), (key, results) => client.emitReviewAnnotated(key, results));
+    client = created;
+    annotator = createReviewAnnotator(window, () => document.querySelector("[data-composer-preview-root]"), (key, results) => created.emitReviewAnnotated(key, results));
 
-    client.emitReady();
+    created.emitReady();
 
     return () => {
-      client.dispose();
-      clientRef.current = null;
-      annotatorRef.current?.dispose();
-      annotatorRef.current = null;
+      created.dispose();
+      client = null;
+      annotator?.dispose();
+      annotator = null;
     };
-  }, [framed, provider.manifest.packId, provider.manifest.packVersion]);
+  });
 
-  useLayoutEffect(() => {
-    const focusToken = acceptedFocusTokenRef.current;
-    acceptedFocusTokenRef.current = null;
+  // Every derived value below is read inside an effect; signals here notify on
+  // every accepted message, so each effect compares what it actually depends on.
+  let focusRevision = INITIAL_PREVIEW_STATE.revision;
+  scope.effect(() => {
+    const revision = state.value.revision;
+    if (revision === focusRevision) return;
+    focusRevision = revision;
+    const focusToken = acceptedFocusToken;
+    acceptedFocusToken = null;
     if (focusToken !== null) focusByToken(focusToken);
-  }, [state.revision]);
+  });
 
-  useEffect(() => {
-    if (!state.selectNative || state.nativeReview) return;
+  scope.effect(() => {
+    const { revision, selectNative, nativeReview } = state.value;
+    void revision;
+    if (!selectNative || nativeReview) return undefined;
     const nodes = [...document.querySelectorAll<HTMLElement>('[data-zc-owner="local"][data-zc-node-id]')];
     for (const node of nodes) { node.tabIndex = 0; node.setAttribute("role", "button"); node.setAttribute("aria-label", `Select native target ${node.dataset.zcNodeId}`); }
     const select = (event: MouseEvent | KeyboardEvent) => {
@@ -160,23 +166,34 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
       if (!node) {
         if ((event.target as Element | null)?.closest("a, [data-zc-owner=source]")) {
           event.preventDefault(); event.stopImmediatePropagation();
-          clientRef.current?.emitError("This target belongs to a source template. Use Structure to edit its owner.");
+          client?.emitError("This target belongs to a source template. Use Structure to edit its owner.");
         }
         return;
       }
       event.preventDefault(); event.stopImmediatePropagation();
-      clientRef.current?.emitSelect(node.dataset.zcNodeId ?? null);
+      client?.emitSelect(node.dataset.zcNodeId ?? null);
     };
     document.addEventListener("click", select, true); document.addEventListener("keydown", select, true);
     return () => { for (const node of nodes) { node.removeAttribute("tabindex"); node.removeAttribute("role"); node.removeAttribute("aria-label"); } document.removeEventListener("click", select, true); document.removeEventListener("keydown", select, true); };
-  }, [state.revision, state.selectNative, state.nativeReview]);
+  });
 
-  useEffect(() => {
-    if ((!state.nativeReview && !state.nativePage) || !state.document || error || fatalError) return;
-    let active = true;
-    const revision = state.revision;
+  // The rendered-candidate check runs once per (revision, review/page, document, linked, error) input set.
+  let checkInputs: readonly unknown[] | null = null;
+  let checkActive: { active: boolean } | null = null;
+  scope.onCleanup(() => { if (checkActive) checkActive.active = false; });
+  scope.effect(() => {
+    const current = state.value;
+    const inputs = [current.revision, current.nativeReview, current.nativePage, current.document, current.linked, error.value, fatalError.value] as const;
+    if (checkInputs && inputs.every((value, index) => Object.is(value, checkInputs![index]))) return;
+    checkInputs = inputs;
+    if (checkActive) checkActive.active = false;
+    checkActive = null;
+    if ((!current.nativeReview && !current.nativePage) || !current.document || error.value || fatalError.value) return;
+    const run = { active: true };
+    checkActive = run;
+    const revision = current.revision;
     const check = async () => {
-      const documents = [state.document!, ...(state.linked ? [state.linked.sourceDocument] : [])];
+      const documents = [current.document!, ...(current.linked ? [current.linked.sourceDocument] : [])];
       if (documents.some(value => !diagnoseDocument(value, provider.catalog).canExport)) throw new Error("Candidate has unsupported or invalid components.");
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       const images = [...document.querySelectorAll<HTMLImageElement>("[data-composer-preview-root] img")];
@@ -207,88 +224,86 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
         await Promise.race([fonts.ready, new Promise(resolve => setTimeout(resolve, 10_000))]);
         if ([...fonts].some(face => face.status === "error")) throw new Error("A page font failed to load.");
       }
-      if (active && failedRevision.current !== revision && clientRef.current?.state.revision === revision) clientRef.current.emitRendered();
+      if (run.active && !scope.abortSignal.aborted && failedRevision !== revision && client?.state.revision === revision) client.emitRendered();
     };
-    void check().catch(cause => { if (active) { failedRevision.current = revision; clientRef.current?.emitError(cause instanceof Error ? cause.message : "Candidate render failed."); } });
-    return () => { active = false; };
-  }, [state.revision, state.nativeReview, state.nativePage, state.document, state.linked, provider, error, fatalError]);
+    void check().catch(cause => { if (run.active && !scope.abortSignal.aborted) { failedRevision = revision; client?.emitError(cause instanceof Error ? cause.message : "Candidate render failed."); } });
+  });
 
   // Review annotations follow the committed DOM of exactly this revision; stale marks are cleared first.
-  useEffect(() => {
+  let annotationInputs: readonly unknown[] | null = null;
+  scope.effect(() => {
+    const { revision, review } = state.value;
+    if (annotationInputs && Object.is(annotationInputs[0], revision) && Object.is(annotationInputs[1], review)) return undefined;
+    annotationInputs = [revision, review];
     let active = true;
-    requestAnimationFrame(() => requestAnimationFrame(() => { if (active) annotatorRef.current?.apply(state.review); }));
+    requestAnimationFrame(() => requestAnimationFrame(() => { if (active && !scope.abortSignal.aborted) annotator?.apply(review); }));
     return () => { active = false; };
-  }, [state.revision, state.review]);
+  });
 
   // Mirror the host's active theme onto THIS document. `colors.css` keys
   // `color-scheme` off `:root[data-theme]`, which is what makes every
   // `light-dark()` token in the restored palette resolve to the right mode.
-  useEffect(() => {
-    document.documentElement.dataset.theme = state.session.theme;
-  }, [state.session.theme]);
+  scope.effect(() => {
+    const theme = state.value.session.theme;
+    if (document.documentElement.dataset.theme !== theme) document.documentElement.dataset.theme = theme;
+  });
 
-  useEffect(() => {
-    if (!framed) return;
+  scope.onActivate(() => {
+    if (!framed) return undefined;
 
     const onKeyDown = (event: KeyboardEvent): void => {
       const direction = canvasHistoryRequest(
         event,
-        state.session.mode,
+        state.value.session.mode,
         document.querySelector(`[${INLINE_EDITING_ATTR}]`) !== null,
       );
       if (direction === null) return;
       event.preventDefault();
-      if (direction === "undo") clientRef.current?.emitRequestUndo();
-      else clientRef.current?.emitRequestRedo();
+      if (direction === "undo") client?.emitRequestUndo();
+      else client?.emitRequestRedo();
     };
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [framed, state.session.mode]);
+  });
 
-  const onSelect = useCallback((nodeId: string | null) => {
-    clientRef.current?.emitSelect(nodeId);
-  }, []);
+  const onSelect = (nodeId: string | null): void => {
+    client?.emitSelect(nodeId);
+  };
 
-  const onRequestAdd = useCallback((target: InsertionTarget, rect?: SerializedRect) => {
-    clientRef.current?.emitRequestAdd(target, rect);
-  }, []);
+  const onRequestAdd = (target: InsertionTarget, rect?: SerializedRect): void => {
+    client?.emitRequestAdd(target, rect);
+  };
 
-  const onOpenSource = useCallback((sourceRecordId: string) => {
-    clientRef.current?.emitOpenSource(sourceRecordId);
-  }, []);
+  const onOpenSource = (sourceRecordId: string): void => {
+    client?.emitOpenSource(sourceRecordId);
+  };
 
-  const onRequestNodeMenu = useCallback((nodeId: string, rect: SerializedRect, focusToken: string) => {
-    clientRef.current?.emitRequestNodeMenu(nodeId, rect, focusToken);
-  }, []);
+  const onRequestNodeMenu = (nodeId: string, rect: SerializedRect, focusToken: string): void => {
+    client?.emitRequestNodeMenu(nodeId, rect, focusToken);
+  };
 
-  const onRequestInsertMenu = useCallback(
-    (target: InsertionTarget, rect: SerializedRect, focusToken: string) => {
-      clientRef.current?.emitRequestInsertMenu(target, rect, focusToken);
-    },
-    [],
-  );
+  const onRequestInsertMenu = (target: InsertionTarget, rect: SerializedRect, focusToken: string): void => {
+    client?.emitRequestInsertMenu(target, rect, focusToken);
+  };
 
-  const onCommitInlineEdit = useCallback(
-    (nodeId: string, fieldKey: string, value: string, documentRevision: number) => {
-      // The renderer supplies its inline session's SESSION-START revision
-      // (issue Takazudo/zudo-sg#288); the client forwards it verbatim as `documentRevision`
-      // and the host validates it before routing through `updateProps`.
-      clientRef.current?.emitCommitInlineEdit(nodeId, fieldKey, value, documentRevision);
-    },
-    [],
-  );
+  const onCommitInlineEdit = (nodeId: string, fieldKey: string, value: string, documentRevision: number): void => {
+    // The renderer supplies its inline session's SESSION-START revision
+    // (issue Takazudo/zudo-sg#288); the client forwards it verbatim as `documentRevision`
+    // and the host validates it before routing through `updateProps`.
+    client?.emitCommitInlineEdit(nodeId, fieldKey, value, documentRevision);
+  };
 
-  const onDropNode = useCallback((sourceNodeId: string, target: InsertionTarget, copy: boolean) => {
+  const onDropNode = (sourceNodeId: string, target: InsertionTarget, copy: boolean): void => {
     // The client stamps the revision on screen (`documentRevision`); the host
     // validates it and revalidates the whole move/copy before applying.
-    clientRef.current?.emitDropNode(sourceNodeId, target, copy);
-  }, []);
+    client?.emitDropNode(sourceNodeId, target, copy);
+  };
 
-  const onNodeError = useCallback((nodeId: string, message: string) => {
-    failedRevision.current = clientRef.current?.state.revision ?? null;
-    clientRef.current?.emitError(`Node "${nodeId}" failed to render: ${message}`, true);
-  }, []);
+  const onNodeError = (nodeId: string, message: string): void => {
+    failedRevision = client?.state.revision ?? null;
+    client?.emitError(`Node "${nodeId}" failed to render: ${message}`, true);
+  };
 
   // Opened directly rather than embedded: there is no Composer to talk to, so
   // say so instead of sitting on "Waiting for a composition…" forever.
@@ -300,53 +315,72 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
     );
   }
 
-  const banner =
-    error === null || fatalError !== null
-      ? null
-      : h(
-          "div",
-          { class: "zc-error", role: "alert" },
-          h("p", { class: "zc-error-title" }, "Preview problem"),
-          h("p", { class: "zc-error-detail" }, error),
-          h(
-            "button",
-            {
-              type: "button",
-              class: "zc-error-dismiss",
-              "data-zc-affordance": "",
-              onClick: () => setError(null),
-            },
-            "Dismiss",
-          ),
-        );
+  const showBanner = computed(() => error.value !== null && fatalError.value === null);
+  const banner = h(Show, {
+    when: showBanner,
+    children: () => h(
+      "div",
+      { class: "zc-error", role: "alert" },
+      h("p", { class: "zc-error-title" }, "Preview problem"),
+      h("p", { class: "zc-error-detail" }, computed(() => error.value ?? "")),
+      h(
+        "button",
+        {
+          type: "button",
+          class: "zc-error-dismiss",
+          "data-zc-affordance": "",
+          "on:click": () => { error.value = null; },
+        },
+        "Dismiss",
+      ),
+    ),
+  });
 
-  const body = fatalError !== null
-    ? h(
-        "div",
-        { class: "zc-error", role: "alert", "data-composer-preview-fatal": "pack-mismatch" },
-        h("p", { class: "zc-error-title" }, "Preview cannot start"),
-        h("p", { class: "zc-error-detail" }, fatalError),
-      )
-    : state.document && state.localRecordId
-    ? h(CompositionCanvas, {
-        document: state.document,
-        localRecordId: state.localRecordId,
-        linked: state.linked,
-        provider,
-        session: state.session,
-        revision: state.revision,
-        onSelect,
-        onRequestAdd,
-        onOpenSource,
-        onRequestNodeMenu,
-        onRequestInsertMenu,
-        onCommitInlineEdit,
-        onDropNode,
-        onNodeError,
-      })
-    : state.document
-      ? h("p", { class: "zc-error", role: "alert" }, "Preview received a composition without a local record identity.")
-      : h("p", { class: "zc-empty" }, "Waiting for a composition…");
+  // The canvas stays mounted across snapshots and follows them through
+  // signals; the last drawn values hold while the branch is being disposed.
+  let lastDocument = INITIAL_PREVIEW_STATE.document;
+  let lastRecordId = "";
+  const canvasDocument = computed(() => (lastDocument = state.value.document ?? lastDocument)!);
+  const canvasRecordId = computed(() => (lastRecordId = state.value.localRecordId ?? lastRecordId));
+  const hasFatal = computed(() => fatalError.value !== null);
+  const hasCanvas = computed(() => state.value.document !== null && state.value.localRecordId !== null);
+  const hasDocument = computed(() => state.value.document !== null);
+
+  const canvas = (): Child => h(CompositionCanvas, {
+    document: canvasDocument,
+    localRecordId: canvasRecordId,
+    linked: computed(() => state.value.linked),
+    provider,
+    session: computed(() => state.value.session),
+    revision: computed(() => state.value.revision),
+    onSelect,
+    onRequestAdd,
+    onOpenSource,
+    onRequestNodeMenu,
+    onRequestInsertMenu,
+    onCommitInlineEdit,
+    onDropNode,
+    onNodeError,
+  });
+
+  const body = h(Show, {
+    when: hasFatal,
+    children: () => h(
+      "div",
+      { class: "zc-error", role: "alert", "data-composer-preview-fatal": "pack-mismatch" },
+      h("p", { class: "zc-error-title" }, "Preview cannot start"),
+      h("p", { class: "zc-error-detail" }, computed(() => fatalError.value ?? "")),
+    ),
+    fallback: () => h(Show, {
+      when: hasCanvas,
+      children: canvas,
+      fallback: () => h(Show, {
+        when: hasDocument,
+        children: () => h("p", { class: "zc-error", role: "alert" }, "Preview received a composition without a local record identity."),
+        fallback: () => h("p", { class: "zc-empty" }, "Waiting for a composition…"),
+      }),
+    }),
+  });
 
   return h("div", { "data-composer-preview-root": "" }, banner, body);
 }

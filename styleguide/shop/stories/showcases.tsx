@@ -1,5 +1,4 @@
-import { createElement, type ComponentChildren, type ComponentType } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { For, computed, getScope, h, signal, type Child, type Component } from "@takazudo/zfb/zudo-react";
 import type { StoryMeta } from "@takazudo/zudo-sg/stories";
 import {
   AddToCart, Breadcrumbs, CartButton, CartPage, CartSummary, CategoryBody,
@@ -31,7 +30,7 @@ type Definition = {
   description: string;
   defaults: Record<string, unknown>;
   source: { exportName: string };
-  component: ComponentType<Record<string, unknown>>;
+  component: Component<Record<string, unknown>>;
 };
 const definitions = componentPack.manifest.components.map((entry) => ({
   ...entry,
@@ -49,17 +48,17 @@ export function storyMeta(id: string): StoryMeta {
   };
 }
 
-export function packDefaults(id: string): ComponentChildren {
+export function packDefaults(id: string): Child {
   const definition = definitions.find((entry) => entry.id === id);
   if (!definition) throw new Error(`Missing Shop pack component: ${id}`);
-  const preview = createElement(definition.component, { ...definition.defaults });
+  const preview = h(definition.component, { ...definition.defaults });
   return /shop\.(cart-|add-to-cart|checkout-form)/.test(id)
     ? <CartSession fill={false}>{preview}</CartSession>
     : preview;
 }
 
-function CartSession({ children, fill = true }: { children: ComponentChildren; fill?: boolean }) {
-  useEffect(() => {
+function CartSession({ children, fill = true }: { children: Child; fill?: boolean }) {
+  getScope().onActivate(() => {
     cartStore.set(fill ? seeded : { lines: [] });
     const clear = () => cartStore.clear();
     addEventListener("pagehide", clear);
@@ -67,13 +66,36 @@ function CartSession({ children, fill = true }: { children: ComponentChildren; f
       removeEventListener("pagehide", clear);
       clear();
     };
-  }, [fill]);
+  });
   return <>{children}</>;
 }
 
+// The authored Pagination renders plain props once, so a page change remounts it
+// and returns focus to the same control, as the retained Preact button kept it.
 function PaginationDemo({ initial }: { initial: number }) {
-  const [page, setPage] = useState(initial);
-  return <Pagination page={page} pageCount={4} onPage={setPage} />;
+  const page = signal(initial);
+  let refocus: { parent: Element; label: string } | null = null;
+  const choose = (next: number) => {
+    const active = document.activeElement;
+    const parent = active?.closest('nav[aria-label="Pagination"]')?.parentElement;
+    const label = active?.getAttribute("aria-label");
+    refocus = parent && label ? { parent, label } : null;
+    page.value = next;
+  };
+  getScope().effect(() => {
+    void page.value;
+    const pending = refocus;
+    refocus = null;
+    if (!pending) return;
+    const controls = [...pending.parent.querySelectorAll<HTMLElement>('nav[aria-label="Pagination"] [aria-label]')];
+    const target = controls.find((element) => element.getAttribute("aria-label") === pending.label);
+    if (target && !target.hasAttribute("disabled")) target.focus();
+  });
+  return (
+    <For each={computed(() => [page.value])} by={(value) => value}>
+      {(value) => <Pagination page={value.value} pageCount={4} onPage={choose} />}
+    </For>
+  );
 }
 
 const productCards = () => [
@@ -84,10 +106,10 @@ const productCards = () => [
 const productGallery = () => <ProductGallery images={<><GalleryImage src={notebook} alt="Closed charcoal notebook" /><GalleryImage src={notebookOpen} alt="Open dotted notebook" /></>} />;
 const note = () => <DemoNote text="This is the demo shop. No payment or message is sent." />;
 
-export function showcase(id: string, example: boolean): ComponentChildren {
+export function showcase(id: string, example: boolean): Child {
   const definition = definitions.find((entry) => entry.id === id);
   if (!definition) throw new Error(`Missing Shop pack component: ${id}`);
-  const render = (props: Record<string, unknown> = {}) => createElement(definition.component, { ...definition.defaults, ...props });
+  const render = (props: Record<string, unknown> = {}) => h(definition.component, { ...definition.defaults, ...props });
   switch (id) {
     case "shop.header": return <Header brand={example ? "Nightjar Supply / Studio" : "Nightjar Supply"} brandHref="#home" nav={<><NavLink label="All objects" href="#products" /><NavLink label="About" href="#about" /></>} actions={<CartButton label="Cart" href="#cart" />} />;
     case "shop.nav-link": return <NavLink label={example ? "About Nightjar" : "All objects"} href="#products" exact={example} />;

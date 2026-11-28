@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/preact";
+import { render, screen, waitFor } from "../../../../test/render";
 import { describe, expect, it, vi } from "vitest";
 import { defineComponentPack } from "@zudo-composer/component-contract";
 import { CompositionCanvas } from "../renderer";

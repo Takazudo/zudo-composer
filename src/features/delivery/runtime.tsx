@@ -1,6 +1,6 @@
 import { renderAssetDownloadMarkdown } from "../../components/asset-download-markdown";
 import { resolveComponentNode, type ComponentManifest, type JsonObject, type JsonValue, type TrustedComponentPack } from "@zudo-composer/component-contract";
-import { Component, h, type ComponentChildren, type JSX } from "preact";
+import { ErrorBoundary, h, type Child, type Component } from "@takazudo/zfb/zudo-react";
 import type { CompositionDocument, CompositionNode } from "../../composer/model/types";
 import { validateNodeProps } from "../../composer/model/node-props";
 import type { SiteCompiledRouteComposition } from "../../site-project/compiler";
@@ -59,31 +59,37 @@ export function projectTrustedProps(node: CompositionNode, definition: Component
   return props;
 }
 
-class NodeErrorBoundary extends Component<{ detail: Omit<DeliveryComponentError, "error">; report?: (detail: DeliveryComponentError) => void; children: ComponentChildren }, { failed: boolean }> {
-  state = { failed: false };
-  componentDidCatch(error: unknown): void { this.props.report?.({ ...this.props.detail, error }); this.setState({ failed: true }); }
-  render(): ComponentChildren { return this.state.failed ? <div class="site-delivery__component-error" role="status">This part of the page could not be displayed.</div> : this.props.children; }
+/**
+ * Isolates one node: a throw from its component, its adapter or a descendant
+ * reports once and leaves a status message in that node's place. Pack
+ * components render synchronously from plain props, so setup and render are
+ * the only places they can throw.
+ */
+function NodeErrorBoundary({ detail, report, children }: { detail: Omit<DeliveryComponentError, "error">; report?: (detail: DeliveryComponentError) => void; children: () => Child }): Child {
+  return <ErrorBoundary children={children} fallback={(error) => {
+    report?.({ ...detail, error });
+    return <div class="site-delivery__component-error" role="status">This part of the page could not be displayed.</div>;
+  }} />;
 }
 
-function BlockedNode({ message }: { message: string }): JSX.Element {
+function BlockedNode({ message }: { message: string }): Child {
   return <div class="site-delivery__component-error" role="status">{message}</div>;
 }
 
 interface RuntimeNodeProps {
   node: CompositionNode;
-  owner: string;
   pack: TrustedComponentPack;
-  outlet?: { parentId: string; slotId: string; children: readonly CompositionNode[]; localOwner: string };
+  outlet?: { parentId: string; slotId: string; children: readonly CompositionNode[] };
   report?: (detail: DeliveryComponentError) => void;
   basePath: DeliveryBasePath;
 }
 
-function RuntimeInvocation({ runtime, props }: { runtime: ReturnType<typeof resolveComponentNode> extends infer T ? T : never; props: Record<string, unknown> }): ComponentChildren {
+function RuntimeInvocation({ runtime, props }: { runtime: ReturnType<typeof resolveComponentNode> extends infer T ? T : never; props: Record<string, unknown> }): Child {
   if (runtime.status !== "resolved") return null;
-  return renderAssetDownloadMarkdown(runtime.definition, props, (chunk) => runtime.runtime.adapters?.render ? runtime.runtime.adapters.render(chunk) as ComponentChildren : h(runtime.runtime.component as never, chunk));
+  return renderAssetDownloadMarkdown(runtime.definition, props, (chunk) => runtime.runtime.adapters?.render ? runtime.runtime.adapters.render(chunk) as Child : h(runtime.runtime.component as Component<Record<string, unknown>>, chunk));
 }
 
-function RuntimeNode({ node, owner, pack, outlet, report, basePath }: RuntimeNodeProps): JSX.Element {
+function RuntimeNode({ node, pack, outlet, report, basePath }: RuntimeNodeProps): Child {
   const resolved = resolveComponentNode(node, pack);
   if (resolved.status !== "resolved") return <BlockedNode message="An unavailable page component was blocked." />;
   const props = projectTrustedProps(node, resolved.definition, basePath);
@@ -98,11 +104,10 @@ function RuntimeNode({ node, owner, pack, outlet, report, basePath }: RuntimeNod
     const projected = outlet?.parentId === node.id && outlet.slotId === slot.id;
     const source = projected ? outlet.children : node.slots[slot.id] ?? [];
     if ((slot.cardinality === "single" && source.length > 1) || (slot.accepts && source.some((child) => !slot.accepts!.includes(child.componentId)))) return <BlockedNode message="An invalid page component was blocked." />;
-    const childOwner = projected ? outlet.localOwner : owner;
-    const children = source.map((child) => <RuntimeNode key={`${childOwner}:${child.id}`} node={child} owner={childOwner} pack={pack} outlet={projected ? undefined : outlet} report={report} basePath={basePath} />);
+    const children = source.map((child) => <RuntimeNode node={child} pack={pack} outlet={projected ? undefined : outlet} report={report} basePath={basePath} />);
     props[slot.prop] = slot.cardinality === "single" ? children[0] : children;
   }
-  return <NodeErrorBoundary detail={{ nodeId: node.id, componentId: node.componentId }} report={report}><RuntimeInvocation runtime={resolved} props={props} /></NodeErrorBoundary>;
+  return <NodeErrorBoundary detail={{ nodeId: node.id, componentId: node.componentId }} report={report}>{() => <RuntimeInvocation runtime={resolved} props={props} />}</NodeErrorBoundary>;
 }
 
 function verifiedLinkedView(composition: SiteCompiledRouteComposition, pack: TrustedComponentPack): { document: CompositionDocument; outlet?: RuntimeNodeProps["outlet"] } | null {
@@ -125,12 +130,11 @@ function verifiedLinkedView(composition: SiteCompiledRouteComposition, pack: Tru
     || targetResolution?.status !== "resolved"
     || !targetResolution.definition.slots.some(({ id }) => id === linked.outlet.target.slotId)
     || composition.local.providerId !== linked.ref.providerId) return null;
-  return { document: linked.document, outlet: { ...linked.outlet.target, children: composition.document.root, localOwner: `${composition.local.providerId}:${composition.routeRecordId}` } };
+  return { document: linked.document, outlet: { ...linked.outlet.target, children: composition.document.root } };
 }
 
-export function DeliveryRuntime({ composition, pack, onComponentError, basePath = "/site" }: DeliveryRuntimeProps): JSX.Element {
+export function DeliveryRuntime({ composition, pack, onComponentError, basePath = "/site" }: DeliveryRuntimeProps): Child {
   const view = verifiedLinkedView(composition, pack);
   if (!view) return <BlockedNode message="This page template could not be verified." />;
-  const owner = composition.linkedSource ? `${composition.linkedSource.ref.providerId}:${composition.linkedSource.ref.recordId}` : `${composition.local.providerId}:${composition.routeRecordId}`;
-  return <>{view.document.root.map((node) => <RuntimeNode key={`${owner}:${node.id}`} node={node} owner={owner} pack={pack} outlet={view.outlet} report={onComponentError} basePath={basePath} />)}</>;
+  return <>{view.document.root.map((node) => <RuntimeNode node={node} pack={pack} outlet={view.outlet} report={onComponentError} basePath={basePath} />)}</>;
 }

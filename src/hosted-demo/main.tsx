@@ -1,6 +1,6 @@
 /// <reference path="../features/composer/pack-config.d.ts" />
 // Dedicated hosted build entry; never imported by the installed local tool.
-import { render } from "preact";
+import { mountOwned } from "../runtime";
 import { isSitePath, isWorkingPreviewPath } from "../features/delivery/routing";
 import { bootstrapTheme, createThemeController } from "../theme/theme";
 
@@ -43,6 +43,6 @@ if (isSitePath(pathname) || isWorkingPreviewPath(pathname)) {
     await import("../style.css");
     const { App } = await import("../App");
     const demo = await (await import("./bootstrap")).bootstrapHostedDemo().catch(failed);
-    render(<App themeController={themeController} integration={demo?.integration} hostedDemo={Boolean(demo)} onIntegration={demo?.onIntegration} />, root);
+    mountOwned(App, { themeController, integration: demo?.integration, hostedDemo: Boolean(demo), onIntegration: demo?.onIntegration }, { parent: root, name: "App" });
   }
 }

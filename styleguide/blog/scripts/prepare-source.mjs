@@ -14,7 +14,7 @@ const contentIndex = JSON.parse(await readFile(resolve(contentRoot, "current.jso
 const contentDir = resolve(contentRoot, "generations", String(contentIndex.generation));
 
 // Bundle the real host source while leaving runtime dependencies external. This
-// makes Preact and the contract resolve from this standalone host, including
+// makes zudo-react and the contract resolve from this standalone host, including
 // in the preview iframe, instead of from the root workspace's node_modules.
 await mkdir(output, { recursive: true });
 await build({
@@ -26,7 +26,7 @@ await build({
   target: "es2022",
   packages: "external",
   jsx: "automatic",
-  jsxImportSource: "preact",
+  jsxImportSource: "@takazudo/zfb/zudo-react",
 });
 await writeFile(resolve(output, "blog-pack.d.ts"),
   'export * from "../../../../packages/demo-blog/components/pack";\n');
@@ -70,8 +70,9 @@ for (const filename of await readdir(publicAssets)) {
   }
 }
 
-// Catch a stale source adapter that accidentally contains inlined Preact.
+// Catch a stale source adapter that accidentally contains an inlined zudo-react runtime.
 const compiled = await readFile(resolve(output, "blog-pack.js"), "utf8");
-if (!compiled.includes('from "preact/hooks"') || compiled.includes("function useState(")) {
-  throw new Error("Blog source adapter did not leave Preact external");
+if (!compiled.includes('from "@takazudo/zfb/zudo-react"') || compiled.includes("function getScope(") ||
+    compiled.includes('from "preact')) {
+  throw new Error("Blog source adapter did not leave zudo-react external");
 }

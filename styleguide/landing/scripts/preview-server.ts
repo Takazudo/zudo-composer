@@ -42,6 +42,6 @@ function registerPreview({ projectRoot, register }: ZfbDevMiddlewareContext) {
 // zfb dev otherwise injects shell assets even into a static public HTML file.
 // The public middleware response preserves the same isolated document as SSG.
 export default definePlugin({
-  name: "landing-preact-preview",
+  name: "landing-zudo-react-preview",
   devMiddleware: registerPreview,
 });

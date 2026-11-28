@@ -1,6 +1,3 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
-import "../../../test-support/cleanup";
 // `ChooserPreviewHost` — issue #254's ephemeral second preview iframe/bridge.
 //
 // `buildChooserPreviewDocument` is tested directly as a pure function (the
@@ -12,9 +9,8 @@ import "../../../test-support/cleanup";
 // own posts, its own dispose on unmount).
 
 import { describe, expect, it, vi } from "vitest";
-import { act } from "preact/test-utils";
-import { render, screen, waitFor } from "@testing-library/preact";
-import { h } from "preact";
+import { h, signal } from "@takazudo/zfb/zudo-react";
+import { render, screen, settle, waitFor } from "../../../../../test/render";
 import { defineComponentPack, type ComponentManifest } from "@zudo-composer/component-contract";
 import { COMPOSITION_SCHEMA_VERSION } from "../../../../../composer/browser";
 import {
@@ -121,8 +117,9 @@ describe("buildChooserPreviewDocument — pure document builder", () => {
   });
 });
 
-function mount(entry: ComponentManifest | null) {
+function mount(initial: ComponentManifest | null) {
   const harness = makeChooserPreviewBridgeHarness(componentProvider.manifest);
+  const entry = signal(initial);
   const utils = render(
     <ChooserPreviewHost
       componentProvider={componentProvider}
@@ -132,20 +129,20 @@ function mount(entry: ComponentManifest | null) {
       location={harness.location}
     />,
   );
-  return { harness, ...utils };
+  return { harness, entry, ...utils };
 }
 
 describe("ChooserPreviewHost — empty state before first hover", () => {
-  it("shows the empty-state hint and sends nothing, even after the iframe becomes ready", () => {
+  it("shows the empty-state hint and sends nothing, even after the iframe becomes ready", async () => {
     const { harness } = mount(null);
     expect(screen.getByText(/Hover or focus a component to preview it here/)).toBeInTheDocument();
-    act(() => harness.deliverReady());
+    await settle(); harness.deliverReady(); await settle();
     expect(harness.posts).toHaveLength(0);
   });
 });
 
 describe("ChooserPreviewHost — live document over its OWN bridge", () => {
-  it("renders a fully loaded multi-root Pattern source unchanged through the isolated bridge", () => {
+  it("renders a fully loaded multi-root Pattern source unchanged through the isolated bridge", async () => {
     const harness = makeChooserPreviewBridgeHarness(componentProvider.manifest);
     const source = {
       schemaVersion: COMPOSITION_SCHEMA_VERSION,
@@ -169,7 +166,7 @@ describe("ChooserPreviewHost — live document over its OWN bridge", () => {
       />,
     );
 
-    act(() => harness.deliverReady());
+    await settle(); harness.deliverReady(); await settle();
     expect(harness.posts).toHaveLength(1);
     const posted = harness.posts[0]!.message as { document: typeof source; session: { mode: string } };
     expect(posted.document).toBe(source);
@@ -177,9 +174,9 @@ describe("ChooserPreviewHost — live document over its OWN bridge", () => {
     expect(posted.session.mode).toBe("preview");
   });
 
-  it("sends a single-node render for the previewed entry, addressed to the exact preview origin", () => {
+  it("sends a single-node render for the previewed entry, addressed to the exact preview origin", async () => {
     const { harness } = mount(leafEntry);
-    act(() => harness.deliverReady());
+    await settle(); harness.deliverReady(); await settle();
     expect(harness.posts).toHaveLength(1);
     const posted = harness.posts[0]!;
     expect(posted.targetOrigin).toBe(harness.location.targetOrigin);
@@ -193,7 +190,7 @@ describe("ChooserPreviewHost — live document over its OWN bridge", () => {
   it("sends resolved host-theme changes through the existing preview session", async () => {
     document.documentElement.dataset.theme = "light";
     const { harness } = mount(leafEntry);
-    act(() => harness.deliverReady());
+    await settle(); harness.deliverReady(); await settle();
     expect(harness.posts.at(-1)!.message).toMatchObject({ session: { theme: "light" } });
 
     document.documentElement.dataset.theme = "dark";
@@ -202,43 +199,29 @@ describe("ChooserPreviewHost — live document over its OWN bridge", () => {
     });
   });
 
-  it("re-renders when the previewed entry changes (still one bridge instance, one growing post log)", () => {
-    const { harness, rerender } = mount(leafEntry);
-    act(() => harness.deliverReady());
+  it("re-renders when the previewed entry changes (still one bridge instance, one growing post log)", async () => {
+    const { harness, entry } = mount(leafEntry);
+    await settle(); harness.deliverReady(); await settle();
     expect(harness.posts).toHaveLength(1);
 
-    rerender(
-      <ChooserPreviewHost
-        componentProvider={componentProvider}
-        entry={containerEntry}
-        catalogById={catalogById}
-        createBridge={harness.createBridge}
-        location={harness.location}
-      />,
-    );
+    entry.value = containerEntry;
+    await settle();
     expect(harness.posts).toHaveLength(2);
     const latest = harness.posts.at(-1)!.message as { document: { root: { componentId: string }[] } };
     expect(latest.document.root[0]!.componentId).toBe("test.split");
   });
 
-  it("clears the empty-state hint once an entry is previewed", () => {
-    const { harness, rerender } = mount(null);
+  it("clears the empty-state hint once an entry is previewed", async () => {
+    const { entry } = mount(null);
     expect(screen.getByText(/Hover or focus a component/)).toBeInTheDocument();
-    rerender(
-      <ChooserPreviewHost
-        componentProvider={componentProvider}
-        entry={leafEntry}
-        catalogById={catalogById}
-        createBridge={harness.createBridge}
-        location={harness.location}
-      />,
-    );
+    entry.value = leafEntry;
+    await settle();
     expect(screen.queryByText(/Hover or focus a component/)).not.toBeInTheDocument();
   });
 });
 
 describe("ChooserPreviewHost — bridge lifecycle is fully independent", () => {
-  it("disposes its OWN bridge on unmount, never affecting a second, separately-mounted harness", () => {
+  it("disposes its OWN bridge on unmount, never affecting a second, separately-mounted harness", async () => {
     const disposeSpy = vi.fn();
     const harness = makeChooserPreviewBridgeHarness(componentProvider.manifest);
     const spyingCreateBridge: typeof harness.createBridge = (options) => {
@@ -254,6 +237,7 @@ describe("ChooserPreviewHost — bridge lifecycle is fully independent", () => {
         location={harness.location}
       />,
     );
+    await settle();
     expect(disposeSpy).not.toHaveBeenCalled();
     unmount();
     expect(disposeSpy).toHaveBeenCalledTimes(1);

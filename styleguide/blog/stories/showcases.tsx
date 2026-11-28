@@ -1,5 +1,4 @@
-import { createElement, type ComponentChildren, type ComponentType } from "preact";
-import { useLayoutEffect, useState } from "preact/hooks";
+import { Show, getScope, h, signal, type Child, type Component } from "@takazudo/zfb/zudo-react";
 import type { StoryMeta } from "@takazudo/zudo-sg/stories";
 import {
   ArticleCard, ArticleHeader, ArticleList, AuthorCard, AuthorGrid, Avatar, Callout,
@@ -10,9 +9,11 @@ import {
 import { articles, authors, comments, type Article } from "../src/generated/content";
 
 /** Only the preview iframe's history changes. The catalog keeps its own URL and navigation. */
-function FixtureRoute({ path, children }: { path: string; children: ComponentChildren }) {
-  const [ready, setReady] = useState(false);
-  useLayoutEffect(() => {
+function FixtureRoute({ path, children }: { path: string; children: Child }) {
+  const ready = signal(false);
+  // Children mount only after the fixture URL is in place, because route-aware
+  // components read the location once at setup.
+  getScope().onActivate(() => {
     if (window.parent === window) throw new Error("Blog fixture routes require an isolated preview iframe");
     const original = location.href;
     const preview = new URL(original);
@@ -20,10 +21,10 @@ function FixtureRoute({ path, children }: { path: string; children: ComponentChi
     // Keep slug and variant so zudo-sg can still identify this iframe's story.
     fixture.search = preview.search;
     history.replaceState(history.state, "", fixture);
-    setReady(true);
+    ready.value = true;
     return () => history.replaceState(history.state, "", original);
-  }, [path]);
-  return ready ? <div data-blog-fixture-path={path}>{children}</div> : null;
+  });
+  return <Show when={ready}>{() => <div data-blog-fixture-path={path}>{children}</div>}</Show>;
 }
 
 const first = articles.find((article) => article.slug === "the-half-finished-list")!;
@@ -50,7 +51,7 @@ export function routeArticleList(mode: "by-route-author" | "exclude-route") {
 interface Definition {
   id: string; title: string; category: string; description: string;
   defaults: Record<string, unknown>; source: { exportName: string };
-  component: ComponentType<Record<string, unknown>>;
+  component: Component<Record<string, unknown>>;
 }
 const definitions = componentPack.manifest.components.map((entry) => ({
   ...entry,
@@ -67,13 +68,13 @@ export function storyMeta(id: string): StoryMeta {
     usage: `import { ${entry.source.exportName} } from "demo-blog/components";\n\nconst props = ${JSON.stringify(entry.defaults, null, 2)};\n<${entry.source.exportName} {...props} />`,
   };
 }
-export function packDefaults(id: string): ComponentChildren {
+export function packDefaults(id: string): Child {
   const entry = definition(id);
-  return createElement(entry.component, { ...entry.defaults });
+  return h(entry.component, { ...entry.defaults });
 }
-export function showcase(id: string, example: boolean): ComponentChildren {
+export function showcase(id: string, example: boolean): Child {
   const entry = definition(id);
-  const render = (props: Record<string, unknown> = {}) => createElement(entry.component, { ...entry.defaults, ...props });
+  const render = (props: Record<string, unknown> = {}) => h(entry.component, { ...entry.defaults, ...props });
   switch (id) {
     case "blog.header": return <FixtureRoute path="/articles/the-half-finished-list"><Header nav={[nav()]} /></FixtureRoute>;
     case "blog.nav-link": return <FixtureRoute path="/articles/the-half-finished-list"><Header nav={[nav()]} /></FixtureRoute>;
