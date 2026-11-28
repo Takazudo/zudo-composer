@@ -1,9 +1,7 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../test-support/cleanup";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/preact";
+import { fireEvent, render, screen, settle, within } from "../../../../test/render";
 import { ComposerWorkspace } from "../composer-workspace";
 
 const BACK = { href: "/composer#/", label: "Back to Compositions" };
@@ -72,13 +70,13 @@ describe("ComposerWorkspace", () => {
     expect(main.firstElementChild).toHaveClass("sg-composer-main__banner");
   });
 
-  it("hands the toolbar a rail toggle, which collapses the region it names", () => {
+  it("hands the toolbar a rail toggle, which collapses the region it names", async () => {
     const { container } = render(
       <ComposerWorkspace
         back={BACK}
         title={<span>Product overview</span>}
         right={({ toggleRail }) => (
-          <button type="button" onClick={() => toggleRail("nav")}>
+          <button type="button" on:click={() => toggleRail("nav")}>
             Toggle structure
           </button>
         )}
@@ -87,6 +85,7 @@ describe("ComposerWorkspace", () => {
     );
     expect(container.querySelector(".cms-editor__body")).not.toHaveClass("nav-collapsed");
     fireEvent.click(screen.getByRole("button", { name: "Toggle structure" }));
+    await settle();
     expect(container.querySelector(".cms-editor__body")).toHaveClass("nav-collapsed");
   });
 });

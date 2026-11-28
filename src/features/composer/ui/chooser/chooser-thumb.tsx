@@ -1,5 +1,6 @@
-import { Component, type ComponentChildren, type RefObject } from "preact";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { computed, ErrorBoundary, getScope, Show, signal, type Child, type Ref } from "@takazudo/zfb/zudo-react";
+import type { VersionedAssetStore } from "../../../../assets/library";
+import { read, type MaybeSignal } from "../../../../components/reactive";
 import type { ComponentDefinition, ComposerComponentProvider } from "../../active-pack";
 import { CompositionPreviewHost, type CompositionPreviewHostProps } from "../../preview/composition-preview-host";
 import { buildChooserPreviewDocument } from "./chooser-preview-host";
@@ -10,53 +11,63 @@ export const CHOOSER_THUMB_VIEWPORT_HEIGHT = 450;
 export const CHOOSER_THUMB_FALLBACK_LIMIT = 4;
 const ATOM_CATEGORIES = new Set(["Actions", "Typography", "Media"]);
 
-class ThumbErrorBoundary extends Component<{ children: ComponentChildren }, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() { return { failed: true }; }
-  render() { return this.state.failed ? <span class="sg-composer-chooser-thumb-note">Preview unavailable</span> : this.props.children; }
-}
-
 export interface ChooserThumbProps {
   entry: ComponentDefinition;
   componentProvider: ComposerComponentProvider;
   catalogById: ReadonlyMap<string, ComponentDefinition>;
-  scrollerRef: RefObject<HTMLUListElement>;
-  index: number;
+  scrollerRef: Ref<HTMLUListElement>;
+  /** Follows the tile's position, which only matters without IntersectionObserver. */
+  index: MaybeSignal<number>;
   location?: CompositionPreviewHostProps["location"];
   createBridge?: CompositionPreviewHostProps["createBridge"];
+  assetStore?: VersionedAssetStore;
 }
 
-function ThumbPreview({ entry, componentProvider, catalogById, location, createBridge }: ChooserThumbProps) {
-  const document = useMemo(() => buildChooserPreviewDocument(entry, catalogById), [entry, catalogById]);
-  const [state, setState] = useState<"loading" | "ready" | "failed">("loading");
+function ThumbPreview({ entry, componentProvider, catalogById, location, createBridge, assetStore }: ChooserThumbProps): Child {
+  const scope = getScope();
+  const document = buildChooserPreviewDocument(entry, catalogById);
+  const state = signal<"loading" | "ready" | "failed">("loading");
   // A navigation that never handshakes also needs a bounded fallback.
-  useEffect(() => {
-    if (state !== "loading") return;
-    const timeout = setTimeout(() => setState("failed"), 15000);
+  scope.onActivate(() => {
+    const timeout = setTimeout(() => {
+      if (state.value === "loading") state.value = "failed";
+    }, 15000);
     return () => clearTimeout(timeout);
-  }, [state]);
-  if (state === "failed") return <span class="sg-composer-chooser-thumb-note">Preview unavailable</span>;
-  return <>
-    {state === "loading" && <span class="sg-composer-chooser-thumb-note">Loading preview…</span>}
-    <div class="sg-composer-chooser-thumb-stage" style={{ visibility: state === "loading" ? "hidden" : "visible" }}>
-      <CompositionPreviewHost componentProvider={componentProvider} document={document}
-        title={`${entry.title} thumbnail`} enlargeable={false} location={location} createBridge={createBridge}
-        onCurrent={() => setState("ready")} onError={() => setState("failed")} />
-    </div>
-  </>;
+  });
+  const failed = computed(() => state.value === "failed");
+  const loading = computed(() => state.value === "loading");
+  return (
+    <Show when={failed} fallback={() => (
+      <>
+        <Show when={loading}>{() => <span class="sg-composer-chooser-thumb-note">Loading preview…</span>}</Show>
+        <div class="sg-composer-chooser-thumb-stage" style={computed(() => ({ visibility: loading.value ? "hidden" : "visible" }))}>
+          <CompositionPreviewHost componentProvider={componentProvider} document={document}
+            title={`${entry.title} thumbnail`} enlargeable={false} location={location} createBridge={createBridge}
+            assetStore={assetStore}
+            onCurrent={() => { if (state.value === "loading") state.value = "ready"; }}
+            onError={() => { state.value = "failed"; }} />
+        </div>
+      </>
+    )}>
+      {() => <span class="sg-composer-chooser-thumb-note">Preview unavailable</span>}
+    </Show>
+  );
 }
 
 /** Each near-visible tile owns a detached document and an independent bridge. */
-export function ChooserThumb(props: ChooserThumbProps) {
+export function ChooserThumb(props: ChooserThumbProps): Child {
   const { entry, index, scrollerRef } = props;
-  const ref = useRef<HTMLDivElement>(null);
-  const [near, setNear] = useState(false);
-  const [width, setWidth] = useState(0);
+  const scope = getScope();
+  const ref: Ref<HTMLDivElement> = { current: null };
+  const near = signal(false);
+  const width = signal(0);
   const viewportWidth = ATOM_CATEGORIES.has(entry.category) ? CHOOSER_THUMB_ATOM_VIEWPORT_WIDTH : CHOOSER_THUMB_VIEWPORT_WIDTH;
-  useLayoutEffect(() => {
+  scope.onActivate(() => {
     const element = ref.current;
     if (!element) return;
-    const measure = () => setWidth(element.clientWidth);
+    const measure = () => {
+      width.value = element.clientWidth;
+    };
     measure();
     if (typeof ResizeObserver !== "undefined") {
       const observer = new ResizeObserver(measure);
@@ -65,21 +76,34 @@ export function ChooserThumb(props: ChooserThumbProps) {
     }
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, []);
-  useEffect(() => {
-    if (typeof IntersectionObserver === "undefined") {
-      setNear(index < CHOOSER_THUMB_FALLBACK_LIMIT);
-      return;
-    }
+  });
+  if (typeof IntersectionObserver === "undefined") {
+    scope.effect(() => {
+      near.value = read(index) < CHOOSER_THUMB_FALLBACK_LIMIT;
+    });
+  }
+  scope.onActivate(() => {
+    if (typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver((entries) => {
-      for (const observed of entries) if (observed.target === ref.current) setNear(observed.isIntersecting);
+      for (const observed of entries) if (observed.target === ref.current) near.value = observed.isIntersecting;
     }, { root: scrollerRef.current, rootMargin: "160px 0px" });
     if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
-  }, [index, scrollerRef]);
-  return <div ref={ref} class="sg-composer-chooser-thumb" inert aria-hidden="true"
-    style={{ "--chooser-thumb-scale": Math.min(1, width / viewportWidth), "--chooser-thumb-width": `${viewportWidth}px`, "--chooser-thumb-height": `${CHOOSER_THUMB_VIEWPORT_HEIGHT}px` }}>
-    {near ? <ThumbErrorBoundary key={entry.id}><ThumbPreview {...props} /></ThumbErrorBoundary>
-      : <span class="sg-composer-chooser-thumb-note">Preview on focus</span>}
-  </div>;
+  });
+  const style = computed(() => ({
+    "--chooser-thumb-scale": String(Math.min(1, width.value / viewportWidth)),
+    "--chooser-thumb-width": `${viewportWidth}px`,
+    "--chooser-thumb-height": `${CHOOSER_THUMB_VIEWPORT_HEIGHT}px`,
+  }));
+  return (
+    <div ref={ref} class="sg-composer-chooser-thumb" inert aria-hidden="true" style={style}>
+      <Show when={near} fallback={() => <span class="sg-composer-chooser-thumb-note">Preview on focus</span>}>
+        {() => (
+          <ErrorBoundary fallback={() => <span class="sg-composer-chooser-thumb-note">Preview unavailable</span>}>
+            {() => <ThumbPreview {...props} />}
+          </ErrorBoundary>
+        )}
+      </Show>
+    </div>
+  );
 }

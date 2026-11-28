@@ -1,6 +1,6 @@
 // Shared current-contract fixtures for the structure rail and chooser.
 
-import { h, type FunctionComponent } from "preact";
+import { h, type Child } from "@takazudo/zfb/zudo-react";
 import { defineComponentPack, type ComponentManifest } from "@zudo-composer/component-contract";
 import type { CompositionDocument, CompositionNode } from "../../../../../composer/browser";
 import { COMPOSITION_SCHEMA_VERSION, createSequentialIdFactory } from "../../../../../composer/browser";
@@ -96,7 +96,7 @@ export const fixtureCatalog: ComponentManifest[] = [
   },
 ];
 
-const FixtureComponent: FunctionComponent<Record<string, unknown>> = (props) =>
+const FixtureComponent = (props: Record<string, unknown>): Child =>
   h("div", props);
 
 export const fixtureComponentPack = defineComponentPack({

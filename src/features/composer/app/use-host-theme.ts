@@ -7,8 +7,9 @@
 // component library, so it must follow the same scheme — that theme is one
 // third of the `PreviewSession` snapshot the bridge sends.
 
+import type { ReadonlySignal, Scope } from "@takazudo/zfb/zudo-react";
 import type { PreviewTheme } from "../preview";
-import { resolveRootTheme, useResolvedTheme } from "../../../theme/use-resolved-theme";
+import { resolveRootTheme, resolvedThemeSignal } from "../../../theme/use-resolved-theme";
 
 /** Resolve the host document's current theme. Defaults to light off-DOM. */
 export function resolveHostTheme(
@@ -17,7 +18,7 @@ export function resolveHostTheme(
   return resolveRootTheme(root);
 }
 
-/** Track the host `<html data-theme>` and re-render when the user toggles it. */
-export function useHostTheme(): PreviewTheme {
-  return useResolvedTheme();
+/** Track the host `<html data-theme>`, owned by `scope`. */
+export function hostThemeSignal(scope: Scope): ReadonlySignal<PreviewTheme> {
+  return resolvedThemeSignal(scope);
 }

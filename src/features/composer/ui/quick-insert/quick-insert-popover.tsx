@@ -1,5 +1,3 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 // The canvas quick insert: when an insertion point sits in a restricted slot
 // with only a few allowed kinds, those kinds are offered as chips right at the
 // insertion point instead of opening the full chooser.
@@ -8,7 +6,7 @@
 // outside-click and focus restoration), so every actionable element carries
 // `role="menuitem"` to join the menu's roving focus.
 
-import type { JSX } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import { LockIcon, PlusIcon } from "../../../../components/icons";
 import type { SlotRule } from "../slot-rules";
 
@@ -40,7 +38,8 @@ export interface QuickInsertPopoverProps {
   onOpenChooser: () => void;
 }
 
-export function QuickInsertPopover({ rule, onInsert, onOpenPatterns, onOpenChooser }: QuickInsertPopoverProps): JSX.Element {
+/** Static for its mount: the host rebuilds it when the target's rule changes. */
+export function QuickInsertPopover({ rule, onInsert, onOpenPatterns, onOpenChooser }: QuickInsertPopoverProps): Child {
   const hidden = rule.hiddenByRule.length;
   return (
     <div class="sg-quick-insert">
@@ -54,9 +53,9 @@ export function QuickInsertPopover({ rule, onInsert, onOpenPatterns, onOpenChoos
             key={component.id}
             type="button"
             role="menuitem"
-            tabIndex={-1}
+            tabindex={-1}
             class="cms-chip sg-quick-insert__chip"
-            onClick={() => onInsert(component.id)}
+            on:click={() => onInsert(component.id)}
           >
             <PlusIcon size="xs" />
             {component.title}
@@ -65,20 +64,20 @@ export function QuickInsertPopover({ rule, onInsert, onOpenPatterns, onOpenChoos
         <button
           type="button"
           role="menuitem"
-          tabIndex={-1}
+          tabindex={-1}
           class="cms-chip sg-quick-insert__chip sg-quick-insert__chip--pattern"
-          onClick={onOpenPatterns}
+          on:click={() => onOpenPatterns()}
         >
           Pattern…
         </button>
       </div>
       <div class="sg-quick-insert__foot">
-        {rule.origin && (
+        {rule.origin ? (
           <span class="sg-quick-insert__origin">
             rule: {rule.origin.componentTitle} › {rule.origin.slotLabel}
           </span>
-        )}
-        <button type="button" role="menuitem" tabIndex={-1} class="sg-quick-insert__more" onClick={onOpenChooser}>
+        ) : null}
+        <button type="button" role="menuitem" tabindex={-1} class="sg-quick-insert__more" on:click={() => onOpenChooser()}>
           More… (search, {hidden} hidden)
         </button>
       </div>

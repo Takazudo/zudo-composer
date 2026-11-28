@@ -1,8 +1,5 @@
 "use client";
-import { useAssetResolvedPreviewSnapshot } from "../preview/assets-snapshot";
 
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 // The parent-side canvas: the preview `<iframe>` host + its bridge lifecycle
 // This is the one place the secure bridge is driven for the main canvas —
 // instance-scoped so the chooser can mount a second host for
@@ -13,7 +10,7 @@ import { useAssetResolvedPreviewSnapshot } from "../preview/assets-snapshot";
 //     titled iframe props;
 //   - the bridge retains the newest snapshot and, on ready/late-ready/reload,
 //     replays it at a fresh revision — so the effect below only has to send the
-//     current snapshot whenever it changes;
+//     current snapshot whenever its identity changes;
 //   - a DOCUMENT change is a full `render`; a session-only change
 //     (mode/theme/selection) is a lighter `updateSession`. One document
 //     snapshot drives the preview — there is no second source mapping.
@@ -49,14 +46,16 @@ import { useAssetResolvedPreviewSnapshot } from "../preview/assets-snapshot";
 // opens exactly as before. A direct Add has no focus token, so its popover
 // restores focus by focusing the iframe, which keeps its own active control.
 
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { JSX } from "preact";
+import { computed, getScope, Show, signal, type Child, type Ref } from "@takazudo/zfb/zudo-react";
 import type { CompositionDocument, InsertionTarget } from "../../../composer/browser";
+import type { VersionedAssetStore } from "../../../assets/library";
 import type { ChooserTab } from "../ui/chooser/composer-chooser";
 import type { ComposerCanvasViewport } from "../chrome/controller-model";
 import type { ComposerComponentProvider } from "../active-pack";
 import { ErrorIcon, InfoIcon, WarningIcon, XMarkIcon } from "../../../components/icons";
+import { toSignal, type MaybeSignal } from "../../../components/reactive";
 import { Button } from "../../../components/ui";
+import { assetResolvedPreviewSnapshot } from "../preview/assets-snapshot";
 import {
   buildComposerPreviewUrl,
   composerPreviewFrameProps,
@@ -93,11 +92,12 @@ export interface CanvasQuickInsertRequest {
 
 export interface ComposerCanvasHostProps {
   componentProvider: ComposerComponentProvider;
-  document: CompositionDocument;
+  document: MaybeSignal<CompositionDocument>;
   /** Separate render-only linked source context; the controller remains local. */
-  snapshot?: ComposerPreviewSnapshot;
-  session: PreviewSession;
-  viewport: ComposerCanvasViewport;
+  snapshot?: MaybeSignal<ComposerPreviewSnapshot | undefined>;
+  /** Compared by identity: pass a stable object per distinct session. */
+  session: MaybeSignal<PreviewSession>;
+  viewport: MaybeSignal<ComposerCanvasViewport>;
   /** A canvas node (or the empty canvas, `null`) was selected in Edit mode. */
   onSelect: (nodeId: string | null) => void;
   /** An insert point was activated — carries Takazudo/zudo-sg#245's index-bearing target. */
@@ -132,6 +132,8 @@ export interface ComposerCanvasHostProps {
   onRequestUndo?: () => void;
   /** Forward a guarded iframe shortcut to the controller's redo action. */
   onRequestRedo?: () => void;
+  /** The workspace's versioned Asset store, for resolving managed Asset references. */
+  assetStore?: VersionedAssetStore;
 
   // ── Test seams (production defaults) ──────────────────────────────────────
   /** Override the bridge factory. Defaults to Takazudo/zudo-sg#248's real bridge. */
@@ -142,13 +144,13 @@ export interface ComposerCanvasHostProps {
   hostWindow?: MessageTarget;
 }
 
-export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element {
+export function ComposerCanvasHost(props: ComposerCanvasHostProps): Child {
   const {
-    document: doc,
+    document: documentProp,
     componentProvider,
     snapshot: snapshotProp,
-    session,
-    viewport,
+    session: sessionProp,
+    viewport: viewportProp,
     onSelect,
     onRequestAdd,
     onRequestQuickInsert,
@@ -159,69 +161,74 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
     onDropNode,
     onRequestUndo,
     onRequestRedo,
+    assetStore,
     createBridge = createComposerPreviewBridge,
     location: locationProp,
     hostWindow,
   } = props;
+  const scope = getScope();
+  const doc = toSignal(documentProp);
+  const suppliedSnapshot = toSignal(snapshotProp);
+  const session = toSignal(sessionProp);
+  const viewport = toSignal(viewportProp);
 
-  const authoredSnapshot = useMemo(
-    () => snapshotProp ?? localPreviewSnapshot(doc, doc.id),
-    [doc, snapshotProp],
-  );
-  const asset = useAssetResolvedPreviewSnapshot(authoredSnapshot, componentProvider.catalog, session.mode === "preview");
-  const snapshot = asset.snapshot;
+  let lastAuthoredInput: { doc: CompositionDocument; supplied: ComposerPreviewSnapshot | undefined } | null = null;
+  let lastAuthored: ComposerPreviewSnapshot | null = null;
+  const authoredSnapshot = computed(() => {
+    const currentDoc = doc.value;
+    const supplied = suppliedSnapshot.value;
+    if (!lastAuthoredInput || lastAuthoredInput.doc !== currentDoc || lastAuthoredInput.supplied !== supplied) {
+      lastAuthoredInput = { doc: currentDoc, supplied };
+      lastAuthored = supplied ?? localPreviewSnapshot(currentDoc, currentDoc.id);
+    }
+    return lastAuthored;
+  });
+  const asset = assetResolvedPreviewSnapshot(scope, authoredSnapshot, componentProvider.catalog, {
+    store: assetStore,
+    enabled: computed(() => session.value.mode === "preview"),
+  });
+  const snapshot = computed(() => asset.value.snapshot);
+  const assetError = computed(() => asset.value.error);
 
-  const frameRef = useRef<HTMLIFrameElement | null>(null);
-  const bridgeRef = useRef<ComposerPreviewBridge | null>(null);
-  const prevSnapshotRef = useRef<ComposerPreviewSnapshot | null>(null);
+  const frameRef: Ref<HTMLIFrameElement> = { current: null };
+  let bridge: ComposerPreviewBridge | null = null;
+  let prevSnapshot: ComposerPreviewSnapshot | null = null;
+  let prevSession: PreviewSession | null = null;
   // Revision of the newest DOCUMENT snapshot sent (updated on `render`, NOT on a
   // session-only `updateSession`). An inline-edit commit stamped BELOW this was
   // authored against a document the host has since superseded → stale → dropped.
-  const lastDocRevisionRef = useRef(-1);
-  // The bridge is created ONCE; its callbacks read the latest props through
-  // this ref so a controller state change never needs to re-create the bridge
-  // (which would drop readiness and re-add a listener).
-  const handlersRef = useRef({
-    mode: session.mode,
-    onSelect,
-    onRequestAdd,
-    onRequestQuickInsert,
-    onOpenSource,
-    onRequestNodeMenu,
-    onRequestInsertMenu,
-    onCommitInlineEdit,
-    onDropNode,
-    onRequestUndo,
-    onRequestRedo,
-  });
-  handlersRef.current = {
-    mode: session.mode,
-    onSelect,
-    onRequestAdd,
-    onRequestQuickInsert,
-    onOpenSource,
-    onRequestNodeMenu,
-    onRequestInsertMenu,
-    onCommitInlineEdit,
-    onDropNode,
-    onRequestUndo,
-    onRequestRedo,
+  let lastDocRevision = -1;
+
+  const renderError = signal<string | null>(null);
+  const fatalError = signal<string | null>(null);
+  const staleNotice = signal<string | null>(null);
+
+  const location = locationProp ?? buildComposerPreviewUrl();
+  const frameProps = composerPreviewFrameProps(location);
+
+  // Sends the current snapshot, or only the session when the snapshot is the
+  // one already sent.
+  const send = (): void => {
+    const current = snapshot.value;
+    const currentSession = session.value;
+    if (!bridge || !current) return;
+    if (prevSnapshot !== current) {
+      prevSnapshot = current;
+      prevSession = currentSession;
+      renderError.value = null;
+      // A fresh document clears any stale-edit notice and advances the revision
+      // an inline commit is validated against.
+      staleNotice.value = null;
+      lastDocRevision = bridge.render(current, currentSession);
+    } else if (prevSession !== currentSession) {
+      prevSession = currentSession;
+      bridge.updateSession(currentSession);
+    }
   };
 
-  const [renderError, setRenderError] = useState<string | null>(null);
-  const [fatalError, setFatalError] = useState<string | null>(null);
-  const [staleNotice, setStaleNotice] = useState<string | null>(null);
-  const [, setReady] = useState(false);
-
-  const location = useMemo(
-    () => locationProp ?? buildComposerPreviewUrl(),
-    [locationProp],
-  );
-  const frameProps = useMemo(() => composerPreviewFrameProps(location), [location]);
-
-  useEffect(() => {
+  scope.onActivate(() => {
     const frame = frameRef.current;
-    if (!frame) return;
+    if (!frame) return undefined;
     const requestAdd = (
       target: InsertionTarget,
       rect: SerializedRect | undefined,
@@ -231,14 +238,13 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
         // Focus the iframe BEFORE the chooser opens so it becomes the chooser's
         // captured trigger — focus then returns here on close.
         frameRef.current?.focus();
-        if (initialTab) handlersRef.current.onRequestAdd(target, initialTab);
-        else handlersRef.current.onRequestAdd(target);
+        if (initialTab) onRequestAdd(target, initialTab);
+        else onRequestAdd(target);
       };
-      const quick = handlersRef.current.onRequestQuickInsert;
-      if (rect && quick?.({ target, rect: translateRect(rect, frameRef.current), restoreFocus, openChooser })) return;
+      if (rect && onRequestQuickInsert?.({ target, rect: translateRect(rect, frameRef.current), restoreFocus, openChooser })) return;
       openChooser();
     };
-    const bridge = createBridge({
+    const created = createBridge({
       frame,
       location,
       hostWindow: hostWindow ?? window,
@@ -246,23 +252,23 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
         packId: componentProvider.manifest.packId,
         packVersion: componentProvider.manifest.packVersion,
       },
-      onReady: () => setReady(true),
-      onSelect: (nodeId) => handlersRef.current.onSelect(nodeId),
+      onReady: () => undefined,
+      onSelect: (nodeId) => onSelect(nodeId),
       onRequestAdd: (target, _revision, rect) => {
         requestAdd(target, rect, () => frameRef.current?.focus());
       },
-      onOpenSource: (sourceRecordId) => handlersRef.current.onOpenSource?.(sourceRecordId),
+      onOpenSource: (sourceRecordId) => onOpenSource?.(sourceRecordId),
       onRequestNodeMenu: (nodeId, rect, focusToken) => {
-        handlersRef.current.onRequestNodeMenu(nodeId, translateRect(rect, frameRef.current), () =>
-          bridgeRef.current?.restoreFocus(focusToken),
+        onRequestNodeMenu(nodeId, translateRect(rect, frameRef.current), () =>
+          bridge?.restoreFocus(focusToken),
         );
       },
       onRequestInsertMenu: (target, rect, focusToken) => {
-        handlersRef.current.onRequestInsertMenu(
+        onRequestInsertMenu(
           target,
           translateRect(rect, frameRef.current),
-          () => bridgeRef.current?.restoreFocus(focusToken),
-          () => requestAdd(target, rect, () => bridgeRef.current?.restoreFocus(focusToken)),
+          () => bridge?.restoreFocus(focusToken),
+          () => requestAdd(target, rect, () => bridge?.restoreFocus(focusToken)),
         );
       },
       onCommitInlineEdit: (nodeId, fieldKey, value, documentRevision) => {
@@ -270,14 +276,12 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
         // against a document snapshot the host has already superseded is
         // DROPPED with an honest status, never silently applied. Only a fresh
         // commit reaches `updateProps` — the single mutation path.
-        if (documentRevision < lastDocRevisionRef.current) {
-          setStaleNotice(
-            "Your inline edit was not applied — the canvas changed while you were typing. Please try again.",
-          );
+        if (documentRevision < lastDocRevision) {
+          staleNotice.value = "Your inline edit was not applied — the canvas changed while you were typing. Please try again.";
           return;
         }
-        setStaleNotice(null);
-        handlersRef.current.onCommitInlineEdit(nodeId, fieldKey, value);
+        staleNotice.value = null;
+        onCommitInlineEdit(nodeId, fieldKey, value);
       },
       onDropNode: (sourceNodeId, target, copy, documentRevision) => {
         // Same revision gate as an inline-edit commit (issue Takazudo/zudo-sg#258): a drop
@@ -285,94 +289,99 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
         // is DROPPED with an honest status. The controller then does the ATOMIC
         // model revalidation (slot/cardinality/cycle/root/opaque-policy) — this
         // is only the stale-revision half of "host revalidates before applying".
-        if (documentRevision < lastDocRevisionRef.current) {
-          setStaleNotice(
-            "Your drag was not applied — the canvas changed while you were dragging. Please try again.",
-          );
+        if (documentRevision < lastDocRevision) {
+          staleNotice.value = "Your drag was not applied — the canvas changed while you were dragging. Please try again.";
           return;
         }
-        setStaleNotice(null);
-        handlersRef.current.onDropNode(sourceNodeId, target, copy);
+        staleNotice.value = null;
+        onDropNode(sourceNodeId, target, copy);
       },
       onRequestUndo: () => {
-        if (handlersRef.current.mode === "edit") handlersRef.current.onRequestUndo?.();
+        if (session.value.mode === "edit") onRequestUndo?.();
       },
       onRequestRedo: () => {
-        if (handlersRef.current.mode === "edit") handlersRef.current.onRequestRedo?.();
+        if (session.value.mode === "edit") onRequestRedo?.();
       },
       onError: (message, recoverable) => {
-        if (recoverable) setRenderError(message);
+        if (recoverable) renderError.value = message;
       },
       onRejected: (reason, detail) => {
         if (reason === "pack-mismatch") {
-          setFatalError(`Component pack mismatch. ${detail ?? "The host and preview loaded different packs."}`);
+          fatalError.value = `Component pack mismatch. ${detail ?? "The host and preview loaded different packs."}`;
         }
       },
     });
-    bridgeRef.current = bridge;
+    bridge = created;
+    send();
     return () => {
-      bridge.dispose();
-      bridgeRef.current = null;
+      created.dispose();
+      bridge = null;
     };
-    // Production: these are all stable. If a test swaps the factory/location the
-    // snapshot effect below re-sends on the next document/session change.
-  }, [componentProvider.manifest.packId, componentProvider.manifest.packVersion, createBridge, location, hostWindow]);
+  });
 
-  useEffect(() => {
-    const bridge = bridgeRef.current;
-    if (!bridge || !snapshot) return;
-    if (prevSnapshotRef.current !== snapshot) {
-      prevSnapshotRef.current = snapshot;
-      setRenderError(null);
-      // A fresh document clears any stale-edit notice and advances the revision
-      // an inline commit is validated against.
-      setStaleNotice(null);
-      lastDocRevisionRef.current = bridge.render(snapshot, session);
-    } else {
-      bridge.updateSession(session);
-    }
-  }, [session, snapshot]);
+  scope.effect(() => {
+    void snapshot.value;
+    void session.value;
+    send();
+  });
 
-  const width = COMPOSER_VIEWPORT_WIDTHS[viewport];
-  const frameStyle = width === null ? undefined : { width: `${width}px`, maxWidth: "100%" };
+  const frameStyle = computed(() => {
+    const width = COMPOSER_VIEWPORT_WIDTHS[viewport.value];
+    return width === null ? "" : { width: `${width}px`, "max-width": "100%" };
+  });
+  const hasSnapshot = computed(() => snapshot.value !== null);
 
   return (
     <div class="sg-composer-canvas-host" data-sg-viewport={viewport}>
-      {fatalError !== null && (
-        <div class="sg-composer-canvas-error" role="alert" data-composer-preview-fatal="pack-mismatch">
-          <span>
-            <ErrorIcon size="sm" class="sg-composer-canvas-error__icon" />
-            <span>Preview cannot start: {fatalError}</span>
-          </span>
-        </div>
-      )}
-      {renderError !== null && (
-        <div class="sg-composer-canvas-error" role="status">
-          <span>
-            <WarningIcon size="sm" class="sg-composer-canvas-error__icon" />
-            <span>Preview error: {renderError}</span>
-          </span>
-          <Button size="sm" onClick={() => setRenderError(null)}>
-            <XMarkIcon size="sm" />
-            Dismiss
-          </Button>
-        </div>
-      )}
-      {staleNotice !== null && (
-        <div class="sg-composer-canvas-error" role="status">
-          <span>
-            <InfoIcon size="sm" class="sg-composer-canvas-error__icon" />
-            <span>{staleNotice}</span>
-          </span>
-          <Button size="sm" onClick={() => setStaleNotice(null)}>
-            <XMarkIcon size="sm" />
-            Dismiss
-          </Button>
-        </div>
-      )}
+      <Show when={computed(() => fatalError.value !== null)}>
+        {() => (
+          <div class="sg-composer-canvas-error" role="alert" data-composer-preview-fatal="pack-mismatch">
+            <span>
+              <ErrorIcon size="sm" class="sg-composer-canvas-error__icon" />
+              <span>{computed(() => `Preview cannot start: ${fatalError.value ?? ""}`)}</span>
+            </span>
+          </div>
+        )}
+      </Show>
+      <Show when={computed(() => renderError.value !== null)}>
+        {() => (
+          <div class="sg-composer-canvas-error" role="status">
+            <span>
+              <WarningIcon size="sm" class="sg-composer-canvas-error__icon" />
+              <span>{computed(() => `Preview error: ${renderError.value ?? ""}`)}</span>
+            </span>
+            <Button size="sm" on:click={() => { renderError.value = null; }}>
+              <XMarkIcon size="sm" />
+              Dismiss
+            </Button>
+          </div>
+        )}
+      </Show>
+      <Show when={computed(() => staleNotice.value !== null)}>
+        {() => (
+          <div class="sg-composer-canvas-error" role="status">
+            <span>
+              <InfoIcon size="sm" class="sg-composer-canvas-error__icon" />
+              <span>{computed(() => staleNotice.value ?? "")}</span>
+            </span>
+            <Button size="sm" on:click={() => { staleNotice.value = null; }}>
+              <XMarkIcon size="sm" />
+              Dismiss
+            </Button>
+          </div>
+        )}
+      </Show>
       <div class="sg-composer-canvas-frame" style={frameStyle}>
-        {asset.error && <p role="alert">{asset.error}</p>}
-        <iframe ref={frameRef} hidden={!snapshot} style={{ display: snapshot ? undefined : "none" }} class="sg-composer-preview-iframe" {...frameProps} />
+        <Show when={computed(() => Boolean(assetError.value))}>
+          {() => <p role="alert">{computed(() => assetError.value ?? "")}</p>}
+        </Show>
+        <iframe
+          ref={frameRef}
+          hidden={computed(() => !hasSnapshot.value)}
+          style={computed(() => (hasSnapshot.value ? "" : { display: "none" }))}
+          class="sg-composer-preview-iframe"
+          {...frameProps}
+        />
       </div>
     </div>
   );

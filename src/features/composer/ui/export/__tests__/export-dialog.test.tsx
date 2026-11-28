@@ -1,9 +1,7 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../../test-support/cleanup";
-import { useState } from "preact/hooks";
+import { signal } from "@takazudo/zfb/zudo-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/preact";
+import { fireEvent, render, screen, settle } from "../../../../../test/render";
 import { generateJsx, type BrowserJsxExportOutcome } from "../../../../../composer/browser";
 import { TEST_COMPONENT_IDS, makeDocument, makeNode, resetTestIds, testManifest } from "../../test-support/composer-fixtures";
 import { ComposerExportDialog } from "../export-dialog";
@@ -86,7 +84,7 @@ describe("ComposerExportDialog — content states", () => {
 /** Realistic host: an "Open export" trigger button that owns `open` state,
  * exactly like #251's integration is expected to wire this dialog up. */
 function DialogHost() {
-  const [open, setOpen] = useState(false);
+  const open = signal(false);
   const doc = makeDocument([
     makeNode(TEST_COMPONENT_IDS.label, { text: "Hi" }, {}, "a"),
     makeNode(TEST_COMPONENT_IDS.label, { text: "Bye" }, {}, "b"),
@@ -94,24 +92,25 @@ function DialogHost() {
   const result = generateJsx(doc, testManifest);
   return (
     <div>
-      <button type="button" onClick={() => setOpen(true)}>
+      <button type="button" on:click={() => { open.value = true; }}>
         Open export
       </button>
-      <ComposerExportDialog open={open} documentName="Doc" result={result} onClose={() => setOpen(false)} />
+      <ComposerExportDialog open={open} documentName="Doc" result={result} onClose={() => { open.value = false; }} />
     </div>
   );
 }
 
 describe("ComposerExportDialog — focus lifecycle", () => {
-  it("moves initial focus into the dialog when it opens", () => {
+  it("moves initial focus into the dialog when it opens", async () => {
     render(<DialogHost />);
     fireEvent.click(screen.getByRole("button", { name: "Open export" }));
+    await settle();
 
     const dialog = screen.getByRole("dialog");
     expect(dialog.contains(document.activeElement)).toBe(true);
   });
 
-  it("restores focus to the trigger element after Escape closes the dialog", () => {
+  it("restores focus to the trigger element after Escape closes the dialog", async () => {
     render(<DialogHost />);
     const trigger = screen.getByRole("button", { name: "Open export" });
     // Focus the trigger explicitly (as a real keyboard user would before
@@ -120,28 +119,34 @@ describe("ComposerExportDialog — focus lifecycle", () => {
     // component's contract.
     trigger.focus();
     fireEvent.click(trigger);
+    await settle();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
 
+    await settle();
+
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("restores focus to the trigger element after the Close button closes it", () => {
+  it("restores focus to the trigger element after the Close button closes it", async () => {
     render(<DialogHost />);
     const trigger = screen.getByRole("button", { name: "Open export" });
     trigger.focus();
     fireEvent.click(trigger);
+    await settle();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await settle();
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("contains Tab focus within the dialog — Tab from the last focusable wraps to the first", () => {
+  it("contains Tab focus within the dialog — Tab from the last focusable wraps to the first", async () => {
     render(<DialogHost />);
     fireEvent.click(screen.getByRole("button", { name: "Open export" }));
+    await settle();
 
     const dialog = screen.getByRole("dialog");
     const focusables = dialog.querySelectorAll<HTMLElement>("button");
@@ -150,12 +155,14 @@ describe("ComposerExportDialog — focus lifecycle", () => {
 
     last.focus();
     fireEvent.keyDown(dialog, { key: "Tab" });
+    await settle();
     expect(document.activeElement).toBe(first);
   });
 
-  it("contains Shift+Tab focus within the dialog — from the first focusable wraps to the last", () => {
+  it("contains Shift+Tab focus within the dialog — from the first focusable wraps to the last", async () => {
     render(<DialogHost />);
     fireEvent.click(screen.getByRole("button", { name: "Open export" }));
+    await settle();
 
     const dialog = screen.getByRole("dialog");
     const focusables = dialog.querySelectorAll<HTMLElement>("button");
@@ -164,6 +171,7 @@ describe("ComposerExportDialog — focus lifecycle", () => {
 
     first.focus();
     fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    await settle();
     expect(document.activeElement).toBe(last);
   });
 });

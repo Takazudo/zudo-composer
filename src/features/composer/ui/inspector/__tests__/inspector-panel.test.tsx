@@ -1,9 +1,7 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../../test-support/cleanup";
-import { useState } from "preact/hooks";
+import { signal } from "@takazudo/zfb/zudo-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { fireEvent, render, screen, settle, waitFor, within } from "../../../../../test/render";
 import type { CompositionDocument } from "../../../../../composer/browser";
 import {
   TEST_COMPONENT_IDS,
@@ -43,8 +41,10 @@ function renderPanel(overrides: Partial<InspectorPanelProps> = {}) {
 }
 
 /** The Reuse tab is document-scoped, so every reuse assertion opens it first. */
-function openReuse(): void {
+async function openReuse(): Promise<void> {
   fireEvent.click(screen.getByRole("tab", { name: "Reuse" }));
+  await settle();
+  await settle();
 }
 
 beforeEach(() => {
@@ -56,7 +56,7 @@ function reusableDocument(): CompositionDocument {
 }
 
 function PatternPublicationHarness({ initialDocument = reusableDocument() }: { initialDocument?: CompositionDocument }) {
-  const [document, setDocument] = useState(initialDocument);
+  const document = signal(initialDocument);
   return (
     <InspectorPanel
       document={document}
@@ -65,9 +65,11 @@ function PatternPublicationHarness({ initialDocument = reusableDocument() }: { i
       mode="edit"
       onUpdateProps={() => {}}
       onRemove={() => {}}
-      onPublishPattern={() => setDocument((current) => ({ ...current, publication: { kind: "pattern" } }))}
+      onPublishPattern={() => {
+        document.value = { ...document.value, publication: { kind: "pattern" } };
+      }}
       onClearPublication={async () => {
-        setDocument((current) => ({ ...current, publication: undefined }));
+        document.value = { ...document.value, publication: undefined };
         return { status: "applied" };
       }}
     />
@@ -75,48 +77,43 @@ function PatternPublicationHarness({ initialDocument = reusableDocument() }: { i
 }
 
 describe("InspectorPanel — root/empty state", () => {
-  it("opens on Properties and shows an empty-composition note when the document has no nodes", () => {
+  it("opens on Properties and shows an empty-composition note when the document has no nodes", async () => {
     renderPanel({ document: makeDocument([]), selectedId: null });
     expect(screen.getByRole("tab", { name: "Properties" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Nothing selected")).toBeInTheDocument();
     expect(screen.getByText(/composition is empty/i)).toBeInTheDocument();
   });
 
-  it("shows a 'select something' note when nodes exist but nothing is selected", () => {
+  it("shows a 'select something' note when nodes exist but nothing is selected", async () => {
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Hi" })]);
     renderPanel({ document: doc, selectedId: null });
     expect(screen.getByText("Nothing selected")).toBeInTheDocument();
     expect(screen.getByText(/select a component/i)).toBeInTheDocument();
   });
 
-  it("falls back to the empty state for a stale/unknown selectedId", () => {
+  it("falls back to the empty state for a stale/unknown selectedId", async () => {
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Hi" }, {}, "a")]);
     renderPanel({ document: doc, selectedId: "does-not-exist" });
     expect(screen.getByText("Nothing selected")).toBeInTheDocument();
   });
 
-  it("disables the Slots tab for a node with no slots, and enables it for a container", () => {
+  it("disables the Slots tab for a node with no slots, and enables it for a container", async () => {
     const leaf = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Hi" }, {}, "a")]);
-    const { rerender } = renderPanel({ document: leaf, selectedId: "a" });
+    const document = signal<CompositionDocument>(leaf);
+    const selectedId = signal<string | null>("a");
+    renderPanel({ document, selectedId });
     expect(screen.getByRole("tab", { name: /Slots/ })).toBeDisabled();
 
     const container = makeDocument([
       makeNode(TEST_COMPONENT_IDS.panel, {}, { left: [], right: [] }, "panel"),
     ]);
-    rerender(
-      <InspectorPanel
-        document={container}
-        manifest={testManifest}
-        selectedId="panel"
-        mode="edit"
-        onUpdateProps={() => {}}
-        onRemove={() => {}}
-      />,
-    );
+    document.value = container;
+    selectedId.value = "panel";
+    await settle();
     expect(screen.getByRole("tab", { name: /Slots/ })).not.toBeDisabled();
   });
 
-  it("shows the Grammar-for-agents block for the document row when the root policy is restricted", () => {
+  it("shows the Grammar-for-agents block for the document row when the root policy is restricted", async () => {
     const doc = makeDocument([]);
     doc.binding = { sourceRecordId: "source", outletId: "outlet-main" };
     renderPanel({
@@ -141,14 +138,14 @@ describe("InspectorPanel — root/empty state", () => {
     expect(screen.getByText(/Region "Left" = test\.panel › left/)).toBeInTheDocument();
   });
 
-  it("omits the Grammar-for-agents block for the document row when the root policy is unrestricted", () => {
+  it("omits the Grammar-for-agents block for the document row when the root policy is unrestricted", async () => {
     renderPanel({ document: makeDocument([]), selectedId: null });
     expect(screen.queryByText("Grammar for agents")).not.toBeInTheDocument();
   });
 });
 
 describe("InspectorPanel — Reuse tab", () => {
-  it("presents linked ownership on the Reuse tab, separately from the selected node's props", () => {
+  it("presents linked ownership on the Reuse tab, separately from the selected node's props", async () => {
     const onOpenSource = vi.fn();
     const onDetach = vi.fn();
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Local" }, {}, "local-node")]);
@@ -168,16 +165,18 @@ describe("InspectorPanel — Reuse tab", () => {
     // The consumer's own local node is what Properties still edits.
     expect(screen.getByLabelText("Text")).toBeInTheDocument();
 
-    openReuse();
+    await openReuse();
     expect(screen.getByText("This composition consumes a Global template.")).toBeInTheDocument();
     expect(screen.getByText(/Site shell.*Main content.*Locked/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open source" }));
+    await settle();
     fireEvent.click(screen.getByRole("button", { name: "Detach" }));
+    await settle();
     expect(onOpenSource).toHaveBeenCalledWith("source-record");
     expect(onDetach).toHaveBeenCalledOnce();
   });
 
-  it("exposes only injected recovery actions for a broken binding", () => {
+  it("exposes only injected recovery actions for a broken binding", async () => {
     const onRetry = vi.fn();
     const onRemoveBrokenBinding = vi.fn();
     renderPanel({
@@ -190,17 +189,19 @@ describe("InspectorPanel — Reuse tab", () => {
       linkedActions: { onRetry, onRemoveBrokenBinding },
     });
 
-    openReuse();
+    await openReuse();
     expect(screen.getByText("Linked template unavailable")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await settle();
     fireEvent.click(screen.getByRole("button", { name: "Remove broken binding" }));
+    await settle();
     expect(onRetry).toHaveBeenCalledOnce();
     expect(onRemoveBrokenBinding).toHaveBeenCalledOnce();
   });
 
-  it("disables empty Pattern publication with an accessible reason", () => {
+  it("disables empty Pattern publication with an accessible reason", async () => {
     renderPanel({ document: makeDocument([]), selectedId: null });
-    openReuse();
+    await openReuse();
     const publish = screen.getByRole("button", { name: "Publish as Pattern" });
     expect(publish).toBeDisabled();
     expect(publish).toHaveAccessibleDescription(
@@ -210,22 +211,24 @@ describe("InspectorPanel — Reuse tab", () => {
 
   it("publishes through one explicit button, then reports the in-memory role without claiming persistence", async () => {
     render(<PatternPublicationHarness />);
-    openReuse();
+    await openReuse();
     const publish = screen.getByRole("button", { name: "Publish as Pattern" });
     expect(publish.tagName).toBe("BUTTON");
     expect(screen.queryByRole("radio", { name: /Pattern/i })).not.toBeInTheDocument();
 
     fireEvent.click(publish);
 
+    await settle();
+
     await waitFor(() => expect(screen.getByText("This composition is a Pattern.")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Unpublish Pattern" })).toBeInTheDocument();
   });
 
-  it("keeps a bound consumer from being published and explains the conflict", () => {
+  it("keeps a bound consumer from being published and explains the conflict", async () => {
     const doc = reusableDocument();
     doc.binding = { sourceRecordId: "source", outletId: "outlet-main" };
     renderPanel({ document: doc, selectedId: null });
-    openReuse();
+    await openReuse();
 
     const publish = screen.getByRole("button", { name: "Publish as Pattern" });
     expect(publish).toBeDisabled();
@@ -233,14 +236,14 @@ describe("InspectorPanel — Reuse tab", () => {
     expect(screen.getByText(/A bound composition cannot publish an outlet of its own/i)).toBeInTheDocument();
   });
 
-  it("keeps Global-template publication separate and guards its unpublish behind an alertdialog", () => {
+  it("keeps Global-template publication separate and guards its unpublish behind an alertdialog", async () => {
     const doc = reusableDocument();
     doc.publication = {
       kind: "global-template",
       outlet: { id: "outlet-main", label: "Main content", target: { parentId: "shell", slotId: "main" } },
     };
     renderPanel({ document: doc, selectedId: null });
-    openReuse();
+    await openReuse();
 
     const publish = screen.getByRole("button", { name: "Publish as Pattern" });
     expect(publish).toBeDisabled();
@@ -249,19 +252,21 @@ describe("InspectorPanel — Reuse tab", () => {
     expect(screen.getByText(/Current outlet: Main content/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Unpublish Global template" }));
+
+    await settle();
     // ConfirmDialog is an alertdialog, never a plain dialog.
     const confirm = screen.getByRole("alertdialog", { name: "Unpublish Global template?" });
     expect(within(confirm).getByRole("button", { name: "Cancel" })).toHaveFocus();
   });
 
-  it("shows a stale outlet diagnostic with a reassign or unpublish path", () => {
+  it("shows a stale outlet diagnostic with a reassign or unpublish path", async () => {
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.panel, {}, { left: [], right: [] }, "panel")]);
     doc.publication = {
       kind: "global-template",
       outlet: { id: "outlet-main", label: "Main", target: { parentId: "missing", slotId: "content" } },
     };
     renderPanel({ document: doc, selectedId: null });
-    openReuse();
+    await openReuse();
 
     expect(screen.getByText(/no longer a declared empty component slot/i)).toBeInTheDocument();
     expect(screen.getByText(/Choose another valid empty slot/i)).toBeInTheDocument();
@@ -270,16 +275,22 @@ describe("InspectorPanel — Reuse tab", () => {
 
   it("confirms before unpublishing, and restores the publish action afterwards", async () => {
     render(<PatternPublicationHarness initialDocument={{ ...reusableDocument(), publication: { kind: "pattern" } }} />);
-    openReuse();
+    await openReuse();
 
     fireEvent.click(screen.getByRole("button", { name: "Unpublish Pattern" }));
+
+    await settle();
     const confirm = screen.getByRole("alertdialog", { name: "Unpublish Pattern?" });
     expect(within(confirm).getByText(/removes the composition’s reusable Pattern status/i)).toBeInTheDocument();
 
     fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+
+    await settle();
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Unpublish Pattern" }));
+
+    await settle();
     fireEvent.click(
       within(screen.getByRole("alertdialog")).getByRole("button", { name: "Unpublish Pattern" }),
     );
@@ -301,11 +312,14 @@ describe("InspectorPanel — Reuse tab", () => {
         finishClear = resolve;
       })),
     });
-    openReuse();
+    await openReuse();
 
     fireEvent.click(screen.getByRole("button", { name: "Unpublish Pattern" }));
+
+    await settle();
     const confirm = screen.getByRole("alertdialog");
     fireEvent.click(within(confirm).getByRole("button", { name: "Unpublish Pattern" }));
+    await settle();
 
     finishClear?.({ status: "blocked", message: "2 consumers are still bound." });
     await waitFor(() =>
@@ -313,26 +327,26 @@ describe("InspectorPanel — Reuse tab", () => {
     );
   });
 
-  it("keeps the current reuse state visible but disables its mutation actions in preview", () => {
+  it("keeps the current reuse state visible but disables its mutation actions in preview", async () => {
     const doc = reusableDocument();
     doc.publication = { kind: "pattern" };
     renderPanel({ document: doc, selectedId: null, mode: "preview" });
-    openReuse();
+    await openReuse();
 
     expect(screen.getByText("This composition is a Pattern.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Unpublish Pattern" })).toBeDisabled();
   });
 
-  it("keeps controller errors visible without treating them as accepted Pattern publication", () => {
+  it("keeps controller errors visible without treating them as accepted Pattern publication", async () => {
     renderPanel({ document: reusableDocument(), selectedId: null, lastError: "This Composition cannot be published right now." });
-    openReuse();
+    await openReuse();
     expect(document.querySelector("[data-sg-reuse-feedback]")).toHaveTextContent(
       "This Composition cannot be published right now.",
     );
     expect(screen.queryByText("This composition is a Pattern.")).not.toBeInTheDocument();
   });
 
-  it("offers the outlet action only for an empty slot selected in Structure", () => {
+  it("offers the outlet action only for an empty slot selected in Structure", async () => {
     const doc = makeDocument([
       makeNode(
         TEST_COMPONENT_IDS.panel,
@@ -343,45 +357,38 @@ describe("InspectorPanel — Reuse tab", () => {
     ]);
     const onSetGlobalTemplateOutlet = vi.fn(async () => ({ status: "applied" as const }));
 
-    const { rerender } = renderPanel({
+    const selectedSlot = signal<{ parentId: string; slotId: string } | null>(null);
+    renderPanel({
       document: doc,
       selectedId: "panel",
-      selectedSlot: null,
+      selectedSlot,
       onSetGlobalTemplateOutlet,
     });
-    openReuse();
+    await openReuse();
     expect(screen.getByRole("button", { name: "Select a slot first" })).toBeDisabled();
 
-    function withSlot(slotId: string) {
-      rerender(
-        <InspectorPanel
-          document={doc}
-          manifest={testManifest}
-          selectedId="panel"
-          selectedSlot={{ parentId: "panel", slotId }}
-          mode="edit"
-          onUpdateProps={() => {}}
-          onRemove={() => {}}
-          onSetGlobalTemplateOutlet={onSetGlobalTemplateOutlet}
-        />,
-      );
-      openReuse();
+    async function withSlot(slotId: string) {
+      selectedSlot.value = { parentId: "panel", slotId };
+      await settle();
+      await openReuse();
     }
 
-    withSlot("right");
+    await withSlot("right");
     expect(screen.getByRole("button", { name: /Use Right as outlet/ })).toBeDisabled();
 
-    withSlot("left");
+    await withSlot("left");
     const use = screen.getByRole("button", { name: "Use Left as outlet" });
     expect(use).not.toBeDisabled();
     fireEvent.click(use);
+    await settle();
     fireEvent.click(screen.getByRole("button", { name: "Publish template" }));
+    await settle();
     expect(onSetGlobalTemplateOutlet).toHaveBeenCalledWith({ parentId: "panel", slotId: "left" }, "Left");
   });
 });
 
 describe("InspectorPanel — identity, parent and position", () => {
-  it("shows the component id, node id and a Document root parent for a top-level node", () => {
+  it("shows the component id, node id and a Document root parent for a top-level node", async () => {
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Hi" }, {}, "a")]);
     const { container } = renderPanel({ document: doc, selectedId: "a" });
     const node = container.querySelector(".sg-composer-inspector-node")!;
@@ -392,7 +399,7 @@ describe("InspectorPanel — identity, parent and position", () => {
     expect(screen.getByText("v1")).toBeInTheDocument();
   });
 
-  it("uses titleFor for a friendlier parent path when supplied", () => {
+  it("uses titleFor for a friendlier parent path when supplied", async () => {
     const doc = makeDocument([
       makeNode(
         TEST_COMPONENT_IDS.panel,
@@ -409,12 +416,15 @@ describe("InspectorPanel — identity, parent and position", () => {
     expect(container.querySelector(".sg-composer-inspector-node")!.textContent).toContain("Split Panel › Left");
   });
 
-  it("routes Duplicate, Copy and Delete through their callbacks", () => {
+  it("routes Duplicate, Copy and Delete through their callbacks", async () => {
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Hi" }, {}, "a")]);
     const { onCopy, onDuplicate, onRemove } = renderPanel({ document: doc, selectedId: "a" });
     fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    await settle();
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await settle();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await settle();
     expect(onDuplicate).toHaveBeenCalledWith("a");
     expect(onCopy).toHaveBeenCalledWith("a");
     expect(onRemove).toHaveBeenCalledWith("a");
@@ -422,7 +432,7 @@ describe("InspectorPanel — identity, parent and position", () => {
 });
 
 describe("InspectorPanel — Slots tab", () => {
-  it("lists every slot with its child count, an open-slot line, and jumps to one", () => {
+  it("lists every slot with its child count, an open-slot line, and jumps to one", async () => {
     const doc = makeDocument([
       makeNode(
         TEST_COMPONENT_IDS.panel,
@@ -437,6 +447,7 @@ describe("InspectorPanel — Slots tab", () => {
     const onJumpToSlot = vi.fn();
     const { container } = renderPanel({ document: doc, selectedId: "panel", onJumpToSlot });
     fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+    await settle();
 
     const items = Array.from(container.querySelectorAll("[data-sg-inspector-slots] li")).map(
       (li) => li.textContent,
@@ -448,6 +459,8 @@ describe("InspectorPanel — Slots tab", () => {
     expect(items[1]).toContain("Accepts any component in the pack.");
 
     fireEvent.click(screen.getByRole("button", { name: "Jump to Right" }));
+
+    await settle();
     expect(onJumpToSlot).toHaveBeenCalledWith({ parentId: "panel", slotId: "right" });
   });
 
@@ -455,13 +468,14 @@ describe("InspectorPanel — Slots tab", () => {
     return makeDocument([makeNode(TEST_COMPONENT_IDS.region, {}, { body: children }, "region")]);
   }
 
-  it("shows a restricted slot's rule: accepted rows with ids, a 'has rule' badge, and the bounds sentence", () => {
+  it("shows a restricted slot's rule: accepted rows with ids, a 'has rule' badge, and the bounds sentence", async () => {
     const { container } = renderPanel({
       document: regionDoc(),
       selectedId: "region",
       entries: testManifestEntries,
     });
     fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+    await settle();
 
     const slot = container.querySelector('[data-sg-inspector-slots] li[class="sg-composer-inspector-slot"]')!;
     expect(slot.textContent).toContain("Rule from Region › Body");
@@ -479,18 +493,19 @@ describe("InspectorPanel — Slots tab", () => {
     expect(labelRow?.textContent).not.toContain("has rule");
   });
 
-  it("warns when a restricted slot holds fewer children than its declared minimum", () => {
+  it("warns when a restricted slot holds fewer children than its declared minimum", async () => {
     renderPanel({
       document: regionDoc([makeNode(TEST_COMPONENT_IDS.label, { text: "A" })]),
       selectedId: "region",
       entries: testManifestEntries,
     });
     fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+    await settle();
 
     expect(screen.getByText(/needs at least 2/)).toBeInTheDocument();
   });
 
-  it("does not warn once the restricted slot meets its declared minimum", () => {
+  it("does not warn once the restricted slot meets its declared minimum", async () => {
     renderPanel({
       document: regionDoc([
         makeNode(TEST_COMPONENT_IDS.label, { text: "A" }),
@@ -500,11 +515,12 @@ describe("InspectorPanel — Slots tab", () => {
       entries: testManifestEntries,
     });
     fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+    await settle();
 
     expect(screen.queryByText(/needs at least/)).not.toBeInTheDocument();
   });
 
-  it("shows the consumer-facing rule for a published Global template outlet instead of a blocked verdict", () => {
+  it("shows the consumer-facing rule for a published Global template outlet instead of a blocked verdict", async () => {
     const doc = regionDoc();
     doc.publication = {
       kind: "global-template",
@@ -512,6 +528,7 @@ describe("InspectorPanel — Slots tab", () => {
     };
     const { container } = renderPanel({ document: doc, selectedId: "region", entries: testManifestEntries });
     fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+    await settle();
 
     const rule = container.querySelector(".sg-composer-inspector-rule")!;
     expect(rule.textContent).toContain("Applies to: every page bound to this template");
@@ -529,13 +546,14 @@ describe("InspectorPanel — Grammar for agents", () => {
     return makeDocument([makeNode(TEST_COMPONENT_IDS.region, {}, { body: children }, "region")]);
   }
 
-  it("shows the block, below the Rule block, for a restricted slot", () => {
+  it("shows the block, below the Rule block, for a restricted slot", async () => {
     const { container } = renderPanel({
       document: regionDoc(),
       selectedId: "region",
       entries: testManifestEntries,
     });
     fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+    await settle();
 
     const slot = container.querySelector('[data-sg-inspector-slots] li[class="sg-composer-inspector-slot"]')!;
     const rule = slot.querySelector(".sg-composer-inspector-rule")!;
@@ -550,15 +568,16 @@ describe("InspectorPanel — Grammar for agents", () => {
     expect(grammar.textContent).toContain("Same output as");
   });
 
-  it("omits the block for an open slot", () => {
+  it("omits the block for an open slot", async () => {
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.panel, {}, { left: [], right: [] }, "panel")]);
     const { container } = renderPanel({ document: doc, selectedId: "panel", entries: testManifestEntries });
     fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+    await settle();
 
     expect(container.querySelector(".sg-composer-inspector-grammar")).not.toBeInTheDocument();
   });
 
-  it("renders this document's own buildGrammar output for a published Global template outlet", () => {
+  it("renders this document's own buildGrammar output for a published Global template outlet", async () => {
     const doc = regionDoc();
     doc.publication = {
       kind: "global-template",
@@ -566,32 +585,38 @@ describe("InspectorPanel — Grammar for agents", () => {
     };
     const { container } = renderPanel({ document: doc, selectedId: "region", entries: testManifestEntries });
     fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+    await settle();
 
     const grammar = container.querySelector<HTMLElement>(".sg-composer-inspector-grammar")!;
     // The header `zudo-composer grammar` itself would print for this exact template.
     expect(grammar.textContent).toContain(`${doc.name} (template ${doc.id})`);
   });
 
-  it("swaps the rendered text between Markdown and JSON", () => {
+  it("swaps the rendered text between Markdown and JSON", async () => {
     const { container } = renderPanel({
       document: regionDoc(),
       selectedId: "region",
       entries: testManifestEntries,
     });
     fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+    await settle();
 
     const grammar = container.querySelector<HTMLElement>(".sg-composer-inspector-grammar")!;
     expect(grammar.querySelector("pre")?.textContent).toContain('Region "Body" = test.region › body');
 
     fireEvent.click(within(grammar).getByRole("button", { name: "JSON" }));
+
+    await settle();
     expect(grammar.querySelector("pre")?.textContent).toContain('"slotId": "body"');
     expect(grammar.querySelector("pre")?.textContent).not.toContain('Region "Body"');
 
     fireEvent.click(within(grammar).getByRole("button", { name: "Markdown" }));
+
+    await settle();
     expect(grammar.querySelector("pre")?.textContent).toContain('Region "Body" = test.region › body');
   });
 
-  it("copies whichever text is currently displayed", () => {
+  it("copies whichever text is currently displayed", async () => {
     copyTextMock.mockResolvedValue(true);
     const { container } = renderPanel({
       document: regionDoc(),
@@ -599,19 +624,25 @@ describe("InspectorPanel — Grammar for agents", () => {
       entries: testManifestEntries,
     });
     fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+    await settle();
     const grammar = container.querySelector<HTMLElement>(".sg-composer-inspector-grammar")!;
 
     fireEvent.click(within(grammar).getByRole("button", { name: "Copy" }));
+
+    await settle();
     expect(copyTextMock).toHaveBeenCalledWith(expect.stringContaining('Region "Body" = test.region › body'));
 
     fireEvent.click(within(grammar).getByRole("button", { name: "JSON" }));
+
+    await settle();
     fireEvent.click(within(grammar).getByRole("button", { name: "Copy" }));
+    await settle();
     expect(copyTextMock).toHaveBeenLastCalledWith(expect.stringContaining('"slotId": "body"'));
   });
 });
 
 describe("InspectorPanel — unaccepted-child diagnostics", () => {
-  it("points at the slot rule when a node holds a child its own slot rejects", () => {
+  it("points at the slot rule when a node holds a child its own slot rejects", async () => {
     const doc = makeDocument([
       makeNode(
         TEST_COMPONENT_IDS.region,
@@ -639,7 +670,7 @@ describe("InspectorPanel — field rendering + commits", () => {
     ]);
   }
 
-  it("renders one control per declared field kind", () => {
+  it("renders one control per declared field kind", async () => {
     renderPanel({ document: widgetDoc(), selectedId: "w" });
     expect(screen.getByLabelText("Title")).toBeInTheDocument();
     expect(screen.getByLabelText("Note")).toBeInTheDocument();
@@ -651,79 +682,89 @@ describe("InspectorPanel — field rendering + commits", () => {
     expect(screen.getByLabelText("Tint")).toHaveAttribute("type", "text");
   });
 
-  it("commits a text field edit through onUpdateProps with the node id + prop patch", () => {
+  it("commits a text field edit through onUpdateProps with the node id + prop patch", async () => {
     const { onUpdateProps } = renderPanel({ document: widgetDoc(), selectedId: "w" });
     fireEvent.input(screen.getByLabelText("Title"), { target: { value: "New title" } });
+    await settle();
     expect(onUpdateProps).toHaveBeenCalledWith("w", { title: "New title" });
   });
 
-  it("commits a boolean field edit with a real boolean", () => {
+  it("commits a boolean field edit with a real boolean", async () => {
     const { onUpdateProps } = renderPanel({ document: widgetDoc(), selectedId: "w" });
     fireEvent.click(screen.getByLabelText("Enabled"));
+    await settle();
     expect(onUpdateProps).toHaveBeenCalledWith("w", { enabled: false });
   });
 
-  it("commits a select field edit", () => {
+  it("commits a select field edit", async () => {
     const { onUpdateProps } = renderPanel({ document: widgetDoc(), selectedId: "w" });
     fireEvent.change(screen.getByLabelText("Variant"), { target: { value: "ghost" } });
+    await settle();
     expect(onUpdateProps).toHaveBeenCalledWith("w", { variant: "ghost" });
   });
 
-  it("commits a color field edit as a string", () => {
+  it("commits a color field edit as a string", async () => {
     const { onUpdateProps } = renderPanel({ document: widgetDoc(), selectedId: "w" });
     fireEvent.input(screen.getByLabelText("Tint"), { target: { value: "#ff0000" } });
+    await settle();
     expect(onUpdateProps).toHaveBeenCalledWith("w", { tint: "#ff0000" });
   });
 
-  it("commits a valid numeric edit as a number, not a string", () => {
+  it("commits a valid numeric edit as a number, not a string", async () => {
     const { onUpdateProps } = renderPanel({ document: widgetDoc(), selectedId: "w" });
     fireEvent.input(screen.getByLabelText("Count"), { target: { value: "7" } });
+    await settle();
     expect(onUpdateProps).toHaveBeenCalledWith("w", { count: 7 });
     expect(typeof onUpdateProps.mock.calls[0]![1].count).toBe("number");
   });
 
-  it("never commits NaN and shows a labelled inline error for invalid numeric drafts", () => {
+  it("never commits NaN and shows a labelled inline error for invalid numeric drafts", async () => {
     // A native <input type="number"> coerces non-numeric text to an empty
     // `.value` per the HTML spec (never lets "abc" reach the DOM value) —
     // the empty-draft branch is what real invalid typing hits.
     const { onUpdateProps } = renderPanel({ document: widgetDoc(), selectedId: "w" });
     const countInput = screen.getByLabelText("Count");
     fireEvent.input(countInput, { target: { value: "abc" } });
+    await settle();
     expect(onUpdateProps).not.toHaveBeenCalled();
     expect(countInput).toHaveAttribute("aria-invalid", "true");
     const describedBy = countInput.getAttribute("aria-describedby")!;
     expect(document.getElementById(describedBy)).toHaveTextContent(/enter a number/i);
   });
 
-  it("rejects an out-of-range numeric draft with a labelled error and no commit", () => {
+  it("rejects an out-of-range numeric draft with a labelled error and no commit", async () => {
     const { onUpdateProps } = renderPanel({ document: widgetDoc(), selectedId: "w" });
     const countInput = screen.getByLabelText("Count");
     fireEvent.input(countInput, { target: { value: "99" } });
+    await settle();
     expect(onUpdateProps).not.toHaveBeenCalled();
     expect(countInput).toHaveAttribute("aria-invalid", "true");
   });
 
-  it("reverts an invalid numeric draft to the last valid value on blur", () => {
+  it("reverts an invalid numeric draft to the last valid value on blur", async () => {
     renderPanel({ document: widgetDoc(), selectedId: "w" });
     const countInput = screen.getByLabelText("Count") as HTMLInputElement;
     fireEvent.input(countInput, { target: { value: "" } });
+    await settle();
     expect(countInput).toHaveAttribute("aria-invalid", "true");
     fireEvent.blur(countInput);
+    await settle();
     expect(countInput.value).toBe("3");
     expect(countInput).not.toHaveAttribute("aria-invalid", "true");
   });
 
-  it("offers an absent optional prop as its own Add control, seeded from the schema", () => {
+  it("offers an absent optional prop as its own Add control, seeded from the schema", async () => {
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.widget, { title: "Only the required one" }, {}, "w")]);
     const { onUpdateProps } = renderPanel({ document: doc, selectedId: "w" });
     expect(screen.queryByLabelText("Note")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add Note" }));
+    await settle();
     expect(onUpdateProps).toHaveBeenCalledWith("w", { note: "" }, null);
   });
 });
 
 describe("InspectorPanel — read-only / preview mode", () => {
-  it("disables every field control and the node actions while keeping values visible", () => {
+  it("disables every field control and the node actions while keeping values visible", async () => {
     const doc = makeDocument([
       makeNode(TEST_COMPONENT_IDS.widget, { title: "Locked", note: "n", enabled: true, count: 3, variant: "solid", tint: "#000" }, {}, "w"),
     ]);
@@ -736,7 +777,7 @@ describe("InspectorPanel — read-only / preview mode", () => {
 });
 
 describe("InspectorPanel — opaque nodes", () => {
-  it("shows diagnostics + raw identity, no editable fields, but keeps Delete", () => {
+  it("shows diagnostics + raw identity, no editable fields, but keeps Delete", async () => {
     const doc = makeDocument([makeNode("unknown.thing", { anything: "x" }, {}, "ghost")]);
     const { container, onRemove } = renderPanel({ document: doc, selectedId: "ghost" });
 
@@ -747,10 +788,12 @@ describe("InspectorPanel — opaque nodes", () => {
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await settle();
     expect(onRemove).toHaveBeenCalledWith("ghost");
   });
 
-  it("keeps declared fields hidden for a known component with an unsupported version", () => {
+  it("keeps declared fields hidden for a known component with an unsupported version", async () => {
     const versioned = makeNode(TEST_COMPONENT_IDS.label, { text: "Preserved" }, {}, "future");
     versioned.componentVersion = 2;
     renderPanel({ document: makeDocument([versioned]), selectedId: "future" });
@@ -761,7 +804,7 @@ describe("InspectorPanel — opaque nodes", () => {
 });
 
 describe("InspectorPanel — DOM scoping sanity", () => {
-  it("does not leak diagnostics markup when the node is editable", () => {
+  it("does not leak diagnostics markup when the node is editable", async () => {
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Hi" }, {}, "a")]);
     const { container } = renderPanel({ document: doc, selectedId: "a" });
     expect(within(container as HTMLElement).queryByRole("alert")).not.toBeInTheDocument();

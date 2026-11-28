@@ -1,6 +1,6 @@
 "use client";
 
-// The central Composer integration hook. This is the single place every
+// The central Composer integration controller. This is the single place every
 // surface's callbacks compose against one controller/reducer and obtain the
 // live session, document, selection, clipboard, menus, and shared chooser.
 //
@@ -17,7 +17,9 @@
 //   `controller.manifest` is identical to what the
 //   inspector/export/tree/chooser all receive.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { computed, signal, type ReadonlySignal, type Scope } from "@takazudo/zfb/zudo-react";
+import { read, type MaybeSignal } from "../../../components/reactive";
+import { memo } from "../reactive/memo";
 import type {
   ComposerReuseResolutionOptions,
   CompositionRecord,
@@ -28,29 +30,29 @@ import { compositionRecordRefKey } from "../../../composer/browser";
 import type { ComponentDefinition, ComposerComponentProvider } from "../active-pack";
 import type { ComposerCanvasViewport } from "../chrome/controller-model";
 import {
-  useComposerController,
+  createComposerController,
   type ComposerController,
-  type UseComposerControllerOptions,
+  type ComposerControllerOptions,
 } from "../chrome/use-composer-controller";
 import type { PreviewSession, PreviewTheme } from "../preview";
 import type { ChooserTab } from "../ui/chooser/composer-chooser";
 import {
-  useComposerExport,
-  type UseComposerExportResult,
+  createComposerExport,
+  type ComposerExportController,
 } from "../ui/export/use-composer-export";
-import { useHostTheme } from "./use-host-theme";
+import { hostThemeSignal } from "./use-host-theme";
 import { getPersistedViewport, setPersistedViewport } from "./viewport";
 
-export interface UseComposerIntegrationOptions {
+export interface ComposerIntegrationOptions {
   /** Exact validated provider shared with the controller and preview. */
   componentProvider: ComposerComponentProvider;
-  /** Forwarded to `useComposerController` (including deterministic test seams). */
-  controllerOptions: Omit<UseComposerControllerOptions, "manifest">;
+  /** Forwarded to `createComposerController` (including deterministic test seams). */
+  controllerOptions: Omit<ComposerControllerOptions, "manifest">;
   /**
    * Optional parent-owned, read-only Global-template resolver. The iframe
    * never receives this provider-facing capability or its loaded source data.
    */
-  reuseResolution?: ComposerReuseResolutionOptions;
+  reuseResolution?: MaybeSignal<ComposerReuseResolutionOptions | undefined>;
 }
 
 export interface ComposerChooserState {
@@ -72,18 +74,19 @@ export interface ComposerIntegrationApi {
   /** The richer array — feed the tree + chooser. */
   manifestEntries: readonly ComponentDefinition[];
   /** The live preview snapshot's session half (mode + theme + selection). */
-  session: PreviewSession;
-  theme: PreviewTheme;
-  viewport: ComposerCanvasViewport;
+  /** Stable per distinct session, so the canvas can compare it by identity. */
+  session: ReadonlySignal<PreviewSession>;
+  theme: ReadonlySignal<PreviewTheme>;
+  viewport: ReadonlySignal<ComposerCanvasViewport>;
   /** Set + persist the canvas viewport. */
   setViewport: (viewport: ComposerCanvasViewport) => void;
-  chooser: ComposerChooserState;
+  chooser: ReadonlySignal<ComposerChooserState>;
   openChooser: (target: InsertionTarget, session?: ComposerInsertSession, initialTab?: ChooserTab) => void;
   closeChooser: () => void;
   completeChooser: (insertedId?: string) => void;
-  exportState: UseComposerExportResult;
+  exportState: ComposerExportController;
   /** Latest parent-app resolver outcome for this provider-qualified record. */
-  reuseResolution: GlobalTemplateResolutionOutcome | null;
+  reuseResolution: ReadonlySignal<GlobalTemplateResolutionOutcome | null>;
   /** Friendly display name for a component id, from the richer catalog. */
   titleFor: (componentId: string) => string | undefined;
   /**
@@ -93,7 +96,7 @@ export interface ComposerIntegrationApi {
    * move — an author who collapsed the branch since selecting it still needs
    * the row back.
    */
-  revealEpoch: number;
+  revealEpoch: ReadonlySignal<number>;
   /** Select and reveal one node; the structure rail reopens its ancestors. */
   revealNode: (nodeId: string) => void;
 
@@ -117,9 +120,9 @@ export interface ComposerIntegrationApi {
   /** Redo the next document mutation through the mounted controller. */
   handleRedo: () => void;
   /** Whether the mounted controller currently has an undo entry. */
-  canUndo: boolean;
+  canUndo: ReadonlySignal<boolean>;
   /** Whether the mounted controller currently has a redo entry. */
-  canRedo: boolean;
+  canRedo: ReadonlySignal<boolean>;
 
   // ── Clipboard/duplicate seam used by the host menus ───────────────────────
   /** Copy: session clipboard = a snapshot of the node. Refused (via `controller.lastError`) for opaque nodes. */
@@ -149,45 +152,47 @@ export interface ComposerIntegrationApi {
   handleDropNode: (sourceNodeId: string, target: InsertionTarget, copy: boolean) => void;
 }
 
-export function useComposerIntegration(
-  options: UseComposerIntegrationOptions,
+export function createComposerIntegration(
+  scope: Scope,
+  options: ComposerIntegrationOptions,
 ): ComposerIntegrationApi {
   const manifestEntries = options.componentProvider.manifest.components;
   const manifest = options.componentProvider.catalog;
-  const controller = useComposerController({ manifest, ...options.controllerOptions });
+  const controller = createComposerController(scope, { manifest, ...options.controllerOptions });
   const { state } = controller;
-  const [reuseResolution, setReuseResolution] = useState<GlobalTemplateResolutionOutcome | null>(null);
-  const reuseRequestGeneration = useRef(0);
-  const setRootPolicyRef = useRef(controller.setRootPolicy);
-  setRootPolicyRef.current = controller.setRootPolicy;
-
-  const reuseConfig = options.reuseResolution;
-  const reuseRefKey = reuseConfig ? compositionRecordRefKey(reuseConfig.ref) : null;
-  const boundSourceKey = state.document.binding
-    ? `${state.document.binding.sourceRecordId}:${state.document.binding.outletId}`
-    : null;
-  const consumerRecord = useMemo<CompositionRecord>(
-    () => ({ ...controller.record, document: state.document }),
-    [controller.record, state.document],
-  );
+  const reuseResolution = signal<GlobalTemplateResolutionOutcome | null>(null);
+  let reuseRequestGeneration = 0;
 
   // A provider navigation, a consumer refresh, or a relevant source-save
   // token invalidates the preceding read. Stores currently do not expose
   // cancellation, so the essential guarantee is that a late result cannot
   // update this controller's policy after the active document has changed.
-  useEffect(() => {
-    const generation = ++reuseRequestGeneration.current;
+  let seenReuseKey: readonly unknown[] | null = null;
+  const runReuseResolution = () => {
+    const reuseConfig = read(options.reuseResolution);
+    const document = state.value.document;
+    const key = [
+      reuseConfig ? compositionRecordRefKey(reuseConfig.ref) : null,
+      document.binding ? `${document.binding.sourceRecordId}:${document.binding.outletId}` : null,
+      document,
+      reuseConfig?.refreshKey,
+      reuseConfig?.resolver,
+    ];
+    if (seenReuseKey !== null && key.every((value, index) => Object.is(value, seenReuseKey![index]))) return;
+    seenReuseKey = key;
+    const generation = ++reuseRequestGeneration;
     if (!reuseConfig) {
-      setReuseResolution(null);
-      setRootPolicyRef.current({ kind: "unrestricted" });
+      reuseResolution.value = null;
+      controller.setRootPolicy({ kind: "unrestricted" });
       return;
     }
-    setReuseResolution(null);
+    reuseResolution.value = null;
+    const consumerRecord: CompositionRecord = { ...controller.record, document };
     void reuseConfig.resolver.resolve(consumerRecord).then(
       (outcome) => {
-        if (generation !== reuseRequestGeneration.current) return;
-        setReuseResolution(outcome);
-        setRootPolicyRef.current(
+        if (generation !== reuseRequestGeneration || scope.abortSignal.aborted) return;
+        reuseResolution.value = outcome;
+        controller.setRootPolicy(
           outcome.status === "resolved" || outcome.status === "incompatible-local-root"
             ? outcome.rootPolicy
             : outcome.status === "unbound"
@@ -196,147 +201,89 @@ export function useComposerIntegration(
         );
       },
       () => {
-        if (generation !== reuseRequestGeneration.current) return;
+        if (generation !== reuseRequestGeneration || scope.abortSignal.aborted) return;
         // A custom resolver may reject. Keep the persisted binding/local roots
         // intact and safely block bound-root writes rather than surfacing a
         // stale or unrestricted policy.
-        setRootPolicyRef.current({ kind: "unresolved" });
+        controller.setRootPolicy({ kind: "unresolved" });
       },
     );
-    return () => {
-      if (generation === reuseRequestGeneration.current) reuseRequestGeneration.current += 1;
-    };
-  }, [boundSourceKey, consumerRecord, reuseConfig?.refreshKey, reuseConfig?.resolver, reuseRefKey]);
+  };
+  // A setup-time effect's first run is deferred, so the mount resolution runs
+  // eagerly here; the effect then handles later changes via the key guard.
+  runReuseResolution();
+  scope.effect(runReuseResolution);
+  scope.onCleanup(() => {
+    reuseRequestGeneration += 1;
+  });
 
-  const theme = useHostTheme();
+  const theme = hostThemeSignal(scope);
 
   // Restore the persisted viewport once, after mount (the controller always
-  // initializes to "fluid"; dispatching during render is not allowed).
-  useEffect(() => {
+  // initializes to "fluid").
+  scope.onActivate(() => {
     const persisted = getPersistedViewport();
-    if (persisted && persisted !== state.viewport) controller.setViewport(persisted);
-  }, []);
+    if (persisted && persisted !== state.value.viewport) controller.setViewport(persisted);
+  });
 
-  const setViewport = useCallback(
-    (viewport: ComposerCanvasViewport) => {
-      setPersistedViewport(viewport);
-      controller.setViewport(viewport);
-    },
-    [controller],
-  );
+  const setViewport = (viewport: ComposerCanvasViewport) => {
+    setPersistedViewport(viewport);
+    controller.setViewport(viewport);
+  };
 
-  const session = useMemo<PreviewSession>(
-    () => ({ mode: state.mode, theme, selectedId: state.selectedId }),
-    [state.mode, theme, state.selectedId],
-  );
+  const session = memo<PreviewSession>(() => ({
+    mode: state.value.mode,
+    theme: theme.value,
+    selectedId: state.value.selectedId,
+  }));
+  const viewport = computed(() => state.value.viewport);
 
-  const [chooser, setChooser] = useState<ComposerChooserState>({ open: false, target: null });
-  const chooserRef = useRef(chooser);
-  chooserRef.current = chooser;
-  const openChooser = useCallback(
-    (target: InsertionTarget, session?: ComposerInsertSession, initialTab?: ChooserTab) => {
-      chooserRef.current.session?.cancel();
-      setChooser({ open: true, target, ...(session ? { session } : {}), ...(initialTab ? { initialTab } : {}) });
-    },
-    [],
-  );
-  const closeChooser = useCallback(() => {
-    chooserRef.current.session?.cancel();
-    setChooser({ open: false, target: null });
-  }, []);
-  const completeChooser = useCallback((insertedId?: string) => {
-    chooserRef.current.session?.complete(insertedId);
-    setChooser({ open: false, target: null });
-  }, []);
-  useEffect(() => () => chooserRef.current.session?.cancel(), []);
+  const chooser = signal<ComposerChooserState>({ open: false, target: null });
+  const openChooser = (target: InsertionTarget, insertSession?: ComposerInsertSession, initialTab?: ChooserTab) => {
+    chooser.value.session?.cancel();
+    chooser.value = { open: true, target, ...(insertSession ? { session: insertSession } : {}), ...(initialTab ? { initialTab } : {}) };
+  };
+  const closeChooser = () => {
+    chooser.value.session?.cancel();
+    chooser.value = { open: false, target: null };
+  };
+  const completeChooser = (insertedId?: string) => {
+    chooser.value.session?.complete(insertedId);
+    chooser.value = { open: false, target: null };
+  };
+  scope.onCleanup(() => chooser.value.session?.cancel());
 
-  // The export hook takes a document RESOLVER, and it's the controller's
+  // The export controller takes a document RESOLVER, and it's the controller's
   // `flushPropUpdates` (issue Takazudo/zudo-sg#291): a debounce-pending inspector edit lands —
   // and the post-flush document is read back in the same tick — before any
   // JSX generation, so an export can never miss the tail of a typing burst.
-  const exportState = useComposerExport(controller.flushPropUpdates, manifest);
+  const exportState = createComposerExport(controller.flushPropUpdates, manifest);
 
-  const titleFor = useMemo(() => {
-    const byId = new Map(manifestEntries.map((e) => [e.id, e.title]));
-    return (componentId: string) => byId.get(componentId);
-  }, [manifestEntries]);
+  const titles = new Map(manifestEntries.map((e) => [e.id, e.title]));
+  const titleFor = (componentId: string) => titles.get(componentId);
 
-  const [revealEpoch, setRevealEpoch] = useState(0);
-  const revealNode = useCallback(
-    (nodeId: string) => {
-      controller.reveal(nodeId);
-      setRevealEpoch((epoch) => epoch + 1);
-    },
-    [controller],
-  );
+  const revealEpoch = signal(0);
+  const revealNode = (nodeId: string) => {
+    controller.reveal(nodeId);
+    revealEpoch.value += 1;
+  };
 
-  const handleCanvasSelect = useCallback(
-    (nodeId: string | null) => {
-      if (nodeId === null) controller.select(null);
-      else revealNode(nodeId);
-    },
-    [controller, revealNode],
-  );
+  const handleCanvasSelect = (nodeId: string | null) => {
+    if (nodeId === null) controller.select(null);
+    else revealNode(nodeId);
+  };
 
-  const handleCanvasRequestAdd = useCallback(
-    (target: InsertionTarget, initialTab?: ChooserTab) => openChooser(target, undefined, initialTab),
-    [openChooser],
-  );
-
-  const handleChooserAdd = useCallback(
-    (target: InsertionTarget, componentId: string) => controller.add(target, componentId),
-    [controller],
-  );
-
-  const handleExpandAncestors = useCallback(
-    (nodeIds: string[]) => nodeIds.forEach((id) => controller.setExpanded(id, true)),
-    [controller],
-  );
-
-  const handleRemoveSelected = useCallback(
-    (nodeId: string) => controller.remove(nodeId),
-    [controller],
-  );
-
-  const handleCopy = useCallback((nodeId: string) => controller.copy(nodeId), [controller]);
-  const handleCut = useCallback((nodeId: string) => controller.cut(nodeId), [controller]);
-  const handlePaste = useCallback((target: InsertionTarget) => controller.paste(target), [controller]);
-  const handleDuplicate = useCallback((nodeId: string) => controller.duplicate(nodeId), [controller]);
-
-  const handleCommitInlineEdit = useCallback(
-    (nodeId: string, fieldKey: string, value: string) =>
-      controller.updateProps(nodeId, { [fieldKey]: value }),
-    [controller],
-  );
-
-  const handleDropNode = useCallback(
-    (sourceNodeId: string, target: InsertionTarget, copy: boolean) =>
-      controller.drop(sourceNodeId, target, copy),
-    [controller],
-  );
-
-  // Keep an escape handler whose identity only changes when what it must close
-  // changes, so the keyboard hook does not re-bind on every controller update.
-  // Depend on `closeExport` itself (not the whole `exportState` object) so a
-  // stray re-render doesn't destabilize this callback even if `exportState`'s
-  // own memoization were ever loosened (issue Takazudo/zudo-sg#286).
-  const { closeExport } = exportState;
-  const openStateRef = useRef({ chooserOpen: chooser.open, exportOpen: exportState.open });
-  openStateRef.current = { chooserOpen: chooser.open, exportOpen: exportState.open };
-  const handleEscape = useCallback(() => {
-    if (openStateRef.current.chooserOpen) closeChooser();
-    if (openStateRef.current.exportOpen) closeExport();
-  }, [closeChooser, closeExport]);
-
-  const handleUndo = useCallback(() => controller.undo(), [controller]);
-  const handleRedo = useCallback(() => controller.redo(), [controller]);
+  const handleEscape = () => {
+    if (chooser.value.open) closeChooser();
+    if (exportState.open.value) exportState.closeExport();
+  };
 
   return {
     controller,
     manifestEntries,
     session,
     theme,
-    viewport: state.viewport,
+    viewport,
     setViewport,
     chooser,
     openChooser,
@@ -348,20 +295,20 @@ export function useComposerIntegration(
     revealEpoch,
     revealNode,
     handleCanvasSelect,
-    handleCanvasRequestAdd,
-    handleChooserAdd,
-    handleExpandAncestors,
-    handleRemoveSelected,
+    handleCanvasRequestAdd: (target, initialTab) => openChooser(target, undefined, initialTab),
+    handleChooserAdd: (target, componentId) => controller.add(target, componentId),
+    handleExpandAncestors: (nodeIds) => nodeIds.forEach((id) => controller.setExpanded(id, true)),
+    handleRemoveSelected: (nodeId) => controller.remove(nodeId),
     handleEscape,
-    handleUndo,
-    handleRedo,
+    handleUndo: () => controller.undo(),
+    handleRedo: () => controller.redo(),
     canUndo: controller.canUndo,
     canRedo: controller.canRedo,
-    handleCopy,
-    handleCut,
-    handlePaste,
-    handleDuplicate,
-    handleCommitInlineEdit,
-    handleDropNode,
+    handleCopy: (nodeId) => controller.copy(nodeId),
+    handleCut: (nodeId) => controller.cut(nodeId),
+    handlePaste: (target) => controller.paste(target),
+    handleDuplicate: (nodeId) => controller.duplicate(nodeId),
+    handleCommitInlineEdit: (nodeId, fieldKey, value) => controller.updateProps(nodeId, { [fieldKey]: value }),
+    handleDropNode: (sourceNodeId, target, copy) => controller.drop(sourceNodeId, target, copy),
   };
 }

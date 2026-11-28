@@ -1,5 +1,5 @@
 import "../../test-support/cleanup";
-import { act, renderHook } from "@testing-library/preact";
+import { act, renderController, type ControllerView as ComposerController } from "./controller-harness";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createSaveQueue,
@@ -26,8 +26,6 @@ import {
 } from "../../../../composer/__tests__/fixtures";
 import {
   INSPECTOR_COMMIT_DEBOUNCE_MS,
-  useComposerController,
-  type ComposerController,
 } from "../use-composer-controller";
 
 const ref = { providerId: "files", recordId: "record-history" } as const;
@@ -70,7 +68,7 @@ function setup(source?: CompositionDocument, rootPolicy?: RootPolicy, historyNow
   resetFixtureIds();
   const initialRecord = makeRecord(source);
   const harness = controlledQueue(initialRecord);
-  const hook = renderHook(() => useComposerController({
+  const hook = renderController(() => ({
     manifest: fixtureManifest,
     record: initialRecord,
     saveQueue: harness.queue,
@@ -98,7 +96,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("useComposerController — history", () => {
+describe("createComposerController — history", () => {
   it("restores and reapplies every undoable document mutation", () => {
     const scenarios: Array<{ prepare?(controller: ComposerController): void; run(controller: ComposerController): void }> = [
       { run: (controller) => controller.add({ parentId: "split", slotId: S.splitRight, index: 1 }, F.box) },

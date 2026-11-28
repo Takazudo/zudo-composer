@@ -1,9 +1,8 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../test-support/cleanup";
 import { afterEach, describe, expect, it } from "vitest";
-import { render, screen, waitFor } from "@testing-library/preact";
-import { resolveHostTheme, useHostTheme } from "../use-host-theme";
+import { getScope } from "@takazudo/zfb/zudo-react";
+import { render, screen, waitFor } from "../../../../test/render";
+import { hostThemeSignal, resolveHostTheme } from "../use-host-theme";
 
 afterEach(() => document.documentElement.removeAttribute("data-theme"));
 
@@ -23,11 +22,11 @@ describe("resolveHostTheme (#251)", () => {
 });
 
 function Probe() {
-  const theme = useHostTheme();
+  const theme = hostThemeSignal(getScope());
   return <span data-testid="theme">{theme}</span>;
 }
 
-describe("useHostTheme (#251)", () => {
+describe("hostThemeSignal (#251)", () => {
   it("tracks the host <html data-theme> and updates when it toggles", async () => {
     document.documentElement.setAttribute("data-theme", "light");
     render(<Probe />);

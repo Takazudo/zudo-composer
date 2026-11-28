@@ -1,7 +1,7 @@
-// Convenience hook wiring Takazudo/zudo-sg#245's `generateJsx` to open/close state for the
+// Convenience controller wiring Takazudo/zudo-sg#245's `generateJsx` to open/close state for the
 // export dialog (issue Takazudo/zudo-sg#249). Deliberately tiny and fully owned by this
 // feature: it's the one place `generateJsx` is called from the
-// presentational layer. The integration can either use this hook directly or
+// presentational layer. The integration can either use this controller directly or
 // call `generateJsx` itself and pass the result straight
 // into `ComposerExportDialog` — both paths render the exact same generator
 // output, never a second render/source mapping. `result` is never copied
@@ -14,7 +14,7 @@
 // prop could not express that: it would still hold the pre-flush render's
 // snapshot when `openExport` runs.
 
-import { useCallback, useMemo, useState } from "preact/hooks";
+import { signal, type ReadonlySignal } from "@takazudo/zfb/zudo-react";
 import type {
   BrowserJsxExportOutcome,
   ComponentCatalog,
@@ -26,18 +26,18 @@ import type {
 } from "../../../../composer/browser";
 import { generateBrowserJsxExport, generateJsx } from "../../../../composer/browser";
 
-export interface UseComposerExportResult {
-  open: boolean;
-  result: JsxGenerationResult | null;
+export interface ComposerExportController {
+  readonly open: ReadonlySignal<boolean>;
+  readonly result: ReadonlySignal<JsxGenerationResult | null>;
   /** The exact document snapshot read after pending prop writes were flushed. */
-  exportDocument: CompositionDocument | null;
+  readonly exportDocument: ReadonlySignal<CompositionDocument | null>;
   /** Copy semantics and any linked-dependency block, separate from opaque-node diagnostics. */
-  copyOutcome: BrowserJsxExportOutcome | null;
+  readonly copyOutcome: ReadonlySignal<BrowserJsxExportOutcome | null>;
   openExport: () => void;
   closeExport: () => void;
 }
 
-export interface UseComposerExportOptions {
+export interface ComposerExportOptions {
   /**
    * Optional current persisted record for linked browser Copy behavior. Its
    * document is replaced with the flushed export snapshot at open time so a
@@ -50,17 +50,18 @@ export interface UseComposerExportOptions {
   idFactory?: IdFactory;
 }
 
-export function useComposerExport(
+/** Create once in the owning component's setup; the methods are stable for its lifetime. */
+export function createComposerExport(
   resolveDocument: () => CompositionDocument,
   manifest: ComponentCatalog,
-  options: UseComposerExportOptions = {},
-): UseComposerExportResult {
-  const [open, setOpen] = useState(false);
-  const [result, setResult] = useState<JsxGenerationResult | null>(null);
-  const [exportDocument, setExportDocument] = useState<CompositionDocument | null>(null);
-  const [copyOutcome, setCopyOutcome] = useState<BrowserJsxExportOutcome | null>(null);
+  options: ComposerExportOptions = {},
+): ComposerExportController {
+  const open = signal(false);
+  const result = signal<JsxGenerationResult | null>(null);
+  const exportDocument = signal<CompositionDocument | null>(null);
+  const copyOutcome = signal<BrowserJsxExportOutcome | null>(null);
 
-  const openExport = useCallback(() => {
+  const openExport = () => {
     const document = resolveDocument();
     const outcome = options.record
       ? generateBrowserJsxExport({
@@ -70,22 +71,15 @@ export function useComposerExport(
           idFactory: options.idFactory,
         })
       : { status: "ready" as const, kind: "ordinary" as const, generation: generateJsx(document, manifest) };
-    setExportDocument(document);
-    setCopyOutcome(outcome);
-    setResult(outcome.status === "ready" ? outcome.generation : null);
-    setOpen(true);
-  }, [resolveDocument, manifest, options.record, options.resolution, options.idFactory]);
+    exportDocument.value = document;
+    copyOutcome.value = outcome;
+    result.value = outcome.status === "ready" ? outcome.generation : null;
+    open.value = true;
+  };
 
-  const closeExport = useCallback(() => {
-    setOpen(false);
-  }, []);
+  const closeExport = () => {
+    open.value = false;
+  };
 
-  // Memoized so the returned object is referentially stable across renders
-  // that don't touch `open`/`result` — callers (e.g. the integration hook's
-  // `handleEscape`) can safely depend on this object without re-binding on
-  // every unrelated parent render (issue Takazudo/zudo-sg#286).
-  return useMemo(
-    () => ({ open, result, exportDocument, copyOutcome, openExport, closeExport }),
-    [open, result, exportDocument, copyOutcome, openExport, closeExport],
-  );
+  return { open, result, exportDocument, copyOutcome, openExport, closeExport };
 }

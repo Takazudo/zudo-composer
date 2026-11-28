@@ -1,8 +1,5 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../test-support/cleanup";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
-import { act } from "preact/test-utils";
+import { fireEvent, render, screen, settle, waitFor, within } from "../../../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   COMPOSITION_PROVIDERS,
@@ -172,6 +169,7 @@ describe("ProductionComposerApp", () => {
     expect(await screen.findByRole("link", { name: "Browser copy" })).toBeInTheDocument();
     expect(navigation.replacements).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Provider: Alternate storage" }));
+    await settle();
     expect(screen.getByRole("menuitemradio", { name: "Local files" })).toBeInTheDocument();
 
     view.unmount();
@@ -202,10 +200,14 @@ describe("ProductionComposerApp", () => {
     await screen.findByText("No compositions yet");
 
     fireEvent.click(screen.getAllByRole("button", { name: "New composition" })[0]);
+
+    await settle();
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     expect(alternate.records.has("ordinary")).toBe(false);
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: " Ordinary page " } });
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
+    await settle();
 
     expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
     expect(alternate.records.get("ordinary")?.document).toMatchObject({
@@ -241,12 +243,16 @@ describe("ProductionComposerApp", () => {
     );
     await screen.findByRole("link", { name: "Site shell" });
     fireEvent.click(screen.getAllByRole("button", { name: "New composition" })[0]);
+    await settle();
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     // Listing templates now resolves each outlet's rule, which needs a further
     // provider.get() round trip before the template tile appears.
     fireEvent.click(await within(dialog).findByRole("button", { name: /Site shell/ }));
+    await settle();
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Bound page" } });
+    await settle();
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
+    await settle();
 
     expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
     expect(alternate.records.get("bound-page")?.document).toMatchObject({
@@ -288,7 +294,9 @@ describe("ProductionComposerApp", () => {
     expect(await screen.findByText("Linked template")).toBeInTheDocument();
     const inspector = view.container.querySelector(".cms-editor__region--insp") as HTMLElement;
     fireEvent.click(within(inspector).getByRole("tab", { name: /^Reuse/ }));
+    await settle();
     fireEvent.click(await within(inspector).findByRole("button", { name: "Detach" }));
+    await settle();
 
     await waitFor(() => {
       const detached = alternate.records.get("bound-page")!;
@@ -327,13 +335,16 @@ describe("ProductionComposerApp", () => {
     );
     await screen.findByRole("link", { name: "Site shell" });
     fireEvent.click(screen.getAllByRole("button", { name: "New composition" })[0]);
+    await settle();
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     // Listing templates now resolves each outlet's rule, which needs a further
     // provider.get() round trip before the template tile appears.
     fireEvent.click(await within(dialog).findByRole("button", { name: /Site shell/ }));
+    await settle();
     alternate.records.delete("site-shell");
     vi.mocked(alternate.store.put).mockClear();
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
+    await settle();
 
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("selected Global template changed");
     expect(alternate.store.put).not.toHaveBeenCalled();
@@ -364,9 +375,13 @@ describe("ProductionComposerApp", () => {
     );
 
     fireEvent.click(await screen.findByRole("tab", { name: /^Reuse/ }));
+
+    await settle();
     fireEvent.click(await screen.findByRole("button", { name: "Unpublish Global template" }));
+    await settle();
     const confirm = screen.getByRole("alertdialog", { name: "Unpublish Global template?" });
     fireEvent.click(within(confirm).getByRole("button", { name: "Unpublish Global template" }));
+    await settle();
 
     await waitFor(() =>
       expect(document.querySelector("[data-sg-reuse-feedback]")).toHaveTextContent(
@@ -398,7 +413,8 @@ describe("ProductionComposerApp", () => {
     );
 
     await screen.findByRole("link", { name: "Back to Compositions" });
-    act(() => bridge.deliver(protocolReadyMessage(PREVIEW_PACK)));
+    bridge.deliver(protocolReadyMessage(PREVIEW_PACK));
+    await settle();
     const toolbar = () => view.container.querySelector(".cms-editor__toolbar") as HTMLElement;
     const undo = () => within(toolbar()).getByRole("button", { name: "Undo" });
     const redo = () => within(toolbar()).getByRole("button", { name: "Redo" });
@@ -409,23 +425,33 @@ describe("ProductionComposerApp", () => {
     const tree = view.container.querySelector(".cms-editor__region--nav") as HTMLElement;
     const inspector = view.container.querySelector(".cms-editor__region--insp") as HTMLElement;
     fireEvent.click(within(tree).getByRole("treeitem", { name: /^Button/ }));
+    await settle();
     fireEvent.click(within(inspector).getByRole("button", { name: "Delete" }));
+    await settle();
     expect(undo()).toBeEnabled();
     expect(redo()).toBeDisabled();
 
     fireEvent.click(undo());
+
+    await settle();
     expect(undo()).toBeDisabled();
     expect(redo()).toBeEnabled();
 
     fireEvent.keyDown(document, { key: "y", ctrlKey: true });
+
+    await settle();
     expect(undo()).toBeEnabled();
     expect(redo()).toBeDisabled();
 
-    act(() => bridge.deliver(protocolRequestHistoryMessage(PREVIEW_PACK, "undo")));
+    bridge.deliver(protocolRequestHistoryMessage(PREVIEW_PACK, "undo"));
+
+    await settle();
     expect(undo()).toBeDisabled();
     expect(redo()).toBeEnabled();
 
     fireEvent.click(within(toolbar()).getByRole("radio", { name: "Preview" }));
+
+    await settle();
     expect(undo()).toBeDisabled();
     expect(redo()).toBeDisabled();
 
@@ -447,6 +473,7 @@ describe("ProductionComposerApp", () => {
     const tree = view.container.querySelector(".cms-editor__region--nav") as HTMLElement;
     const inspector = view.container.querySelector(".cms-editor__region--insp") as HTMLElement;
     fireEvent.click(within(tree).getByRole("treeitem", { name: /^Button/ }));
+    await settle();
     fireEvent.input(within(inspector).getByLabelText("Label"), {
       target: { value: "Last keystroke before leaving" },
     });
@@ -476,10 +503,14 @@ describe("ProductionComposerApp", () => {
     );
     await screen.findByRole("link", { name: "Browser copy" });
     fireEvent.click(screen.getByRole("button", { name: "Provider: Alternate storage" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Local files" }));
+    await settle();
     await screen.findByRole("link", { name: "File copy" });
     fireEvent.click(screen.getByRole("button", { name: "More actions for File copy" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
+    await settle();
 
     expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
     expect(files.records.get("file-copy")?.document.name).toBe("File copy copy");
@@ -507,12 +538,16 @@ describe("ProductionComposerApp", () => {
     const tree = view.container.querySelector(".cms-editor__region--nav") as HTMLElement;
     const inspector = view.container.querySelector(".cms-editor__region--insp") as HTMLElement;
     fireEvent.click(within(tree).getByRole("treeitem", { name: /^Button/ }));
+    await settle();
     fireEvent.input(within(inspector).getByLabelText("Label"), {
       target: { value: "Duplicated latest draft" },
     });
 
     fireEvent.click(screen.getByRole("button", { name: "More composition actions" }));
+
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate composition" }));
+    await settle();
 
     await waitFor(() =>
       expect(navigation.read()).toEqual({
@@ -577,7 +612,9 @@ describe("ProductionComposerApp", () => {
     expect(screen.getByText(/Future source is quarantined unchanged\./)).toBeInTheDocument();
     expect(screen.getByText(/The original source has been preserved\./)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Start fresh…" }));
+    await settle();
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Start fresh?" })).getByRole("button", { name: "Start fresh" }));
+    await settle();
 
     expect(await screen.findByRole("link", { name: "Fresh sample" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Compositions" })).toBeInTheDocument();
@@ -624,6 +661,7 @@ describe("ProductionComposerApp", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await settle();
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "New composition" })).not.toBeInTheDocument());
 
     // A one-shot intent: navigating away and back to the index (remounting
@@ -660,9 +698,12 @@ describe("ProductionComposerApp", () => {
     );
     await screen.findByRole("link", { name: "Back to Compositions" });
     fireEvent.click(screen.getByRole("button", { name: "More composition actions" }));
+    await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    await settle();
     const dialog = screen.getByRole("alertdialog", { name: "Delete Site shell?" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await settle();
 
     expect(await screen.findByText("Cannot delete this Global template while 1 consumer is still linked.")).toBeInTheDocument();
     expect(alternate.records.has("site-shell")).toBe(true);

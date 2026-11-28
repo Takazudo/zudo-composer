@@ -1,4 +1,4 @@
-// Controlled-numeric-field hook for the inspector (issue Takazudo/zudo-sg#249).
+// Controlled-numeric-field model for the inspector (issue Takazudo/zudo-sg#249).
 //
 // Numeric drafts must never commit `NaN` or flip the prop's JS type. While
 // the user is mid-edit ("-", "", "12.") the draft is free text and is NOT
@@ -7,21 +7,28 @@
 // instead of silently reverting, and blur reverts the visible text to the
 // last committed value so the field never strands the user on invalid text
 // after they look away. See use-text-field.ts for the matching
-// caret-retention rationale — this hook uses the same focused-guard pattern.
+// caret-retention rationale — this model uses the same focused-guard pattern.
 
-import { useEffect, useRef, useState } from "preact/hooks";
+//
+// A number input takes no `modelValue`, so the visible text is written to the
+// element explicitly (`writeDom`) whenever the draft is reset from outside.
 
-export interface UseNumericFieldOptions {
-  value: number;
+import { signal, type ReadonlySignal, type Scope } from "@takazudo/zfb/zudo-react";
+
+export interface NumericFieldOptions {
+  value: ReadonlySignal<number>;
   min?: number;
   max?: number;
   step?: number;
   onCommit: (value: number) => void;
+  /** Writes reset text into the control (number inputs are not model-bound). */
+  writeDom?: (text: string) => void;
 }
 
-export interface UseNumericFieldResult {
-  draft: string;
-  error: string | null;
+export interface NumericFieldModel {
+  /** The visible draft; it may be invalid text while the field is focused. */
+  draft: ReadonlySignal<string>;
+  error: ReadonlySignal<string | null>;
   onInput: (value: string) => void;
   onFocus: () => void;
   onBlur: () => void;
@@ -49,55 +56,64 @@ function validateDraft(
   return { ok: true, value: parsed };
 }
 
-export function useNumericField({ value, min, max, step, onCommit }: UseNumericFieldOptions): UseNumericFieldResult {
-  const [draft, setDraft] = useState(() => String(value));
-  const [error, setError] = useState<string | null>(null);
-  const focusedRef = useRef(false);
+/** Owned by `scope`. */
+export function createNumericField(scope: Scope, { value, min, max, step, onCommit, writeDom }: NumericFieldOptions): NumericFieldModel {
+  const draft = signal(String(value.value));
+  const error = signal<string | null>(null);
+  let focused = false;
   // The last value handed to `onCommit` that the `value` prop has not yet
   // caught up with. With a DEBOUNCED commit channel (issue Takazudo/zudo-sg#291) the incoming
   // `value` lags the keystream, so deduping against `value` alone would
   // swallow a correction typed inside the debounce window (e.g. "55" then
   // backspace to "5" — 5 equals the stale prop, but 55 is what's pending).
-  const inFlightRef = useRef<number | null>(null);
+  let inFlight: number | null = null;
+  let committed = value.value;
 
-  useEffect(() => {
+  const reset = (next: number) => {
+    const text = String(next);
+    draft.value = text;
+    error.value = null;
+    writeDom?.(text);
+  };
+
+  // Only an actual change of the incoming value counts, as with the text field.
+  scope.effect(() => {
+    const next = value.value;
+    if (Object.is(next, committed)) return;
     // The document caught up (our commit landed) or moved externally — either
     // way the fresh `value` is the truth to dedupe against again.
-    inFlightRef.current = null;
-    if (focusedRef.current) return;
-    setDraft(String(value));
-    setError(null);
-  }, [value]);
+    committed = next;
+    inFlight = null;
+    if (focused) return;
+    reset(next);
+  });
 
   return {
     draft,
     error,
     onInput: (text) => {
-      setDraft(text);
+      draft.value = text;
       const result = validateDraft(text, min, max, step);
       if (result.ok) {
-        setError(null);
+        error.value = null;
         // Never commit a value equal to what's already there (or already in
         // flight) — avoids a redundant document mutation (and redundant
         // autosave) on every keystroke that doesn't change the parsed number.
-        if (result.value !== (inFlightRef.current ?? value)) {
-          inFlightRef.current = result.value;
+        if (result.value !== (inFlight ?? committed)) {
+          inFlight = result.value;
           onCommit(result.value);
         }
       } else {
-        setError(result.message);
+        error.value = result.message;
       }
     },
     onFocus: () => {
-      focusedRef.current = true;
+      focused = true;
     },
     onBlur: () => {
-      focusedRef.current = false;
-      const result = validateDraft(draft, min, max, step);
-      if (!result.ok) {
-        setDraft(String(value));
-        setError(null);
-      }
+      focused = false;
+      const result = validateDraft(draft.value, min, max, step);
+      if (!result.ok) reset(committed);
     },
   };
 }

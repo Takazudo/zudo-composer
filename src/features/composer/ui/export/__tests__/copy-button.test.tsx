@@ -1,12 +1,10 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../../test-support/cleanup";
 // Mocks the shared `copyText` utility so this suite verifies this
 // component's success/failure feedback deterministically, independent of a
 // test environment's Clipboard API / execCommand emulation quirks.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { fireEvent, render, screen, waitFor } from "../../../../../test/render";
 
 const copyTextMock = vi.fn<(text: string) => Promise<boolean>>();
 

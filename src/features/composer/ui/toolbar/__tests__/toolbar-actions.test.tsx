@@ -1,8 +1,6 @@
-/** @jsxRuntime automatic */
-/** @jsxImportSource preact */
 import "../../../test-support/cleanup";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/preact";
+import { fireEvent, render, screen } from "../../../../../test/render";
 import { ComposerToolbarActions } from "../toolbar-actions";
 
 describe("ComposerToolbarActions", () => {
