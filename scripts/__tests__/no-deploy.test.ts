@@ -62,6 +62,43 @@ describe("reachable validation commands cannot deploy", () => {
     expect(() => audit(root)).toThrow(/No-deploy assertion/u);
   });
 
+  it.each([
+    "vp dev",
+    "vp test run",
+    "vp build",
+    "vp run hosted-demo:deploy",
+    "vp run --filter demo-sample build:site",
+    "vp exec wrangler deploy",
+    "vp exec -- wrangler versions upload",
+    "vp dlx wrangler deploy",
+    "vp pm publish",
+    "vpx wrangler deploy",
+    "vpx scripts/verify.mjs",
+    "vpr hosted-demo:deploy",
+    "node_modules/.bin/vp run hosted-demo:deploy",
+    "env CI=1 vp exec wrangler deploy",
+    "corepack pnpm exec vp run hosted-demo:deploy",
+    "pnpm exec vpx wrangler deploy",
+    "pnpm dlx vite-plus run hosted-demo:deploy",
+    "npx vp exec wrangler deploy",
+    "bash -c 'vp exec wrangler deploy'",
+    "node scripts/verify.mjs && vp run hosted-demo:deploy",
+  ])("accepts no Vite+ command grammar while adoption is deferred: %s", async (command) => {
+    const root = await fixture(command);
+    expect(() => audit(root)).toThrow(/Vite\+ command has no accepted no-deploy grammar/u);
+  });
+
+  it("rejects a Vite+ command hidden behind a script alias, shell wrapper or JS process wrapper", async () => {
+    const alias = await fixture("pnpm proof", { proof: "pnpm delivery", delivery: "vp run release-it", "release-it": "node scripts/verify.mjs" });
+    expect(() => audit(alias)).toThrow(/Vite\+ command .*vp run release-it[\s\S]*package\.json#delivery/u);
+    const shellWrapper = await fixture("./scripts/validate.sh");
+    await put(shellWrapper, "scripts/validate.sh", "#!/bin/sh\nnode scripts/verify.mjs\n'v''p' exec wrangler deploy\n");
+    expect(() => audit(shellWrapper)).toThrow(/Vite\+ command has no accepted no-deploy grammar: vp exec wrangler deploy/u);
+    const jsWrapper = await fixture("node scripts/validate.mjs");
+    await put(jsWrapper, "scripts/validate.mjs", "import { execFileSync } from 'node:child_process'; const tool = 'v' + 'p'; execFileSync(tool, ['dlx', 'wrangler', 'deploy']);\n");
+    expect(() => audit(jsWrapper)).toThrow(/Vite\+ command has no accepted no-deploy grammar: vp dlx wrangler deploy/u);
+  });
+
   it("follows multiple script aliases and lifecycle hooks", async () => {
     const root = await fixture("pnpm build-proof", { "build-proof": "pnpm delivery", delivery: "pnpm hosted-demo:deploy" });
     expect(() => audit(root)).toThrow(/hosted-demo:deploy/u);
