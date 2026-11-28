@@ -31,3 +31,18 @@ export function memo<T>(read: () => T, equals: (left: T, right: T) => boolean = 
     return next;
   });
 }
+
+/**
+ * `useMemo(compute, deps)`: `compute` runs again only when an entry of
+ * `deps()` changes identity, so a derivation that builds a fresh object keeps
+ * its identity across unrelated upstream writes.
+ */
+export function memoOn<const D extends readonly unknown[], T>(deps: () => D, compute: (...deps: D) => T): ReadonlySignal<T> {
+  let last: { deps: D; value: T } | null = null;
+  return computed(() => {
+    const next = deps();
+    if (last !== null && shallowEqual(last.deps, next)) return last.value;
+    last = { deps: next, value: compute(...next) };
+    return last.value;
+  });
+}

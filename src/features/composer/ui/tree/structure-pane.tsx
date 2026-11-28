@@ -12,7 +12,7 @@
 // by dropping its ancestor chain from that set, which is all the reveal
 // contract needs: the canvas and the add flows already move `selectedId`.
 
-import { computed, getScope, signal, type Child } from "@takazudo/zfb/zudo-react";
+import { computed, flush, getScope, signal, type Child } from "@takazudo/zfb/zudo-react";
 import type {
   ComponentCatalog,
   CompositionDocument,
@@ -28,7 +28,7 @@ import { read, toSignal, type MaybeSignal } from "../../../../components/reactiv
 import { Rebuild } from "../../../../components/rebuild";
 import { Banner, Button, Pane, PaneBody, PaneHeader } from "../../../../components/ui";
 import type { ComponentDefinition } from "../../active-pack";
-import { memo } from "../../reactive/memo";
+import { memo, memoOn } from "../../reactive/memo";
 import { buildCatalogById } from "./tree-helpers";
 import {
   ancestorRowIds,
@@ -160,16 +160,13 @@ export function ComposerStructurePane({
   const entries = toSignal(entriesProp);
   const selectedId = toSignal(selectedIdProp);
   const selectedSlot = toSignal(selectedSlotProp);
-  const catalogById = computed(() => buildCatalogById(entries.value));
-  const outline = computed<ComposerOutline>(() =>
-    buildComposerOutline({
-      document: document.value,
-      manifest: manifest.value,
-      catalogById: catalogById.value,
-      catalog: entries.value,
-      rootPolicy: read(rootPolicyProp),
-      readOnly: read(readOnlyProp),
-    }),
+  const catalogById = memoOn(() => [entries.value] as const, (current) => buildCatalogById(current));
+  // Cached on its inputs: a fresh outline gives every row new node identities,
+  // which remounts each row's actions and drops focus from a menu trigger.
+  const outline = memoOn(
+    () => [document.value, manifest.value, catalogById.value, entries.value, read(rootPolicyProp), read(readOnlyProp)] as const,
+    (currentDocument, currentManifest, currentCatalogById, catalog, rootPolicy, readOnly): ComposerOutline =>
+      buildComposerOutline({ document: currentDocument, manifest: currentManifest, catalogById: currentCatalogById, catalog, rootPolicy, readOnly }),
   );
   const treeHost: { current: HTMLDivElement | null } = { current: null };
   let pendingDirectFocusId: string | null = null;
@@ -271,7 +268,12 @@ export function ComposerStructurePane({
     const id = selectedId.value;
     if (pendingDirectFocusId === null || pendingDirectFocusId !== id) return;
     pendingDirectFocusId = null;
-    treeHost.current?.querySelector<HTMLElement>('[role="treeitem"][aria-selected="true"]')?.focus();
+    // The inserted row can mount in a later pass than this effect; wait for
+    // the DOM queue to drain, as the Preact effect ran after commit.
+    void flush().then(() => {
+      if (scope.abortSignal.aborted) return;
+      treeHost.current?.querySelector<HTMLElement>('[role="treeitem"][aria-selected="true"]')?.focus();
+    });
   });
 
   /** The Add / More pair a row shows on hover and keyboard focus. */

@@ -144,8 +144,7 @@ describe("ComposerCanvasHost — bridge lifecycle (#251)", () => {
   });
 
   it("a document change re-renders; a session-only change is a lighter update", async () => {
-    const { bridge, doc, update, onSelect, onRequestAdd, onRequestNodeMenu, onRequestInsertMenu, onCommitInlineEdit, onDropNode } =
-      mount();
+    const { bridge, doc, update } = mount();
     bridge.deliver(readyMessage());
     await settle();
     bridge.posts.length = 0;
@@ -207,18 +206,7 @@ describe("ComposerCanvasHost — bridge lifecycle (#251)", () => {
   });
 
   it("sizes the frame to the chosen viewport width (preview width only)", async () => {
-    const {
-      bridge,
-      container,
-      update,
-      onSelect,
-      onRequestAdd,
-      onRequestNodeMenu,
-      onRequestInsertMenu,
-      onCommitInlineEdit,
-      onDropNode,
-      doc,
-    } = mount();
+    const { container, update, doc } = mount();
     const frame = () => container.querySelector(".sg-composer-canvas-frame") as HTMLElement;
     // fluid → no fixed width
     expect(frame().style.width).toBe("");
@@ -655,7 +643,7 @@ describe("ComposerIntegration — quick insert routing by slot rule (#639)", () 
 
   it("a restricted slot with at most six kinds opens the quick-insert popover, not the chooser", async () => {
     const s = await setup();
-    s.add({ parentId: "region", slotId: "few", index: 0 });
+    await s.add({ parentId: "region", slotId: "few", index: 0 });
 
     expect(s.chooser()).toBeNull();
     const menu = s.menu()!;
@@ -671,7 +659,7 @@ describe("ComposerIntegration — quick insert routing by slot rule (#639)", () 
 
   it("a chip inserts at the target, selects the new node and restores iframe focus", async () => {
     const s = await setup();
-    s.add({ parentId: "region", slotId: "few", index: 0 });
+    await s.add({ parentId: "region", slotId: "few", index: 0 });
 
     fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Text" }));
 
@@ -686,7 +674,7 @@ describe("ComposerIntegration — quick insert routing by slot rule (#639)", () 
 
   it("Pattern… opens the chooser on its Patterns tab and More… on Components, both for the same target", async () => {
     const s = await setup();
-    s.add({ parentId: "region", slotId: "few", index: 0 });
+    await s.add({ parentId: "region", slotId: "few", index: 0 });
     fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Pattern…" }));
     await settle();
 
@@ -695,7 +683,7 @@ describe("ComposerIntegration — quick insert routing by slot rule (#639)", () 
     fireEvent.click(within(s.chooser()!).getByRole("button", { name: "Cancel" }));
     await settle();
 
-    s.add({ parentId: "region", slotId: "few", index: 0 });
+    await s.add({ parentId: "region", slotId: "few", index: 0 });
     fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: /^More…/ }));
     await settle();
     expect(within(s.chooser()!).getByRole("button", { name: "Components" })).toHaveAttribute("aria-pressed", "true");
@@ -729,21 +717,21 @@ describe("ComposerIntegration — quick insert routing by slot rule (#639)", () 
 
   it("a restricted slot with more than six kinds opens the chooser", async () => {
     const s = await setup();
-    s.add({ parentId: "region", slotId: "wide", index: 0 });
+    await s.add({ parentId: "region", slotId: "wide", index: 0 });
     expect(s.menu()).toBeNull();
     expect(s.chooser()).not.toBeNull();
   });
 
   it("an open document root opens the chooser", async () => {
     const s = await setup();
-    s.add({ parentId: null, slotId: "root", index: 1 });
+    await s.add({ parentId: null, slotId: "root", index: 1 });
     expect(s.menu()).toBeNull();
     expect(s.chooser()).not.toBeNull();
   });
 
   it("a full restricted slot opens the chooser's blocked state as before", async () => {
     const s = await setup(2);
-    s.add({ parentId: "region", slotId: "few", index: 2 });
+    await s.add({ parentId: "region", slotId: "few", index: 2 });
     expect(s.menu()).toBeNull();
     expect(s.chooser()).toHaveTextContent("This slot is full");
   });

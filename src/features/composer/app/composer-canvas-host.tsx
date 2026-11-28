@@ -53,7 +53,7 @@ import type { ChooserTab } from "../ui/chooser/composer-chooser";
 import type { ComposerCanvasViewport } from "../chrome/controller-model";
 import type { ComposerComponentProvider } from "../active-pack";
 import { ErrorIcon, InfoIcon, WarningIcon, XMarkIcon } from "../../../components/icons";
-import { read, toSignal, type MaybeSignal } from "../../../components/reactive";
+import { toSignal, type MaybeSignal } from "../../../components/reactive";
 import { Button } from "../../../components/ui";
 import { assetResolvedPreviewSnapshot } from "../preview/assets-snapshot";
 import {
