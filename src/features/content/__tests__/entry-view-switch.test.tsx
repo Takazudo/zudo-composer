@@ -40,6 +40,10 @@ describe("Content main pane view switch", () => {
     expect(await screen.findByRole("textbox", { name: "Title" })).toHaveValue("The quiet hour");
     expect(screen.queryByRole("table", { name: "Entries in Articles" })).toBeNull();
     expect(screen.getByRole("option", { name: "Missing Entry · author-missing" })).toBeInTheDocument();
+    // The single-reference select carries its Field's id, so the visible label names it too.
+    const author = screen.getByRole("combobox", { name: "Author" });
+    expect(author.id).not.toBe("");
+    expect(document.querySelector(`label[for="${author.id}"]`)).toHaveTextContent("Author");
 
     await controller.openEntry("article-known");
     await settleTasks();

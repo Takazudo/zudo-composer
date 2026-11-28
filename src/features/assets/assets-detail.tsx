@@ -110,16 +110,20 @@ function AssetDetail({
       </dl>
 
       <Field label="Public URL">
-        <div class="sg-assets-detail__copy">
-          <Input size="sm" class="sg-assets-detail__value" value={url} readonly on:focus={(event) => event.currentTarget.select()} />
-          <Button size="sm" on:click={() => onCopyUrl(record)}>Copy</Button>
-        </div>
+        {(field) => (
+          <div class="sg-assets-detail__copy">
+            <Input field={field} size="sm" class="sg-assets-detail__value" value={url} readonly on:focus={(event) => event.currentTarget.select()} />
+            <Button size="sm" on:click={() => onCopyUrl(record)}>Copy</Button>
+          </div>
+        )}
       </Field>
       <Field label="Markdown">
-        <div class="sg-assets-detail__copy">
-          <Input size="sm" class="sg-assets-detail__value" value={assetMarkdown(record)} readonly on:focus={(event) => event.currentTarget.select()} />
-          <Button size="sm" on:click={() => onCopyMarkdown(record)}>Copy Markdown</Button>
-        </div>
+        {(field) => (
+          <div class="sg-assets-detail__copy">
+            <Input field={field} size="sm" class="sg-assets-detail__value" value={assetMarkdown(record)} readonly on:focus={(event) => event.currentTarget.select()} />
+            <Button size="sm" on:click={() => onCopyMarkdown(record)}>Copy Markdown</Button>
+          </div>
+        )}
       </Field>
 
       <Button variant="danger" size="sm" class="sg-assets-detail__delete" on:click={() => onDelete(record)}>

@@ -21,7 +21,7 @@ export type ContentAssetPickerRenderer = (request: {
 
 type ReferenceOption = Awaited<ReturnType<ContentAuthoringController["referenceEntries"]>>[number];
 
-function ReferenceControl({ schema, value, path, label, multiple, controller, commit }: { schema: Extract<ContentValueSchema, { kind: "reference" | "reference-list" }>; value: ReadonlySignal<JsonValue | undefined>; path: readonly (string | number)[]; label: string; multiple: boolean; controller: ContentAuthoringController; commit(value: JsonValue | undefined): void }) {
+function ReferenceControl({ schema, value, path, label, multiple, controller, fieldControl, commit }: { schema: Extract<ContentValueSchema, { kind: "reference" | "reference-list" }>; value: ReadonlySignal<JsonValue | undefined>; path: readonly (string | number)[]; label: string; multiple: boolean; controller: ContentAuthoringController; fieldControl?: FieldControl; commit(value: JsonValue | undefined): void }) {
   const scope = getScope();
   const options = signal<readonly ReferenceOption[]>([]);
   const error = signal<string | null>(null);
@@ -39,7 +39,7 @@ function ReferenceControl({ schema, value, path, label, multiple, controller, co
     // A select takes static options, so it is rebuilt whenever the choices change.
     const choices = keyedBy(() => ({ options: options.value, stale: stale.value }), (current) => JSON.stringify([current.options.map((option) => [option.ref.recordId, option.label, option.lifecycle]), current.stale.map((ref) => ref.recordId)]));
     return <div class="sg-content-reference">
-      <Rebuild value={choices}>{(current) => <SingleReferenceSelect label={label} selected={selected} options={current.options} stale={current.stale} onChange={(recordId) => { const option = options.value.find((item) => item.ref.recordId === recordId); commit(option ? option.ref as unknown as JsonValue : undefined); }} />}</Rebuild>
+      <Rebuild value={choices}>{(current) => <SingleReferenceSelect label={label} field={fieldControl} selected={selected} options={current.options} stale={current.stale} onChange={(recordId) => { const option = options.value.find((item) => item.ref.recordId === recordId); commit(option ? option.ref as unknown as JsonValue : undefined); }} />}</Rebuild>
       {errorLine}
       <Show when={computed(() => stale.value.length > 0)}>{() => <p class="sg-content-field-error">The selected Entry is stale. Choose another Entry or clear it.</p>}</Show>
     </div>;
@@ -61,9 +61,9 @@ function ReferenceControl({ schema, value, path, label, multiple, controller, co
   </div>;
 }
 
-function SingleReferenceSelect({ label, selected, options, stale, onChange }: { label: string; selected: ReadonlySignal<ContentEntryRef[]>; options: readonly ReferenceOption[]; stale: readonly ContentEntryRef[]; onChange(recordId: string): void }) {
+function SingleReferenceSelect({ label, field, selected, options, stale, onChange }: { label: string; field?: FieldControl; selected: ReadonlySignal<ContentEntryRef[]>; options: readonly ReferenceOption[]; stale: readonly ContentEntryRef[]; onChange(recordId: string): void }) {
   const draft = externalDraft(getScope(), computed(() => selected.value[0]?.recordId ?? ""));
-  return <Select aria-label={label} modelValue={draft} on:change={(event) => onChange(event.currentTarget.value)}><option value="">No Entry selected</option>{options.map((option) => <option value={option.ref.recordId}>{`${option.label} · ${option.lifecycle}`}</option>)}{stale.map((ref) => <option value={ref.recordId}>{`Missing Entry · ${ref.recordId}`}</option>)}</Select>;
+  return <Select field={field} aria-label={label} modelValue={draft} on:change={(event) => onChange(event.currentTarget.value)}><option value="">No Entry selected</option>{options.map((option) => <option value={option.ref.recordId}>{`${option.label} · ${option.lifecycle}`}</option>)}{stale.map((ref) => <option value={ref.recordId}>{`Missing Entry · ${ref.recordId}`}</option>)}</Select>;
 }
 
 export interface StructuredValueEditorProps {
@@ -86,7 +86,7 @@ export function StructuredValueEditor({ schema, field, path, controller, run, re
   const invoke = (next: JsonValue | undefined) => run(() => commit(next));
   const nested = { controller, run, renderAssetPicker, assetPickerCapabilities };
   if (schema.kind === "choice") return <ContentScalarControl schema={schema} value={value} field={fieldControl} onChange={invoke} />;
-  if (schema.kind === "reference" || schema.kind === "reference-list") return <ReferenceControl schema={schema} value={value} path={path} label={field.label} multiple={schema.kind === "reference-list"} controller={controller} commit={invoke} />;
+  if (schema.kind === "reference" || schema.kind === "reference-list") return <ReferenceControl schema={schema} value={value} path={path} label={field.label} multiple={schema.kind === "reference-list"} controller={controller} fieldControl={fieldControl} commit={invoke} />;
   if (schema.kind === "asset-use") return <AssetUseCard kind={schema.use} value={value} controller={controller} renderAssetPicker={renderAssetPicker} assetPickerCapabilities={assetPickerCapabilities} commit={invoke} />;
   if (schema.kind === "object") {
     const object = computed(() => value.value && typeof value.value === "object" && !Array.isArray(value.value) ? value.value as Record<string, JsonValue> : {});
