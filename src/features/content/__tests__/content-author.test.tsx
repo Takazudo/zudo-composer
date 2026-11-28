@@ -1,12 +1,12 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
-import type { JSX } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { getScope, Show, computed } from "@takazudo/zfb/zudo-react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "../../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createContentEntryRecord, createContentModelRecord, type ContentEntryRecord, type ContentFieldDefinition } from "../../../content";
 import { ContentApp } from "../content-app";
 import { ContentEntryAuthor, ContentSchemaAuthor, contentFieldKeyError } from "../content-author";
 import { createContentAuthoringController, type ContentAuthoringController } from "../controller";
 import { createMemoryContentProvider } from "../fixtures";
+import { controllerState } from "../reactive-draft";
 
 // Vitest runs without `globals`, so Testing Library never installs its own
 // auto-cleanup and a second render would query against both trees.
@@ -46,29 +46,27 @@ async function openAuthoring(values: ContentEntryRecord["values"] = {}): Promise
 }
 
 function useControllerState(controller: ContentAuthoringController) {
-  const [state, setState] = useState(controller.state);
-  useEffect(() => controller.subscribe(setState), [controller]);
-  return state;
+  return controllerState(getScope(), controller);
 }
 
 /** Mirrors the route's own reporter: a failed action is caught, never thrown. */
 const run = (action: () => void | Promise<void>) => void Promise.resolve(action()).catch(() => undefined);
 
-function EntryHarness({ controller }: { controller: ContentAuthoringController }): JSX.Element | null {
+function EntryHarness({ controller }: { controller: ContentAuthoringController }) {
   const state = useControllerState(controller);
-  return state.model && state.entry ? <ContentEntryAuthor state={state} controller={controller} run={run} /> : null;
+  return <Show when={computed(() => Boolean(state.value.model && state.value.entry))}>{() => <ContentEntryAuthor state={state} controller={controller} run={run} />}</Show>;
 }
 
-function SchemaHarness({ controller, onRemove }: { controller: ContentAuthoringController; onRemove?: (field: ContentFieldDefinition) => void }): JSX.Element | null {
+function SchemaHarness({ controller, onRemove }: { controller: ContentAuthoringController; onRemove?: (field: ContentFieldDefinition) => void }) {
   const state = useControllerState(controller);
-  return state.model ? (
+  return <Show when={computed(() => state.value.model !== null)}>{() => (
     <ContentSchemaAuthor
       state={state}
       controller={controller}
       run={run}
       onRemove={onRemove ?? (() => undefined)}
     />
-  ) : null;
+  )}</Show>;
 }
 
 function fieldRow(label: string): HTMLElement {

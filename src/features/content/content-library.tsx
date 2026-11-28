@@ -1,16 +1,17 @@
-import type { JSX } from "preact";
-import { useMemo, useRef, useState } from "preact/hooks";
-import { RailCollapseButton, useEditorChrome } from "../../components/editor-chrome";
+import { computed, getScope, signal, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
+import { RailCollapseButton, type EditorChromeController, type EditorRailsController } from "../../components/editor-chrome";
 import { CopyIcon, DuplicateIcon, EllipsisIcon, PlusIcon, TrashIcon } from "../../components/icons";
 import { OutlineTree, type OutlineInsertTarget, type OutlineNode } from "../../components/outline-tree";
-import { Menu, MenuItem, MenuSeparator, useMenu } from "../../components/overlay";
+import { createMenu, Menu, MenuItem, MenuSeparator } from "../../components/overlay";
 import { Button, Pane, PaneBody, PaneHeader } from "../../components/ui";
 import { buildContentOutline, isContentMoreRowId } from "./content-outline";
 import type { ContentAuthoringController, ContentAuthoringState } from "./controller";
 
 export interface ContentNavigatorProps {
-  state: ContentAuthoringState;
+  state: ReadonlySignal<ContentAuthoringState>;
   controller: ContentAuthoringController;
+  chrome: EditorChromeController;
+  rails: EditorRailsController;
   run(action: () => void | Promise<void>): void;
   onAddModel(): void;
   onDeleteModel(id: string, label: string): void;
@@ -22,7 +23,7 @@ export interface ContentNavigatorProps {
 interface RowMenuProps {
   node: OutlineNode;
   kind: "model" | "entry";
-  canHoldAnotherEntry: boolean;
+  canHoldAnotherEntry: ReadonlySignal<boolean>;
   onOpen(): void;
   onAddEntry(): void;
   onDuplicate(): void;
@@ -30,9 +31,10 @@ interface RowMenuProps {
   onDelete(): void;
 }
 
-function ContentRowMenu({ node, kind, canHoldAnotherEntry, onOpen, onAddEntry, onDuplicate, onCopyId, onDelete }: RowMenuProps): JSX.Element {
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menu = useMenu(triggerRef, { align: "end" });
+function ContentRowMenu({ node, kind, canHoldAnotherEntry, onOpen, onAddEntry, onDuplicate, onCopyId, onDelete }: RowMenuProps) {
+  const triggerRef: Ref<HTMLButtonElement> = { current: null };
+  const menu = createMenu(triggerRef, { align: "end" });
+  const unavailable = computed(() => !canHoldAnotherEntry.value);
   const noun = kind === "model" ? "model" : "entry";
   return (
     <>
@@ -49,9 +51,9 @@ function ContentRowMenu({ node, kind, canHoldAnotherEntry, onOpen, onAddEntry, o
       <Menu controller={menu} label={`${node.title} actions`}>
         <MenuItem onSelect={onOpen}>Open {noun}</MenuItem>
         {kind === "model" ? (
-          <MenuItem icon={PlusIcon} disabled={!canHoldAnotherEntry} onSelect={onAddEntry}>Add entry</MenuItem>
+          <MenuItem icon={PlusIcon} disabled={unavailable} onSelect={onAddEntry}>Add entry</MenuItem>
         ) : (
-          <MenuItem icon={DuplicateIcon} disabled={!canHoldAnotherEntry} onSelect={onDuplicate}>Duplicate entry</MenuItem>
+          <MenuItem icon={DuplicateIcon} disabled={unavailable} onSelect={onDuplicate}>Duplicate entry</MenuItem>
         )}
         {kind === "entry" ? <MenuItem icon={CopyIcon} onSelect={onCopyId}>Copy entry ID</MenuItem> : null}
         <MenuSeparator />
@@ -70,43 +72,47 @@ function ContentRowMenu({ node, kind, canHoldAnotherEntry, onOpen, onAddEntry, o
  * holds one model's Entries at a time; every other category is childless, and
  * selecting one is what loads it.
  */
-export function ContentNavigator({ state, controller, run, onAddModel, onDeleteModel, onDeleteEntry, onCopyEntryId, onSelectionAccepted }: ContentNavigatorProps): JSX.Element {
-  const { setActivePane } = useEditorChrome();
-  const openModel = state.model;
-  const openModelId = openModel?.id ?? null;
+export function ContentNavigator({ state, controller, chrome, rails, run, onAddModel, onDeleteModel, onDeleteEntry, onCopyEntryId, onSelectionAccepted }: ContentNavigatorProps) {
+  const scope = getScope();
+  const { setActivePane } = chrome;
+  const openModel = computed(() => state.value.model);
+  const openModelId = computed(() => openModel.value?.id ?? null);
 
-  const nodes = useMemo(() => buildContentOutline({
-    models: state.models,
-    entryCounts: state.entryCounts,
-    incompleteCounts: state.incompleteCounts,
-    openModel,
-    entries: state.entries,
-    hasMoreEntries: state.nextCursor !== undefined,
-    isEntryIncomplete: (entry) => controller.completeness(entry).length > 0,
-  }), [controller, openModel, state.entries, state.entryCounts, state.incompleteCounts, state.models, state.nextCursor]);
+  const nodes = computed(() => {
+    const current = state.value;
+    return buildContentOutline({
+      models: current.models,
+      entryCounts: current.entryCounts,
+      incompleteCounts: current.incompleteCounts,
+      openModel: current.model,
+      entries: current.entries,
+      hasMoreEntries: current.nextCursor !== undefined,
+      isEntryIncomplete: (entry) => controller.completeness(entry).length > 0,
+    });
+  });
 
-  // Opening a model must reveal it. Adjusted during render rather than in an
-  // effect: an effect runs after paint, so the model would flash closed on the
-  // frame that loaded it.
-  const [expandedIds, setExpandedIds] = useState<readonly string[]>([]);
-  const lastOpenId = useRef<string | null>(null);
-  if (openModelId !== lastOpenId.current) {
-    lastOpenId.current = openModelId;
-    if (openModelId !== null && !expandedIds.includes(openModelId)) setExpandedIds([...expandedIds, openModelId]);
-  }
+  // Opening a model must reveal it, in the same flush that loads it.
+  const expandedIds = signal<readonly string[]>(openModelId.value === null ? [] : [openModelId.value]);
+  let lastOpenId = openModelId.value;
+  scope.effect(() => {
+    const id = openModelId.value;
+    if (id === lastOpenId) return;
+    lastOpenId = id;
+    if (id !== null && !expandedIds.value.includes(id)) expandedIds.value = [...expandedIds.value, id];
+  });
 
-  const openChildCount = openModelId === null ? 0 : nodes.find((node) => node.id === openModelId)?.children?.length ?? 0;
+  const openChildCount = () => { const id = openModelId.value; return id === null ? 0 : nodes.value.find((node) => node.id === id)?.children?.length ?? 0; };
   // A Single holds exactly one Entry, so its add row withdraws once it has one.
-  const entryActionPending = state.modelSelectionPending || state.entryCreationPending;
-  const canAddEntry = !entryActionPending && openModel !== null && !(openModel.document.kind === "single" && state.entries.length > 0);
+  const entryActionPending = computed(() => state.value.modelSelectionPending || state.value.entryCreationPending);
+  const canAddEntry = computed(() => { const model = openModel.value; return !entryActionPending.value && model !== null && !(model.document.kind === "single" && state.value.entries.length > 0); });
 
   // Entries carry no authored order: they are listed newest first by
   // `createdAt` and creation prepends, so a position between two of them cannot
   // be persisted without an order field. Only the terminal rows insert.
   function canInsert(target: OutlineInsertTarget): boolean {
-    if (target.parentId === null) return target.index === state.models.length;
-    if (target.parentId !== openModelId) return false;
-    return canAddEntry && target.index === openChildCount;
+    if (target.parentId === null) return target.index === state.value.models.length;
+    if (target.parentId !== openModelId.value) return false;
+    return canAddEntry.value && target.index === openChildCount();
   }
 
   function selectRow(id: string): void {
@@ -114,7 +120,7 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
       run(() => controller.loadMoreEntries());
       return;
     }
-    if (state.models.some((model) => model.id === id)) {
+    if (state.value.models.some((model) => model.id === id)) {
       run(async () => {
         await controller.openModel(id);
         controller.browseEntries();
@@ -125,11 +131,11 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
     run(async () => { await controller.openEntry(id); onSelectionAccepted?.(); });
   }
 
-  const selectedId = state.entry?.id ?? openModelId ?? undefined;
+  const selectedId = computed(() => state.value.entry?.id ?? openModelId.value ?? undefined);
 
   return (
     <Pane label="Content">
-      <PaneHeader as="h1" title="Content" count={state.models.length} actions={<RailCollapseButton rail="nav" />} />
+      <PaneHeader as="h1" title="Content" count={computed(() => state.value.models.length)} actions={<RailCollapseButton rail="nav" rails={rails} />} />
       <PaneBody>
         <OutlineTree
           label="Content"
@@ -139,7 +145,7 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
           onSelect={selectRow}
           onOpen={(id) => { if (!isContentMoreRowId(id)) setActivePane("main"); }}
           expandedIds={expandedIds}
-          onExpandedChange={setExpandedIds}
+          onExpandedChange={(ids) => { expandedIds.value = ids; }}
           canInsert={canInsert}
           onRequestInsert={(target) => {
             if (target.parentId === null) onAddModel();
@@ -155,17 +161,21 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
           }
           renderActions={(node) => {
             if (isContentMoreRowId(node.id)) return null;
-            const model = state.models.find((candidate) => candidate.id === node.id) ?? null;
+            const isModel = state.value.models.some((candidate) => candidate.id === node.id);
             // Judged against the row's own model, not the open one: a Single is
             // full once it holds its single Entry, whichever model is loaded.
-            const rowCanAdd = model === null
-              ? canAddEntry
-              : model.kind === "collection" || (state.entryCounts[model.id] ?? 0) === 0;
+            const canHold = computed(() => {
+              const model = state.value.models.find((candidate) => candidate.id === node.id) ?? null;
+              const rowCanAdd = model === null
+                ? canAddEntry.value
+                : model.kind === "collection" || (state.value.entryCounts[model.id] ?? 0) === 0;
+              return !entryActionPending.value && rowCanAdd;
+            });
             return (
               <ContentRowMenu
                 node={node}
-                kind={model === null ? "entry" : "model"}
-                canHoldAnotherEntry={!entryActionPending && rowCanAdd}
+                kind={isModel ? "model" : "entry"}
+                canHoldAnotherEntry={canHold}
                 onOpen={() => { selectRow(node.id); setActivePane("main"); }}
                 onAddEntry={() => run(async () => {
                   await controller.openModel(node.id);
@@ -174,7 +184,7 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
                 })}
                 onDuplicate={() => run(async () => { await controller.duplicateEntry(node.id); onSelectionAccepted?.(); })}
                 onCopyId={() => onCopyEntryId(node.id)}
-                onDelete={() => (model === null ? onDeleteEntry(node.id, node.title) : onDeleteModel(node.id, node.title))}
+                onDelete={() => (isModel ? onDeleteModel(node.id, node.title) : onDeleteEntry(node.id, node.title))}
               />
             );
           }}

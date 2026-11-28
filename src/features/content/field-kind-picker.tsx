@@ -1,5 +1,4 @@
-import type { JSX } from "preact";
-import { useRef } from "preact/hooks";
+import { computed, For, type Child, type ReadonlySignal, type Ref } from "@takazudo/zfb/zudo-react";
 import {
   BooleanIcon,
   ChevronDownIcon,
@@ -16,7 +15,8 @@ import {
   UrlIcon,
   type IconComponent,
 } from "../../components/icons";
-import { Menu, MenuRadioItem, MenuSection, useMenu } from "../../components/overlay";
+import { read, type MaybeSignal } from "../../components/reactive";
+import { createMenu, Menu, MenuRadioItem, MenuSection } from "../../components/overlay";
 import { Button } from "../../components/ui";
 import type { ContentFieldKind } from "../../content";
 
@@ -52,11 +52,11 @@ export function contentFieldKindPresentation(kind: ContentFieldKind): ContentFie
 }
 
 export interface FieldKindPickerProps {
-  value: ContentFieldKind;
+  value: MaybeSignal<ContentFieldKind>;
   /** Stored Entries hold values for this field, so its type can no longer change. */
-  locked?: boolean;
+  locked?: MaybeSignal<boolean>;
   /** Accessible name for the trigger, e.g. "Type for Title". */
-  label: string;
+  label: MaybeSignal<string>;
   onChange(kind: ContentFieldKind): void;
 }
 
@@ -73,10 +73,11 @@ const LOCKED_REASON = "Type is immutable because stored Entries hold values for 
  * same information — icon, friendly name, explanation, the current choice — in
  * the space of the chip that names the type in the row.
  */
-export function FieldKindPicker({ value, locked = false, label, onChange }: FieldKindPickerProps): JSX.Element {
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menu = useMenu(triggerRef, { align: "start" });
-  const { label: currentLabel, icon: CurrentIcon } = contentFieldKindPresentation(value);
+export function FieldKindPicker({ value, locked = false, label, onChange }: FieldKindPickerProps) {
+  const triggerRef: Ref<HTMLButtonElement> = { current: null };
+  const menu = createMenu(triggerRef, { align: "start" });
+  const current = computed(() => contentFieldKindPresentation(read(value)));
+  const isLocked = computed(() => Boolean(read(locked)));
 
   return (
     <>
@@ -86,27 +87,27 @@ export function FieldKindPicker({ value, locked = false, label, onChange }: Fiel
         class="sg-content-kind-trigger"
         elementRef={triggerRef}
         aria-label={label}
-        title={locked ? LOCKED_REASON : undefined}
-        data-locked={locked || undefined}
+        title={computed<string | null>(() => (isLocked.value ? LOCKED_REASON : null))}
+        data-locked={computed(() => isLocked.value || undefined)}
         {...menu.triggerProps}
       >
-        <CurrentIcon size="xs" />
-        {currentLabel}
+        <KindIcon kind={current} />
+        {computed(() => current.value.label)}
         <ChevronDownIcon size="xs" class="sg-content-kind-trigger__caret" />
       </Button>
-      <Menu controller={menu} label={label} class="sg-content-kind-menu">
-        <MenuSection title={locked ? LOCKED_TITLE : "Field type"}>
+      {/* The menu forwards its label to `aria-label`, which binds a signal. */}
+      <Menu controller={menu} label={label as string} class="sg-content-kind-menu">
+        <KindSection locked={isLocked}>
           {CONTENT_FIELD_KIND_PRESENTATIONS.map(({ kind, label: friendlyLabel, explanation, icon: Icon }) => (
             <MenuRadioItem
-              key={kind}
-              checked={kind === value}
+              checked={computed(() => kind === read(value))}
               // The chosen kind stays selectable so the menu always has one
               // focusable row; re-picking it is a no-op.
-              disabled={locked && kind !== value}
+              disabled={computed(() => isLocked.value && kind !== read(value))}
               // `disabled` stops a pointer, not a synthesised activation, and
               // the controller answers a locked change by throwing — so the
               // refusal is stated here too rather than left to the attribute.
-              onSelect={() => { if (!locked && kind !== value) onChange(kind); }}
+              onSelect={() => { if (!isLocked.value && kind !== read(value)) onChange(kind); }}
             >
               <span class="sg-content-kind-option">
                 <Icon size="sm" class="sg-content-kind-option__icon" />
@@ -117,8 +118,19 @@ export function FieldKindPicker({ value, locked = false, label, onChange }: Fiel
               </span>
             </MenuRadioItem>
           ))}
-        </MenuSection>
+        </KindSection>
       </Menu>
     </>
   );
+}
+
+/** Set up on every open, so the section title states the lock as it is now. */
+function KindSection({ locked, children }: { locked: ReadonlySignal<boolean>; children: Child }) {
+  return <MenuSection title={locked.value ? LOCKED_TITLE : "Field type"}>{children}</MenuSection>;
+}
+
+/** The current kind's icon; a kind change swaps the glyph in place. */
+function KindIcon({ kind }: { kind: ReadonlySignal<ContentFieldKindPresentation> }) {
+  const icon = computed(() => [kind.value]);
+  return <For each={icon} by={(presentation) => presentation.kind}>{(presentation) => { const Icon = presentation.value.icon; return <Icon size="xs" />; }}</For>;
 }

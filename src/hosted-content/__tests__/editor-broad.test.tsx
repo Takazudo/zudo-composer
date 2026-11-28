@@ -1,5 +1,5 @@
 import { EditorView } from "@codemirror/view";
-import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
+import { fireEvent, screen, settle, settleTasks, waitFor, within } from "../../test/render";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { mountHostedContentEditor } from "../editor";
 import type { HostedContentEditorHandle, HostedContentEditorOptions } from "../editor";
@@ -56,21 +56,21 @@ describe("hosted permitted record controls", () => {
     const fixture = editorFixture({ nestedNumeric: true }); const { handle } = mount(fixture); await handle.ready;
     const number = screen.getByRole("spinbutton", { name: "details: nested: number" });
     Object.defineProperty(number, "validity", { configurable: true, value: { badInput: true } });
-    fireEvent.input(number, { target: { value: "" } });
+    fireEvent.input(number, { target: { value: "" } }); await settle();
     const clear = screen.getByRole("button", { name: "Clear: details: nested", exact: true });
     expect(clear).toBeDisabled(); fireEvent.click(clear); expect(handle.state.content!.providers[0]!.entries.find((entry) => entry.id === "home")!.values.details).toMatchObject({ nested: { number: 9 }, secret: "Locked" }); expect(values(fixture).details).toMatchObject({ nested: { number: 9 }, secret: "Locked" });
     await expect(handle.flush()).rejects.toThrow("incomplete number"); expect(handle.state.invalidInputs).toHaveLength(1);
     Object.defineProperty(number, "validity", { configurable: true, value: { badInput: false } });
-    fireEvent.input(number, { target: { value: "0" } }); expect(clear).not.toBeDisabled();
+    fireEvent.input(number, { target: { value: "0" } }); await settle(); expect(clear).not.toBeDisabled();
     fireEvent.click(clear); await handle.flush(); expect(values(fixture).details).toEqual({ label: "Visible", secret: "Locked" });
     expect(handle.state.invalidInputs).toEqual([]); expect(handle.state.dirty).toBe(false);
   });
   it("blocks numeric list shape actions during incomplete input and leaves no orphan marker after correction", async () => {
     const fixture = editorFixture({ numericResults: true }); const { handle } = mount(fixture); await handle.ready;
-    const number = screen.getByRole("spinbutton", { name: "results: Item 2" }); fireEvent.input(number, { target: { value: "" } });
-    expect(number).toHaveAttribute("aria-invalid", "true"); expect(handle.state.dirty).toBe(true); await expect(handle.flush()).rejects.toThrow("incomplete number"); expect(values(fixture).results).toEqual([9, 5]);
+    const number = screen.getByRole("spinbutton", { name: "results: Item 2" }); fireEvent.input(number, { target: { value: "" } }); await settle();
+    expect(number).toHaveAttribute("aria-invalid", "true"); expect(handle.state.dirty).toBe(true); await expect(handle.flush()).rejects.toThrow("incomplete number"); expect(values(fixture).results).toEqual([9, 5]); await settle();
     expect(screen.getByRole("button", { name: "Remove item: results 1" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Remove item: results 2" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Move up: results 2" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Add item: results" })).toBeDisabled();
-    fireEvent.input(number, { target: { value: "-2.5" } }); await handle.flush(); expect(values(fixture).results).toEqual([9, -2.5]); expect(handle.state.invalidInputs).toEqual([]);
+    fireEvent.input(number, { target: { value: "-2.5" } }); await handle.flush(); expect(values(fixture).results).toEqual([9, -2.5]); expect(handle.state.invalidInputs).toEqual([]); await settle();
     fireEvent.click(screen.getByRole("button", { name: "Remove item: results 2" })); await handle.flush(); expect(values(fixture).results).toEqual([9]); expect(handle.state.dirty).toBe(false);
   });
   it("distinguishes an empty replacement from a clear and keeps incomplete drafts savable", async () => {
@@ -172,7 +172,7 @@ describe("hosted permitted record controls", () => {
     const state = await fixture.service.readState(fixture.actor); await fixture.service.execute(fixture.actor, { kind: "set-fields", operationKey: "other", expected: { draftRevision: state.draftRevision, definition: state.definition, baseline: state.baseline }, entry: page, values: { title: "Changed by another editor" }, clear: [] });
     fireEvent.click(screen.getByRole("button", { name: "Create item", exact: true })); await waitFor(() => expect(handle.state.phase).toBe("conflict"));
     fireEvent.click(screen.getByRole("button", { name: "Review current content" })); await screen.findByRole("button", { name: "Reapply my changes" });
-    fireEvent.click(screen.getByRole("button", { name: "Reapply my changes" })); await waitFor(() => expect(handle.state.pending).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Reapply my changes" })); await waitFor(() => expect(handle.state.pending).toBeNull()); await settleTasks();
     expect(handle.state.phase).toBe("dirty"); expect(handle.state.dirty).toBe(true); expect(screen.getByRole("textbox", { name: "question" })).toHaveValue("Retained question");
     fireEvent.click(screen.getByRole("button", { name: "Create item", exact: true })); await waitFor(() => expect(fixture.database().state.providers[0]!.entries.some((entry) => entry.id.startsWith("server-") && entry.modelId === "faq")).toBe(true));
   });
