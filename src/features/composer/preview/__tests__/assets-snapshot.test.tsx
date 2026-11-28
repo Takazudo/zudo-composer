@@ -1,11 +1,12 @@
-import { render, waitFor } from "../../../../test/render";
+import { render, settleTasks, waitFor } from "../../../../test/render";
+import { getScope, signal } from "@takazudo/zfb/zudo-react";
 import { describe, expect, it, vi } from "vitest";
 import { notifyPersistenceChange } from "../../../../shared/persistence-generation";
 import { providerFixture, PNG } from "../../../assets/__tests__/versioned-fixture";
 import { activeComponentProvider } from "../../active-pack";
 import { CompositionPreviewHost } from "../composition-preview-host";
 import type { CompositionDocument } from "../../../../composer/model/types";
-import { resolvePreviewAssetSnapshot } from "../assets-snapshot";
+import { assetResolvedPreviewSnapshot, resolvePreviewAssetSnapshot } from "../assets-snapshot";
 import { LiveAssetReferenceResolver } from "../../../../assets/references";
 import { localPreviewSnapshot } from "../protocol";
 describe("host-only draft Asset resolution", () => {
@@ -36,5 +37,40 @@ describe("host-only draft Asset resolution", () => {
     notifyPersistenceChange("assets");
     await waitFor(() => expect(renderSnapshot.mock.lastCall?.[0].document.root[0].props.href).toBe(next.document.versions.at(-1)!.url));
     expect(document.root[0]!.props.href).toBe(`/uploaded-assets/asset-${record.id}`);
+  });
+  it("subscribes to Asset changes once per managed span, not once per snapshot", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "preview.png", declaredMimeType: "image/png", bytes: PNG });
+    const documentFor = (label: string): CompositionDocument => ({ schemaVersion: 2, id: "preview", name: "Preview", root: [{ id: "link", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-assets/asset-${record.id}`, children: label }, slots: {} }] });
+    const plain: CompositionDocument = { schemaVersion: 2, id: "preview", name: "Preview", root: [{ id: "link", componentId: "ui.cta-button", componentVersion: 1, props: { href: "https://example.test/", children: "Plain" }, slots: {} }] };
+    const unsubscribe = vi.fn();
+    const original = LiveAssetReferenceResolver.prototype.subscribeChanges;
+    const subscribe = vi.spyOn(LiveAssetReferenceResolver.prototype, "subscribeChanges").mockImplementation(function (this: LiveAssetReferenceResolver, listener) {
+      const stop = original.call(this, listener);
+      return () => { unsubscribe(); stop(); };
+    });
+    try {
+      const snapshot = signal(localPreviewSnapshot(documentFor("One"), "preview"));
+      const results: boolean[] = [];
+      function Probe() {
+        const resolved = assetResolvedPreviewSnapshot(getScope(), snapshot, activeComponentProvider.catalog, { store: provider.store });
+        getScope().effect(() => { results.push(resolved.value.loading); });
+        return null;
+      }
+      const view = render(<Probe />);
+      await settleTasks();
+      for (const label of ["Two", "Three", "Four"]) { snapshot.value = localPreviewSnapshot(documentFor(label), "preview"); await settleTasks(); }
+      expect(subscribe).toHaveBeenCalledTimes(1);
+      expect(unsubscribe).not.toHaveBeenCalled();
+      snapshot.value = localPreviewSnapshot(plain, "preview"); await settleTasks();
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+      snapshot.value = localPreviewSnapshot(documentFor("Five"), "preview"); await settleTasks();
+      expect(subscribe).toHaveBeenCalledTimes(2);
+      view.unmount();
+      expect(unsubscribe).toHaveBeenCalledTimes(2);
+      expect(results.length).toBeGreaterThan(0);
+    } finally {
+      subscribe.mockRestore();
+    }
   });
 });

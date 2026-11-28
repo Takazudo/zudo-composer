@@ -57,15 +57,16 @@ export function assetResolvedPreviewSnapshot(
   });
   const resolved = signal<{ source: ComposerPreviewSnapshot; generation: number; value: ComposerPreviewSnapshot | null; error?: string } | null>(null);
 
-  let subscribed = false;
+  // One subscription per managed span: re-running on every snapshot write must
+  // not close the resolver's persistence channel or drop its pending cache.
+  let stopChanges: (() => void) | null = null;
+  const unsubscribe = () => { const stop = stopChanges; stopChanges = null; stop?.(); };
   scope.effect(() => {
     const managed = hasManaged.value;
-    if (managed === subscribed) return undefined;
-    subscribed = managed;
-    if (!managed) return undefined;
-    const stop = resolver.subscribeChanges(() => { generation.value += 1; });
-    return () => { subscribed = false; stop(); };
+    if (managed && !stopChanges) stopChanges = resolver.subscribeChanges(() => { generation.value += 1; });
+    else if (!managed) unsubscribe();
   });
+  scope.onCleanup(unsubscribe);
 
   let requested: { source: ComposerPreviewSnapshot; generation: number } | null = null;
   scope.effect(() => {
