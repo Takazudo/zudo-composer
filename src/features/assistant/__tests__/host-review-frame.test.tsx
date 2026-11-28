@@ -1,9 +1,8 @@
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
-import { afterEach, expect, it, vi } from "vitest";
+import { fireEvent, render, waitFor } from "../../../test/render";
+import { expect, it, vi } from "vitest";
 import { HostReviewFrame } from "../host-review-frame";
 import type { HostReviewPreview } from "../../../shared/host-review-types";
 import type { ProductionProviderIntegration } from "../../../app/provider-integration";
-afterEach(cleanup);
 it("accepts only the exact displayed candidate and revokes fresh Apply on canonical or URL changes", async () => {
   const identity = { workspaceId: "proof", revision: "a".repeat(64), pathname: "/", packId: "pack", packVersion: "1", rendererId: "host", rendererVersion: "1", rendererDigest: "b".repeat(64) };
   const value: HostReviewPreview = { reviewId: "review", candidateDigest: "c".repeat(64), baseDigest: "d".repeat(64), documentUrl: window.location.origin + "/", preview: { identity, frameId: "exact-frame", targets: [], navigation: { url: "/", pathnames: ["/"] } } };
