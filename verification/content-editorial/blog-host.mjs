@@ -16,7 +16,8 @@ export async function startBlogHost({ port, assistant }) {
   await mkdir(join(host, "node_modules/@zudo-composer"), { recursive: true });
   await symlink(repository, join(host, "node_modules/zudo-composer"), "dir");
   await symlink(join(repository, "packages/component-contract"), join(host, "node_modules/@zudo-composer/component-contract"), "dir");
-  await symlink(await realpath(join(repository, "packages/demo-blog/node_modules/preact")), join(host, "node_modules/preact"), "dir");
+  await mkdir(join(host, "node_modules/@takazudo"), { recursive: true });
+  await symlink(await realpath(join(repository, "packages/demo-blog/node_modules/@takazudo/zfb")), join(host, "node_modules/@takazudo/zfb"), "dir");
   if (assistant) {
     await writeFile(join(host, "zudo-composer.config.ts"), `import { defineComposerConfig } from "zudo-composer/config";\n\nexport default defineComposerConfig(${JSON.stringify({ pack: "demo-blog/components", assistant })});\n`);
   }

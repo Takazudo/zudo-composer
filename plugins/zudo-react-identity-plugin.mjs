@@ -48,6 +48,9 @@ export default function zudoReactIdentityPlugin() {
     },
     async resolveId(source, importer, options) {
       if (source !== `${ZUDO_REACT_PACKAGE}/zudo-react` && !source.startsWith(`${ZUDO_REACT_PACKAGE}/zudo-react/`)) return null;
+      // The dependency scanner resolves through this container with `scan: true`
+      // to find raw package files to prebundle; those ids are never served.
+      if (/** @type {{scan?: boolean}} */ (options).scan) return null;
       const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
       if (!resolved || resolved.external) return resolved;
       const environment = this.environment?.name ?? "default";

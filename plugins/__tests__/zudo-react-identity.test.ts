@@ -4,6 +4,7 @@
 // enforced by construction. These guards pin each piece of that construction.
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -141,5 +142,75 @@ describe("Vite dev prebundle identity", () => {
   it("refuses a partial prebundle, which would inline a private scheduler copy", async () => {
     const graph = await servedGraph("partial");
     expect(String(graph.refused)).toMatch(/Two zudo-react runtimes in one graph/);
+  }, 60_000);
+});
+
+describe("Vite dev prebundle identity for a host outside the repository", () => {
+  // `zudo-composer dev` roots Vite at the host, so the tool's own source is an
+  // out-of-root importer reached through /@fs, and the dependency scanner runs.
+  let host = "";
+  let tool = "";
+
+  beforeAll(() => {
+    host = realpathSync(mkdtempSync(join(tmpdir(), "zr-out-of-root-host-")));
+    const cache = join(repo, "node_modules/.cache");
+    mkdirSync(cache, { recursive: true });
+    tool = mkdtempSync(join(cache, "zr-out-of-root-tool-"));
+    mkdirSync(join(host, "node_modules/@takazudo"), { recursive: true });
+    // As prepared hosts do: a symlink to the repository's own symlinked package.
+    symlinkSync(join(repo, "node_modules/@takazudo/zfb"), join(host, "node_modules/@takazudo/zfb"));
+    writeFileSync(join(host, "package.json"), '{"name":"out-of-root-host","private":true,"type":"module"}');
+    writeFileSync(join(tool, "sync-value.ts"), 'import { signal } from "@takazudo/zfb/zudo-react";\nexport const s = signal(0);\n');
+    writeFileSync(join(tool, "main.tsx"), 'import { mount } from "@takazudo/zfb/zudo-react/client";\nimport { s } from "./sync-value";\nexport const el = <i>{s}</i>;\nexport { mount };\n');
+  });
+  afterAll(() => {
+    if (host) rmSync(host, { recursive: true, force: true });
+    if (tool) rmSync(tool, { recursive: true, force: true });
+  });
+
+  async function servedGraph(mode: "all" | "exclude") {
+    const server = await createServer({
+      root: host, configFile: false, logLevel: "silent", cacheDir: join(host, `node_modules/.vite-${mode}`),
+      server: { middlewareMode: true, hmr: false, fs: { allow: [host, repo] } },
+      oxc: zudoReactOxc(),
+      resolve: { dedupe: [ZUDO_REACT_PACKAGE] },
+      plugins: [zudoReactIdentityPlugin()],
+      optimizeDeps: {
+        // A real scan from the out-of-root entry, as the dev server configures it.
+        entries: [join(tool, "main.tsx")],
+        include: mode === "all" ? [...ZUDO_REACT_DEV_ENTRIES] : [],
+        exclude: mode === "exclude" ? [ZUDO_REACT_PACKAGE] : [],
+        rolldownOptions: { transform: zudoReactOxc() },
+        force: true,
+      },
+    });
+    try {
+      // Optimized resolution waits for the scan, which resolves raw package files through the plugin container first.
+      const imports: string[] = [];
+      for (const file of ["sync-value.ts", "main.tsx"]) {
+        const result = await server.transformRequest(`/@fs${join(tool, file)}`);
+        for (const match of result!.code.matchAll(/from\s+"([^"]+)"/g)) {
+          if (/zudo-react|takazudo_zfb/.test(match[1]!)) imports.push(match[1]!.replace(/\?v=\w+$/, ""));
+        }
+      }
+      // The first optimizer run commits only once the crawl is idle; closing earlier never settles.
+      await server.environments.client.waitForRequestsIdle();
+      return [...new Set(imports)];
+    } finally {
+      await server.close();
+    }
+  }
+
+  it("serves core, client and the injected jsx-dev-runtime from one optimized runtime", async () => {
+    const imports = await servedGraph("all");
+    expect(imports.some((url) => url.endsWith("/deps/@takazudo_zfb_zudo-react_jsx-dev-runtime.js"))).toBe(true);
+    expect(imports.some((url) => url.endsWith("/deps/@takazudo_zfb_zudo-react.js"))).toBe(true);
+    expect(imports.every((url) => url.includes("/deps/@takazudo_zfb_zudo-react"))).toBe(true);
+  }, 60_000);
+
+  it("serves every subpath from the package files when the package is excluded", async () => {
+    const imports = await servedGraph("exclude");
+    expect(imports.length).toBeGreaterThanOrEqual(3);
+    expect(imports.every((url) => url.includes("/zfb/dist/zudo-react/"))).toBe(true);
   }, 60_000);
 });

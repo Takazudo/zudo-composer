@@ -152,6 +152,7 @@ describe("resolveComposerDevConfig", () => {
     expect(inlineConfig.resolve?.alias).toEqual(resolveImageEditorAliases());
     expect(inlineConfig.resolve?.dedupe).toEqual(["@takazudo/zfb"]);
     expect(inlineConfig.oxc).toEqual(zudoReactOxc());
+    expect(inlineConfig.optimizeDeps?.rolldownOptions).toEqual({ transform: zudoReactOxc() });
     const names = inlineConfig.plugins?.flat().map((plugin) => (plugin as { name?: string } | undefined)?.name);
     expect(names).toContain("zudo-composer-app-html");
     expect(names).toContain("zudo-component-pack");

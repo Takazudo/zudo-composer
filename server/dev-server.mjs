@@ -79,6 +79,10 @@ export async function resolveComposerDevConfig(options = {}) {
         // runtime dependencies, since the pack is excluded from scanning above
         // (#703 — every real `zudo-composer dev` boots through this config).
         include: devPrebundleIncludes({ workspaceRoot, pack: settings.pack, exclude: OPTIMIZE_DEPS_EXCLUDE }),
+        // The scanner ignores `oxc` and finds no tsconfig for tool files outside
+        // the host root, so it would compile JSX against `react/jsx-dev-runtime`,
+        // fail, and skip pre-bundling everything it discovered.
+        rolldownOptions: { transform: zudoReactOxc() },
       },
       resolve: resolveComposerModules(),
       oxc: zudoReactOxc(),
