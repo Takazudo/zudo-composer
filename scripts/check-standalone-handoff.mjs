@@ -5,6 +5,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
 import { AUTHORING_ROUTES } from "./routes.mjs";
 import { assertHandoffHashes } from "./handoff-identities.mjs";
+import { isRemovedHostDependency, isRemovedHostImport } from "./zudo-react-specifiers.mjs";
 import { CONTRACT_PACKAGE_COMMIT, PERMANENT_HANDOFF_HASHES, UI_PACK } from "./ui-pack-identity.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -184,11 +185,10 @@ for (const path of markdownFiles(root)) {
 }
 
 const directDependencies = Object.keys({ ...packageJson.dependencies, ...packageJson.devDependencies });
-const forbiddenZfbModule = /zudo-doc|(?:^|[/@-])zfb(?:[/@-]|$)|virtual-zfb|styleguide.*registry/i;
-// The zudo-react runtime is the tool's own UI runtime, not a zfb application module.
-const zudoReactRuntime = /^@takazudo\/zfb(?:\/zudo-react(?:\/[a-z-]+)?)?$/;
-const forbiddenHostModule = { test: (/** @type {string} */ name) => forbiddenZfbModule.test(name) && !zudoReactRuntime.test(name) };
-assert.deepEqual(directDependencies.filter((name) => forbiddenHostModule.test(name)), []);
+// The zudo-react runtime is the tool's own UI runtime, not a zfb application
+// module: its package name may be a manifest key, and source may import only its
+// exact runtime entry points, never the bare application entry or `/testing`.
+assert.deepEqual(directDependencies.filter(isRemovedHostDependency), []);
 
 const forbiddenImports = [];
 const productionFiles = [
@@ -199,7 +199,7 @@ const productionFiles = [
 for (const path of productionFiles) {
   const source = readFileSync(path, "utf8");
   for (const match of source.matchAll(/(?:from\s+|import\s*(?:\(\s*)?|@import\s+)["']([^"']+)["']/g)) {
-    if (forbiddenHostModule.test(match[1])) {
+    if (isRemovedHostImport(match[1])) {
       forbiddenImports.push(`${relative(root, path)} -> ${match[1]}`);
     }
   }

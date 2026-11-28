@@ -1,0 +1,11 @@
+export declare const ZUDO_REACT_PACKAGE_NAME: "@takazudo/zfb";
+export declare const ZUDO_REACT_IMPORT_SPECIFIERS: readonly string[];
+export declare function isZudoReactPackageName(name: string): boolean;
+export declare function isZudoReactImportSpecifier(specifier: string): boolean;
+export declare const ZFB_APPLICATION_REFERENCE: RegExp;
+export declare function moduleSpecifiers(source: string, fileName?: string): string[];
+export declare function isUiRuntimeSpecifier(specifier: string): boolean;
+export declare function isRemovedHostDependency(name: string): boolean;
+export declare function isRemovedHostImport(specifier: string): boolean;
+export declare const HEADLESS_PROVIDER_COUPLING: RegExp;
+export declare const ROOT_CONFIG_PROVIDER_COUPLING: RegExp;
