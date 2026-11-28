@@ -10,7 +10,7 @@ corepack pnpm -C styleguide/blog build
 corepack pnpm -C styleguide/blog dev
 ```
 
-The dev port is **4400**. This host is excluded from the root pnpm workspace and has its own lockfile. `gen` bundles the real Blog component pack from TypeScript source into ignored `src/generated/`, leaving `preact`, `preact/*`, and `@zudo-composer/component-contract` external for deterministic standalone resolution. It also copies the demo's uploaded images to ignored `public/uploaded-assets/` at their original URLs and reads article, author, and comment fixture content from the committed CMS records. No prebuilt demo artifacts or existing `node_modules` are needed.
+The dev port is **4400**. This host is excluded from the root pnpm workspace and has its own lockfile. `gen` bundles the real Blog component pack from TypeScript source into ignored `src/generated/`, leaving `@takazudo/zfb/zudo-react`, its subpaths, and `@zudo-composer/component-contract` external for deterministic standalone resolution. It also copies the demo's uploaded images to ignored `public/uploaded-assets/` at their original URLs and reads article, author, and comment fixture content from the committed CMS records. No prebuilt demo artifacts or existing `node_modules` are needed.
 
 `check` enforces one discoverable story per pack ID, verifies real route-filtered content and public assets, then typechecks. The host has `/` home, `/components` catalog, `/tokens` Blog tokens, and `/docs/getting-started` notes. Engine chrome supplies search, theme, sidebar, and responsive navigation. Preview iframes load the real Blog stylesheet and use Blog semantic colors for their canvas. Route-aware stories change only their own iframe history, preserving zudo-sg's preview query parameters; tag chips cannot change the parent catalog URL.
 
@@ -25,7 +25,7 @@ not install Sample's `@zudo-composer/ui` package.
 
 The catalog uses published zudo-sg 0.9 / zudo-doc 10.0 (Classic theme pack) on zfb 6.0.1, with
 zudo-react and Wind for its shell. The actual product pack and story callbacks
-remain Preact. `src/config/preview.mjs` validates the retained same-origin
+run in a separate zudo-react preview graph. `src/config/preview.mjs` validates the retained same-origin
 `/components/preview` endpoint. The frame loads only its separately compiled
 Tailwind pack stylesheet and runtime, with no shell islands or CSS injection.
 
@@ -45,7 +45,7 @@ source/workbench, image, token and CSS boundaries. Browser generation makes
 `build` a serial heavy lane: install Playwright Chromium first, or explicitly
 set `PLAYWRIGHT_EXECUTABLE_PATH` for an approved local executable.
 
-`check` checks source inventory and both shell and Preact TypeScript graphs.
+`check` checks source inventory and both shell and preview TypeScript graphs.
 `verify:browser` consumes prepared `dist` and covers copy/live CSS/height,
 resizing, resolved theme, protocol validation/readiness, actual token CSS
 edits, repeated SPA navigation, all variants and cleanup. There are no authored

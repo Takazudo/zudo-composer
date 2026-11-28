@@ -9,7 +9,7 @@ dist/
 src/styleguide/sg-registry.ts
 src/styleguide/token-manifest.ts
 
-# Isolated Preact pipeline outputs
+# Isolated zudo-react preview pipeline outputs
 src/styleguide/descriptors.ts
 src/styleguide/sources.ts
 preview/loaders.ts

@@ -29,17 +29,17 @@ can both precede a ready document generation (see the upstream notes).
 
 `check`, `build`, and `dev` each run `gen` first. Host generation validates the
 actual authored exports, derives plain SG descriptors, per-variant source, and
-a Preact-only loader map; the installed engine generates the token manifest.
+a preview-only loader map; the installed engine generates the token manifest.
 All generated files are ignored and reproducible from the stories and pack CSS.
 
-`build` and `dev` compile the separate Vite/Tailwind Preact pipeline before zfb.
+`build` and `dev` compile the separate Vite/Tailwind zudo-react preview pipeline before zfb.
 The preview is a generated public HTML document; a public zfb dev middleware
 serves those exact bytes to prevent automatic shell CSS/island injection. The
 host detail route composes public SG/Doc APIs to retain the source panel alongside
 descriptor-driven controls and previews.
 
 The browser dependency belongs to this standalone host. Install Chromium before
-building: thumbnail generation captures every actual Preact component after
+building: thumbnail generation captures every actual zudo-react component after
 markdown, images and fonts settle. CI should install this browser before its
 styleguide build step. `PLAYWRIGHT_EXECUTABLE_PATH` explicitly selects an alternate
 local executable; unset it to use the pinned Playwright browser.

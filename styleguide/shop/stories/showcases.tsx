@@ -71,7 +71,7 @@ function CartSession({ children, fill = true }: { children: Child; fill?: boolea
 }
 
 // The authored Pagination renders plain props once, so a page change remounts it
-// and returns focus to the same control, as the retained Preact button kept it.
+// and returns focus to the same control, as the retained button kept it.
 function PaginationDemo({ initial }: { initial: number }) {
   const page = signal(initial);
   let refocus: { parent: Element; label: string } | null = null;

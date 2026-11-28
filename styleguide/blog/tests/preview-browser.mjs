@@ -196,7 +196,7 @@ try {
   await last.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })));
   await expect(last.locator("#blog-preview")).toBeEmpty();
   assert.deepEqual(errors, [], "All variants and shell paths must render without browser errors");
-  report.checks.push("All 73 actual variants in isolated Preact frames, actual PNG inventory and pagehide disposal");
+  report.checks.push("All 73 actual variants in isolated zudo-react preview frames, actual PNG inventory and pagehide disposal");
   report.result = "PASS";
   console.log(JSON.stringify(report, null, 2));
 } catch (error) {
