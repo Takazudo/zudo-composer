@@ -100,12 +100,16 @@ describe("managed downloads in the stock Markdown component", () => {
     expect(result.status).toBe("ready"); if (result.status !== "ready") throw new Error(result.message);
     const baseline = render(<ProseMd markdown={"Before **download** [reference][resource]\n\n[resource]: https://example.com/resource"} />);
     await waitFor(() => expect(baseline.container.querySelector("strong")).toBeInTheDocument());
-    const baselineHtml = baseline.container.firstElementChild!.innerHTML;
+    // zudo-react's `zr:` comments carry each root's positional path, which differs between a
+    // standalone root and the same component nested in the canvas; compare the markup itself.
+    const markup = (html: string) => html.replace(/<!--\/?zr:[^>]*-->/g, "");
+    const baselineHtml = markup(baseline.container.firstElementChild!.innerHTML);
     baseline.unmount();
     const canvas = render(<CompositionCanvas document={result.snapshot.document} localRecordId="preview" provider={activeComponentProvider} session={{ mode: "preview", theme: "light", selectedId: null }} onSelect={() => undefined} onRequestAdd={() => undefined} onRequestNodeMenu={() => undefined} onRequestInsertMenu={() => undefined} />);
     expect(screen.getByRole("link", { name: "Get bundle" })).toHaveAttribute("download", "bundle.zip");
     await waitFor(() => expect(screen.getByText("After download")).toBeInTheDocument());
-    expect(canvas.container.querySelector("strong")!.parentElement!.parentElement!.innerHTML).toBe(baselineHtml);
+    expect(markup(canvas.container.querySelector("strong")!.parentElement!.parentElement!.innerHTML)).toBe(baselineHtml);
+    expect(baselineHtml).toContain("<p>Before <strong>download</strong>");
     const resolved = { url: "javascript:alert(1)", fileName: "bundle.zip", mimeType: "application/zip", byteLength: 22 };
     expect(splitAssetDownloadMarkdown(assetDownloadMarkdown(use, resolved)).every((part) => "markdown" in part)).toBe(true);
     doc.root[0]!.props.markdown = assetDownloadMarkdown(use, resolved);

@@ -6,6 +6,7 @@ import { build, type InlineConfig } from "vite";
 import { APP_ROOT, SITE_BUILD_ENTRY, appModuleId } from "../../plugins/roots.mjs";
 import { createModuleEvaluator } from "../module-evaluator.mjs";
 import { runSiteBuild } from "../site-build/run.mjs";
+import { DEV_JSX_SITE_MARKER } from "../site-build/artifact.mjs";
 
 let directory: string;
 let host: string;
@@ -99,12 +100,16 @@ describe("static build environment", () => {
     const code = await builtJavaScript();
     expect(code).toContain("host-env-marker");
     expect(code).toContain(production ? "production-jsx-proof" : "development-jsx-proof");
+    // The zudo-react runtime reads `source.fileName`/`source.columnNumber`; only an emitted
+    // jsxDEV site literal (`fileName: …, columnNumber: <n>`) is development metadata.
     if (production) {
-      expect(code).not.toContain("fileName");
+      expect(code).not.toMatch(/\bfileName\s*:/);
+      expect(code).not.toMatch(DEV_JSX_SITE_MARKER);
       expect(code).not.toContain("/home/");
       expect(code).not.toContain("visitor.tsx");
     } else {
-      expect(code).toContain("fileName");
+      expect(code).toMatch(/\bfileName\s*:/);
+      expect(code).toMatch(DEV_JSX_SITE_MARKER);
       expect(code).toContain("visitor.tsx");
     }
   });

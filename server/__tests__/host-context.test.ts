@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { realpathSync } from "node:fs";
-import { createRequire } from "node:module";
+import { existsSync, realpathSync } from "node:fs";
+import Module, { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -111,7 +111,12 @@ describe("host-owned module evaluation", () => {
     const requireHost = createRequire(join(hostRoot, "package.json"));
     const runtimePaths = [requireHost.resolve("@takazudo/zfb/zudo-react"), createRequire(packEntry).resolve("@takazudo/zfb/zudo-react"), createRequire(import.meta.url).resolve("@takazudo/zfb/zudo-react")];
     expect(new Set(runtimePaths).size).toBe(3);
-    expect(() => requireHost.resolve("@zudo-composer/image-editor")).toThrow();
+    // The host's own node_modules chain must not carry the tool's private image editor. pnpm's
+    // vitest bin shim adds the workspace's hoisted `.pnpm/node_modules` to NODE_PATH, so a bare
+    // `require.resolve` would see it through the runner rather than through the host.
+    const hostModulePaths = (Module as unknown as { _nodeModulePaths(from: string): string[] })._nodeModulePaths(hostRoot);
+    expect(hostModulePaths[0]).toBe(join(hostRoot, "node_modules"));
+    expect(hostModulePaths.filter((path) => existsSync(join(path, "@zudo-composer/image-editor")))).toEqual([]);
 
     const dev = await createDevGraph();
     const devModule = await dev.ssrLoadModule(COMPONENT_PACK_ID) as { componentPack: TrustedComponentPack };
