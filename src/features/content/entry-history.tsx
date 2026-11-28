@@ -60,9 +60,12 @@ export function EntryHistory({ controller, entry: suppliedEntry, fields, refresh
   const label = (fieldId: string) => read(fields).find((field) => field.id === fieldId)?.label ?? fieldId;
 
   let load = 0;
+  // Computeds rerun their readers on every upstream change, so the trigger is compared by value.
+  let requested: string | null = null;
   scope.effect(() => {
-    void read(refreshKey);
-    void generation.value;
+    const trigger = `${read(refreshKey)}\u0000${generation.value}`;
+    if (trigger === requested) return;
+    requested = trigger;
     const current = ++load;
     const live = () => current === load && !scope.abortSignal.aborted;
     void editorial.listRevisions({ entry: ref(), limit: PAGE_SIZE }).then((page) => {

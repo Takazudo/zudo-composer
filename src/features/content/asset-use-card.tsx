@@ -50,18 +50,23 @@ export function AssetUseCard({ kind, value, controller, renderAssetPicker, asset
   const assetKey = computed(() => use.value ? `${use.value.asset.providerId}\u0000${use.value.asset.assetId}` : "");
 
   // Reload after the picker closes: it may have uploaded or replaced a file.
+  // A rerun that changes neither the open picker nor the asset starts no read.
+  let loadedFor: string | null = null;
+  let load = 0;
   scope.effect(() => {
-    if (picker.value) return undefined;
-    void assetKey.value;
-    let live = true;
+    const key = assetKey.value;
+    if (picker.value) { loadedFor = null; load += 1; return; }
+    if (key === loadedFor) return;
+    loadedFor = key;
+    const token = ++load;
+    const live = () => token === load && !scope.abortSignal.aborted;
     loading.value = true;
     error.value = null;
     void controller.assetAssets().then((items) => {
-      if (live && !scope.abortSignal.aborted) { assets.value = items; loading.value = false; }
+      if (live()) { assets.value = items; loading.value = false; }
     }, (cause: unknown) => {
-      if (live && !scope.abortSignal.aborted) { assets.value = []; loading.value = false; error.value = cause instanceof Error ? cause.message : "Asset catalog unavailable."; }
+      if (live()) { assets.value = []; loading.value = false; error.value = cause instanceof Error ? cause.message : "Asset catalog unavailable."; }
     });
-    return () => { live = false; };
   });
 
   const asset = computed(() => { const current = use.value; return current ? assets.value.find((item) => item.providerId === current.asset.providerId && item.assetId === current.asset.assetId) : undefined; });

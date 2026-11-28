@@ -67,11 +67,18 @@ function MarkdownSourceControl({ label, required, invalid, describedBy, value, o
   scope.onActivate(() => {
     void import("../features/content/markdown-source").then(({ createMarkdownEditor }) => {
       if (scope.abortSignal.aborted || !mount.current) return;
+      appliedValidity = JSON.stringify(validity.value);
       controller = createMarkdownEditor({ parent: mount.current, value: value.value, labelledBy: labelId, required, ...validity.value, theme: "light", onChange: (next) => onChange(next) });
     });
   });
   scope.effect(() => { const next = value.value; controller?.setValue(next); });
-  scope.effect(() => { const next = validity.value; controller?.setInvalid(next.invalid, next.describedBy); });
+  let appliedValidity = JSON.stringify(validity.value);
+  scope.effect(() => {
+    const next = validity.value, key = JSON.stringify(next);
+    if (key === appliedValidity || !controller) return;
+    appliedValidity = key;
+    controller.setInvalid(next.invalid, next.describedBy);
+  });
   const actions: { label: string; format: MarkdownFormat }[] = [{ label: labels.bold, format: "bold" }, { label: labels.italic, format: "italic" }, { label: labels.link, format: "link" }, { label: labels.heading, format: "heading" }];
   return <div class="hosted-content-editor__markdown"><span id={labelId} class="hosted-content-editor__sr-only">{label}</span><div class="hosted-content-editor__actions" role="toolbar" aria-label={label}>{actions.map((action) => <button type="button" on:pointerdown={(event) => event.preventDefault()} on:click={() => { if (controller) applyMarkdownFormat(controller.view, action.format); }}>{action.label}</button>)}</div><div ref={mount} /></div>;
 }
