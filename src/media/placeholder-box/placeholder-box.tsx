@@ -1,4 +1,4 @@
-import type { JSX } from "preact";
+import type { CSSProperties } from "@takazudo/zfb/zudo-react";
 import { cx } from "../../lib/cx";
 
 export type PlaceholderBoxSize = "sm" | "md" | "lg";
@@ -40,9 +40,9 @@ export function PlaceholderBox({
   ...rest
 }: PlaceholderBoxProps) {
   const displayLabel = label ?? alt ?? src ?? "image";
-  const style: JSX.CSSProperties = aspect
-    ? { aspectRatio: aspect }
-    : { minHeight: SIZE_MIN_HEIGHT[size] };
+  const style: CSSProperties = aspect
+    ? { "aspect-ratio": aspect }
+    : { "min-height": SIZE_MIN_HEIGHT[size] };
 
   return (
     <span

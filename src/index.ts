@@ -40,3 +40,5 @@ export type { StackDirection, StackGap, StackAlign, StackJustify, StackProps } f
 
 export { cx } from "./lib/cx";
 export type { ClassValue } from "./lib/cx";
+
+export type { SlotChildren } from "./lib/slot";

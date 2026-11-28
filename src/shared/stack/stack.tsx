@@ -1,5 +1,6 @@
-import type { ComponentChildren, JSX } from "preact";
+import { h } from "@takazudo/zfb/zudo-react";
 import { cx } from "../../lib/cx";
+import { slotChild, type SlotChildren } from "../../lib/slot";
 
 export type StackDirection = "vertical" | "horizontal";
 export type StackGap = "xs" | "sm" | "md" | "lg" | "xl";
@@ -46,9 +47,9 @@ export type StackProps = {
   /** Main-axis justification. Defaults to start. */
   justify?: StackJustify;
   /** Wrapping element tag. Defaults to div. */
-  as?: keyof JSX.IntrinsicElements;
+  as?: keyof HTMLElementTagNameMap;
   class?: string;
-  children?: ComponentChildren;
+  children?: SlotChildren;
 };
 
 /**
@@ -62,23 +63,23 @@ export function Stack({
   gap = "md",
   align = "stretch",
   justify = "start",
-  as: Tag = "div",
+  as = "div",
   class: cls,
   children,
 }: StackProps) {
   const gapClass = direction === "horizontal" ? HORIZONTAL_GAP_CLASS[gap] : VERTICAL_GAP_CLASS[gap];
-  return (
-    <Tag
-      class={cx(
+  return h(
+    as,
+    {
+      class: cx(
         "flex",
         direction === "horizontal" ? "flex-row flex-wrap" : "flex-col",
         gapClass,
         ALIGN_CLASS[align],
         JUSTIFY_CLASS[justify],
         cls,
-      )}
-    >
-      {children}
-    </Tag>
+      ),
+    },
+    slotChild(children),
   );
 }
