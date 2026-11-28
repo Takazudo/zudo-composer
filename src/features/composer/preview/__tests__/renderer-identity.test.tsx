@@ -55,6 +55,7 @@ const provider = createComposerComponentProvider(defineComponentPack({
       fields: [
         { prop: "title", label: "Title", schema: { type: "string" }, editor: { kind: "text" } },
         { prop: "rawHtml", label: "Raw", schema: { type: "string" }, editor: { kind: "text" } },
+        { prop: "on:click", label: "Listener", schema: { type: "string" }, editor: { kind: "text" } },
       ],
       slots: [], component: Raw,
     },
@@ -220,5 +221,17 @@ describe("CompositionCanvas keyed node identity", () => {
     const raw = view.container.querySelector(".test-raw")!;
     expect(raw.innerHTML).toBe("");
     expect(raw.getAttribute("title")).toBe("kept");
+  });
+
+  it("never lets a declared document prop bind a zudo-react `on:*` listener", () => {
+    const document = doc("Title", "First");
+    document.root.push(node("listener", "test.raw", { "on:click": "alert(1)", title: "kept" }));
+    const { view } = mount(document, preview);
+    const raw = view.container.querySelector(".test-raw") as HTMLElement;
+    expect(raw).not.toBeNull();
+    expect(raw.getAttribute("title")).toBe("kept");
+    expect(raw.getAttribute("on:click")).toBeNull();
+    expect(raw.onclick).toBeNull();
+    expect(() => raw.click()).not.toThrow();
   });
 });
